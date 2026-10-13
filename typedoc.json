@@ -1,0 +1,12 @@
+{
+  "tsconfig": "tsconfig.typedoc.json",
+  "entryPoints": ["src/core", "src/main.ts", "src/bot.ts"],
+  "entryPointStrategy": "expand",
+  "exclude": ["**/*.test.ts"],
+  "out": "dist/api",
+  "name": "Рубіж — API ядра",
+  "includeVersion": true,
+  "excludePrivate": true,
+  "excludeInternal": true,
+  "categorizeByGroup": true
+}

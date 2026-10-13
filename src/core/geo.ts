@@ -29,7 +29,7 @@ export const DEFAULT_MAX_UFOS = 3;
 
 export type UfoKind = 'розвідник' | 'збирач';
 
-interface KindProfile {
+export interface KindProfile {
   moveEveryTicks: number;
   landingTicks: number;
 }
