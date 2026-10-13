@@ -17,10 +17,10 @@ echo "=========================================="
 echo ""
 echo "--- Перевірка правил AGENTS.md ---"
 if [ -f "AGENTS.md" ]; then
-    # Перевіряємо, чи змінюються заборонені файли
-    if git diff --cached --name-only | grep -qE '(src/ui/|\.github/workflows/|package\.json|tsconfig\.json|vite\.config\.ts)'; then
+    # Перевіряємо, чи змінюються заборонені файли (package.json — окремо, правило 1b за ADR-0012)
+    if git diff --cached --name-only | grep -qE '(src/ui/|\.github/workflows/|tsconfig\.json|vite\.config\.ts)'; then
         echo "[FAIL] ЗМІНЕНО ЗАБОРОНЕНИЙ ФАЙЛ! Див. AGENTS.md"
-        git diff --cached --name-only | grep -E '(src/ui/|\.github/workflows/|package\.json|tsconfig\.json|vite\.config\.ts)'
+        git diff --cached --name-only | grep -E '(src/ui/|\.github/workflows/|tsconfig\.json|vite\.config\.ts)'
         echo ""
         echo "Дію заборонено. Внесіть зміни у коміт окремо або зверніться до власнику."
         exit 1
@@ -28,6 +28,17 @@ if [ -f "AGENTS.md" ]; then
     echo "[OK] Правила AGENTS.md дотримано"
 else
     echo "[WARN] AGENTS.md не знайдено"
+fi
+
+# 1b. Залежності лише з ADR (ADR-0012): package.json у коміті → docs/adr/ у тому ж коміті
+if git diff --cached --name-only | grep -qE '^package\.json$'; then
+    if git diff --cached --name-only | grep -qE '^docs/adr/'; then
+        echo "[OK] package.json з ADR (процес ADR-0012)"
+    else
+        echo "[FAIL] package.json БЕЗ ADR! Залежності — лише за ADR-0012:"
+        echo "       ADR + явна авторизація власника, окремий коміт chore(deps):"
+        exit 1
+    fi
 fi
 
 # 2. Запуск тестів
