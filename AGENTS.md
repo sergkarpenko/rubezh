@@ -222,6 +222,7 @@ git push origin iter-X.Y
 | ADR-0013 | DOM-тести UI-шару (main.ts) через jsdom | accepted | 2026-10-13 |
 | ADR-0014 | Pre-commit hooks — Husky + lint-staged | accepted | 2026-10-13 |
 | ADR-0015 | Уніфікація стилю — ESLint + Prettier | accepted | 2026-10-13 |
+| ADR-0016 | Генерація документації коду — TypeDoc | accepted | 2026-10-13 |
 
 **Нове рішення?** Створіть новий ADR з порядковим номером.
 
