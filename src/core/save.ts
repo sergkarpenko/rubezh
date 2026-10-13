@@ -1,0 +1,258 @@
+// src/core/save.ts
+// Ітерація П5.2: збереження/відновлення партії — ядро без DOM (ADR-0026).
+// ADR-0002: чисте ядро; конкретне сховище (localStorage у main.ts) підключається
+// через абстракцію слоту «рядок-значення» (SlotStore).
+// ADR-0003: geo.rng не викликається під час збереження — траєкторія не зсувається;
+// позиція потоку зберігається як число (rng.state, mulberry32), тому відновлена
+// партія продовжує траєкторію оригіналу байт-у-байт.
+// ADR-0026: активна місія не зберігається (кнопки активні лише на геосцені);
+// мітадані слоту — похідні від збереженого стану.
+// Формат: { version: 1, seed, savedAt, state }. Невідома версія або пошкоджений
+// JSON — throw з українським текстом, без часткового стану. Зміни схеми —
+// новою версією + міграцією на вході.
+
+import { mulberry32, type StatefulRng, type Unit, type Vec2 } from './combat';
+import { createGeoGame, type GeoEvent, type GeoState, type Ufo } from './geo';
+import { createRoster, type Roster } from './squad';
+import { createEconomy, type EconomyEvent, type EconomyState } from './economy';
+
+export const SAVE_VERSION = 1;
+export const SAVE_SLOTS = 3; // ADR-0026: три слоти, ключі rubezh.save.1..3 у main.ts
+
+// Партія — єдиний стан збереження: GeoState + Roster + EconomyState + сід.
+// Сід окремо: GeoState не зберігає походження свого rng, а він потрібен
+// у форматі сейва (ADR-0026) і для подальших планів на авто-продовження.
+export interface Party {
+  seed: number;
+  geo: GeoState;
+  roster: Roster;
+  econ: EconomyState;
+}
+
+export function createParty(seed: number): Party {
+  return { seed, geo: createGeoGame({ seed }), roster: createRoster(), econ: createEconomy() };
+}
+
+// Серіалізований стан: усе, що описує подальшу траєкторію. rng.state — позиція
+// потоку mulberry32 (не сам файл-функція: функції не серіалізуються).
+interface GeoSave {
+  rngState: number;
+  minute: number;
+  base: Vec2;
+  ufos: Ufo[];
+  log: GeoEvent[];
+  spawnChance: number;
+  maxUfos: number;
+  nextId: number;
+}
+
+interface RosterSave {
+  soldiers: Unit[];
+  hired: number;
+  hospital: Record<string, number>;
+}
+
+interface EconSave {
+  money: number;
+  lastAllowanceDay: number;
+  log: EconomyEvent[];
+}
+
+export interface SaveData {
+  version: number;
+  seed: number;
+  savedAt: string;
+  state: {
+    geo: GeoSave;
+    roster: RosterSave;
+    econ: EconSave;
+  };
+}
+
+// Зберігає партію у JSON-рядок. savedAt — мітка часу для панелі слотів;
+// передається параметром, щоб ядро лишалося чистим і тестованим.
+export function serializeParty(party: Party, savedAt: string = ''): string {
+  const rng = party.geo.rng as StatefulRng;
+  if (typeof rng.state !== 'number') {
+    // ADR-0026: без стану rng відновити траєкторію неможливо — відмовляємо явно.
+    throw new Error('geo.rng не має стану: збереження можливе лише з mulberry32 (ADR-0003)');
+  }
+  const data: SaveData = {
+    version: SAVE_VERSION,
+    seed: party.seed,
+    savedAt,
+    state: {
+      geo: {
+        rngState: rng.state,
+        minute: party.geo.minute,
+        base: { ...party.geo.base },
+        ufos: party.geo.ufos.map((u) => ({ ...u, pos: { ...u.pos }, target: { ...u.target } })),
+        log: party.geo.log.slice(),
+        spawnChance: party.geo.spawnChance,
+        maxUfos: party.geo.maxUfos,
+        nextId: party.geo.nextId,
+      },
+      roster: {
+        soldiers: party.roster.soldiers.map((s) => ({ ...s, pos: { ...s.pos }, weapon: { ...s.weapon } })),
+        hired: party.roster.hired,
+        hospital: { ...party.roster.hospital },
+      },
+      econ: {
+        money: party.econ.money,
+        lastAllowanceDay: party.econ.lastAllowanceDay,
+        log: party.econ.log.slice(),
+      },
+    },
+  };
+  return JSON.stringify(data);
+}
+
+function fail(msg: string): never {
+  throw new Error(msg);
+}
+
+// Розбір JSON-рядка у валідований SaveData. Будь-яка проблема — throw
+// з українським текстом; частковий стан не виникає (валідація до конструювання).
+function parseSave(json: string): SaveData {
+  let data: SaveData;
+  try {
+    data = JSON.parse(json) as SaveData;
+  } catch {
+    fail('Пошкоджені дані збереження: некоректний JSON');
+  }
+  if (data === null || typeof data !== 'object' || Array.isArray(data)) {
+    fail('Пошкоджені дані збереження: очікувався обʼєкт');
+  }
+  if (data.version !== SAVE_VERSION) {
+    fail('Невідома версія збереження: ' + String(data.version) + ' (очікується ' + SAVE_VERSION + ')');
+  }
+  if (!Number.isInteger(data.seed)) {
+    fail('Пошкоджені дані збереження: seed');
+  }
+  if (typeof data.savedAt !== 'string') {
+    fail('Пошкоджені дані збереження: savedAt');
+  }
+  const st = data.state;
+  if (st === null || typeof st !== 'object') {
+    fail('Пошкоджені дані збереження: state');
+  }
+  if (
+    !Number.isInteger(st.geo?.rngState) ||
+    !Number.isInteger(st.geo?.minute) ||
+    !Number.isInteger(st.geo?.nextId) ||
+    typeof st.geo?.spawnChance !== 'number' ||
+    !Number.isInteger(st.geo?.maxUfos) ||
+    !Array.isArray(st.geo?.ufos) ||
+    !Array.isArray(st.geo?.log) ||
+    typeof st.geo?.base?.x !== 'number' ||
+    typeof st.geo?.base?.y !== 'number'
+  ) {
+    fail('Пошкоджені дані збереження: гео-стан');
+  }
+  if (
+    !Array.isArray(st.roster?.soldiers) ||
+    !Number.isInteger(st.roster?.hired) ||
+    st.roster?.hospital === null ||
+    typeof st.roster?.hospital !== 'object'
+  ) {
+    fail('Пошкоджені дані збереження: ростер');
+  }
+  if (!Number.isInteger(st.econ?.money) || !Number.isInteger(st.econ?.lastAllowanceDay) || !Array.isArray(st.econ?.log)) {
+    fail('Пошкоджені дані збереження: економіка');
+  }
+  return data;
+}
+
+// Відновлює партію з JSON-рядка. rng відновлюється з позиції потоку
+// (mulberry32(rngState) продовжує з того самого місця), тож подальші
+// тики/дії дають лог байт-у-байт оригіналу (ADR-0026, критерій П5.2).
+export function deserializeParty(json: string): Party {
+  const data = parseSave(json);
+  const g = data.state.geo;
+  // mulberry32(S) робить перший виклик зі стану S + INC — ідентично
+  // наступному виклику оригіналу, що зупинився на S.
+  const geo = createGeoGame({ seed: data.seed, rng: mulberry32(g.rngState) });
+  geo.minute = g.minute;
+  geo.base = { x: g.base.x, y: g.base.y };
+  geo.ufos = g.ufos.map((u) => ({ ...u, pos: { ...u.pos }, target: { ...u.target } }));
+  geo.log = g.log.slice();
+  geo.spawnChance = g.spawnChance;
+  geo.maxUfos = g.maxUfos;
+  geo.nextId = g.nextId;
+  return {
+    seed: data.seed,
+    geo,
+    roster: {
+      soldiers: data.state.roster.soldiers.map((s) => ({ ...s, pos: { ...s.pos } })),
+      hired: data.state.roster.hired,
+      hospital: { ...data.state.roster.hospital },
+    },
+    econ: {
+      money: data.state.econ.money,
+      lastAllowanceDay: data.state.econ.lastAllowanceDay,
+      log: data.state.econ.log.slice(),
+    },
+  };
+}
+
+// Абстракція слоту (ADR-0026): ядро бачить лише рядок-значення за номером;
+// localStorage підключається у main.ts, тести ядра — на моках сховища.
+export interface SlotStore {
+  read(slot: number): string | null;
+  write(slot: number, data: string): void;
+  remove(slot: number): void;
+}
+
+function assertSlot(slot: number): void {
+  if (!Number.isInteger(slot) || slot < 1 || slot > SAVE_SLOTS) {
+    throw new Error('Номер слоту має бути цілим від 1 до ' + SAVE_SLOTS);
+  }
+}
+
+export function saveToSlot(store: SlotStore, slot: number, party: Party, savedAt: string = ''): void {
+  assertSlot(slot);
+  store.write(slot, serializeParty(party, savedAt));
+}
+
+export function loadFromSlot(store: SlotStore, slot: number): Party {
+  assertSlot(slot);
+  const json = store.read(slot);
+  if (json === null) {
+    throw new Error('Слот ' + slot + ' порожній');
+  }
+  return deserializeParty(json);
+}
+
+export function slotIsEmpty(store: SlotStore, slot: number): boolean {
+  assertSlot(slot);
+  return store.read(slot) === null;
+}
+
+export function eraseSlot(store: SlotStore, slot: number): void {
+  assertSlot(slot);
+  store.remove(slot);
+}
+
+// Мітадані слоту (ADR-0026, п.4): дата/сід/тик/баланс/живі солдати —
+// похідні від збереженого стану, окремо не дублюються.
+export interface SlotMeta {
+  savedAt: string;
+  seed: number;
+  day: number;
+  minute: number;
+  money: number;
+  aliveSoldiers: number;
+}
+
+export function slotMeta(json: string): SlotMeta {
+  const data = parseSave(json);
+  return {
+    savedAt: data.savedAt,
+    seed: data.seed,
+    // доба = floor(хвилини / 1440) + 1 — та сама формула, що geoDay (geo.ts)
+    day: Math.floor(data.state.geo.minute / 1440) + 1,
+    minute: data.state.geo.minute,
+    money: data.state.econ.money,
+    aliveSoldiers: data.state.roster.soldiers.length,
+  };
+}
