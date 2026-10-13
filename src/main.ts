@@ -11,14 +11,18 @@
 // вибір солдата, клік-рух по шляху (A* + pathApCost), постріл у вибраному режимі,
 // заступа, кінець ходу → синхронний хід прибульців (патерн 5.1.4, без таймерів).
 // Авто-боти (src/bot.ts) лишились як кнопка «Демо-бій».
+//
+// Фаза 2 (П7): чисті шматки «візуальної логіки» (cellFromPoint, samePath,
+// hpColor, geoEventText, battleEventText) експортуються для юніт-тестів
+// (src/main.test.ts); DOM-ініціалізація — лише у браузері (typeof document).
 
 import {
   RADAR_RANGE, TICK_MINUTES, WORLD_W, WORLD_H, advanceTime, createGeoGame,
-  detectedUfos, geoClock, missionTargets, type GeoState,
+  detectedUfos, geoClock, missionTargets, type GeoEvent, type GeoState,
 } from './core/geo';
 import { ALIEN_SPAWN, SQUAD_SPAWN, completeMission, createMission, missionOutcome, type Mission } from './core/mission';
 import { applyMissionResult, createRoster, missionSquad, type Roster } from './core/squad';
-import { calculateHitChance, moveUnit, resolveAttack, setOverwatch, type ShotMode, type Unit, type Vec2 } from './core/combat';
+import { calculateHitChance, moveUnit, resolveAttack, setOverwatch, type GameEvent, type ShotMode, type Unit, type Vec2 } from './core/combat';
 import { computeVisibleCells, findPath, pathApCost } from './core/map';
 import { aliensTurn, autoBattle } from './bot';
 
@@ -70,40 +74,50 @@ function unitName(id: string): string {
 
 // Бойові події (state.log) → журнал: постріли і смерті (туман не порушуємо:
 // події пишуться лише про реальні дії, а читач — гравець, який їх бачив).
+// П7: чистий перетворювач події → рядок журналу; null — не для гравця.
+export function battleEventText(e: GameEvent, name: (id: string) => string): { text: string; cls: string } | null {
+  if (e.type === 'shot') {
+    return { text: name(e.shooterId) + ' → ' + name(e.targetId) + ' (' + MODE_LABEL[e.mode] + '): ' + (e.hit ? '−' + e.damage : 'промах'), cls: '' };
+  }
+  if (e.type === 'death') {
+    return { text: '✝ ' + name(e.unitId) + ' загинув', cls: 'lose' };
+  }
+  return null; // move / turn / overwatch — не для журналу бою
+}
+
 function drainBattleLog(): void {
   if (!mission) return;
   const log = mission.state.log;
   for (; seenBattleLog < log.length; seenBattleLog++) {
-    const e = log[seenBattleLog];
-    if (e.type === 'shot') {
-      journal(unitName(e.shooterId) + ' → ' + unitName(e.targetId) + ' (' + MODE_LABEL[e.mode] + '): ' + (e.hit ? '−' + e.damage : 'промах'));
-    } else if (e.type === 'death') {
-      journal('✝ ' + unitName(e.unitId) + ' загинув', 'lose');
-    }
+    const msg = battleEventText(log[seenBattleLog], unitName);
+    if (msg) journal(msg.text, msg.cls);
   }
 }
 
 // Geo-події → журнал (туман стратегічного шару: лише виявлені НЛО, як у 4.2).
+// П7: чистий фільтр туману; knownDetected веде викликаючий (ufo_detected
+// додається до набору ДО перевірки ufo_landed/ufo_left у тому ж batch).
+export function geoEventText(e: GeoEvent, knownDetected: ReadonlySet<string>): { text: string; cls: string } | null {
+  switch (e.type) {
+    case 'day': return { text: '— Доба ' + e.day + ' —', cls: '' };
+    case 'ufo_detected': return { text: 'Виявлено НЛО: ' + e.ufoId, cls: '' };
+    case 'ufo_landed':
+      return knownDetected.has(e.ufoId) ? { text: 'НЛО ' + e.ufoId + ' приземлився — відкрито вікно місії', cls: '' } : null;
+    case 'ufo_left':
+      return knownDetected.has(e.ufoId) ? { text: 'НЛО ' + e.ufoId + ' відлетів і зник', cls: '' } : null;
+    case 'mission_won': return { text: 'Місію зачищено ✓', cls: 'win' };
+    case 'mission_lost': return { text: 'Загін втрачено ✗', cls: 'lose' };
+    default: return null; // ufo_spawned / ufo_move — приховано туманом
+  }
+}
+
 function drainGeoLog(): void {
   const log = party.geo.log;
   for (; seenGeoLog < log.length; seenGeoLog++) {
     const e = log[seenGeoLog];
-    switch (e.type) {
-      case 'day': journal('— Доба ' + e.day + ' —'); break;
-      case 'ufo_detected':
-        knownDetected.add(e.ufoId);
-        journal('Виявлено НЛО: ' + e.ufoId);
-        break;
-      case 'ufo_landed':
-        if (knownDetected.has(e.ufoId)) journal('НЛО ' + e.ufoId + ' приземлився — відкрито вікно місії');
-        break;
-      case 'ufo_left':
-        if (knownDetected.has(e.ufoId)) journal('НЛО ' + e.ufoId + ' відлетів і зник');
-        break;
-      case 'mission_won': journal('Місію зачищено ✓', 'win'); break;
-      case 'mission_lost': journal('Загін втрачено ✗', 'lose'); break;
-      default: break; // ufo_spawned / ufo_move — приховано туманом
-    }
+    if (e.type === 'ufo_detected') knownDetected.add(e.ufoId);
+    const msg = geoEventText(e, knownDetected);
+    if (msg) journal(msg.text, msg.cls);
   }
 }
 
@@ -183,6 +197,11 @@ function renderUfos(): void {
   }
 }
 
+// П7: колір HP у ростері (чиста функція): повне — зелений, понад половину — жовтий, інакше — червоний.
+export function hpColor(hp: number, maxHp: number): string {
+  return hp >= maxHp ? '#7fbf7f' : hp > maxHp / 2 ? '#d8b25a' : '#ff9c9c';
+}
+
 function renderRoster(): void {
   const box = el('roster');
   box.innerHTML = '';
@@ -199,9 +218,8 @@ function renderRoster(): void {
   for (const s of soldiers) {
     const row = document.createElement('div');
     row.className = 'soldier';
-    const hpColor = s.hp >= s.maxHp ? '#7fbf7f' : s.hp > s.maxHp / 2 ? '#d8b25a' : '#ff9c9c';
     row.innerHTML = '<span style="min-width:64px">' + s.name + '</span>' +
-      '<span style="color:' + hpColor + '">HP ' + s.hp + '/' + s.maxHp + '</span>' +
+      '<span style="color:' + hpColor(s.hp, s.maxHp) + '">HP ' + s.hp + '/' + s.maxHp + '</span>' +
       '<span class="kills">⚔ ' + s.kills + '</span>';
     box.appendChild(row);
   }
@@ -355,12 +373,18 @@ function checkOutcome(): boolean {
   return false;
 }
 
+// П7: чиста частина cellFromEvent — координати вікна (CSS) → клітинка бойовища
+// (buffer-розмір канви / BCELL); rect — getBoundingClientRect канви.
+export function cellFromPoint(cx: number, cy: number, rect: { left: number; top: number; width: number; height: number }, canvas: { width: number; height: number }): Vec2 {
+  return {
+    x: Math.floor((cx - rect.left) / rect.width * canvas.width / BCELL),
+    y: Math.floor((cy - rect.top) / rect.height * canvas.height / BCELL),
+  };
+}
+
 function cellFromEvent(ev: MouseEvent): Vec2 {
   const cv = el<HTMLCanvasElement>('battle');
-  const rect = cv.getBoundingClientRect();
-  const x = Math.floor((ev.clientX - rect.left) / rect.width * cv.width / BCELL);
-  const y = Math.floor((ev.clientY - rect.top) / rect.height * cv.height / BCELL);
-  return { x, y };
+  return cellFromPoint(ev.clientX, ev.clientY, cv.getBoundingClientRect(), cv);
 }
 
 function battleCanvasClick(ev: MouseEvent): void {
@@ -427,9 +451,7 @@ function battleCanvasHover(ev: MouseEvent): void {
     return;
   }
   const path = findPath(mission.state, sel.pos, cell);
-  const same = path !== null && hoverPath !== null && path.length === hoverPath.length &&
-    path.every((p, i) => p.x === hoverPath![i].x && p.y === hoverPath![i].y);
-  if (same) return; // без перерисовки на кожен піксель
+  if (samePath(path, hoverPath)) return; // без перерисовки на кожен піксель
   hoverPath = path;
   hoverAp = path ? pathApCost(path) : 0;
   if (path) {
@@ -521,18 +543,28 @@ function restart(): void {
   journal('Нова партія (сід ' + seed + '). Рухайте час — радар шукає НЛО.');
 }
 
-el('btn-tick').onclick = () => { if (!mission) { advanceTime(party.geo, 1); renderAll(); } };
-el('btn-day').onclick = () => { if (!mission) { advanceTime(party.geo, 48); renderAll(); } };
-el('btn-new').onclick = restart;
-el('btn-snap').onclick = () => armFire('snap');
-el('btn-aimed').onclick = () => armFire('aimed');
-el('btn-auto').onclick = () => armFire('auto');
-el('btn-ow').onclick = armOverwatch;
-el('btn-end').onclick = endPlayerTurn;
-el('btn-demo').onclick = demoBattle;
-const bc = el<HTMLCanvasElement>('battle');
-bc.addEventListener('click', battleCanvasClick);
-bc.addEventListener('mousemove', battleCanvasHover);
-bc.addEventListener('mouseleave', battleCanvasLeave);
-renderAll();
-journal('Партію розпочато. Рухайте час — радар шукає НЛО.');
+// П7: той самий шлях під курсором? (без перерисовки на кожен піксель)
+export function samePath(a: Vec2[] | null, b: Vec2[] | null): boolean {
+  if (a === null || b === null) return false;
+  return a.length === b.length && a.every((p, i) => p.x === b[i].x && p.y === b[i].y);
+}
+
+// П7: у node-середовищі (vitest) DOM відсутній — ініціалізацію керування
+// пропускаємо; чисті функції вище імпортуються тестами напряму.
+if (typeof document !== 'undefined') {
+  el('btn-tick').onclick = () => { if (!mission) { advanceTime(party.geo, 1); renderAll(); } };
+  el('btn-day').onclick = () => { if (!mission) { advanceTime(party.geo, 48); renderAll(); } };
+  el('btn-new').onclick = restart;
+  el('btn-snap').onclick = () => armFire('snap');
+  el('btn-aimed').onclick = () => armFire('aimed');
+  el('btn-auto').onclick = () => armFire('auto');
+  el('btn-ow').onclick = armOverwatch;
+  el('btn-end').onclick = endPlayerTurn;
+  el('btn-demo').onclick = demoBattle;
+  const bc = el<HTMLCanvasElement>('battle');
+  bc.addEventListener('click', battleCanvasClick);
+  bc.addEventListener('mousemove', battleCanvasHover);
+  bc.addEventListener('mouseleave', battleCanvasLeave);
+  renderAll();
+  journal('Партію розпочато. Рухайте час — радар шукає НЛО.');
+}
