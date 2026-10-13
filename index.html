@@ -109,6 +109,20 @@
         padding: 3px 0;
         font-variant-numeric: tabular-nums;
       }
+      .save-row {
+        display: flex;
+        gap: 6px;
+        align-items: center;
+        margin: 4px 0;
+        flex-wrap: wrap;
+      }
+      .save-row .meta {
+        flex: 1 1 100%;
+      }
+      .save-row button {
+        padding: 4px 8px;
+        font-size: 12px;
+      }
       .kills {
         color: #d8b25a;
       }
@@ -183,6 +197,8 @@
         <button id="btn-hire">Найм солдата (100)</button>
         <h2 style="margin-top: 14px">Ростер загону</h2>
         <div id="roster"></div>
+        <h2 style="margin-top: 14px">Збереження</h2>
+        <div id="save-panel"></div>
       </section>
       <section class="panel hidden" id="battle-panel">
         <h2>Тактичний бій <span id="bturn" style="color: #7d8794"></span></h2>

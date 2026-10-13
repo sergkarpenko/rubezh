@@ -20,6 +20,9 @@
 // в панелі «Фінанси», кнопка найму, статус поранених у ростері
 // («лікарня: N тіків»); тік часу = geoTick + economyTick + hospitalTick,
 // банкрутство фіксується на тіку геосцени (кнопки блокуються).
+// Фаза 5 (П5.3, ADR-0026): панель збереження — 3 слоти (зберегти/
+// завантажити/видалити), активна лише на геосцені (місія не переривається);
+// сховище — localStorage через адаптер SlotStore (ядро без DOM — save.ts).
 
 import {
   RADAR_RANGE,
@@ -27,25 +30,14 @@ import {
   WORLD_W,
   WORLD_H,
   advanceTime,
-  createGeoGame,
   detectedUfos,
   geoClock,
   missionTargets,
   type GeoEvent,
-  type GeoState,
 } from './core/geo';
 import { ALIEN_SPAWN, SQUAD_SPAWN, completeMission, createMission, missionOutcome, type Mission } from './core/mission';
-import {
-  applyMissionResult,
-  createRoster,
-  hireSoldier,
-  hospitalTick,
-  isBankrupt,
-  missionSquad,
-  readySoldiers,
-  type Roster,
-} from './core/squad';
-import { createEconomy, creditMissionBonus, economyTick, HIRE_PRICE, type EconomyEvent, type EconomyState } from './core/economy';
+import { applyMissionResult, hireSoldier, hospitalTick, isBankrupt, missionSquad, readySoldiers } from './core/squad';
+import { creditMissionBonus, economyTick, HIRE_PRICE, type EconomyEvent } from './core/economy';
 import {
   calculateHitChance,
   endTurn,
@@ -59,17 +51,13 @@ import {
 } from './core/combat';
 import { computeVisibleCells, findPath, pathApCost } from './core/map';
 import { aliensTurn, autoBattle } from './bot';
+// П5.3 (ADR-0026): партія і слоти збереження — із чистого ядра save.ts.
+import { SAVE_SLOTS, createParty, eraseSlot, loadFromSlot, saveToSlot, slotMeta, type Party, type SlotStore } from './core/save';
 
 const GCELL = 36; // px на клітинку світу (16×8 → 576×288)
 const BCELL = 26; // px на клітинку бойовища (20×20 → 520×520)
 
 const MODE_LABEL: Record<ShotMode, string> = { snap: 'швидкий', aimed: 'прицільний', auto: 'черга' };
-
-interface Party {
-  geo: GeoState;
-  roster: Roster;
-  econ: EconomyState;
-}
 
 function el<T extends HTMLElement>(id: string): T {
   const e = document.getElementById(id);
@@ -92,12 +80,20 @@ let fireMode: ShotMode | null = null; // «зведений» режим пос�
 let hoverPath: Vec2[] | null = null; // прев'ю шляху під курсором
 let hoverAp = 0;
 
-function newParty(seed: number): Party {
-  seenGeoLog = 0;
+// Прийняти партію у UI-шар: історію журналу не відтворюємо (лише нові події
+// після точки входу), трекінг НЛО перебудовуємо з логу (ADR-0006), банкрутство
+// перераховуємо (ADR-0021). Спільно для нової і завантаженої партії.
+function adoptParty(p: Party): Party {
+  seenGeoLog = p.geo.log.length;
   knownDetected.clear();
-  seenEconLog = 0;
-  gameOver = false;
-  return { geo: createGeoGame({ seed }), roster: createRoster(), econ: createEconomy() };
+  for (const e of p.geo.log) if (e.type === 'ufo_detected') knownDetected.add(e.ufoId);
+  seenEconLog = p.econ.log.length;
+  gameOver = isBankrupt(p.econ, p.roster);
+  return p;
+}
+
+function newParty(seed: number): Party {
+  return adoptParty(createParty(seed));
 }
 
 function journal(text: string, cls = ''): void {
@@ -356,6 +352,128 @@ function renderRoster(): void {
   }
 }
 
+// --- П5.3: панель збереження (ADR-0026) ---
+
+// ADR-0026: сховище — localStorage, ключі rubezh.save.1..3. Ядро бачить лише
+// абстракцію SlotStore (save.ts); тут — конкретний браузерний адаптер.
+const store: SlotStore = {
+  read: (slot) => {
+    try {
+      return localStorage.getItem('rubezh.save.' + slot);
+    } catch {
+      return null;
+    }
+  },
+  write: (slot, data) => localStorage.setItem('rubezh.save.' + slot, data),
+  remove: (slot) => localStorage.removeItem('rubezh.save.' + slot),
+};
+
+// Недоступний localStorage (приватний режим тощо) — повідомлення в UI (ADR-0026).
+let storageOk = true;
+function detectStorage(): void {
+  try {
+    localStorage.setItem('rubezh.probe', '1');
+    localStorage.removeItem('rubezh.probe');
+    storageOk = true;
+  } catch {
+    storageOk = false;
+  }
+}
+
+function renderSavePanel(): void {
+  const box = el('save-panel');
+  box.innerHTML = '';
+  if (!storageOk) {
+    box.innerHTML = '<div class="meta">Сховище недоступне (приватний режим?) — збереження вимкнено.</div>';
+    return;
+  }
+  const busy = mission !== null; // збереження лише на геосцені (ADR-0026)
+  for (let slot = 1; slot <= SAVE_SLOTS; slot++) {
+    const row = document.createElement('div');
+    row.className = 'save-row';
+    const meta = document.createElement('span');
+    meta.id = 'slot-' + slot;
+    meta.className = 'meta';
+    const json = store.read(slot);
+    const empty = json === null;
+    if (json === null) meta.textContent = '—';
+    else {
+      try {
+        const m = slotMeta(json);
+        const mnt = m.minute % 1440;
+        meta.textContent =
+          'Д' +
+          m.day +
+          ' ' +
+          String(Math.floor(mnt / 60)).padStart(2, '0') +
+          ':' +
+          String(mnt % 60).padStart(2, '0') +
+          ' · сід ' +
+          m.seed +
+          ' · ' +
+          m.money +
+          ' · ' +
+          m.aliveSoldiers +
+          ' солд · ' +
+          m.savedAt.slice(0, 16).replace('T', ' ');
+      } catch {
+        meta.textContent = 'пошкоджений слот';
+      }
+    }
+    const bSave = document.createElement('button');
+    bSave.id = 'btn-save-' + slot;
+    bSave.textContent = 'Зберегти';
+    bSave.disabled = busy || gameOver;
+    bSave.onclick = () => saveSlot(slot);
+    const bLoad = document.createElement('button');
+    bLoad.id = 'btn-load-' + slot;
+    bLoad.textContent = 'Завантажити';
+    bLoad.disabled = busy || empty;
+    bLoad.onclick = () => loadSlot(slot);
+    const bDel = document.createElement('button');
+    bDel.id = 'btn-del-' + slot;
+    bDel.textContent = 'Видалити';
+    bDel.disabled = busy || empty;
+    bDel.onclick = () => deleteSlot(slot);
+    row.append(meta, bSave, bLoad, bDel);
+    box.appendChild(row);
+  }
+}
+
+// ADR-0026: збереження можливе лише на геосцені (місія не переривається).
+function saveSlot(slot: number): void {
+  if (mission !== null || gameOver) return;
+  try {
+    saveToSlot(store, slot, party, new Date().toISOString());
+    journal('Збережено: слот ' + slot + '.');
+  } catch (e) {
+    journal('✗ Збереження не вдалось: ' + (e as Error).message, 'lose');
+  }
+  renderSavePanel();
+}
+
+function loadSlot(slot: number): void {
+  if (mission !== null) return;
+  try {
+    party = adoptParty(loadFromSlot(store, slot));
+    journal('Завантажено: слот ' + slot + ' — ' + geoClock(party.geo) + ', баланс ' + party.econ.money + '.');
+  } catch (e) {
+    journal('✗ Завантаження не вдалось: ' + (e as Error).message, 'lose');
+  }
+  renderAll();
+}
+
+function deleteSlot(slot: number): void {
+  if (mission !== null) return;
+  try {
+    eraseSlot(store, slot);
+    journal('Слот ' + slot + ' видалено.');
+  } catch (e) {
+    journal('✗ ' + (e as Error).message, 'lose');
+  }
+  renderSavePanel();
+}
+
 // --- тактичний бій (5.3) ---
 
 function binfo(text: string): void {
@@ -479,6 +597,7 @@ function renderAll(): void {
   renderUfos();
   renderFinances();
   renderRoster();
+  renderSavePanel();
   if (mission) renderBattle();
   else el('battle-panel').classList.add('hidden');
 }
@@ -785,6 +904,8 @@ if (typeof document !== 'undefined') {
   bc.addEventListener('click', battleCanvasClick);
   bc.addEventListener('mousemove', battleCanvasHover);
   bc.addEventListener('mouseleave', battleCanvasLeave);
+  detectStorage();
   renderAll();
   journal('Партію розпочато. Рухайте час — радар шукає НЛО.');
+  if (!storageOk) journal('✗ Сховище недоступне — збереження вимкнено (приватний режим?).', 'lose');
 }

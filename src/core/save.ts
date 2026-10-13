@@ -83,7 +83,10 @@ export function serializeParty(party: Party, savedAt: string = ''): string {
     savedAt,
     state: {
       geo: {
-        rngState: rng.state,
+        // >>> 0: стан mulberry32 — знакове int32 після |0; без нормалізації
+        // формат «дрифтував» б (save → load → save давав інший рядок).
+        // Біти ті самі, тож траєкторія не залежить від подання (ADR-0003).
+        rngState: rng.state >>> 0,
         minute: party.geo.minute,
         base: { ...party.geo.base },
         ufos: party.geo.ufos.map((u) => ({ ...u, pos: { ...u.pos }, target: { ...u.target } })),
