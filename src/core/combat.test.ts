@@ -2,6 +2,7 @@
 // src/core/combat.test.ts
 // Юніт-тести бойового ядра (ітерації 0–2). Запуск: npx vitest
 // Логіка всіх сценаріїв попередньо перевірена в пісочниці.
+// 2026-10-13: узгоджено з ядром після першого запуску CI (3 тести заступи/атаки).
 
 import { describe, expect, it } from 'vitest';
 import {
@@ -109,7 +110,9 @@ describe('атака', () => {
     const walled = setupGame(alwaysHit, ['5,2']);
     expect(() => resolveAttack(walled, 's1', 'a1', 'aimed')).toThrow('лінії вогню');
 
-    const tired = setupGame(alwaysHit, ['5,2']);
+    // без стіни: ядро перевіряє LOS раніше за AP, тож для винятку про AP
+    // лінія вогню має бути чистою
+    const tired = setupGame(alwaysHit);
     tired.units[0].ap = 2;
     expect(() => resolveAttack(tired, 's1', 'a1', 'snap')).toThrow('очок дій');
   });
@@ -164,12 +167,19 @@ describe('заступа (overwatch)', () => {
     expect(g.units[0].ap).toBe(7);
     expect(g.units[0].overwatch).toBe(true);
     expect(g.log).toContainEqual({ type: 'overwatch', unitId: 's1', armed: true });
+    // озброєна заступа ігнорується повторним викликом — скидаємо прапор,
+    // щоб перевірити саме брак AP
+    g.units[0].overwatch = false;
     g.units[0].ap = 2;
     expect(() => setOverwatch(g, 's1')).toThrow('очок дій');
   });
 
   it('реакційний вогонь: один постріл за рух ворога, заступа розряджається', () => {
     const g = setupGame();
+    // ціль 10 HP: мінімальний дамаг гвинтівки (3) при alwaysHit не вбиває —
+    // перевіряємо саме «поранений, але живий»
+    g.units[1].hp = 10;
+    g.units[1].maxHp = 10;
     setOverwatch(g, 's1');
     endTurn(g);
     expect(g.units[0].overwatch).toBe(true); // тримається під час ходу ворога
@@ -256,7 +266,7 @@ describe('детермінізм', () => {
       resolveAttack(g, 's1', 'a1', 'snap');
       endTurn(g);
       resolveAttack(g, 'a1', 's1', 'aimed');
-      return JSON.stringify(g.log) + '|' + g.units.map(u => `${u.hp}:${u.ap}:${u.alive}`).join(',');
+      return JSON.stringify(g.log) + '|' + g.units.map(u => \`\${u.hp}:\${u.ap}:\${u.alive}\`).join(',');
     };
     expect(play(7)).toBe(play(7));
   });
