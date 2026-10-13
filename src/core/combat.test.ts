@@ -1,4 +1,3 @@
-
 // src/core/combat.test.ts
 // Юніт-тести бойового ядра (ітерації 0–2). Запуск: npx vitest
 // Логіка всіх сценаріїв попередньо перевірена в пісочниці.
@@ -266,7 +265,7 @@ describe('детермінізм', () => {
       resolveAttack(g, 's1', 'a1', 'snap');
       endTurn(g);
       resolveAttack(g, 'a1', 's1', 'aimed');
-      return JSON.stringify(g.log) + '|' + g.units.map(u => \`\${u.hp}:\${u.ap}:\${u.alive}\`).join(',');
+      return JSON.stringify(g.log) + '|' + g.units.map(u => u.hp + ':' + u.ap + ':' + u.alive).join(',');
     };
     expect(play(7)).toBe(play(7));
   });
