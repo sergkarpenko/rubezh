@@ -6,70 +6,35 @@
 // Дзеркало ШІ прибульців 3.5 (src/core/ai.ts): найближча видима ціль → постріл
 // (auto > aimed > snap за очікуваним пошкодженням); не можна — рух у бік цілі;
 // цілей не видно — рух до зони НЛО (без резерву на заступу: демо має досягти
-// швидкого контакту). Використовує лише публічне API ядра; туман війни чесний
-// (visibleEnemies). Логіка перевірена в пісочниці: 12/12 боїв завершуються,
-// детерміновано.
+// швидкого контакту). Спільні примітиви — у src/core/ai-utils.ts (Фаза 2, П6),
+// дублювання з ai.ts усунуто. Використовує лише публічне API ядра; туман
+// війни чесний (visibleEnemies). Логіка перевірена в пісочниці: 12/12 боїв
+// завершуються, детерміновано.
 
 import {
-  distance, endTurn, hasLineOfSight, moveUnit, resolveAttack,
-  type GameState, type ShotMode, type Unit, type Vec2,
+  endTurn,
+  moveUnit,
+  resolveAttack,
+  type GameState,
+  type Unit,
 } from './core/combat';
-import { findPath, visibleEnemies } from './core/map';
+import { visibleEnemies } from './core/map';
+import { bestPathToNeighbors, bestShootMode, nearestEnemy, pathToward } from './core/ai-utils';
 import { aiStep } from './core/ai';
 import { ALIEN_SPAWN, SQUAD_SPAWN, missionOutcome } from './core/mission';
-
-const MODE_PRIORITY: ShotMode[] = ['auto', 'aimed', 'snap']; // за очікуваним пошкодженням на постріл
-
-// Найкращий доступний режим пострілу: дальність + LOS + AP, інакше null.
-function bestShootMode(state: GameState, u: Unit, target: Unit): ShotMode | null {
-  if (distance(u.pos, target.pos) > u.weapon.range) return null;
-  if (!hasLineOfSight(state, u.pos, target.pos)) return null;
-  for (const mode of MODE_PRIORITY) {
-    if (u.ap >= u.weapon.modes[mode].apCost) return mode;
-  }
-  return null;
-}
-
-// Шлях до клітинки поруч із ціллю, обрізаний до наявних AP (як pathToward у ai.ts).
-function pathToward(state: GameState, u: Unit, target: Unit): Vec2[] | null {
-  const goals: Vec2[] = [
-    { x: target.pos.x + 1, y: target.pos.y }, { x: target.pos.x - 1, y: target.pos.y },
-    { x: target.pos.x, y: target.pos.y + 1 }, { x: target.pos.x, y: target.pos.y - 1 },
-  ];
-  let best: Vec2[] | null = null;
-  for (const g of goals) {
-    const p = findPath(state, u.pos, g);
-    if (p && p.length > 0 && (best === null || p.length < best.length)) best = p;
-  }
-  if (!best) return null;
-  return best.slice(0, u.ap);
-}
-
-// Рух до зони НЛО, коли цілей не видно (дзеркало patrolStep, без резерву AP).
-function advanceStep(state: GameState, u: Unit): Vec2[] | null {
-  const goals: Vec2[] = [];
-  for (const p of ALIEN_SPAWN) {
-    goals.push({ x: p.x + 1, y: p.y }, { x: p.x - 1, y: p.y }, { x: p.x, y: p.y + 1 }, { x: p.x, y: p.y - 1 });
-  }
-  let best: Vec2[] | null = null;
-  for (const g of goals) {
-    const p = findPath(state, u.pos, g);
-    if (p && p.length > 0 && (best === null || p.length < best.length)) best = p;
-  }
-  if (!best) return null;
-  return best.slice(0, u.ap);
-}
 
 // Одна жадібна дія солдата: true — дія виконана (виконана дія завжди витрачає AP).
 function soldierStep(state: GameState, u: Unit): boolean {
   if (!u.alive || u.ap <= 0) return false;
   const enemies = visibleEnemies(state, 'player');
   if (enemies.length === 0) {
-    const step = advanceStep(state, u);
+    // Рух до зони НЛО (дзеркало patrolStep, але без резерву на заступу:
+    // демо має досягти швидкого контакту).
+    const step = bestPathToNeighbors(state, u, ALIEN_SPAWN, u.ap);
     if (step) { moveUnit(state, u.id, step); return true; }
     return false;
   }
-  const target = enemies.reduce((best, e) => distance(u.pos, e.pos) < distance(u.pos, best.pos) ? e : best);
+  const target = nearestEnemy(u, enemies);
   const mode = bestShootMode(state, u, target);
   if (mode) { resolveAttack(state, u.id, target.id, mode); return true; }
   const step = pathToward(state, u, target);
