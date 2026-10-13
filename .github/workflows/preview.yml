@@ -27,6 +27,15 @@ jobs:
           node-version: 22
       - run: npm install
       - run: npm test
+      # Покриття ядра + поріг 80% (ADR-0017); звіт — dist/coverage
+      - run: npm run test:coverage
+      # Завантаження на Codecov: не ламати CI, доки не задано CODECOV_TOKEN (ADR-0017)
+      - name: Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          files: dist/coverage/coverage-final.json
+          token: ${{ secrets.CODECOV_TOKEN }}
+        continue-on-error: true
       - run: npm run build
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
