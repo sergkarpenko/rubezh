@@ -26,7 +26,7 @@ Source: **GitHub Actions**.
 
 - TypeScript + Canvas 2D, Vite, без фреймворків (ADR-0001, ADR-0010)
 - Тестування: vitest (jsdom для DOM-тестів UI), покриття v8 → Codecov
-- Якість: ESLint + Prettier (лінт і формат — рубіж на коміті), TypeDoc для довідки API
+- Якість: ESLint + Prettier (лінт і формат — рубіж на коміті), TypeDoc для довідки API, Dependabot для оновлення залежностей (ADR-0020)
 
 ## Розробка
 

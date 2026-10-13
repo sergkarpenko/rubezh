@@ -1,0 +1,25 @@
+# Dependabot: тижневі оновлення залежностей (ADR-0020).
+# Мерж PR власником = авторизація; окремий ADR на оновлення не потрібен.
+# ADR-0012 лишається чинним для нових залежностей і ручних змін package.json.
+version: 2
+updates:
+  # npm: package.json + package-lock.json
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    # dev-залежності — одним PR; production — окремим (зараз усі dev, на майбутнє)
+    groups:
+      dev:
+        dependency-type: "development"
+      production:
+        dependency-type: "production"
+    commit-message:
+      prefix: "chore(deps)"
+  # GitHub Actions у .github/workflows/
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: "chore(ci)"
