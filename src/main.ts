@@ -26,12 +26,15 @@ function el<T extends HTMLElement>(id: string): T {
   return e as T;
 }
 
+// Порядок оголошень важливий: newParty() на старті модуля пише seenGeoLog
+// і knownDetected — вони мають бути ініціалізовані ДО виклику (інакше TDZ:
+// ReferenceError до першого рендера, і вся сторінка лишається порожньою).
+let seenGeoLog = 0;
+const knownDetected = new Set<string>();
 let party: Party = newParty(42);
 let mission: Mission | null = null;
 let battleTimer: ReturnType<typeof setInterval> | undefined;
 let battleResult: 'перемога' | 'поразка' | null = null;
-let seenGeoLog = 0;
-const knownDetected = new Set<string>();
 
 function newParty(seed: number): Party {
   seenGeoLog = 0;
