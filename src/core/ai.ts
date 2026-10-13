@@ -17,15 +17,7 @@
 // bestPathToNeighbors) винесено в ai-utils.ts — ними користується і демо-бот
 // гравця (src/bot.ts), дублювання логіки немає.
 
-import {
-  OVERWATCH_AP_COST,
-  moveUnit,
-  resolveAttack,
-  setOverwatch,
-  type GameState,
-  type Unit,
-  type Vec2,
-} from './combat';
+import { OVERWATCH_AP_COST, moveUnit, resolveAttack, setOverwatch, type GameState, type Vec2 } from './combat';
 import { visibleEnemies } from './map';
 import { bestPathToNeighbors, bestShootMode, nearestEnemy, pathToward } from './ai-utils';
 

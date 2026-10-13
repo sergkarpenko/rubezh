@@ -42,12 +42,28 @@ describe('samePath: дедуплікація превʼю шляху під ку
   });
 
   it('ідентичні шляхи — true', () => {
-    const a = [{ x: 1, y: 2 }, { x: 2, y: 2 }];
-    expect(samePath(a, [{ x: 1, y: 2 }, { x: 2, y: 2 }])).toBe(true);
+    const a = [
+      { x: 1, y: 2 },
+      { x: 2, y: 2 },
+    ];
+    expect(
+      samePath(a, [
+        { x: 1, y: 2 },
+        { x: 2, y: 2 },
+      ])
+    ).toBe(true);
   });
 
   it('різна довжина / інша клітинка — false', () => {
-    expect(samePath([{ x: 1, y: 1 }], [{ x: 1, y: 1 }, { x: 2, y: 1 }])).toBe(false);
+    expect(
+      samePath(
+        [{ x: 1, y: 1 }],
+        [
+          { x: 1, y: 1 },
+          { x: 2, y: 1 },
+        ]
+      )
+    ).toBe(false);
     expect(samePath([{ x: 1, y: 1 }], [{ x: 2, y: 1 }])).toBe(false);
   });
 });
@@ -70,28 +86,25 @@ describe('geoEventText: фільтр туману стратегічного ж�
   const ev = (e: Partial<GeoEvent> & { type: GeoEvent['type'] }): GeoEvent => e as GeoEvent;
 
   it('доба і виявлення — видно завжди', () => {
-    expect(geoEventText(ev({ type: 'day', day: 2, minute: 0 }), known))
-      .toEqual({ text: '— Доба 2 —', cls: '' });
-    expect(geoEventText(ev({ type: 'ufo_detected', ufoId: 'u2', pos: { x: 1, y: 1 }, minute: 5 }), known))
-      .toEqual({ text: 'Виявлено НЛО: u2', cls: '' });
+    expect(geoEventText(ev({ type: 'day', day: 2, minute: 0 }), known)).toEqual({ text: '— Доба 2 —', cls: '' });
+    expect(geoEventText(ev({ type: 'ufo_detected', ufoId: 'u2', pos: { x: 1, y: 1 }, minute: 5 }), known)).toEqual({
+      text: 'Виявлено НЛО: u2',
+      cls: '',
+    });
   });
 
   it('приземлення/відліт видно лише для раніше виявлених НЛО', () => {
-    expect(geoEventText(ev({ type: 'ufo_landed', ufoId: 'u1', pos: { x: 2, y: 2 }, minute: 9 }), known)?.text)
-      .toContain('приземлився');
+    expect(geoEventText(ev({ type: 'ufo_landed', ufoId: 'u1', pos: { x: 2, y: 2 }, minute: 9 }), known)?.text).toContain('приземлився');
     expect(geoEventText(ev({ type: 'ufo_landed', ufoId: 'uX', pos: { x: 2, y: 2 }, minute: 9 }), known)).toBe(null);
-    expect(geoEventText(ev({ type: 'ufo_left', ufoId: 'u1', minute: 30 }), known)?.text)
-      .toContain('відлетів');
+    expect(geoEventText(ev({ type: 'ufo_left', ufoId: 'u1', minute: 30 }), known)?.text).toContain('відлетів');
     expect(geoEventText(ev({ type: 'ufo_left', ufoId: 'uX', minute: 30 }), known)).toBe(null);
   });
 
   it('спавн і рух НЛО приховано туманом; результати місій з класами win/lose', () => {
     expect(geoEventText(ev({ type: 'ufo_spawned', ufoId: 'u3', kind: 'розвідник', pos: { x: 0, y: 0 }, minute: 1 }), known)).toBe(null);
     expect(geoEventText(ev({ type: 'ufo_move', ufoId: 'u1', from: { x: 0, y: 0 }, to: { x: 1, y: 0 }, minute: 2 }), known)).toBe(null);
-    expect(geoEventText(ev({ type: 'mission_won', ufoId: 'u1', minute: 60 }), known))
-      .toEqual({ text: 'Місію зачищено ✓', cls: 'win' });
-    expect(geoEventText(ev({ type: 'mission_lost', ufoId: 'u1', minute: 60 }), known))
-      .toEqual({ text: 'Загін втрачено ✗', cls: 'lose' });
+    expect(geoEventText(ev({ type: 'mission_won', ufoId: 'u1', minute: 60 }), known)).toEqual({ text: 'Місію зачищено ✓', cls: 'win' });
+    expect(geoEventText(ev({ type: 'mission_lost', ufoId: 'u1', minute: 60 }), known)).toEqual({ text: 'Загін втрачено ✗', cls: 'lose' });
   });
 });
 
@@ -100,15 +113,17 @@ describe('battleEventText: події бою → журнал', () => {
   const ev = (e: Partial<GameEvent> & { type: GameEvent['type'] }): GameEvent => e as GameEvent;
 
   it('постріл: влучання з пошкодженням / промах', () => {
-    expect(battleEventText(ev({ type: 'shot', shooterId: 's1', targetId: 'a1', mode: 'aimed', hit: true, damage: 4 }), name))
-      .toEqual({ text: 'Гарт → Морок (прицільний): −4', cls: '' });
-    expect(battleEventText(ev({ type: 'shot', shooterId: 's1', targetId: 'a1', mode: 'auto', hit: false, damage: 0 }), name)
-      ?.text).toContain('промах');
+    expect(battleEventText(ev({ type: 'shot', shooterId: 's1', targetId: 'a1', mode: 'aimed', hit: true, damage: 4 }), name)).toEqual({
+      text: 'Гарт → Морок (прицільний): −4',
+      cls: '',
+    });
+    expect(
+      battleEventText(ev({ type: 'shot', shooterId: 's1', targetId: 'a1', mode: 'auto', hit: false, damage: 0 }), name)?.text
+    ).toContain('промах');
   });
 
   it('смерть — клас lose; рух/хід/заступа — не для журналу', () => {
-    expect(battleEventText(ev({ type: 'death', unitId: 'a1', killerId: 's1' }), name))
-      .toEqual({ text: '✝ Морок загинув', cls: 'lose' });
+    expect(battleEventText(ev({ type: 'death', unitId: 'a1', killerId: 's1' }), name)).toEqual({ text: '✝ Морок загинув', cls: 'lose' });
     expect(battleEventText(ev({ type: 'move', unitId: 's1', from: { x: 0, y: 0 }, to: { x: 1, y: 0 } }), name)).toBe(null);
     expect(battleEventText(ev({ type: 'turn', turn: 2, side: 'alien' }), name)).toBe(null);
     expect(battleEventText(ev({ type: 'overwatch', unitId: 's1', armed: true }), name)).toBe(null);

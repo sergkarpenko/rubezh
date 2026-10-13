@@ -20,10 +20,13 @@ beforeAll(async () => {
   document.body.innerHTML = html.match(/<body[^>]*>([\s\S]*)<\/body>/)![1];
 
   // No-op контекст малювання: усі виклики — порожні, присвоєння властивостей — так.
-  const noopCtx = new Proxy({}, {
-    get: () => () => undefined,
-    set: () => true,
-  }) as unknown as CanvasRenderingContext2D;
+  const noopCtx = new Proxy(
+    {},
+    {
+      get: () => () => undefined,
+      set: () => true,
+    }
+  ) as unknown as CanvasRenderingContext2D;
   const proto = HTMLCanvasElement.prototype as unknown as {
     getContext: () => CanvasRenderingContext2D;
     getBoundingClientRect: (this: HTMLCanvasElement) => DOMRect;
@@ -32,9 +35,14 @@ beforeAll(async () => {
   // Клік-математика: канва розтягнута на 1:1, клітинка = width/20 (BCELL).
   proto.getBoundingClientRect = function (this: HTMLCanvasElement): DOMRect {
     return {
-      x: 0, y: 0, left: 0, top: 0,
-      width: this.width, height: this.height,
-      right: this.width, bottom: this.height,
+      x: 0,
+      y: 0,
+      left: 0,
+      top: 0,
+      width: this.width,
+      height: this.height,
+      right: this.width,
+      bottom: this.height,
       toJSON: () => '',
     } as DOMRect;
   };

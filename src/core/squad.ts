@@ -22,18 +22,15 @@ import { makeSoldier, SQUAD_SPAWN } from './mission';
 export const STARTING_ROSTER_SIZE = 6; // два повні загони + запас
 
 // Стартовий пул імен — фіксований, без RNG (детермінізм). Циклічно: «Іван», …, «Віра», «Іван 2»…
-const SOLDIER_NAMES = [
-  'Іван', 'Олена', 'Тарас', 'Марія', 'Богдан', 'Софія',
-  'Дмитро', 'Ярина', 'Орест', 'Наталія', 'Андрій', 'Віра',
-];
+const SOLDIER_NAMES = ['Іван', 'Олена', 'Тарас', 'Марія', 'Богдан', 'Софія', 'Дмитро', 'Ярина', 'Орест', 'Наталія', 'Андрій', 'Віра'];
 
 export interface Roster {
   soldiers: Unit[]; // живі солдати; загиблі вилучаються (перма-смерть)
-  hired: number;   // скільки всього пройшло через ростер (для унікальності id/імен)
+  hired: number; // скільки всього пройшло через ростер (для унікальності id/імен)
 }
 
 export interface MissionAftermath {
-  lost: Unit[];      // солдати, вилучені з ростеру (загинули в бою)
+  lost: Unit[]; // солдати, вилучені з ростеру (загинули в бою)
   survivors: Unit[]; // виживші після повного лікування на базі
 }
 
@@ -70,15 +67,15 @@ export function missionSquad(roster: Roster, size: number = SQUAD_SPAWN.length):
 // Загиблий вилучається з ростеру назавжди; виживший повністю лікується на
 // базі (hp = maxHp), заступа скидається; kills зберігаються — стаж ветерана.
 export function applyMissionResult(roster: Roster, state: GameState): MissionAftermath {
-  const deployed = state.units.filter(u => u.side === 'player');
+  const deployed = state.units.filter((u) => u.side === 'player');
   if (deployed.length === 0) throw new Error('У стані місії немає солдатів гравця');
   const lost: Unit[] = [];
   const survivors: Unit[] = [];
   for (const u of deployed) {
-    const rec = roster.soldiers.find(s => s.id === u.id);
+    const rec = roster.soldiers.find((s) => s.id === u.id);
     if (!rec) throw new Error('Солдат не з цього ростеру: ' + u.id);
     if (!u.alive) {
-      roster.soldiers = roster.soldiers.filter(s => s.id !== u.id);
+      roster.soldiers = roster.soldiers.filter((s) => s.id !== u.id);
       lost.push(rec);
     } else {
       rec.hp = rec.maxHp;

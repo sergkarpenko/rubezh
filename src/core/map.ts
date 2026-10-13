@@ -1,4 +1,3 @@
-
 // src/core/map.ts
 // Ітерація 2: пошук шляху (A*), туман війни, генератор тестових мап.
 // ADR-0002: Чисте ядро логіки без DOM/Canvas
@@ -22,7 +21,9 @@ import {
 
 export const VISION_RANGE = 12;
 
-function key(pos: Vec2): string { return pos.x + ',' + pos.y; }
+function key(pos: Vec2): string {
+  return pos.x + ',' + pos.y;
+}
 
 // --- Пошук шляху (A*, 4 напрямки, евристика Мангеттен) ---
 
@@ -34,12 +35,15 @@ function key(pos: Vec2): string { return pos.x + ',' + pos.y; }
 export function findPath(state: GameState, start: Vec2, goal: Vec2, maxNodes = 2000): Vec2[] | null {
   const k = (p: Vec2) => p.x + ',' + p.y;
   if (k(start) === k(goal)) return []; // спершу старт = ціль, потім перевірка зайнятості
-  const passable = (p: Vec2): boolean =>
-    isInside(state.map, p) && !isBlocked(state.map, p) && !unitAt(state, p);
+  const passable = (p: Vec2): boolean => isInside(state.map, p) && !isBlocked(state.map, p) && !unitAt(state, p);
   if (!passable(goal)) return null;
 
   const h = (p: Vec2) => Math.abs(p.x - goal.x) + Math.abs(p.y - goal.y);
-  interface Node { pos: Vec2; g: number; f: number }
+  interface Node {
+    pos: Vec2;
+    g: number;
+    f: number;
+  }
   const open: Node[] = [{ pos: start, g: 0, f: h(start) }];
   const cameFrom = new Map<string, string>();
   const gScore = new Map<string, number>([[k(start), 0]]);
@@ -64,8 +68,10 @@ export function findPath(state: GameState, start: Vec2, goal: Vec2, maxNodes = 2
       return path;
     }
     const nb: Vec2[] = [
-      { x: cur.pos.x + 1, y: cur.pos.y }, { x: cur.pos.x - 1, y: cur.pos.y },
-      { x: cur.pos.x, y: cur.pos.y + 1 }, { x: cur.pos.x, y: cur.pos.y - 1 },
+      { x: cur.pos.x + 1, y: cur.pos.y },
+      { x: cur.pos.x - 1, y: cur.pos.y },
+      { x: cur.pos.x, y: cur.pos.y + 1 },
+      { x: cur.pos.x, y: cur.pos.y - 1 },
     ];
     for (const n of nb) {
       if (closed.has(k(n)) || !passable(n)) continue;
@@ -113,7 +119,7 @@ export function visibleEnemies(state: GameState, side: Side): Unit[] {
     if (u.side !== side || !u.alive) continue;
     for (const kk of computeVisibleCells(state, u.pos)) seen.add(kk);
   }
-  return state.units.filter(u => u.alive && u.side !== side && seen.has(key(u.pos)));
+  return state.units.filter((u) => u.alive && u.side !== side && seen.has(key(u.pos)));
 }
 
 // --- Генератор тестових мап ---
@@ -131,10 +137,13 @@ export function makeTestMap(seed: number, width = 20, height = 20, density = 0.0
       if (rng() < density) blocked.add(x + ',' + y);
     }
   }
-  for (const [sx, sy] of [[2, 2], [17, 2]] as const) {
+  for (const [sx, sy] of [
+    [2, 2],
+    [17, 2],
+  ] as const) {
     for (let dy = -1; dy <= 1; dy++) {
       for (let dx = -1; dx <= 1; dx++) {
-        blocked.delete((sx + dx) + ',' + (sy + dy));
+        blocked.delete(sx + dx + ',' + (sy + dy));
       }
     }
   }

@@ -1,4 +1,3 @@
-
 // src/core/geo.ts
 // Ітерація 4.1: стратегічне ядро «Рубіж» — час, мапа світу, база, НЛО.
 // ADR-0001: Цільова платформа — браузер
@@ -21,20 +20,23 @@
 
 import { mulberry32, type RNG, type Vec2 } from './combat';
 
-export const TICK_MINUTES = 30;            // 1 тік = 30 хвилин; доба = 48 тіків
+export const TICK_MINUTES = 30; // 1 тік = 30 хвилин; доба = 48 тіків
 export const WORLD_W = 16;
 export const WORLD_H = 8;
-export const RADAR_RANGE = 4;             // Чебишев, із замиканням по X
-export const DEFAULT_SPAWN_CHANCE = 0.03;  // за тік ≈ 1.5 НЛО/добу (за симуляціями 20 сідів × 10 днів)
+export const RADAR_RANGE = 4; // Чебишев, із замиканням по X
+export const DEFAULT_SPAWN_CHANCE = 0.03; // за тік ≈ 1.5 НЛО/добу (за симуляціями 20 сідів × 10 днів)
 export const DEFAULT_MAX_UFOS = 3;
 
 export type UfoKind = 'розвідник' | 'збирач';
 
-interface KindProfile { moveEveryTicks: number; landingTicks: number }
+interface KindProfile {
+  moveEveryTicks: number;
+  landingTicks: number;
+}
 
 export const UFO_KINDS: Record<UfoKind, KindProfile> = {
-  'розвідник': { moveEveryTicks: 1, landingTicks: 8 },  // швидкий, коротке вікно (4 год)
-  'збирач': { moveEveryTicks: 2, landingTicks: 16 },    // повільний, широке вікно (8 год)
+  розвідник: { moveEveryTicks: 1, landingTicks: 8 }, // швидкий, коротке вікно (4 год)
+  збирач: { moveEveryTicks: 2, landingTicks: 16 }, // повільний, широке вікно (8 год)
 };
 
 export type UfoStatus = 'летить' | 'приземлився';
@@ -61,10 +63,10 @@ export type GeoEvent =
   | { type: 'mission_lost'; ufoId: string; minute: number };
 
 export interface GeoState {
-  minute: number;     // хвилини від старту; 0 = 00:00 дня 1
+  minute: number; // хвилини від старту; 0 = 00:00 дня 1
   rng: RNG;
-  base: Vec2;         // єдина база «Рубіж»
-  ufos: Ufo[];        // усі НЛО, включно з невиявленими (туман: гравець бачить лише detected)
+  base: Vec2; // єдина база «Рубіж»
+  ufos: Ufo[]; // усі НЛО, включно з невиявленими (туман: гравець бачить лише detected)
   log: GeoEvent[];
   spawnChance: number;
   maxUfos: number;
@@ -104,7 +106,8 @@ export function geoDay(state: GeoState): number {
 // Мітка часу для UI: "Д1 06:30"
 export function geoClock(state: GeoState): string {
   const m = state.minute % 1440;
-  const h = Math.floor(m / 60), mm = m % 60;
+  const h = Math.floor(m / 60),
+    mm = m % 60;
   return 'Д' + geoDay(state) + ' ' + String(h).padStart(2, '0') + ':' + String(mm).padStart(2, '0');
 }
 
@@ -177,7 +180,7 @@ export function geoTick(state: GeoState): void {
     } else {
       ufo.landedTicksLeft -= 1;
       if (ufo.landedTicksLeft <= 0) {
-        state.ufos = state.ufos.filter(u => u !== ufo);
+        state.ufos = state.ufos.filter((u) => u !== ufo);
         state.log.push({ type: 'ufo_left', ufoId: ufo.id, minute: state.minute });
       }
     }
@@ -201,10 +204,10 @@ export function advanceTime(state: GeoState, ticks: number): void {
 
 // НЛО, видимі гравцеві (туман стратегічного шару: лише виявлені радаром).
 export function detectedUfos(state: GeoState): Ufo[] {
-  return state.ufos.filter(u => u.detected);
+  return state.ufos.filter((u) => u.detected);
 }
 
 // Приземлені виявлені НЛО — кандидати на тактичну місію (зв'язок шарів — ітерація 5).
 export function missionTargets(state: GeoState): Ufo[] {
-  return state.ufos.filter(u => u.detected && u.status === 'приземлився');
+  return state.ufos.filter((u) => u.detected && u.status === 'приземлився');
 }

@@ -1,4 +1,3 @@
-
 // src/core/mission.ts
 // Ітерація 5.0: зв'язок шарів — тактична місія з приземленого виявленого НЛО.
 // ADR-0002: Чисте ядро логіки без DOM/Canvas
@@ -44,10 +43,18 @@ import { missionTargets, type GeoState, type Ufo, type UfoKind } from './geo';
 export const MISSION_MAP_W = 20;
 export const MISSION_MAP_H = 20;
 // Зони висадки і НЛО збігаються з «чистими» зонами makeTestMap (3×3 навколо (2,2) і (17,2)).
-export const SQUAD_SPAWN: Vec2[] = [{ x: 2, y: 2 }, { x: 3, y: 2 }, { x: 2, y: 3 }];
-export const ALIEN_SPAWN: Vec2[] = [{ x: 17, y: 2 }, { x: 16, y: 2 }, { x: 17, y: 3 }];
+export const SQUAD_SPAWN: Vec2[] = [
+  { x: 2, y: 2 },
+  { x: 3, y: 2 },
+  { x: 2, y: 3 },
+];
+export const ALIEN_SPAWN: Vec2[] = [
+  { x: 17, y: 2 },
+  { x: 16, y: 2 },
+  { x: 17, y: 3 },
+];
 
-export const ALIENS_PER_KIND: Record<UfoKind, number> = { 'розвідник': 2, 'збирач': 3 };
+export const ALIENS_PER_KIND: Record<UfoKind, number> = { розвідник: 2, збирач: 3 };
 // Точність прибульців — за балансом 3.6 (.50/.45/.40), циклічно.
 const ALIEN_ACCURACY = [0.5, 0.45, 0.4];
 
@@ -69,7 +76,12 @@ function reachable(map: GameMap, from: Vec2, targets: Vec2[]): boolean {
   const queue: Vec2[] = [from];
   while (queue.length > 0) {
     const p = queue.shift()!;
-    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+    for (const [dx, dy] of [
+      [1, 0],
+      [-1, 0],
+      [0, 1],
+      [0, -1],
+    ] as const) {
       const n = { x: p.x + dx, y: p.y + dy };
       const k2 = n.x + ',' + n.y;
       if (!isInside(map, n) || map.blocked.has(k2) || seen.has(k2)) continue;
@@ -77,7 +89,7 @@ function reachable(map: GameMap, from: Vec2, targets: Vec2[]): boolean {
       queue.push(n);
     }
   }
-  return targets.every(t => seen.has(t.x + ',' + t.y));
+  return targets.every((t) => seen.has(t.x + ',' + t.y));
 }
 
 const MAP_SEED_ATTEMPTS = 50;
@@ -100,8 +112,8 @@ export function makeSoldier(id: string, name: string): Unit {
 export interface MissionBriefing {
   ufoId: string;
   kind: UfoKind;
-  aliens: number;   // прибульців на бойовищі
-  minute: number;   // хвилина геосцени на момент запуску
+  aliens: number; // прибульців на бойовищі
+  minute: number; // хвилина геосцени на момент запуску
 }
 
 export interface Mission {
@@ -115,7 +127,7 @@ export interface CreateMissionOptions {
 
 // Пошук цілі місії з валідацією: лише приземлений виявлений НЛО.
 function findTarget(geo: GeoState, ufoId: string): Ufo {
-  const ufo = missionTargets(geo).find(u => u.id === ufoId);
+  const ufo = missionTargets(geo).find((u) => u.id === ufoId);
   if (!ufo) throw new Error('Місію можна запустити лише з приземленого виявленого НЛО: ' + ufoId);
   return ufo;
 }
@@ -133,19 +145,23 @@ export function createMission(geo: GeoState, ufoId: string, opts: CreateMissionO
   for (const u of squad) {
     if (u.side !== 'player') throw new Error('У загині можуть бути лише солдати гравця: ' + u.id);
   }
-  squad.forEach((u, i) => { u.pos = { ...SQUAD_SPAWN[i] }; });
+  squad.forEach((u, i) => {
+    u.pos = { ...SQUAD_SPAWN[i] };
+  });
 
   const n = ALIENS_PER_KIND[ufo.kind];
   const aliens: Unit[] = [];
   for (let i = 0; i < n; i++) {
-    aliens.push(makeUnit({
-      id: 'a' + (i + 1),
-      side: 'alien',
-      name: 'Прибулець ' + (i + 1),
-      pos: { ...ALIEN_SPAWN[i] },
-      firingAccuracy: ALIEN_ACCURACY[i % ALIEN_ACCURACY.length],
-      weapon: ALIEN_CUTTER,
-    }));
+    aliens.push(
+      makeUnit({
+        id: 'a' + (i + 1),
+        side: 'alien',
+        name: 'Прибулець ' + (i + 1),
+        pos: { ...ALIEN_SPAWN[i] },
+        firingAccuracy: ALIEN_ACCURACY[i % ALIEN_ACCURACY.length],
+        weapon: ALIEN_CUTTER,
+      })
+    );
   }
 
   const state = createGame({ map, units: [...squad, ...aliens], rng });
@@ -157,9 +173,9 @@ export type MissionOutcome = 'триває' | 'перемога' | 'поразк
 // Стан місії за бойовим станом: перемога перевіряється першою
 // (останній постріл прибульця не буває «одночасним» із останнім пострілом солдата).
 export function missionOutcome(state: GameState): MissionOutcome {
-  const aliveAliens = state.units.filter(u => u.side === 'alien' && u.alive).length;
+  const aliveAliens = state.units.filter((u) => u.side === 'alien' && u.alive).length;
   if (aliveAliens === 0) return 'перемога';
-  const aliveSquad = state.units.filter(u => u.side === 'player' && u.alive).length;
+  const aliveSquad = state.units.filter((u) => u.side === 'player' && u.alive).length;
   if (aliveSquad === 0) return 'поразка';
   return 'триває';
 }
@@ -167,10 +183,10 @@ export function missionOutcome(state: GameState): MissionOutcome {
 // Застосувати завершену місію до геосцени (викликати один раз після бою).
 // Перемога: НЛО зникає (зачищено). Поразка: НЛО лишається, вікно триває.
 export function completeMission(geo: GeoState, ufoId: string, outcome: 'перемога' | 'поразка'): void {
-  const ufo = geo.ufos.find(u => u.id === ufoId);
+  const ufo = geo.ufos.find((u) => u.id === ufoId);
   if (!ufo) throw new Error('Невідомий НЛО: ' + ufoId);
   if (outcome === 'перемога') {
-    geo.ufos = geo.ufos.filter(u => u.id !== ufoId);
+    geo.ufos = geo.ufos.filter((u) => u.id !== ufoId);
     geo.log.push({ type: 'mission_won', ufoId, minute: geo.minute });
   } else {
     geo.log.push({ type: 'mission_lost', ufoId, minute: geo.minute });

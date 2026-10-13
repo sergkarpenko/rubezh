@@ -1,33 +1,25 @@
-
 // src/core/map.test.ts
 // Тести ітерації 2: A*, туман війни, генератор тестових мап. Запуск: npx vitest
 // Логіка всіх сценаріїв попередньо перевірена в пісочниці.
 
 import { describe, expect, it } from 'vitest';
-import {
-  computeVisibleCells,
-  findPath,
-  makeTestMap,
-  pathApCost,
-  visibleEnemies,
-} from './map';
+import { computeVisibleCells, findPath, makeTestMap, pathApCost, visibleEnemies } from './map';
 import { createGame, makeUnit, moveUnit, type GameMap, type GameState, type RNG, type Vec2 } from './combat';
 
 const alwaysHit: RNG = () => 0;
 const FAR: Vec2 = { x: 8, y: 10 }; // прибілець поза зонами тестів пошуку шляху
 
 const map = (blocked: string[] = []): GameMap => ({
-  width: 20, height: 20, blocked: new Set(blocked),
+  width: 20,
+  height: 20,
+  blocked: new Set(blocked),
 });
 
 function setupGame(blocked: string[] = [], aPos: Vec2 = FAR): GameState {
   return createGame({
     map: map(blocked),
     rng: alwaysHit,
-    units: [
-      makeUnit({ id: 's1', side: 'player', pos: { x: 2, y: 2 } }),
-      makeUnit({ id: 'a1', side: 'alien', pos: aPos }),
-    ],
+    units: [makeUnit({ id: 's1', side: 'player', pos: { x: 2, y: 2 } }), makeUnit({ id: 'a1', side: 'alien', pos: aPos })],
   });
 }
 
@@ -62,8 +54,8 @@ describe('A*: перешкоди і недосяжність', () => {
     const g = setupGame(wallCol);
     const p = findPath(g, { x: 2, y: 2 }, { x: 8, y: 2 })!;
     expect(p).toHaveLength(14);
-    expect(p.some(st => wallCol.includes(st.x + ',' + st.y))).toBe(false); // не крізь стіну
-    expect(p.some(st => st.x === 5 && st.y === 6)).toBe(true);             // через прохід
+    expect(p.some((st) => wallCol.includes(st.x + ',' + st.y))).toBe(false); // не крізь стіну
+    expect(p.some((st) => st.x === 5 && st.y === 6)).toBe(true); // через прохід
   });
 
   it('замкнена ціль і зайнята ціль → null', () => {
@@ -78,7 +70,7 @@ describe('A*: перешкоди і недосяжність', () => {
     const g = setupGame([], { x: 3, y: 2 });
     const p = findPath(g, { x: 2, y: 2 }, { x: 4, y: 2 })!;
     expect(p).toHaveLength(4);
-    expect(p.some(st => st.x === 3 && st.y === 2)).toBe(false);
+    expect(p.some((st) => st.x === 3 && st.y === 2)).toBe(false);
   });
 
   it('інтеграція: findPath → moveUnit витрачає AP за шляхом', () => {
@@ -108,8 +100,8 @@ describe('туман війни', () => {
   it('стіна видима сама, але ховає клітинки за нею', () => {
     const g = setupGame(['4,2']);
     const vis = computeVisibleCells(g, { x: 2, y: 2 }, 5);
-    expect(vis.has('3,2')).toBe(true);  // перед стіною
-    expect(vis.has('4,2')).toBe(true);   // сама стіна
+    expect(vis.has('3,2')).toBe(true); // перед стіною
+    expect(vis.has('4,2')).toBe(true); // сама стіна
     expect(vis.has('5,2')).toBe(false); // за стіною
     expect(vis.has('6,2')).toBe(false);
   });
@@ -119,8 +111,8 @@ describe('туман війни', () => {
     expect(visibleEnemies(hidden, 'player')).toHaveLength(0);
 
     const open = setupGame([], { x: 3, y: 2 });
-    expect(visibleEnemies(open, 'player').map(u => u.id)).toEqual(['a1']);
-    expect(visibleEnemies(open, 'alien').map(u => u.id)).toEqual(['s1']);
+    expect(visibleEnemies(open, 'player').map((u) => u.id)).toEqual(['a1']);
+    expect(visibleEnemies(open, 'alien').map((u) => u.id)).toEqual(['s1']);
   });
 });
 
@@ -136,8 +128,8 @@ describe('генератор тестових мап', () => {
     const m = makeTestMap(13, 20, 20, 0.9); // щільність 90%
     for (let dy = -1; dy <= 1; dy++) {
       for (let dx = -1; dx <= 1; dx++) {
-        expect(m.blocked.has((2 + dx) + ',' + (2 + dy))).toBe(false);
-        expect(m.blocked.has((17 + dx) + ',' + (2 + dy))).toBe(false);
+        expect(m.blocked.has(2 + dx + ',' + (2 + dy))).toBe(false);
+        expect(m.blocked.has(17 + dx + ',' + (2 + dy))).toBe(false);
       }
     }
   });

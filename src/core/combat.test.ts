@@ -23,10 +23,15 @@ import {
 const alwaysHit: RNG = () => 0;
 const alwaysMiss: RNG = () => 0.9999;
 // послідовний RNG для точкових перевірок порогів шансів
-const seqRng = (vals: number[]): RNG => { let i = 0; return () => vals[i++ % vals.length]; };
+const seqRng = (vals: number[]): RNG => {
+  let i = 0;
+  return () => vals[i++ % vals.length];
+};
 
 const map = (blocked: string[] = []): GameMap => ({
-  width: 20, height: 20, blocked: new Set(blocked),
+  width: 20,
+  height: 20,
+  blocked: new Set(blocked),
 });
 
 // Ціль із 3 HP: мінімальне пошкодження гвинтівки (3) убиває точно.
@@ -78,7 +83,7 @@ describe('атака', () => {
     expect(r.shots[0].hit).toBe(true);
     expect(r.shots[0].damage).toBeGreaterThanOrEqual(3);
     expect(r.shots[0].damage).toBeLessThanOrEqual(6);
-    expect(g.units[0].ap).toBe(5);          // 10 − 5
+    expect(g.units[0].ap).toBe(5); // 10 − 5
     expect(g.units[0].kills).toBe(1);
     expect(g.units[1].alive).toBe(false);
     expect(g.units[1].hp).toBe(0);
@@ -88,8 +93,8 @@ describe('атака', () => {
   it('авто-серія зупиняється, коли ціль гине', () => {
     const g = setupGame();
     const r = resolveAttack(g, 's1', 'a1', 'auto');
-    expect(r.shots).toHaveLength(1);        // перше ж влучання вбило
-    expect(g.units[0].ap).toBe(6);          // 10 − 4
+    expect(r.shots).toHaveLength(1); // перше ж влучання вбило
+    expect(g.units[0].ap).toBe(6); // 10 − 4
   });
 
   it('промах: 0 пошкоджень', () => {
@@ -120,27 +125,37 @@ describe('атака', () => {
 describe('рух', () => {
   it('дві клітинки = 2 AP, позиція оновлена, події в лозі', () => {
     const g = setupGame();
-    moveUnit(g, 's1', [{ x: 3, y: 2 }, { x: 4, y: 2 }]);
+    moveUnit(g, 's1', [
+      { x: 3, y: 2 },
+      { x: 4, y: 2 },
+    ]);
     expect(g.units[0].pos).toEqual({ x: 4, y: 2 });
     expect(g.units[0].ap).toBe(8);
-    expect(g.log.filter(e => e.type === 'move')).toHaveLength(2);
+    expect(g.log.filter((e) => e.type === 'move')).toHaveLength(2);
   });
 
   it('заборонені випадки: діагональ, розрив, перешкода, зайнята клітинка, без AP, не свій хід', () => {
     const g = setupGame();
-    expect(() => moveUnit(g, 's1', [{ x: 5, y: 3 }])).toThrow();   // діагональ
-    expect(() => moveUnit(g, 's1', [{ x: 6, y: 4 }])).toThrow();   // не суміжний
-    expect(() => moveUnit(g, 's1', [{ x: 5, y: 2 }, { x: 6, y: 2 }, { x: 7, y: 2 }, { x: 8, y: 2 }])).toThrow(); // зайнята
+    expect(() => moveUnit(g, 's1', [{ x: 5, y: 3 }])).toThrow(); // діагональ
+    expect(() => moveUnit(g, 's1', [{ x: 6, y: 4 }])).toThrow(); // не суміжний
+    expect(() =>
+      moveUnit(g, 's1', [
+        { x: 5, y: 2 },
+        { x: 6, y: 2 },
+        { x: 7, y: 2 },
+        { x: 8, y: 2 },
+      ])
+    ).toThrow(); // зайнята
 
     const walled = setupGame(alwaysHit, ['3,2']);
     expect(() => moveUnit(walled, 's1', [{ x: 3, y: 2 }])).toThrow(); // перешкода
 
     const empty = setupGame();
     empty.units[0].ap = 0;
-    expect(() => moveUnit(empty, 's1', [{ x: 2, y: 3 }])).toThrow();  // без AP
+    expect(() => moveUnit(empty, 's1', [{ x: 2, y: 3 }])).toThrow(); // без AP
 
     const g2 = setupGame();
-    expect(() => moveUnit(g2, 'a1', [{ x: 8, y: 3 }])).toThrow();     // не свій хід
+    expect(() => moveUnit(g2, 'a1', [{ x: 8, y: 3 }])).toThrow(); // не свій хід
   });
 });
 
@@ -182,8 +197,11 @@ describe('заступа (overwatch)', () => {
     setOverwatch(g, 's1');
     endTurn(g);
     expect(g.units[0].overwatch).toBe(true); // тримається під час ходу ворога
-    moveUnit(g, 'a1', [{ x: 7, y: 2 }, { x: 6, y: 2 }]);
-    const shots = g.log.filter(e => e.type === 'shot' && e.shooterId === 's1');
+    moveUnit(g, 'a1', [
+      { x: 7, y: 2 },
+      { x: 6, y: 2 },
+    ]);
+    const shots = g.log.filter((e) => e.type === 'shot' && e.shooterId === 's1');
     expect(shots).toHaveLength(1);
     expect(g.units[0].overwatch).toBe(false);
     expect(g.units[1].alive).toBe(true);
@@ -194,10 +212,13 @@ describe('заступа (overwatch)', () => {
     const g = setupGame(); // a1 має 3 HP
     setOverwatch(g, 's1');
     endTurn(g);
-    moveUnit(g, 'a1', [{ x: 7, y: 2 }, { x: 6, y: 2 }]);
+    moveUnit(g, 'a1', [
+      { x: 7, y: 2 },
+      { x: 6, y: 2 },
+    ]);
     expect(g.units[1].alive).toBe(false);
     expect(g.units[1].pos).toEqual({ x: 7, y: 2 });
-    expect(g.log.filter(e => e.type === 'move' && e.unitId === 'a1')).toHaveLength(1);
+    expect(g.log.filter((e) => e.type === 'move' && e.unitId === 'a1')).toHaveLength(1);
   });
 
   it('без лінії вогню заступа не спрацьовує і залишається зброєною', () => {
@@ -206,7 +227,7 @@ describe('заступа (overwatch)', () => {
     setOverwatch(g, 's1');
     endTurn(g);
     moveUnit(g, 'a1', [{ x: 6, y: 1 }]);
-    expect(g.log.some(e => e.type === 'shot')).toBe(false);
+    expect(g.log.some((e) => e.type === 'shot')).toBe(false);
     expect(g.units[0].overwatch).toBe(true);
   });
 
@@ -224,7 +245,7 @@ describe('заступа (overwatch)', () => {
     setOverwatch(hit, 's1');
     endTurn(hit);
     moveUnit(hit, 'a1', [{ x: 7, y: 2 }]);
-    const s = hit.log.find(e => e.type === 'shot' && e.shooterId === 's1') as Extract<GameEvent, { type: 'shot' }>;
+    const s = hit.log.find((e) => e.type === 'shot' && e.shooterId === 's1') as Extract<GameEvent, { type: 'shot' }>;
     expect(s.hit).toBe(true);
     expect(s.damage).toBe(5); // 3 + floor(0.5×4)
 
@@ -232,7 +253,7 @@ describe('заступа (overwatch)', () => {
     setOverwatch(miss, 's1');
     endTurn(miss);
     moveUnit(miss, 'a1', [{ x: 7, y: 2 }]);
-    const s2 = miss.log.find(e => e.type === 'shot' && e.shooterId === 's1') as Extract<GameEvent, { type: 'shot' }>;
+    const s2 = miss.log.find((e) => e.type === 'shot' && e.shooterId === 's1') as Extract<GameEvent, { type: 'shot' }>;
     expect(s2.hit).toBe(false);
     expect(s2.damage).toBe(0);
   });
@@ -243,7 +264,7 @@ describe('заступа (overwatch)', () => {
     setOverwatch(g, 'a1');
     endTurn(g);
     moveUnit(g, 's1', [{ x: 3, y: 2 }]);
-    expect(g.log.some(e => e.type === 'shot' && e.shooterId === 'a1')).toBe(true);
+    expect(g.log.some((e) => e.type === 'shot' && e.shooterId === 'a1')).toBe(true);
     expect(g.units[0].alive).toBe(true);
     expect(g.units[0].hp).toBeLessThanOrEqual(7);
   });
@@ -260,12 +281,15 @@ describe('детермінізм', () => {
           makeUnit({ id: 'a1', side: 'alien', pos: { x: 8, y: 2 }, hp: 20, maxHp: 20 }),
         ],
       });
-      moveUnit(g, 's1', [{ x: 2, y: 3 }, { x: 3, y: 3 }]);
+      moveUnit(g, 's1', [
+        { x: 2, y: 3 },
+        { x: 3, y: 3 },
+      ]);
       resolveAttack(g, 's1', 'a1', 'auto');
       resolveAttack(g, 's1', 'a1', 'snap');
       endTurn(g);
       resolveAttack(g, 'a1', 's1', 'aimed');
-      return JSON.stringify(g.log) + '|' + g.units.map(u => u.hp + ':' + u.ap + ':' + u.alive).join(',');
+      return JSON.stringify(g.log) + '|' + g.units.map((u) => u.hp + ':' + u.ap + ':' + u.alive).join(',');
     };
     expect(play(7)).toBe(play(7));
   });

@@ -11,13 +11,7 @@
 // війни чесний (visibleEnemies). Логіка перевірена в пісочниці: 12/12 боїв
 // завершуються, детерміновано.
 
-import {
-  endTurn,
-  moveUnit,
-  resolveAttack,
-  type GameState,
-  type Unit,
-} from './core/combat';
+import { endTurn, moveUnit, resolveAttack, type GameState, type Unit } from './core/combat';
 import { visibleEnemies } from './core/map';
 import { bestPathToNeighbors, bestShootMode, nearestEnemy, pathToward } from './core/ai-utils';
 import { aiStep } from './core/ai';
@@ -31,14 +25,23 @@ function soldierStep(state: GameState, u: Unit): boolean {
     // Рух до зони НЛО (дзеркало patrolStep, але без резерву на заступу:
     // демо має досягти швидкого контакту).
     const step = bestPathToNeighbors(state, u, ALIEN_SPAWN, u.ap);
-    if (step) { moveUnit(state, u.id, step); return true; }
+    if (step) {
+      moveUnit(state, u.id, step);
+      return true;
+    }
     return false;
   }
   const target = nearestEnemy(u, enemies);
   const mode = bestShootMode(state, u, target);
-  if (mode) { resolveAttack(state, u.id, target.id, mode); return true; }
+  if (mode) {
+    resolveAttack(state, u.id, target.id, mode);
+    return true;
+  }
   const step = pathToward(state, u, target);
-  if (step) { moveUnit(state, u.id, step); return true; }
+  if (step) {
+    moveUnit(state, u.id, step);
+    return true;
+  }
   return false;
 }
 
@@ -47,7 +50,7 @@ function soldierStep(state: GameState, u: Unit): boolean {
 export function botTurn(state: GameState): number {
   if (state.activeSide !== 'player') throw new Error('botTurn: зараз не хід гравця');
   let actions = 0;
-  for (const u of state.units.filter(x => x.side === 'player' && x.alive)) {
+  for (const u of state.units.filter((x) => x.side === 'player' && x.alive)) {
     let guard = 0;
     while (u.alive && u.ap > 0 && guard++ < 60 && soldierStep(state, u)) actions++;
   }
@@ -70,7 +73,8 @@ export function aliensTurn(state: GameState): number {
 export function autoBattle(state: GameState, maxHalfTurns = 240): { outcome: ReturnType<typeof missionOutcome>; halfTurns: number } {
   let halfTurns = 0;
   while (missionOutcome(state) === 'триває' && halfTurns < maxHalfTurns) {
-    if (state.activeSide === 'player') botTurn(state); else aliensTurn(state);
+    if (state.activeSide === 'player') botTurn(state);
+    else aliensTurn(state);
     halfTurns++;
   }
   return { outcome: missionOutcome(state), halfTurns };

@@ -1,11 +1,10 @@
-
 // src/core/combat.ts
 // Бойове ядро «Рубіж» — ітерації 0–2.
 // ADR-0002: Чисте ядро логіки без DOM/Canvas
 // ADR-0003: Детермінізм через ін'єктований RNG (mulberry32)
 // ADR-0004: Формула влучності без залежності від відстані (точність × модифікатор режиму)
 // ADR-0005: Заступа (overwatch) — один постріл зі штрафом точності ×0.7
-// 
+//
 // Чиста логіка: жодних залежностей від DOM/Canvas.
 // Уся недетермінованість ізольована в ін'єктованому RNG (детерміновані тести і реплеї).
 // Дизайн шансів за мотивами X-COM: влучність = вроджена точність солдата × модифікатор типу пострілу.
@@ -13,12 +12,24 @@
 
 export type RNG = () => number; // [0, 1)
 
-export interface Vec2 { x: number; y: number }
+export interface Vec2 {
+  x: number;
+  y: number;
+}
 export type Side = 'player' | 'alien';
 export type ShotMode = 'auto' | 'snap' | 'aimed';
 
-export interface ShotProfile { apCost: number; accuracyMod: number; shots: number }
-export interface Weapon { name: string; damage: [number, number]; range: number; modes: Record<ShotMode, ShotProfile> }
+export interface ShotProfile {
+  apCost: number;
+  accuracyMod: number;
+  shots: number;
+}
+export interface Weapon {
+  name: string;
+  damage: [number, number];
+  range: number;
+  modes: Record<ShotMode, ShotProfile>;
+}
 
 export interface Unit {
   id: string;
@@ -27,7 +38,7 @@ export interface Unit {
   pos: Vec2;
   hp: number;
   maxHp: number;
-  ap: number;          // очки дій (аналог Time Units)
+  ap: number; // очки дій (аналог Time Units)
   maxAp: number;
   firingAccuracy: number; // вроджена точність, 0..1
   weapon: Weapon;
@@ -43,7 +54,11 @@ export type GameEvent =
   | { type: 'turn'; turn: number; side: Side }
   | { type: 'overwatch'; unitId: string; armed: boolean };
 
-export interface GameMap { width: number; height: number; blocked: ReadonlySet<string> } // "x,y"
+export interface GameMap {
+  width: number;
+  height: number;
+  blocked: ReadonlySet<string>;
+} // "x,y"
 export interface GameState {
   map: GameMap;
   units: Unit[];
@@ -56,7 +71,7 @@ export interface GameState {
 export const MOVE_AP_PER_CELL = 1;
 export const HIT_CHANCE_FLOOR = 0.02;
 export const HIT_CHANCE_CAP = 0.95;
-export const OVERWATCH_AP_COST = 3;      // вартість заступи
+export const OVERWATCH_AP_COST = 3; // вартість заступи
 export const OVERWATCH_ACC_PENALTY = 0.7; // штраф точності реакційного пострілу
 
 export const RIFLE: Weapon = {
@@ -89,14 +104,17 @@ export const ALIEN_CUTTER: Weapon = {
 export function mulberry32(seed: number): RNG {
   let a = seed >>> 0;
   return () => {
-    a |= 0; a = (a + 0x6d2b79f5) | 0;
+    a |= 0;
+    a = (a + 0x6d2b79f5) | 0;
     let t = Math.imul(a ^ (a >>> 15), 1 | a);
     t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
 }
 
-function key(pos: Vec2): string { return pos.x + ',' + pos.y; }
+function key(pos: Vec2): string {
+  return pos.x + ',' + pos.y;
+}
 
 export function distance(a: Vec2, b: Vec2): number {
   return Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y));
@@ -104,17 +122,27 @@ export function distance(a: Vec2, b: Vec2): number {
 
 function bresenham(a: Vec2, b: Vec2): Vec2[] {
   const pts: Vec2[] = [];
-  let x0 = a.x, y0 = a.y;
-  const x1 = b.x, y1 = b.y;
-  const dx = Math.abs(x1 - x0), dy = Math.abs(y1 - y0);
-  const sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1;
+  let x0 = a.x,
+    y0 = a.y;
+  const x1 = b.x,
+    y1 = b.y;
+  const dx = Math.abs(x1 - x0),
+    dy = Math.abs(y1 - y0);
+  const sx = x0 < x1 ? 1 : -1,
+    sy = y0 < y1 ? 1 : -1;
   let err = dx - dy;
   for (;;) {
     pts.push({ x: x0, y: y0 });
     if (x0 === x1 && y0 === y1) break;
     const e2 = 2 * err;
-    if (e2 > -dy) { err -= dy; x0 += sx; }
-    if (e2 < dx) { err += dx; y0 += sy; }
+    if (e2 > -dy) {
+      err -= dy;
+      x0 += sx;
+    }
+    if (e2 < dx) {
+      err += dx;
+      y0 += sy;
+    }
   }
   return pts;
 }
@@ -122,12 +150,14 @@ function bresenham(a: Vec2, b: Vec2): Vec2[] {
 export function isInside(map: GameMap, pos: Vec2): boolean {
   return pos.x >= 0 && pos.y >= 0 && pos.x < map.width && pos.y < map.height;
 }
-export function isBlocked(map: GameMap, pos: Vec2): boolean { return map.blocked.has(key(pos)); }
+export function isBlocked(map: GameMap, pos: Vec2): boolean {
+  return map.blocked.has(key(pos));
+}
 export function unitAt(state: GameState, pos: Vec2): Unit | undefined {
-  return state.units.find(u => u.alive && u.pos.x === pos.x && u.pos.y === pos.y);
+  return state.units.find((u) => u.alive && u.pos.x === pos.x && u.pos.y === pos.y);
 }
 export function getUnit(state: GameState, id: string): Unit {
-  const u = state.units.find(u => u.id === id);
+  const u = state.units.find((u) => u.id === id);
   if (!u) throw new Error('Невідомий юніт: ' + id);
   return u;
 }
@@ -155,8 +185,16 @@ export function calculateHitChance(attacker: Unit, mode: ShotMode): number {
 
 export function makeUnit(init: Partial<Unit> & { id: string; side: Side; pos: Vec2 }): Unit {
   return {
-    name: init.id, hp: 10, maxHp: 10, ap: 10, maxAp: 10,
-    firingAccuracy: 0.6, weapon: RIFLE, alive: true, kills: 0, overwatch: false,
+    name: init.id,
+    hp: 10,
+    maxHp: 10,
+    ap: 10,
+    maxAp: 10,
+    firingAccuracy: 0.6,
+    weapon: RIFLE,
+    alive: true,
+    kills: 0,
+    overwatch: false,
     ...init,
   };
 }
@@ -170,7 +208,9 @@ export interface CreateGameOptions {
 
 export function createGame(opts: CreateGameOptions): GameState {
   const state: GameState = {
-    map: opts.map, units: opts.units, turn: 1,
+    map: opts.map,
+    units: opts.units,
+    turn: 1,
     activeSide: opts.startingSide ?? 'player',
     rng: opts.rng ?? mulberry32(42),
     log: [],
@@ -186,7 +226,11 @@ export function endTurn(state: GameState): void {
   if (next === 'player') state.turn += 1;
   state.activeSide = next;
   // на початку свого ходу заступа скидається (AP зарезервовані минулого разу)
-  for (const u of state.units) if (u.side === next && u.alive) { u.ap = u.maxAp; u.overwatch = false; }
+  for (const u of state.units)
+    if (u.side === next && u.alive) {
+      u.ap = u.maxAp;
+      u.overwatch = false;
+    }
   state.log.push({ type: 'turn', turn: state.turn, side: next });
 }
 
@@ -236,11 +280,14 @@ function fireOnce(state: GameState, shooter: Unit, target: Unit, mode: ShotMode,
   const hit = state.rng() < chance;
   let damage = 0;
   if (hit) {
-    const dmin = shooter.weapon.damage[0], dmax = shooter.weapon.damage[1];
+    const dmin = shooter.weapon.damage[0],
+      dmax = shooter.weapon.damage[1];
     damage = dmin + Math.floor(state.rng() * (dmax - dmin + 1));
     target.hp -= damage;
     if (target.hp <= 0) {
-      target.hp = 0; target.alive = false; shooter.kills += 1;
+      target.hp = 0;
+      target.alive = false;
+      shooter.kills += 1;
       state.log.push({ type: 'death', unitId: target.id, killerId: shooter.id });
     }
   }
@@ -252,10 +299,7 @@ function fireOnce(state: GameState, shooter: Unit, target: Unit, mode: ShotMode,
 // зі штрафом точності OVERWATCH_ACC_PENALTY.
 function fireReaction(state: GameState, shooter: Unit, target: Unit): void {
   const profile = shooter.weapon.modes.snap;
-  const chance = Math.min(
-    HIT_CHANCE_CAP,
-    Math.max(HIT_CHANCE_FLOOR, shooter.firingAccuracy * profile.accuracyMod * OVERWATCH_ACC_PENALTY),
-  );
+  const chance = Math.min(HIT_CHANCE_CAP, Math.max(HIT_CHANCE_FLOOR, shooter.firingAccuracy * profile.accuracyMod * OVERWATCH_ACC_PENALTY));
   fireOnce(state, shooter, target, 'snap', chance);
 }
 
@@ -271,7 +315,10 @@ function triggerOverwatch(state: GameState, mover: Unit): void {
   }
 }
 
-export interface AttackResult { shots: { hit: boolean; damage: number }[]; targetDown: boolean }
+export interface AttackResult {
+  shots: { hit: boolean; damage: number }[];
+  targetDown: boolean;
+}
 
 // Перевірки перед пострілом: активна сторона, жива ціль, вогонь лише по ворогах,
 // дальність, лінія вогню, вартість AP (ADR-0004: відстань не впливає на влучність).
@@ -295,7 +342,10 @@ export function resolveAttack(state: GameState, shooterId: string, targetId: str
   for (let i = 0; i < profile.shots; i++) {
     const shot = fireOnce(state, s, t, mode, chance);
     result.shots.push(shot);
-    if (!t.alive) { result.targetDown = true; break; } // мертва ціль не отримує зайвих куль серії
+    if (!t.alive) {
+      result.targetDown = true;
+      break;
+    } // мертва ціль не отримує зайвих куль серії
   }
   return result;
 }

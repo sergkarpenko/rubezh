@@ -3,28 +3,22 @@
 // до цього вони покривалися лише опосередковано через ai.ts / bot.ts.
 
 import { describe, expect, it } from 'vitest';
-import {
-  createGame,
-  makeUnit,
-  type GameMap,
-  type GameState,
-  type Unit,
-} from './combat';
+import { createGame, makeUnit, type GameMap, type GameState, type Unit } from './combat';
 import { bestPathToNeighbors, bestShootMode, nearestEnemy, pathToward } from './ai-utils';
 
 const alwaysHit = () => 0;
 
 const map = (blocked: string[] = []): GameMap => ({
-  width: 20, height: 20, blocked: new Set(blocked),
+  width: 20,
+  height: 20,
+  blocked: new Set(blocked),
 });
 
 function game(blocked: string[] = []): GameState {
   return createGame({
-    map: map(blocked), rng: alwaysHit,
-    units: [
-      makeUnit({ id: 's1', side: 'player', pos: { x: 2, y: 2 } }),
-      makeUnit({ id: 'a1', side: 'alien', pos: { x: 8, y: 2 } }),
-    ],
+    map: map(blocked),
+    rng: alwaysHit,
+    units: [makeUnit({ id: 's1', side: 'player', pos: { x: 2, y: 2 } }), makeUnit({ id: 'a1', side: 'alien', pos: { x: 8, y: 2 } })],
   });
 }
 
@@ -76,7 +70,15 @@ describe('bestPathToNeighbors', () => {
 
   it('кілька клітинок — найкоротший шлях до найближчого сусіда', () => {
     const g = game();
-    const step = bestPathToNeighbors(g, g.units[1], [{ x: 2, y: 2 }, { x: 7, y: 3 }], g.units[1].ap);
+    const step = bestPathToNeighbors(
+      g,
+      g.units[1],
+      [
+        { x: 2, y: 2 },
+        { x: 7, y: 3 },
+      ],
+      g.units[1].ap
+    );
     expect(step).toHaveLength(1); // сусід (7,3) — поруч, достатньо 1 кроку
   });
 

@@ -12,8 +12,13 @@ function mkGeo(ufoId: string, kind: 'розвідник' | 'збирач' = 'р�
   const g = createGeoGame({ seed: 9, spawnChance: 0 });
   if (ticks > 0) advanceTime(g, ticks);
   g.ufos.push({
-    id: ufoId, kind, pos: { ...g.base }, target: { ...g.base },
-    detected: true, status: 'приземлився', landedTicksLeft: 16,
+    id: ufoId,
+    kind,
+    pos: { ...g.base },
+    target: { ...g.base },
+    detected: true,
+    status: 'приземлився',
+    landedTicksLeft: 16,
   });
   return g;
 }
@@ -25,9 +30,9 @@ function mkMission(ufoId: string, kind?: 'розвідник' | 'збирач', 
 describe('bot: хід гравця', () => {
   it('без видимих цілей солдати висуваються до зони НЛО і передають хід', () => {
     const m = mkMission('u1');
-    const before = JSON.stringify(m.state.units.filter(u => u.side === 'player').map(u => u.pos));
+    const before = JSON.stringify(m.state.units.filter((u) => u.side === 'player').map((u) => u.pos));
     const actions = botTurn(m.state);
-    const after = JSON.stringify(m.state.units.filter(u => u.side === 'player').map(u => u.pos));
+    const after = JSON.stringify(m.state.units.filter((u) => u.side === 'player').map((u) => u.pos));
     expect(actions).toBeGreaterThan(0);
     expect(m.state.activeSide).toBe('alien');
     expect(after).not.toBe(before);
@@ -52,7 +57,13 @@ describe('bot: хід прибульців', () => {
 
 describe('bot: авто-бій', () => {
   it('авто-бій завершується перемогою або поразкою, без зависань', () => {
-    for (const [id, kind, ticks] of [['uA', 'розвідник', 0], ['uB', 'збирач', 7], ['uC', 'розвідник', 14], ['uD', 'збирач', 21], ['uE', 'розвідник', 28]] as const) {
+    for (const [id, kind, ticks] of [
+      ['uA', 'розвідник', 0],
+      ['uB', 'збирач', 7],
+      ['uC', 'розвідник', 14],
+      ['uD', 'збирач', 21],
+      ['uE', 'розвідник', 28],
+    ] as const) {
       const r = autoBattle(mkMission(id, kind as 'розвідник' | 'збирач', ticks).state);
       expect(['перемога', 'поразка']).toContain(r.outcome);
       expect(r.halfTurns).toBeGreaterThan(0);

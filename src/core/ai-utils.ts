@@ -6,14 +6,7 @@
 // ADR-0003: Детермінізм — RNG не потрібен, порядок цілей фіксований
 // ADR-0006: Туман війни — список цілей формує викликаючий (visibleEnemies)
 
-import {
-  distance,
-  hasLineOfSight,
-  type GameState,
-  type ShotMode,
-  type Unit,
-  type Vec2,
-} from './combat';
+import { distance, hasLineOfSight, type GameState, type ShotMode, type Unit, type Vec2 } from './combat';
 import { findPath } from './map';
 
 // Пріоритет режимів пострілу: за очікуваним пошкодженням на постріл.
@@ -31,7 +24,7 @@ export function bestShootMode(state: GameState, u: Unit, target: Unit): ShotMode
 
 // Найближчий видимий ворог (Чебишев). Викликати лише при непорожньому списку.
 export function nearestEnemy(u: Unit, enemies: Unit[]): Unit {
-  return enemies.reduce((best, e) => distance(u.pos, e.pos) < distance(u.pos, best.pos) ? e : best);
+  return enemies.reduce((best, e) => (distance(u.pos, e.pos) < distance(u.pos, best.pos) ? e : best));
 }
 
 // Найкоротший шлях до СУСІДів заданих клітинок (самих клітинок може не бути
