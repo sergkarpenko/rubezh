@@ -39,6 +39,8 @@ npm run test:coverage  # покриття src/core/ з порогом 80% (зв�
 npm run docs       # TypeDoc-довідка API (HTML у dist/api)
 ```
 
+Онлайн-довідка API публікується з кожним пушем: https://sergkarpenko.github.io/rubezh/api/
+
 Pre-commit hook перевіряє правила AGENTS.md, процес ADR-0012 для залежностей, тести і exact-байти, а lint-staged автоматично виправляє формат staged-файлів.
 
 **Примітка про `docs/prototypes/`**: це архів React-прототипів віджетів (довідковий знімок, не змінювати — див. README там). Вони містять вбудовані копії старих модулів ядра; джерело правди про логіку — `src/core/`.

@@ -225,6 +225,7 @@ git push origin iter-X.Y
 | ADR-0016 | Генерація документації коду — TypeDoc | accepted | 2026-10-13 |
 | ADR-0017 | Відстеження покриття тестами — Codecov + @vitest/coverage-v8 | accepted | 2026-10-13 |
 | ADR-0018 | Зміна workflow-файлів — лише з ADR у тому ж коміті | accepted | 2026-10-13 |
+| ADR-0019 | Публікація TypeDoc-довідки на Pages — /api/ поруч із демо | accepted | 2026-10-13 |
 
 **Нове рішення?** Створіть новий ADR з порядковим номером.
 

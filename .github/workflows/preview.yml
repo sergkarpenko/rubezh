@@ -1,4 +1,4 @@
-# Демо-превью на GitHub Pages: тести → збірка Vite → деплой.
+# Демо-превью і TypeDoc-довідка на GitHub Pages: тести → збірка Vite → docs → деплой.
 # Працює при кожному пуші в main. Якщо деплой не проходить:
 # Settings → Pages → Build and deployment → Source: GitHub Actions.
 name: preview
@@ -36,6 +36,9 @@ jobs:
           files: dist/coverage/coverage-final.json
           token: ${{ secrets.CODECOV_TOKEN }}
       - run: npm run build
+      # TypeDoc-довідка API у dist/api (ADR-0019): обов'язково після vite build —
+      # той очищає dist/; потрапляє в той самий Pages-артефакт (URL: /api/)
+      - run: npm run docs
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
