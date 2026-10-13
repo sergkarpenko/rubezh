@@ -22,7 +22,7 @@ import {
 } from './core/geo';
 import { ALIEN_SPAWN, SQUAD_SPAWN, completeMission, createMission, missionOutcome, type Mission } from './core/mission';
 import { applyMissionResult, createRoster, missionSquad, type Roster } from './core/squad';
-import { calculateHitChance, moveUnit, resolveAttack, setOverwatch, type GameEvent, type ShotMode, type Unit, type Vec2 } from './core/combat';
+import { calculateHitChance, endTurn, moveUnit, resolveAttack, setOverwatch, type GameEvent, type ShotMode, type Unit, type Vec2 } from './core/combat';
 import { computeVisibleCells, findPath, pathApCost } from './core/map';
 import { aliensTurn, autoBattle } from './bot';
 
@@ -494,6 +494,7 @@ function endPlayerTurn(): void {
   hoverPath = null;
   fireMode = null;
   try {
+    endTurn(mission.state); // передати хід прибульцям (aliensTurn очікує їхній хід)
     const actions = aliensTurn(mission.state); // синхронно, одним кліком (5.1.4)
     if (!checkOutcome()) {
       binfo('Хід прибульців відпрацьовано (' + actions + ' дій). Ваш хід — хід ' + mission.state.turn + '.');
