@@ -11,7 +11,17 @@
 import { describe, expect, it } from 'vitest';
 import { advanceTime, createGeoGame, geoTick, missionTargets, type GeoEvent, type GeoState, type Ufo } from './core/geo';
 import { completeMission, createMission, missionOutcome, type Mission } from './core/mission';
-import { applyMissionResult, createRoster, missionSquad, type Roster } from './core/squad';
+import {
+  applyMissionResult,
+  createRoster,
+  hireSoldier,
+  hospitalTick,
+  isBankrupt,
+  missionSquad,
+  readySoldiers,
+  type Roster,
+} from './core/squad';
+import { createEconomy, spend } from './core/economy';
 import { autoBattle } from './bot';
 
 // Геопартія, де перший НЛО вже приземлився в зоні радара (кандидат на місію).
@@ -69,7 +79,7 @@ describe('інтеграція: повний цикл (геосцена → мі
     expect(geo.log.some((e) => e.type === 'ufo_landed' && e.ufoId === ufo.id)).toBe(true);
   });
 
-  it('перемога: НЛО зачищено, загін лікується, час геосцени заморожено під час бою', () => {
+  it('перемога: НЛО зачищено, поранені йдуть у лікарню і одужують тіками; час заморожено під час бою', () => {
     const { geo, ufo } = geoWithTarget(11);
     const roster = createRoster();
     const mission = createMission(geo, ufo.id, { squad: strongSquad(roster) });
@@ -90,16 +100,32 @@ describe('інтеграція: повний цикл (геосцена → мі
     expect(geo.ufos.find((u) => u.id === ufo.id)).toBeUndefined();
     expect(geo.log.at(-1)).toMatchObject({ type: 'mission_won', ufoId: ufo.id, minute: geo.minute });
 
-    // наслідки для ростеру: загиблих немає, виживші повністю лікувані на базі
+    // наслідки для ростеру (ADR-0021): миттєвого лікування немає — виживший
+    // або боєготовий, або поранений у лікарні на (maxHp − hp) × 2 тиків
     expect(aftermath.lost).toHaveLength(0);
     expect(aftermath.survivors).toHaveLength(3);
     for (const s of aftermath.survivors) {
-      expect(s.hp).toBe(s.maxHp);
       expect(s.overwatch).toBe(false);
       expect(roster.soldiers).toContain(s);
+      if (s.hp < s.maxHp) {
+        expect(aftermath.wounded).toContain(s);
+        expect(roster.hospital[s.id]).toBe((s.maxHp - s.hp) * 2);
+      } else {
+        expect(roster.hospital[s.id]).toBeUndefined();
+      }
     }
     // бій справді був: хтось із солдатів мав убивства (стаж ветерана, ADR-0008)
     expect(mission.state.units.some((u) => u.side === 'player' && u.kills > 0)).toBe(true);
+
+    // поранені не потрапляють у наступний загін (АДР-0021)
+    expect(missionSquad(roster).every((s) => roster.hospital[s.id] === undefined)).toBe(true);
+
+    // одужання тіками геосцени: після максимального терміну лікарня порожня
+    const maxTicks = Math.max(0, ...aftermath.wounded.map((s) => roster.hospital[s.id]));
+    for (let i = 0; i < maxTicks; i++) hospitalTick(roster);
+    expect(Object.keys(roster.hospital)).toEqual([]);
+    for (const s of aftermath.survivors) expect(s.hp).toBe(s.maxHp);
+    expect(readySoldiers(roster)).toHaveLength(6);
   });
 
   it('поразка: перма-смерть у ростері, НЛО лишається, місію можна повторити', () => {
@@ -175,5 +201,60 @@ describe('інтеграція: детермінізм і ізоляція ша�
     expect(a.minute).toBe(b.minute);
     expect(JSON.stringify(a.ufos)).toBe(JSON.stringify(b.ufos));
     expect(JSON.stringify(withoutMissionEvents(a.log))).toBe(JSON.stringify(withoutMissionEvents(b.log)));
+  });
+});
+
+describe('інтеграція: економіка і лікарня (П4.4, ADR-0021)', () => {
+  // Два програші поспіль висмоктують ростер (6 солдатів → 0);
+  // наявних грошей (300 − витрати) не вистачає на третій найм → банкрутство.
+  it('банкрутство настає на тіку геосцени: боєготових немає і грошей на найм немає', () => {
+    const econ = createEconomy();
+    const roster = createRoster();
+    const { geo } = geoWithTarget(11);
+
+    // два програші: усі 6 солдатів гинуть (перма-смерть)
+    for (let missionNo = 0; missionNo < 2; missionNo++) {
+      const target = missionTargets(geo)[0];
+      expect(target).toBeDefined();
+      const mission = createMission(geo, target.id, { squad: doomedSquad(roster) });
+      const res = autoBattle(mission.state, 240);
+      const outcome = finalOutcome(res.outcome);
+      expect(outcome).toBe('поразка');
+      applyMissionResult(roster, mission.state);
+      completeMission(geo, target.id, outcome);
+    }
+    expect(roster.soldiers).toEqual([]);
+
+    // гроші витрачено (лишилось 50 < HIRE_PRICE) — найм неможливий
+    spend(econ, 250);
+    expect(isBankrupt(econ, roster)).toBe(true);
+
+    // перевірка на тіку геосцени: кінець партії фіксується під час руху часу
+    geoTick(geo);
+    expect(isBankrupt(econ, roster)).toBe(true);
+  });
+
+  it('поранені в лікарні + нестача грошей: найм рятує партію', () => {
+    const econ = createEconomy();
+    const roster = createRoster(3);
+    // усі троє поранені важко (1 HP лишилось → 18 тиків одужання кожен)
+    for (const s of roster.soldiers) s.hp = 1;
+    roster.hospital['s1'] = 18;
+    roster.hospital['s2'] = 18;
+    roster.hospital['s3'] = 18;
+    expect(readySoldiers(roster)).toHaveLength(0);
+    expect(isBankrupt(econ, roster)).toBe(false); // 300 ≥ 100 — найм доступний
+
+    hireSoldier(econ, roster);
+    expect(readySoldiers(roster)).toHaveLength(1);
+    expect(isBankrupt(econ, roster)).toBe(false);
+
+    spend(econ, 150); // лишається 50
+    expect(isBankrupt(econ, roster)).toBe(false); // найманий боєготовий
+
+    // одужання: 18 тиків — усі ветерани повертаються в стрій
+    for (let i = 0; i < 18; i++) hospitalTick(roster);
+    expect(Object.keys(roster.hospital)).toEqual([]);
+    expect(readySoldiers(roster)).toHaveLength(4);
   });
 });

@@ -6,7 +6,18 @@ import { describe, expect, it } from 'vitest';
 import type { Side } from './combat';
 import { advanceTime, createGeoGame, type GeoState } from './geo';
 import { completeMission, createMission, makeSoldier, missionOutcome, type Mission } from './mission';
-import { applyMissionResult, createRoster, fireSoldier, hireSoldier, missionSquad, type Roster } from './squad';
+import {
+  applyMissionResult,
+  createRoster,
+  fireSoldier,
+  HEAL_TICKS_PER_HP,
+  hospitalTick,
+  hireSoldier,
+  isBankrupt,
+  missionSquad,
+  readySoldiers,
+  type Roster,
+} from './squad';
 import { createEconomy, HIRE_PRICE, spend } from './economy';
 
 // Геопартія з вручну «посадженим» НЛО (спавн вимкнено) — для точкових сценаріїв.
@@ -67,12 +78,12 @@ describe('squad: підбір загону', () => {
     const r = createRoster();
     expect(() => missionSquad(r, 0)).toThrow();
     expect(() => missionSquad(r, 4)).toThrow();
-    expect(() => missionSquad({ soldiers: [], hired: 0 })).toThrow();
+    expect(() => missionSquad({ soldiers: [], hired: 0, hospital: {} })).toThrow();
   });
 });
 
 describe('squad: результат місії', () => {
-  it('перемога: виживші повністю лікуються, kills збережено, розмір ростеру той самий', () => {
+  it('перемога: виживший з hp < maxHp іде в лікарню (не лікується миттєво), kills збережено', () => {
     const r = createRoster();
     const g = mkGeo('uW');
     const m = createMission(g, 'uW', { squad: missionSquad(r) });
@@ -86,11 +97,14 @@ describe('squad: результат місії', () => {
     const af = applyMissionResult(r, m.state);
     expect(af.lost).toEqual([]);
     expect(af.survivors.map((s) => s.id)).toEqual(['s1', 's2', 's3']);
+    expect(af.wounded.map((s) => s.id)).toEqual(['s1']);
     expect(r.soldiers.length).toBe(6);
-    expect(r.soldiers[0].hp).toBe(10);
+    // ADR-0021: hp не відновлюється — поранений чекає одужання тіками
+    expect(r.soldiers[0].hp).toBe(4);
     expect(r.soldiers[0].ap).toBe(10);
     expect(r.soldiers[0].overwatch).toBe(false);
     expect(r.soldiers[0].kills).toBe(2); // стаж ветерана зберігається
+    expect(r.hospital['s1']).toBe((10 - 4) * HEAL_TICKS_PER_HP);
     // geo-бік циклу: порядок з completeMission не важливий
     completeMission(g, 'uW', 'перемога');
     expect(g.log.some((e) => e.type === 'mission_won' && e.ufoId === 'uW')).toBe(true);
@@ -107,7 +121,7 @@ describe('squad: результат місії', () => {
     expect(missionSquad(r).map((s) => s.id)).toEqual(['s4', 's5', 's6']);
   });
 
-  it('часткова втрата: загиблий зникає назавжди, поранений лікується', () => {
+  it('часткова втрата: загиблий зникає назавжди, поранений іде в лікарню', () => {
     const r = createRoster();
     const m = createMission(mkGeo('uP'), 'uP', { squad: missionSquad(r) });
     const s2 = m.state.units.find((u) => u.id === 's2')!;
@@ -118,8 +132,10 @@ describe('squad: результат місії', () => {
     const af = applyMissionResult(r, m.state);
     expect(af.lost.map((s) => s.id)).toEqual(['s2']);
     expect(af.survivors.map((s) => s.id)).toEqual(['s1', 's3']);
+    expect(af.wounded.map((s) => s.id)).toEqual(['s3']);
     expect(r.soldiers.map((s) => s.id)).toEqual(['s1', 's3', 's4', 's5', 's6']);
-    expect(r.soldiers.find((s) => s.id === 's3')!.hp).toBe(10);
+    expect(r.soldiers.find((s) => s.id === 's3')!.hp).toBe(5); // hp не відновлено
+    expect(r.hospital['s3']).toBe((10 - 5) * HEAL_TICKS_PER_HP);
   });
 
   it('чужий солдат у стані місії або повторний виклик → помилка', () => {
@@ -247,5 +263,113 @@ describe('squad: кадрування (П4.3, ADR-0021)', () => {
     fireSoldier(r, 's1');
     expect(r.soldiers).toEqual([]);
     expect(() => missionSquad(r)).toThrow('Ростер порожній');
+  });
+});
+
+describe('squad: лікарня (П4.4, ADR-0021)', () => {
+  it('поранений не потрапляє в missionSquad, боєготові — так', () => {
+    const r = createRoster();
+    r.hospital['s1'] = 10;
+    r.hospital['s2'] = 4;
+    expect(missionSquad(r).map((s) => s.id)).toEqual(['s3', 's4', 's5']);
+    expect(readySoldiers(r).map((s) => s.id)).toEqual(['s3', 's4', 's5', 's6']);
+  });
+
+  it('усі поранені → помилка з українським текстом', () => {
+    const r = createRoster(1);
+    r.hospital['s1'] = 2;
+    expect(() => missionSquad(r)).toThrow('Немає боєготових солдатів');
+  });
+
+  it('hospitalTick: 1 HP = 2 тики, потім солдат знову боєготовий', () => {
+    const r = createRoster();
+    r.soldiers[0].hp = 7; // бракує 3 HP → 6 тиків
+    r.hospital['s1'] = 6;
+    hospitalTick(r);
+    expect(r.hospital['s1']).toBe(5);
+    expect(r.soldiers[0].hp).toBe(7);
+    for (let i = 0; i < 4; i++) hospitalTick(r);
+    expect(r.hospital['s1']).toBe(1);
+    expect(r.soldiers[0].hp).toBe(7);
+    hospitalTick(r); // шостий тік — одужання
+    expect(r.hospital['s1']).toBeUndefined();
+    expect(r.soldiers[0].hp).toBe(10);
+    expect(readySoldiers(r)).toHaveLength(6);
+  });
+
+  it('hospitalTick: кілька поранених одужують незалежно, порядок за ростером', () => {
+    const r = createRoster();
+    r.soldiers[0].hp = 9;
+    r.soldiers[1].hp = 8;
+    r.hospital['s1'] = 2;
+    r.hospital['s2'] = 4;
+    hospitalTick(r);
+    expect(r.hospital['s1']).toBe(1); // ще один тик
+    expect(r.soldiers[0].hp).toBe(9);
+    expect(r.hospital['s2']).toBe(3);
+    expect(r.soldiers[1].hp).toBe(8);
+    hospitalTick(r);
+    expect(r.hospital['s1']).toBeUndefined(); // другий тік — готовий
+    expect(r.soldiers[0].hp).toBe(10);
+    expect(r.hospital['s2']).toBe(2);
+  });
+
+  it('hospitalTick не чіпає боєготових (порожня лікарня — no-op)', () => {
+    const r = createRoster();
+    const before = JSON.stringify(r);
+    hospitalTick(r);
+    expect(JSON.stringify(r)).toBe(before);
+  });
+
+  it('одужання детерміноване: та сама послідовність тиків — той самий стан', () => {
+    const run = () => {
+      const r = createRoster();
+      r.soldiers[0].hp = 6;
+      r.hospital['s1'] = 8;
+      for (let i = 0; i < 10; i++) hospitalTick(r);
+      return JSON.stringify({ hospital: r.hospital, hp: r.soldiers[0].hp, ready: readySoldiers(r).length });
+    };
+    expect(run()).toBe(run());
+  });
+});
+
+describe('squad: банкрутство (П4.4, ADR-0021)', () => {
+  it('боєготові є → не банкрут навіть без грошей', () => {
+    const econ = createEconomy();
+    spend(econ, 300);
+    expect(isBankrupt(econ, createRoster())).toBe(false);
+  });
+
+  it('усі поранені і грошей на найм немає → банкрут', () => {
+    const econ = createEconomy();
+    spend(econ, 250); // лишається 50 < HIRE_PRICE
+    const r = createRoster(2);
+    r.hospital['s1'] = 10;
+    r.hospital['s2'] = 10;
+    expect(isBankrupt(econ, r)).toBe(true);
+  });
+
+  it('усі поранені, але грошей вистачає на найм → не банкрут', () => {
+    const econ = createEconomy(); // 300 ≥ HIRE_PRICE
+    const r = createRoster(2);
+    r.hospital['s1'] = 10;
+    r.hospital['s2'] = 10;
+    expect(isBankrupt(econ, r)).toBe(false);
+  });
+
+  it('порожній ростер і грошей немає → банкрут', () => {
+    const econ = createEconomy();
+    spend(econ, 300);
+    const r = createRoster(1);
+    fireSoldier(r, 's1');
+    expect(isBankrupt(econ, r)).toBe(true);
+  });
+
+  it('сувора умова власника: поранений одужає наступним тиком, але банкрутство вже настане', () => {
+    const econ = createEconomy();
+    spend(econ, 300); // 0
+    const r = createRoster(1);
+    r.hospital['s1'] = 1;
+    expect(isBankrupt(econ, r)).toBe(true);
   });
 });

@@ -1,6 +1,7 @@
 // src/core/squad.ts
 // Ітерація 5.2: персистентність загону між місіями — ростер солдатів «Рубіжа».
 // Фаза 4 (П4.3): кадрування — найм за гроші та звільнення.
+// Фаза 4 (П4.4): лікарня — поранення і час відновлення; банкрутство.
 // ADR-0002: Чисте ядро логіки без DOM/Canvas
 // ADR-0008: Ростер загону — персистентність між місіями
 // ADR-0010: Цільовий UI — ванільний TS + Canvas (ростер вижив у main.ts)
@@ -16,14 +17,16 @@
 // з EconomyState і додає солдата в кінець ростеру (ветерани йдуть у бій першими);
 // fireSoldier(roster, id) — звільнення на прохання гравця.
 // Перма-смерть наскрізна: солдат, загиблий у бою, вилучається з ростеру назавжди.
-// MVP-спрощення (зміни — новими ADR): виживші повністю лікуються на базі між
-// місіями (лікарня з часом відновлення — П4.4, ADR-0021).
+// Лікарня (ADR-0021, замість MVP-лікування ADR-0008): виживший з hp < maxHp →
+// «поранений» (ростер.hospital[id] = тики одужання), не потрапляє в missionSquad;
+// відлік веде hospitalTick(roster) — 1 тік геосцени, HEAL_TICKS_PER_HP тиків на HP.
 
 import type { GameState, Unit } from './combat';
 import { HIRE_PRICE, spend, type EconomyState } from './economy';
 import { makeSoldier, SQUAD_SPAWN } from './mission';
 
 export const STARTING_ROSTER_SIZE = 6; // два повні загони + запас
+export const HEAL_TICKS_PER_HP = 2; // ADR-0021: 1 HP = 2 тики геосцени
 
 // Стартовий пул імен — фіксований, без RNG (детермінізм). Циклічно: «Іван», …, «Віра», «Іван 2»…
 const SOLDIER_NAMES = ['Іван', 'Олена', 'Тарас', 'Марія', 'Богдан', 'Софія', 'Дмитро', 'Ярина', 'Орест', 'Наталія', 'Андрій', 'Віра'];
@@ -31,11 +34,13 @@ const SOLDIER_NAMES = ['Іван', 'Олена', 'Тарас', 'Марія', 'Б
 export interface Roster {
   soldiers: Unit[]; // живі солдати; загиблі вилучаються (перма-смерть)
   hired: number; // скільки всього пройшло через ростер (для унікальності id/імен)
+  hospital: Record<string, number>; // id пораненого → тики одужання, що лишилися
 }
 
 export interface MissionAftermath {
   lost: Unit[]; // солдати, вилучені з ростеру (загинули в бою)
-  survivors: Unit[]; // виживші після повного лікування на базі
+  survivors: Unit[]; // усі виживші (готові + поранені)
+  wounded: Unit[]; // поранені — на лікуванні в лікарні (підмножина survivors)
 }
 
 // Солдат ростеру за порядковим індексом (0-based): ім'я з циклічного пулу,
@@ -54,7 +59,7 @@ export function createRoster(size: number = STARTING_ROSTER_SIZE): Roster {
   }
   const soldiers: Unit[] = [];
   for (let i = 0; i < size; i++) soldiers.push(rosterSoldier(i));
-  return { soldiers, hired: size };
+  return { soldiers, hired: size, hospital: {} };
 }
 
 // Найм нового солдата за гроші (ADR-0021): списує HIRE_PRICE з економіки
@@ -78,41 +83,83 @@ export function fireSoldier(roster: Roster, id: string): Unit {
   return rec;
 }
 
-// Загін на наступну місію: перші size живих солдатів ростеру.
-// size обмежений зоною висадки; солдатів може виявитись менше, ніж просили,
-// якщо ростер порідів (валідний загін — від 1 солдата).
+// Загін на наступну місію: перші size БОЄГОТОВИХ солдатів ростеру
+// (поранені в лікарні не рахуються — ADR-0021). size обмежений зоною
+// висадки; солдатів може виявитись менше, ніж просили, якщо ростер порідів
+// (валідний загін — від 1 солдата).
 export function missionSquad(roster: Roster, size: number = SQUAD_SPAWN.length): Unit[] {
   if (!Number.isInteger(size) || size < 1 || size > SQUAD_SPAWN.length) {
     throw new Error('Розмір загону: ціле число від 1 до ' + SQUAD_SPAWN.length);
   }
-  const squad = roster.soldiers.slice(0, size);
-  if (squad.length === 0) throw new Error('Ростер порожній — немає кого відправити на місію');
+  const squad = readySoldiers(roster).slice(0, size);
+  if (squad.length === 0) {
+    throw new Error(
+      roster.soldiers.length === 0
+        ? 'Ростер порожній — немає кого відправити на місію'
+        : 'Немає боєготових солдатів — усі поранені в лікарні'
+    );
+  }
   return squad;
+}
+
+// Боєготові солдати: живі, поза лікарнею (ADR-0021). Порядок — як у ростері
+// (ветерани перші, новобранці останніми).
+export function readySoldiers(roster: Roster): Unit[] {
+  return roster.soldiers.filter((s) => roster.hospital[s.id] === undefined);
+}
+
+// Тік лікарні разом із геосценою (ADR-0021): відлік одужання поранених.
+// Тики скінчилися → солдат знову боєготовий (hp = maxHp).
+// Детермінізм: порядок фіксований за ростером, жодного RNG.
+export function hospitalTick(roster: Roster): void {
+  for (const s of roster.soldiers) {
+    const left = roster.hospital[s.id];
+    if (left === undefined) continue;
+    if (left <= 1) {
+      delete roster.hospital[s.id];
+      s.hp = s.maxHp;
+    } else {
+      roster.hospital[s.id] = left - 1;
+    }
+  }
+}
+
+// Банкрутство партії (ADR-0021): боєготових немає і грошей на найм теж —
+// кінець партії. Перевіряти на тіку геосцени; поранені в лікарні НЕ
+// рахуються готовими (сувора умова власника: банкрутство настає одразу).
+export function isBankrupt(econ: EconomyState, roster: Roster): boolean {
+  return readySoldiers(roster).length === 0 && econ.money < HIRE_PRICE;
 }
 
 // Застосувати результат завершеної місії до ростеру (один раз після бою;
 // порядок виклику щодо completeMission не важливий — це різні стани).
 // Порівняння за id: солдат у стані місії, якого нема в ростері, → помилка
 // (захист від застосування бою «чужого» загону; повторний виклик теж падає).
-// Загиблий вилучається з ростеру назавжди; виживший повністю лікується на
-// базі (hp = maxHp), заступа скидається; kills зберігаються — стаж ветерана.
+// Загиблий вилучається з ростеру назавжди; виживший НЕ лікується миттєво
+// (ADR-0021): hp < maxHp → «поранений» у лікарню на (maxHp − hp) × HEAL_TICKS_PER_HP
+// тиків; заступа скидається; kills зберігаються — стаж ветерана.
 export function applyMissionResult(roster: Roster, state: GameState): MissionAftermath {
   const deployed = state.units.filter((u) => u.side === 'player');
   if (deployed.length === 0) throw new Error('У стані місії немає солдатів гравця');
   const lost: Unit[] = [];
   const survivors: Unit[] = [];
+  const wounded: Unit[] = [];
   for (const u of deployed) {
     const rec = roster.soldiers.find((s) => s.id === u.id);
     if (!rec) throw new Error('Солдат не з цього ростеру: ' + u.id);
     if (!u.alive) {
       roster.soldiers = roster.soldiers.filter((s) => s.id !== u.id);
+      delete roster.hospital[u.id];
       lost.push(rec);
     } else {
-      rec.hp = rec.maxHp;
       rec.ap = rec.maxAp;
       rec.overwatch = false;
+      if (rec.hp < rec.maxHp) {
+        roster.hospital[rec.id] = (rec.maxHp - rec.hp) * HEAL_TICKS_PER_HP;
+        wounded.push(rec);
+      }
       survivors.push(rec);
     }
   }
-  return { lost, survivors };
+  return { lost, survivors, wounded };
 }
