@@ -65,12 +65,10 @@
 
 ### Pre-commit hook
 
-Для автоматичної перевірки перед комітом встановить hook:
+Хук встановлюється автоматично при `npm install` через Husky (ADR-0014): скрипт `prepare` задає `core.hooksPath = .husky/_`, а `.husky/pre-commit` викликає `scripts/pre-commit.sh`.
 
 ```bash
-# У директорії проєкту
-ln -s ../../scripts/pre-commit.sh .git/hooks/pre-commit
-chmod +x .git/hooks/pre-commit
+npm install
 ```
 
 Hook перевіряє:
@@ -222,6 +220,7 @@ git push origin iter-X.Y
 | ADR-0011 | Ліцензія проєкту — MIT | accepted | 2026-10-13 |
 | ADR-0012 | Процес додавання залежностей — ADR + авторизація власника | accepted | 2026-10-13 |
 | ADR-0013 | DOM-тести UI-шару (main.ts) через jsdom | accepted | 2026-10-13 |
+| ADR-0014 | Pre-commit hooks — Husky + lint-staged | accepted | 2026-10-13 |
 
 **Нове рішення?** Створіть новий ADR з порядковим номером.
 

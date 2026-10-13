@@ -1,7 +1,7 @@
 #!/bin/sh
 # Pre-commit hook для проєкту Рубіж
-# Встановлення: ln -s ../../scripts/pre-commit.sh .git/hooks/pre-commit
-# 
+# Викликається з .husky/pre-commit (Husky, ADR-0014)
+#
 # Перевіряє:
 # 1. Тести проходять (npm test)
 # 2. Exact-байти збережено
