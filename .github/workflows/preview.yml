@@ -39,7 +39,7 @@ jobs:
       # TypeDoc-довідка API у dist/api (ADR-0019): обов'язково після vite build —
       # той очищає dist/; потрапляє в той самий Pages-артефакт (URL: /api/)
       - run: npm run docs
-      - uses: actions/configure-pages@v5
+      - uses: actions/configure-pages@v6
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
