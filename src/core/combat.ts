@@ -201,19 +201,24 @@ export function setOverwatch(state: GameState, unitId: string): void {
   state.log.push({ type: 'overwatch', unitId: u.id, armed: true });
 }
 
+// Перевірки одного кроку шляху: суміжність, межі мапи, перешкода, зайнятість, AP.
+function assertStep(state: GameState, u: Unit, step: Vec2): void {
+  if (Math.abs(step.x - u.pos.x) + Math.abs(step.y - u.pos.y) !== 1) {
+    throw new Error('Крок не суміжний (дозволені 4 напрямки)');
+  }
+  if (!isInside(state.map, step)) throw new Error('Крок за межі мапи');
+  if (isBlocked(state.map, step)) throw new Error('Крок у перешкоду');
+  if (unitAt(state, step)) throw new Error('Клітинка зайнята');
+  if (u.ap < MOVE_AP_PER_CELL) throw new Error('Недостатньо очок дій');
+}
+
 // Рух по готовому шляху (A* — у map.ts, ітерація 2). Кроки строго по 4 напрямках.
 // Кожен крок може спровокувати реакційний вогонь заступи ворога; смерть перериває рух.
 export function moveUnit(state: GameState, unitId: string, path: Vec2[]): void {
   const u = getUnit(state, unitId);
   requireActive(state, u);
   for (const step of path) {
-    if (Math.abs(step.x - u.pos.x) + Math.abs(step.y - u.pos.y) !== 1) {
-      throw new Error('Крок не суміжний (дозволені 4 напрямки)');
-    }
-    if (!isInside(state.map, step)) throw new Error('Крок за межі мапи');
-    if (isBlocked(state.map, step)) throw new Error('Крок у перешкоду');
-    if (unitAt(state, step)) throw new Error('Клітинка зайнята');
-    if (u.ap < MOVE_AP_PER_CELL) throw new Error('Недостатньо очок дій');
+    assertStep(state, u, step);
     const from = { ...u.pos };
     u.ap -= MOVE_AP_PER_CELL;
     u.pos = { ...step };
@@ -223,14 +228,11 @@ export function moveUnit(state: GameState, unitId: string, path: Vec2[]): void {
   }
 }
 
-// Один реакційний постріл заступою: режим snap без витрати AP (AP зарезервовані),
-// зі штрафом точності OVERWATCH_ACC_PENALTY.
-function fireReaction(state: GameState, shooter: Unit, target: Unit): void {
-  const profile = shooter.weapon.modes.snap;
-  const chance = Math.min(
-    HIT_CHANCE_CAP,
-    Math.max(HIT_CHANCE_FLOOR, shooter.firingAccuracy * profile.accuracyMod * OVERWATCH_ACC_PENALTY),
-  );
+// Один постріл (спільний для атаки й реакційного вогню заступи, Фаза 2/П5):
+// кидок влучності, пошкодження, смерть цілі; події — у state.log.
+// ADR-0003: порядок викликів RNG фіксований — кидок влучності, потім лише
+// при влучанні кидок пошкодження.
+function fireOnce(state: GameState, shooter: Unit, target: Unit, mode: ShotMode, chance: number): { hit: boolean; damage: number } {
   const hit = state.rng() < chance;
   let damage = 0;
   if (hit) {
@@ -242,7 +244,19 @@ function fireReaction(state: GameState, shooter: Unit, target: Unit): void {
       state.log.push({ type: 'death', unitId: target.id, killerId: shooter.id });
     }
   }
-  state.log.push({ type: 'shot', shooterId: shooter.id, targetId: target.id, mode: 'snap', hit, damage });
+  state.log.push({ type: 'shot', shooterId: shooter.id, targetId: target.id, mode, hit, damage });
+  return { hit, damage };
+}
+
+// Один реакційний постріл заступою: режим snap без витрати AP (AP зарезервовані),
+// зі штрафом точності OVERWATCH_ACC_PENALTY.
+function fireReaction(state: GameState, shooter: Unit, target: Unit): void {
+  const profile = shooter.weapon.modes.snap;
+  const chance = Math.min(
+    HIT_CHANCE_CAP,
+    Math.max(HIT_CHANCE_FLOOR, shooter.firingAccuracy * profile.accuracyMod * OVERWATCH_ACC_PENALTY),
+  );
+  fireOnce(state, shooter, target, 'snap', chance);
 }
 
 // Реакційний вогонь по юніту, що рухається: один постріл з кожної заступи.
@@ -259,35 +273,29 @@ function triggerOverwatch(state: GameState, mover: Unit): void {
 
 export interface AttackResult { shots: { hit: boolean; damage: number }[]; targetDown: boolean }
 
-export function resolveAttack(state: GameState, shooterId: string, targetId: string, mode: ShotMode): AttackResult {
-  const s = getUnit(state, shooterId);
-  const t = getUnit(state, targetId);
+// Перевірки перед пострілом: активна сторона, жива ціль, вогонь лише по ворогах,
+// дальність, лінія вогню, вартість AP (ADR-0004: відстань не впливає на влучність).
+function assertCanFire(state: GameState, s: Unit, t: Unit, mode: ShotMode): void {
   requireActive(state, s);
   if (!t.alive) throw new Error('Ціль уже мертва');
   if (s.side === t.side) throw new Error('Вогонь по своїх заборонений');
   if (distance(s.pos, t.pos) > s.weapon.range) throw new Error('Ціль поза дальністю зброї');
   if (!hasLineOfSight(state, s.pos, t.pos)) throw new Error('Немає лінії вогню');
+  if (s.ap < s.weapon.modes[mode].apCost) throw new Error('Недостатньо очок дій для пострілу ' + mode);
+}
+
+export function resolveAttack(state: GameState, shooterId: string, targetId: string, mode: ShotMode): AttackResult {
+  const s = getUnit(state, shooterId);
+  const t = getUnit(state, targetId);
+  assertCanFire(state, s, t, mode);
   const profile = s.weapon.modes[mode];
-  if (s.ap < profile.apCost) throw new Error('Недостатньо очок дій для пострілу ' + mode);
   s.ap -= profile.apCost;
   const chance = calculateHitChance(s, mode);
   const result: AttackResult = { shots: [], targetDown: false };
   for (let i = 0; i < profile.shots; i++) {
-    const hit = state.rng() < chance;
-    let damage = 0;
-    if (hit) {
-      const dmin = s.weapon.damage[0], dmax = s.weapon.damage[1];
-      damage = dmin + Math.floor(state.rng() * (dmax - dmin + 1));
-      t.hp -= damage;
-      if (t.hp <= 0) {
-        t.hp = 0; t.alive = false; s.kills += 1;
-        result.targetDown = true;
-        state.log.push({ type: 'death', unitId: t.id, killerId: s.id });
-      }
-    }
-    state.log.push({ type: 'shot', shooterId: s.id, targetId: t.id, mode, hit, damage });
-    result.shots.push({ hit, damage });
-    if (!t.alive) break; // мертва ціль не отримує зайвих куль серії
+    const shot = fireOnce(state, s, t, mode, chance);
+    result.shots.push(shot);
+    if (!t.alive) { result.targetDown = true; break; } // мертва ціль не отримує зайвих куль серії
   }
   return result;
 }
