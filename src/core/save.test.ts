@@ -68,6 +68,8 @@ describe('save: формат', () => {
     hireSoldier(p.econ, p.roster); // змінити економіку й ростер
     const restored = deserializeParty(serializeParty(p, '2026-10-14T00:00:00Z'));
     expect(snapshot(restored)).toBe(snapshot(p));
+    // стабільність формату: load → save того самого стану — ідентичний рядок
+    expect(serializeParty(restored, '2026-10-14T00:00:00Z')).toBe(serializeParty(p, '2026-10-14T00:00:00Z'));
   });
 
   it('той самий стан і savedAt — той самий JSON-рядок (стабільний формат)', () => {
