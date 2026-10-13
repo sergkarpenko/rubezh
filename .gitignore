@@ -2,6 +2,7 @@ node_modules/
 dist/
 *.log
 .DS_Store
+.husky/_/
 
 # Прототипи React (архів, не змінювати)
 /src/ui/
