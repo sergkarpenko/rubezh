@@ -2,10 +2,71 @@
 <html lang="uk">
 <head>
   <meta charset="utf-8">
-  <title>Рубіж</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Рубіж — демо-превью</title>
+  <style>
+    :root { color-scheme: dark; }
+    body { margin: 0; background: #0d1017; color: #d7dde6; font: 14px/1.45 system-ui, sans-serif; }
+    header { padding: 12px 16px; border-bottom: 1px solid #232a36; }
+    h1 { font-size: 20px; margin: 0; letter-spacing: .06em; }
+    .sub { color: #7d8794; font-size: 12px; margin-top: 2px; }
+    main { display: flex; flex-wrap: wrap; gap: 16px; padding: 16px; align-items: flex-start; }
+    section.panel { background: #131824; border: 1px solid #232a36; border-radius: 8px; padding: 12px; }
+    h2 { font-size: 12px; margin: 0 0 8px; color: #9fb0c3; text-transform: uppercase; letter-spacing: .08em; }
+    button { background: #1d2740; border: 1px solid #31435f; color: #d7e4f7; border-radius: 6px; padding: 6px 10px; cursor: pointer; font: inherit; }
+    button:disabled { opacity: .45; cursor: default; }
+    button.mission { background: #3a2f10; border-color: #8a6d1d; }
+    input { background: #0d1017; border: 1px solid #31435f; color: inherit; border-radius: 6px; padding: 6px 8px; width: 72px; font: inherit; }
+    canvas { display: block; background: #0a0d12; border-radius: 6px; }
+    .clock { font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; }
+    .ufo { margin: 6px 0; padding: 8px; border: 1px solid #232a36; border-radius: 6px; }
+    .ufo button { margin-top: 6px; }
+    .meta { color: #7d8794; font-size: 12px; }
+    .soldier { display: flex; gap: 10px; padding: 3px 0; font-variant-numeric: tabular-nums; }
+    .kills { color: #d8b25a; }
+    .banner { padding: 10px 14px; border-radius: 6px; font-weight: 600; margin: 8px 0; }
+    .banner.win { background: #12301c; color: #7fe2a0; }
+    .banner.lose { background: #341418; color: #ff9c9c; }
+    #log { list-style: none; margin: 0; padding: 0; max-height: 560px; width: 340px; overflow: auto; font-size: 12px; color: #9aa7b5; }
+    #log li { padding: 3px 0; border-bottom: 1px solid #1a2130; }
+    #log li.win { color: #7fe2a0; }
+    #log li.lose { color: #ff9c9c; }
+    .hidden { display: none !important; }
+  </style>
 </head>
 <body>
-  <div id="app"></div>
+  <header>
+    <h1>РУБІЖ</h1>
+    <div class="sub">демо-превью ядра: геосцена + місії + ростер (ітерації 4.1–5.2). Бій відтворюється ботами автоматично.</div>
+  </header>
+  <main>
+    <section class="panel">
+      <h2>Геосцена</h2>
+      <div class="clock" id="clock">—</div>
+      <div style="display:flex; gap:8px; margin:10px 0; flex-wrap:wrap;">
+        <button id="btn-tick">+1 тік (30 хв)</button>
+        <button id="btn-day">+1 доба</button>
+        <input id="seed" type="number" value="42" title="Сід партії">
+        <button id="btn-new">Нова партія</button>
+      </div>
+      <canvas id="geo" width="576" height="288"></canvas>
+    </section>
+    <section class="panel">
+      <h2>Сканери (виявлені НЛО)</h2>
+      <div id="ufos"></div>
+      <h2 style="margin-top:14px;">Ростер загону</h2>
+      <div id="roster"></div>
+    </section>
+    <section class="panel hidden" id="battle-panel">
+      <h2>Тактичний бій <span id="bturn" style="color:#7d8794"></span></h2>
+      <div id="bresult"></div>
+      <canvas id="battle" width="520" height="520"></canvas>
+    </section>
+    <section class="panel">
+      <h2>Журнал</h2>
+      <ul id="log"></ul>
+    </section>
+  </main>
   <script type="module" src="/src/main.ts"></script>
 </body>
 </html>
