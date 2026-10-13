@@ -1,4 +1,6 @@
 # Husky pre-commit (ADR-0014): усі перевірки проєкту — у scripts/pre-commit.sh
 # (правила AGENTS.md, рубіж ADR-0012, тести, exact-байти)
+# lint-staged спочатку: eslint --fix + prettier --write на staged-файлах (ADR-0015),
+# фікси пере-стейджуються до тестів
+npx lint-staged
 ./scripts/pre-commit.sh
-# lint-staged підключимо у П10 разом з ESLint/Prettier (ADR-0014)

@@ -7,13 +7,25 @@
     "dev": "vite",
     "test": "vitest run",
     "build": "vite build",
-    "prepare": "husky"
+    "prepare": "husky",
+    "lint": "eslint src",
+    "lint:fix": "eslint src --fix",
+    "format": "prettier --write src index.html",
+    "format:check": "prettier --check src index.html"
+  },
+  "lint-staged": {
+    "src/**/*.ts": ["eslint --fix", "prettier --write"],
+    "*.{html,css}": ["prettier --write"]
   },
   "devDependencies": {
+    "eslint": "^10.12.0",
+    "eslint-config-prettier": "^10.1.8",
     "husky": "^9.1.7",
     "jsdom": "^30.1.2",
     "lint-staged": "^17.6.0",
+    "prettier": "^3.9.10",
     "typescript": "^5.6.0",
+    "typescript-eslint": "^8.71.2",
     "vite": "^6.0.0",
     "vitest": "^2.1.0"
   }
