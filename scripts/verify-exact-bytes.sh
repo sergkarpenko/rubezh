@@ -1,13 +1,20 @@
 #!/bin/bash
 # verify-exact-bytes.sh
-# Перевірка "exact-байти": порівняння файлів після генерації через пісочницю
+# Перевірка "exact-байти": робоча копія файла має байт-у-байт збігатися
+# з версією в git-індексі (тим, що комітиться). Порівняння — через blob-hash
+# git (портувально: без sha256sum/grep -P, яких немає на macOS).
 # Використання: ./scripts/verify-exact-bytes.sh [--fix]
-#   --fix: спробувати автоматично виправити розходження (лише для текстових файлів)
+#   --fix: відкинути локальні зміни текстового файла (git checkout -- <file>)
+#
+# П13 (Фаза 2): полагоджено падіння "$2: unbound variable" (compare_file
+# викликався без аргумента fix_mode) і саму логіку порівняння — sha256sum
+# проти git-hash не збігається ніколи; --fix тепер відновлює з індексу.
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+cd "$PROJECT_ROOT"
 
 # Кольори для виводу
 RED='\033[0;31m'
@@ -15,11 +22,14 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
+say() { printf '%b\n' "$1"; } # printf замість echo: echo у bash не розкриває \033
+
 # Файли, які потрібно перевіряти (текстові файли ядра та UI)
 FILES_TO_CHECK=(
   "src/core/combat.ts"
   "src/core/map.ts"
   "src/core/ai.ts"
+  "src/core/ai-utils.ts"
   "src/core/geo.ts"
   "src/core/mission.ts"
   "src/core/squad.ts"
@@ -36,112 +46,97 @@ SKIP_PATTERNS=(
   ".git/"
 )
 
-echo "=========================================="
-echo "Перевірка exact-байти для проєкту Рубіж"
-echo "=========================================="
+say "=========================================="
+say "Перевірка exact-байти для проєкту Рубіж"
+say "=========================================="
 
-# Функція для перевірки, чи файл є текстовим
+# Текстовий файл: `file` повертає "text" для текстових (UTF-8 укр. — теж),
+# "data" для бінарних. Без grep -P (не підтримується BSD grep на macOS).
 is_text_file() {
-  local file="$1"
-  # Перевіряємо, чи файл містить лише друковані символи та переноси рядків
-  if file "$file" | grep -qP '[^\x00-\x7F]'; then
-    return 1  # Не текстовий (містить не-ASCII)
-  fi
-  # Перевіряємо на наявність нульових байтів
-  if grep -qP '\x00' "$file" 2>/dev/null; then
-    return 1  # Бінарний файл
-  fi
-  return 0  # Текстовий файл
+  local f="$1"
+  file "$f" | grep -qi 'text'
 }
 
-# Функція для порівняння файлу з його git-версією
+# Порівняння робочої копії з git-індексом: blob-hash'и мають збігатися.
 compare_file() {
   local file="$1"
-  local fix_mode="$2"
-  
+  local fix_mode="${2:-}"
+
   # Пропускаємо, якщо файл не існує
   if [ ! -f "$file" ]; then
-    echo "${YELLOW}-- Пропускаю: $file (файл не існує)${NC}"
+    say "${YELLOW}-- Пропускаю: $file (файл не існує)${NC}"
     return 0
   fi
-  
+
   # Пропускаємо заборонені шаблони
   for pattern in "${SKIP_PATTERNS[@]}"; do
     if [[ "$file" == *"$pattern"* ]]; then
-      echo "${YELLOW}-- Пропускаю: $file (заборонений шаблон)${NC}"
+      say "${YELLOW}-- Пропускаю: $file (заборонений шаблон)${NC}"
       return 0
     fi
   done
-  
-  # Отримуємо hash поточного файлу
-  current_hash=$(sha256sum "$file" | awk '{print $1}')
-  
-  # Отримуємо hash версії у git (index або HEAD)
-  if git diff --cached --quiet "$file" 2>/dev/null; then
-    # Файл у staging area
-    staged_hash=$(git hash-object "$file" | awk '{print $1}')
-  else
-    # Файл у HEAD
-    staged_hash=$(git hash-object HEAD:"$file" 2>/dev/null || echo "")
-  fi
-  
-  if [ -z "$staged_hash" ]; then
-    # Файл новий (не в git)
-    echo "${GREEN}[OK] Новий файл: $file${NC}"
+
+  # Blob-hash версії в індексі (порожньо — файл не відстежується git)
+  local index_blob
+  index_blob=$(git ls-files -s -- "$file" | awk '{print $2}')
+  if [ -z "$index_blob" ]; then
+    say "${GREEN}[OK] Не відстежується git (новий): $file${NC}"
     return 0
   fi
-  
-  if [ "$current_hash" != "$staged_hash" ]; then
-    echo "${RED}[FAIL] РОЗХІДЖЕННЯ: $file${NC}"
-    echo "   Поточний hash: $current_hash"
-    echo "   Git hash:     $staged_hash"
-    
-    if [ "$fix_mode" = "--fix" ] && is_text_file "$file"; then
-      echo "   ${YELLOW}-- Спроба автоматичного виправлення...${NC}"
-      git checkout HEAD -- "$file" 2>/dev/null || git restore "$file" 2>/dev/null
-      if [ "$current_hash" = "$(sha256sum "$file" | awk '{print $1}')" ]; then
-        echo "   ${GREEN}[FIXED] Виправлено: $file${NC}"
-        return 0
-      else
-        echo "   ${RED}[ERROR] Не вдалося виправити автоматично${NC}"
-      fi
+
+  # Blob-hash робочої копії — канонічне байтове порівняння git
+  local work_blob
+  work_blob=$(git hash-object "$file")
+  if [ "$work_blob" = "$index_blob" ]; then
+    say "${GREEN}[OK] $file${NC}"
+    return 0
+  fi
+
+  say "${RED}[FAIL] РОЗХОДЖЕННЯ: $file${NC}"
+  say "   Робоча копія: $work_blob"
+  say "   Git-індекс:   $index_blob"
+
+  if [ "$fix_mode" = "--fix" ] && is_text_file "$file"; then
+    say "   ${YELLOW}-- Відкидаю локальні зміни (git checkout -- $file)...${NC}"
+    git checkout -- "$file"
+    if [ "$(git hash-object "$file")" = "$index_blob" ]; then
+      say "   ${GREEN}[FIXED] Виправлено: $file${NC}"
+      return 0
     fi
-    return 1
-  else
-    echo "${GREEN}[OK] $file${NC}"
-    return 0
+    say "   ${RED}[ERROR] Не вдалося виправити автоматично${NC}"
   fi
+  return 1
 }
 
 # Головний цикл
-echo ""
-echo "--- Перевірка основних файлів ---"
+say ""
+say "--- Перевірка основних файлів ---"
 all_ok=true
 for file in "${FILES_TO_CHECK[@]}"; do
-  if ! compare_file "$file" "$@"; then
-    all_ok=false
-  fi
+  compare_file "$file" "$@" || all_ok=false
 done
 
-# Додатково: перевіряємо всі TypeScript файли у src/
-echo ""
-echo "--- Додаткова перевірка усіх TypeScript файлів у src/ ---"
+# Додатково: решта TypeScript файлів у src/ (без дублів зі списком вище)
+say ""
+say "--- Додаткова перевірка TypeScript файлів у src/ ---"
+# без declare -A (macOS — bash 3.2, асоціативних масивів немає)
 while IFS= read -r -d '' file; do
-  if ! compare_file "$file" "$@"; then
-    all_ok=false
-  fi
-done < <(find "$PROJECT_ROOT/src" -name "*.ts" -print0)
+  case " ${FILES_TO_CHECK[*]} " in
+    *" $file "*) continue ;;
+  esac
+  compare_file "$file" "$@" || all_ok=false
+done < <(find src -name '*.ts' -print0)
 
-echo ""
+say ""
 if $all_ok; then
-  echo "${GREEN}[OK] Усі файли у порядку! Exact-байти збережено.${NC}"
+  say "${GREEN}[OK] Усі файли у порядку! Exact-байти збережено.${NC}"
   exit 0
 else
-  echo "${RED}[FAIL] Виявлено розходження! Перевірте файли вище.${NC}"
-  echo ""
-  echo "Рекомендації:"
-  echo "  1. Перевірте файли у пісочниці перед комітом"
-  echo "  2. Використовуйте concatenation рядків замість template literals"
-  echo "  3. Уникнійте екранування, яке може пошкодити вміст"
+  say "${RED}[FAIL] Виявлено розходження! Перевірте файли вище.${NC}"
+  say ""
+  say "Рекомендації:"
+  say "  1. Перевірте файли у пісочниці перед комітом"
+  say "  2. Використовуйте конкатенацію рядків замість template literals"
+  say "  3. Уникайте екранування, яке може пошкодити вміст"
   exit 1
 fi
