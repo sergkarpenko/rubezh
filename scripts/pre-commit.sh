@@ -17,8 +17,9 @@ echo "=========================================="
 echo ""
 echo "--- Перевірка правил AGENTS.md ---"
 if [ -f "AGENTS.md" ]; then
-    # Перевіряємо, чи змінюються заборонені файли (package.json — окремо, правило 1b за ADR-0012)
-    if git diff --cached --name-only | grep -qE '(src/ui/|\.github/workflows/|tsconfig\.json|vite\.config\.ts)'; then
+    # Перевіряємо, чи змінюються заборонені файли
+    # (package.json — правило 1b за ADR-0012; .github/workflows/ — правило 1c за ADR-0018)
+    if git diff --cached --name-only | grep -qE '(src/ui/|tsconfig\.json|vite\.config\.ts)'; then
         echo "[FAIL] ЗМІНЕНО ЗАБОРОНЕНИЙ ФАЙЛ! Див. AGENTS.md"
         git diff --cached --name-only | grep -E '(src/ui/|\.github/workflows/|tsconfig\.json|vite\.config\.ts)'
         echo ""
@@ -37,6 +38,17 @@ if git diff --cached --name-only | grep -qE '^package\.json$'; then
     else
         echo "[FAIL] package.json БЕЗ ADR! Залежності — лише за ADR-0012:"
         echo "       ADR + явна авторизація власника, окремий коміт chore(deps):"
+        exit 1
+    fi
+fi
+
+# 1c. Workflow-файли лише з ADR (ADR-0018): .github/workflows/ у коміті → docs/adr/ у тому ж коміті
+if git diff --cached --name-only | grep -qE '^\.github/workflows/'; then
+    if git diff --cached --name-only | grep -qE '^docs/adr/'; then
+        echo "[OK] workflow-файли з ADR (процес ADR-0018)"
+    else
+        echo "[FAIL] .github/workflows/ БЕЗ ADR! Зміни CI/CD — лише за ADR-0018:"
+        echo "       ADR у docs/adr/ у тому ж коміті; відповідність ADR вказівці власника перевіряється на рев'ю"
         exit 1
     fi
 fi
