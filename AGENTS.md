@@ -231,6 +231,7 @@ git push origin iter-X.Y
 | ADR-0022 | Patrol-режим ШІ місії | accepted | 2026-10-13 |
 | ADR-0023 | Вимоги і план фази: EARS-критерії в плані, ADR — єдине місце архітектури | accepted | 2026-10-13 |
 | ADR-0024 | Dependabot-бампи GitHub Actions — виняток із ADR-0018 | accepted | 2026-10-13 |
+| ADR-0025 | Захист гілки main — force-push/deletion + required status checks | accepted | 2026-10-13 |
 
 **Нове рішення?** Створіть новий ADR з порядковим номером.
 

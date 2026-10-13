@@ -1,0 +1,32 @@
+# CI-гейт на PR (ADR-0025): тести + поріг покриття + збірка + docs — без деплою.
+# Працює при кожному PR у main; чек «test» — required status check
+# для захисту гілки main (той самий рубіж, що й preview на push).
+name: ci
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install
+      - run: npm test
+      # Покриття ядра + поріг 80% (ADR-0017) — дублювати завантаження на Codecov
+      # не треба: те робить preview.yml на push у main
+      - run: npm run test:coverage
+      - run: npm run build
+      # TypeDoc-довідка (ADR-0019) — перевірка генерації на PR
+      - run: npm run docs
