@@ -15,6 +15,11 @@
 // Фаза 2 (П7): чисті шматки «візуальної логіки» (cellFromPoint, samePath,
 // hpColor, geoEventText, battleEventText) експортуються для юніт-тестів
 // (src/main.test.ts); DOM-ініціалізація — лише у браузері (typeof document).
+//
+// Фаза 4 (П4.5): економіка і лікарня (ADR-0021) — баланс і надходження
+// в панелі «Фінанси», кнопка найму, статус поранених у ростері
+// («лікарня: N тіків»); тік часу = geoTick + economyTick + hospitalTick,
+// банкрутство фіксується на тіку геосцени (кнопки блокуються).
 
 import {
   RADAR_RANGE,
@@ -30,7 +35,17 @@ import {
   type GeoState,
 } from './core/geo';
 import { ALIEN_SPAWN, SQUAD_SPAWN, completeMission, createMission, missionOutcome, type Mission } from './core/mission';
-import { applyMissionResult, createRoster, missionSquad, type Roster } from './core/squad';
+import {
+  applyMissionResult,
+  createRoster,
+  hireSoldier,
+  hospitalTick,
+  isBankrupt,
+  missionSquad,
+  readySoldiers,
+  type Roster,
+} from './core/squad';
+import { createEconomy, creditMissionBonus, economyTick, HIRE_PRICE, type EconomyEvent, type EconomyState } from './core/economy';
 import {
   calculateHitChance,
   endTurn,
@@ -53,6 +68,7 @@ const MODE_LABEL: Record<ShotMode, string> = { snap: 'швидкий', aimed: '�
 interface Party {
   geo: GeoState;
   roster: Roster;
+  econ: EconomyState;
 }
 
 function el<T extends HTMLElement>(id: string): T {
@@ -66,6 +82,8 @@ function el<T extends HTMLElement>(id: string): T {
 let seenGeoLog = 0;
 const knownDetected = new Set<string>();
 let seenBattleLog = 0;
+let seenEconLog = 0;
+let gameOver = false; // банкрутство (ADR-0021): боєготових немає і грошей на найм немає
 let party: Party = newParty(42);
 let mission: Mission | null = null;
 let battleResult: 'перемога' | 'поразка' | null = null;
@@ -77,7 +95,9 @@ let hoverAp = 0;
 function newParty(seed: number): Party {
   seenGeoLog = 0;
   knownDetected.clear();
-  return { geo: createGeoGame({ seed }), roster: createRoster() };
+  seenEconLog = 0;
+  gameOver = false;
+  return { geo: createGeoGame({ seed }), roster: createRoster(), econ: createEconomy() };
 }
 
 function journal(text: string, cls = ''): void {
@@ -151,6 +171,38 @@ function drainGeoLog(): void {
   }
 }
 
+// П4.5: чистий перетворювач події економіки → рядок журналу (для юніт-тестів).
+export function economyEventText(e: EconomyEvent): { text: string; cls: string } {
+  switch (e.type) {
+    case 'allowance':
+      return { text: 'Дотація за добу ' + e.day + ': +' + e.amount, cls: '' };
+    case 'mission_bonus':
+      return { text: 'Премія за місію (' + e.kind + '): +' + e.amount, cls: 'win' };
+    case 'spend':
+      return { text: 'Витрати: −' + e.amount, cls: 'lose' };
+  }
+}
+
+function drainEconLog(): void {
+  const log = party.econ.log;
+  for (; seenEconLog < log.length; seenEconLog++) {
+    const msg = economyEventText(log[seenEconLog]);
+    journal(msg.text, msg.cls);
+  }
+}
+
+// П4.5 (ADR-0021): один тік часу партії — геосцена + дотація + лікарня +
+// перевірка банкрутства. Викликати лише поза бою (час геосцени заморожено).
+function partyTick(): void {
+  advanceTime(party.geo, 1);
+  economyTick(party.econ, party.geo);
+  hospitalTick(party.roster);
+  if (!gameOver && isBankrupt(party.econ, party.roster)) {
+    gameOver = true;
+    journal('✗ Банкрутство: немає боєготових солдатів і грошей на найм — партію програно.', 'lose');
+  }
+}
+
 function renderGeo(): void {
   drainGeoLog();
   const cv = el<HTMLCanvasElement>('geo');
@@ -211,8 +263,8 @@ function renderGeo(): void {
 
   el('clock').textContent = geoClock(party.geo);
   const busy = mission !== null;
-  (el('btn-tick') as HTMLButtonElement).disabled = busy;
-  (el('btn-day') as HTMLButtonElement).disabled = busy;
+  (el('btn-tick') as HTMLButtonElement).disabled = busy || gameOver;
+  (el('btn-day') as HTMLButtonElement).disabled = busy || gameOver;
 }
 
 function renderUfos(): void {
@@ -234,9 +286,15 @@ function renderUfos(): void {
       const btn = document.createElement('button');
       btn.className = 'mission';
       btn.textContent = '▶ Запустити місію';
-      const rosterEmpty = party.roster.soldiers.length === 0;
-      btn.disabled = mission !== null || rosterEmpty;
-      if (rosterEmpty) btn.title = 'Ростер порожній — немає кого відправити';
+      // П4.5 (ADR-0021): поранені в лікарні не боєготові — місію запускати ніким
+      const ready = readySoldiers(party.roster).length;
+      btn.disabled = mission !== null || gameOver || ready === 0;
+      if (gameOver) btn.title = 'Партію програно — банкрутство';
+      else if (ready === 0)
+        btn.title =
+          party.roster.soldiers.length === 0
+            ? 'Ростер порожній — найм солдата за гроші'
+            : 'Усі солдати поранені — чекайте одужання або наймайте';
       btn.onclick = () => launchMission(u.id);
       div.appendChild(btn);
     }
@@ -249,20 +307,34 @@ export function hpColor(hp: number, maxHp: number): string {
   return hp >= maxHp ? '#7fbf7f' : hp > maxHp / 2 ? '#d8b25a' : '#ff9c9c';
 }
 
+// П4.5 (ADR-0021): панель фінансів — баланс, кнопка найму, надходження в журнал.
+function renderFinances(): void {
+  drainEconLog();
+  el('money').textContent = gameOver ? 'БАНКРУТ' : String(party.econ.money);
+  const hire = el<HTMLButtonElement>('btn-hire');
+  hire.disabled = gameOver || party.econ.money < HIRE_PRICE;
+  hire.title = hire.disabled ? 'Недостатньо грошей (ціна найму ' + HIRE_PRICE + ')' : 'Новий солдат у кінець ростеру (−' + HIRE_PRICE + ')';
+}
+
 function renderRoster(): void {
   const box = el('roster');
   box.innerHTML = '';
   const soldiers = party.roster.soldiers;
   if (soldiers.length === 0) {
-    box.innerHTML = '<div style="color:#ff9c9c">Загін втрачено — місії більше неможливі. Почніть нову партію.</div>';
+    box.innerHTML =
+      '<div style="color:#ff9c9c">Загін втрачено.</div>' +
+      (party.econ.money >= HIRE_PRICE
+        ? '<div class="meta">Найм доступний — кнопка «Найм солдата».</div>'
+        : '<div class="meta">Грошей на найм немає.</div>');
     return;
   }
   const head = document.createElement('div');
   head.className = 'meta';
   head.style.marginBottom = '4px';
-  head.textContent = soldiers.length + ' солдатів у строю';
+  head.textContent = soldiers.length + ' солдатів (' + readySoldiers(party.roster).length + ' боєготових)';
   box.appendChild(head);
   for (const s of soldiers) {
+    const heal = party.roster.hospital[s.id];
     const row = document.createElement('div');
     row.className = 'soldier';
     row.innerHTML =
@@ -276,6 +348,7 @@ function renderRoster(): void {
       '/' +
       s.maxHp +
       '</span>' +
+      (heal !== undefined ? '<span class="meta">лікарня: ' + heal + ' тик(и)</span>' : '') +
       '<span class="kills">⚔ ' +
       s.kills +
       '</span>';
@@ -404,6 +477,7 @@ function renderBattle(): void {
 function renderAll(): void {
   renderGeo();
   renderUfos();
+  renderFinances();
   renderRoster();
   if (mission) renderBattle();
   else el('battle-panel').classList.add('hidden');
@@ -639,11 +713,17 @@ function finishBattle(outcome: 'перемога' | 'поразка'): void {
   const aftermath = applyMissionResult(party.roster, mission.state);
   completeMission(party.geo, mission.briefing.ufoId, outcome);
   for (const s of aftermath.lost) journal('✝ ' + s.name + ' загинув у бою', 'lose');
+  for (const s of aftermath.wounded) journal('✚ ' + s.name + ' поранений — лікарня: ' + party.roster.hospital[s.id] + ' тик(и)');
   if (outcome === 'перемога') {
+    // П4.5 (ADR-0021): премія за перемогу за тип НЛО; надходження — у журнал
+    creditMissionBonus(party.econ, mission.briefing.kind);
+    const woundedNote = aftermath.wounded.length > 0 ? ' · поранених: ' + aftermath.wounded.length : '';
     el('bresult').innerHTML =
       '<div class="banner win">ЗАЧИЩЕНО ✓ — загін повернувся на базу (' +
       aftermath.survivors.length +
-      ' виживших)</div>' +
+      ' виживших' +
+      woundedNote +
+      ')</div>' +
       '<button id="btn-close">← Повернутись на геосцену</button>';
   } else {
     el('bresult').innerHTML =
@@ -674,17 +754,27 @@ export function samePath(a: Vec2[] | null, b: Vec2[] | null): boolean {
 if (typeof document !== 'undefined') {
   el('btn-tick').onclick = () => {
     if (!mission) {
-      advanceTime(party.geo, 1);
+      partyTick();
       renderAll();
     }
   };
   el('btn-day').onclick = () => {
     if (!mission) {
-      advanceTime(party.geo, 48);
+      for (let i = 0; i < 48; i++) partyTick();
       renderAll();
     }
   };
   el('btn-new').onclick = restart;
+  // П4.5 (ADR-0021): найм солдата — списання грошей, новобранець у кінець ростеру
+  el('btn-hire').onclick = () => {
+    try {
+      const s = hireSoldier(party.econ, party.roster);
+      journal('+ Найм: ' + s.name + ' у ростері');
+      renderAll();
+    } catch (e) {
+      journal('✗ ' + (e as Error).message, 'lose');
+    }
+  };
   el('btn-snap').onclick = () => armFire('snap');
   el('btn-aimed').onclick = () => armFire('aimed');
   el('btn-auto').onclick = () => armFire('auto');

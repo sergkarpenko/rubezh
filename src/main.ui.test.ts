@@ -53,10 +53,11 @@ beforeAll(async () => {
 });
 
 describe('UI-флоу превью: геосцена → місія → бій → результат (ADR-0013)', () => {
-  it('ініціалізація: журнал старту, годинник, ростер, панель бою прихована', () => {
+  it('ініціалізація: журнал старту, годинник, ростер, фінанси, панель бою прихована', () => {
     expect($('log').textContent).toContain('Партію розпочато');
     expect($('clock').textContent).toBe('Д1 00:00');
-    expect($('roster').textContent).toContain('6 солдатів у строю');
+    expect($('roster').textContent).toContain('6 солдатів (6 боєготових)');
+    expect($('money').textContent).toBe('300');
     expect($('battle-panel').classList.contains('hidden')).toBe(true);
     expect(btn('btn-tick').disabled).toBe(false);
   });
@@ -126,5 +127,73 @@ describe('UI-флоу превью: геосцена → місія → бій �
     expect($('battle-panel').classList.contains('hidden')).toBe(true);
     expect(btn('btn-tick').disabled).toBe(false);
     expect($('bresult').textContent).toBe('');
+  });
+});
+
+describe('критичний флоу економіки: найм → місія → поранення → одужання (П4.5, ADR-0021)', () => {
+  // Сід 42 детермінований (перевірено сценарієм у пісочниці): перша місія —
+  // «розвідник» на 22-му тіку; демо-бій — перемога, s2 гине, s1 поранений
+  // 6/10 → лікарня 8 тіків; премія +150.
+
+  it('скидання партії: баланс 300, ростер 6', () => {
+    ($('seed') as HTMLInputElement).value = '42';
+    btn('btn-new').click();
+    expect($('money').textContent).toBe('300');
+    expect($('roster').textContent).toContain('6 солдатів (6 боєготових)');
+  });
+
+  it('найм: −100, новобранець «Дмитро» в кінці ростеру', () => {
+    btn('btn-hire').click();
+    expect($('money').textContent).toBe('200');
+    expect($('roster').textContent).toContain('7 солдатів (7 боєготових)');
+    expect($('roster').textContent).toContain('Дмитро');
+    expect($('log').textContent).toContain('Найм: Дмитро');
+    expect($('log').textContent).toContain('Витрати: −100');
+  });
+
+  it('місія: тіки до вікна, запуск, час заблоковано', () => {
+    let found = false;
+    for (let i = 0; i < 1500 && !found; i++) {
+      btn('btn-tick').click();
+      found = document.querySelector('button.mission') !== null;
+    }
+    expect(found).toBe(true);
+    (document.querySelector('button.mission') as HTMLButtonElement).click();
+    expect($('battle-panel').classList.contains('hidden')).toBe(false);
+    expect(btn('btn-tick').disabled).toBe(true);
+  });
+
+  it('поранення: демо-бій — перемога, поранений у лікарні, премія за місію', () => {
+    btn('btn-demo').click();
+    expect($('bresult').textContent).toContain('ЗАЧИЩЕНО');
+    expect($('bresult').textContent).toContain('поранених: 1');
+    expect($('log').textContent).toContain('Іван поранений — лікарня: 8 тик(и)');
+    expect($('log').textContent).toContain('Премія за місію (розвідник): +150');
+    expect($('money').textContent).toBe('350'); // 300 − 100 найм + 150 премія
+  });
+
+  it('поранений не боєготовий: статус у ростері, місія недоступна поки вікно триває', () => {
+    btn('btn-close').click();
+    expect($('battle-panel').classList.contains('hidden')).toBe(true);
+    expect($('roster').textContent).toContain('6 солдатів (5 боєготових)');
+    expect($('roster').textContent).toContain('лікарня: 8 тик(и)');
+    expect($('roster').textContent).toContain('HP 6/10');
+    expect(btn('btn-tick').disabled).toBe(false);
+  });
+
+  it('одужання: 8 тіків — ветеран знову боєготовий, баланс і годинник цілі', () => {
+    for (let i = 0; i < 8; i++) btn('btn-tick').click();
+    expect($('roster').textContent).not.toContain('лікарня');
+    expect($('roster').textContent).toContain('HP 10/10');
+    expect($('roster').textContent).toContain('6 солдатів (6 боєготових)');
+    expect($('money').textContent).toBe('350'); // доти не було — доба не завершена
+    expect($('clock').textContent).toBe('Д1 15:00'); // 22 + 8 тіків по 30 хв
+  });
+
+  it('дотація: завершення доби 1 — +100 у журналі і балансі', () => {
+    for (let i = 0; i < 18; i++) btn('btn-tick').click(); // 30 тіків усього
+    expect($('clock').textContent).toBe('Д2 00:00');
+    expect($('money').textContent).toBe('450');
+    expect($('log').textContent).toContain('Дотація за добу 1: +100');
   });
 });

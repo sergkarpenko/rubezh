@@ -3,9 +3,10 @@
 // (node-середовище vitest; DOM-ініціалізація в main.ts стоїть за typeof document).
 
 import { describe, expect, it } from 'vitest';
-import { battleEventText, cellFromPoint, geoEventText, hpColor, samePath } from './main';
+import { battleEventText, cellFromPoint, economyEventText, geoEventText, hpColor, samePath } from './main';
 import type { GeoEvent } from './core/geo';
 import type { GameEvent } from './core/combat';
+import type { EconomyEvent } from './core/economy';
 
 describe('cellFromPoint: клік (CSS-пікселі) → клітинка бойовища', () => {
   // канва 520×520 buffer (20×20 клітинок по 26px — BCELL), розташована на сторінці
@@ -127,5 +128,19 @@ describe('battleEventText: події бою → журнал', () => {
     expect(battleEventText(ev({ type: 'move', unitId: 's1', from: { x: 0, y: 0 }, to: { x: 1, y: 0 } }), name)).toBe(null);
     expect(battleEventText(ev({ type: 'turn', turn: 2, side: 'alien' }), name)).toBe(null);
     expect(battleEventText(ev({ type: 'overwatch', unitId: 's1', armed: true }), name)).toBe(null);
+  });
+});
+
+describe('economyEventText: події економіки → журнал (П4.5, ADR-0021)', () => {
+  it('дотація, премія і витрати — рядки з класами кольорів журналу', () => {
+    expect(economyEventText({ type: 'allowance', day: 3, amount: 100 } as EconomyEvent)).toEqual({
+      text: 'Дотація за добу 3: +100',
+      cls: '',
+    });
+    expect(economyEventText({ type: 'mission_bonus', kind: 'розвідник', amount: 150 } as EconomyEvent)).toEqual({
+      text: 'Премія за місію (розвідник): +150',
+      cls: 'win',
+    });
+    expect(economyEventText({ type: 'spend', amount: 100 } as EconomyEvent)).toEqual({ text: 'Витрати: −100', cls: 'lose' });
   });
 });
