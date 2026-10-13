@@ -6,7 +6,8 @@ import { describe, expect, it } from 'vitest';
 import type { Side } from './combat';
 import { advanceTime, createGeoGame, type GeoState } from './geo';
 import { completeMission, createMission, makeSoldier, missionOutcome, type Mission } from './mission';
-import { applyMissionResult, createRoster, missionSquad, type Roster } from './squad';
+import { applyMissionResult, createRoster, fireSoldier, hireSoldier, missionSquad, type Roster } from './squad';
+import { createEconomy, HIRE_PRICE, spend } from './economy';
 
 // Геопартія з вручну «посадженим» НЛО (спавн вимкнено) — для точкових сценаріїв.
 function mkGeo(ufoId: string): GeoState {
@@ -176,5 +177,75 @@ describe('squad: наскрізний цикл', () => {
       return JSON.stringify(g.log);
     };
     expect(run(true)).toBe(run(false));
+  });
+});
+
+describe('squad: кадрування (П4.3, ADR-0021)', () => {
+  it('найм: списує HIRE_PRICE, додає солдата в кінець ростеру, hired зростає', () => {
+    const econ = createEconomy();
+    const r = createRoster(); // s1..s6, hired 6
+    const hired = hireSoldier(econ, r);
+    expect(econ.money).toBe(300 - HIRE_PRICE);
+    expect(hired.id).toBe('s7');
+    expect(hired.name).toBe('Дмитро');
+    expect(r.hired).toBe(7);
+    expect(r.soldiers.map((s) => s.id)).toEqual(['s1', 's2', 's3', 's4', 's5', 's6', 's7']);
+    expect(hired.side).toBe('player');
+    expect(hired.hp).toBe(10);
+    expect(hired.alive).toBe(true);
+  });
+
+  it('імена циклічні: після вичерпання пулу — ім’я з номером, id унікальний', () => {
+    const econ = createEconomy();
+    const r = createRoster(12); // увесь пул імен
+    const first = hireSoldier(econ, r);
+    expect(first.id).toBe('s13');
+    expect(first.name).toBe('Іван 2');
+    const second = hireSoldier(econ, r);
+    expect(second.id).toBe('s14');
+    expect(second.name).toBe('Олена 2');
+  });
+
+  it('недостатньо грошей — помилка, ростер і лічильник не змінюються', () => {
+    const econ = createEconomy();
+    spend(econ, 250); // лишається 50 < HIRE_PRICE
+    const r = createRoster();
+    expect(() => hireSoldier(econ, r)).toThrow('Недостатньо грошей');
+    expect(r.soldiers).toHaveLength(6);
+    expect(r.hired).toBe(6);
+  });
+
+  it('найм детермінований: однакова послідовність — ті самі id та імена', () => {
+    const run = () => {
+      const econ = createEconomy();
+      const r = createRoster();
+      const hired = [hireSoldier(econ, r), hireSoldier(econ, r)];
+      return JSON.stringify({ hired: hired.map((s) => s.id + ':' + s.name), money: econ.money, roster: r.soldiers.map((s) => s.id) });
+    };
+    expect(run()).toBe(run());
+  });
+
+  it('звільнення: вилучає за id і повертає солдата, решта ростеру без змін', () => {
+    const r = createRoster();
+    const fired = fireSoldier(r, 's2');
+    expect(fired.id).toBe('s2');
+    expect(r.soldiers.map((s) => s.id)).toEqual(['s1', 's3', 's4', 's5', 's6']);
+    expect(() => fireSoldier(r, 's2')).toThrow('Солдата немає в ростері');
+  });
+
+  it('ветерани йдуть у бій першими: найм додає в кінець, missionSquad не чіпає новобранця', () => {
+    const econ = createEconomy();
+    const r = createRoster();
+    fireSoldier(r, 's1');
+    fireSoldier(r, 's2');
+    hireSoldier(econ, r); // s7 у кінці
+    expect(missionSquad(r).map((s) => s.id)).toEqual(['s3', 's4', 's5']);
+  });
+
+  it('звільнення останнього солдата — ростер порожній, місія неможлива', () => {
+    const r = createRoster(1);
+    fireSoldier(r, 's1');
+    expect(r.soldiers).toEqual([]);
+    expect(() => missionSquad(r)).toThrow('Ростер порожній');
   });
 });

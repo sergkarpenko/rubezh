@@ -1,22 +1,26 @@
 // src/core/squad.ts
 // Ітерація 5.2: персистентність загону між місіями — ростер солдатів «Рубіжа».
+// Фаза 4 (П4.3): кадрування — найм за гроші та звільнення.
 // ADR-0002: Чисте ядро логіки без DOM/Canvas
 // ADR-0008: Ростер загону — персистентність між місіями
 // ADR-0010: Цільовий UI — ванільний TS + Canvas (ростер вижив у main.ts)
+// ADR-0021: Економіка: гроші, найм, лікарня, банкрутство
 //
 // Чиста логіка: жодних залежностей від DOM/Canvas і жодного RNG — стартовий ростер
-// детермінований (фіксований пул імен).
+// і найм детерміновані (фіксований пул імен, циклічний за лічильником hired).
 // Ростер — окремий стан партії поруч із GeoState: geo.ts нічого не знає про солдатів,
 // mission.ts приймає загін ззовні (opts.squad). Цикл шару застосунка:
 //   createRoster() → missionSquad(roster) → createMission(geo, ufoId, { squad })
 //   → бій → applyMissionResult(roster, mission.state) → completeMission(geo, ufoId, …)
+// Втрати покриваються наймом (П4.3): hireSoldier(econ, roster) списує HIRE_PRICE
+// з EconomyState і додає солдата в кінець ростеру (ветерани йдуть у бій першими);
+// fireSoldier(roster, id) — звільнення на прохання гравця.
 // Перма-смерть наскрізна: солдат, загиблий у бою, вилучається з ростеру назавжди.
 // MVP-спрощення (зміни — новими ADR): виживші повністю лікуються на базі між
-// місіями (лікарня з часом відновлення — ітерація 5.x, економіка); кадрування
-// нових солдатів немає — порожній ростер = місії неможливі (фактично кінець
-// партії; свідомий наслідок стовпа «незворотність наслідків}).
+// місіями (лікарня з часом відновлення — П4.4, ADR-0021).
 
 import type { GameState, Unit } from './combat';
+import { HIRE_PRICE, spend, type EconomyState } from './economy';
 import { makeSoldier, SQUAD_SPAWN } from './mission';
 
 export const STARTING_ROSTER_SIZE = 6; // два повні загони + запас
@@ -34,18 +38,44 @@ export interface MissionAftermath {
   survivors: Unit[]; // виживші після повного лікування на базі
 }
 
+// Солдат ростеру за порядковим індексом (0-based): ім'я з циклічного пулу,
+// id — порядковий номер. Спільне для старту партії і найму: лічильник hired
+// робить id/імена унікальними без RNG (детермінізм, ADR-0021).
+function rosterSoldier(index: number): Unit {
+  const base = SOLDIER_NAMES[index % SOLDIER_NAMES.length];
+  const name = index < SOLDIER_NAMES.length ? base : base + ' ' + (Math.floor(index / SOLDIER_NAMES.length) + 1);
+  return makeSoldier('s' + (index + 1), name);
+}
+
 // Стартовий ростер організації: size солдатів із фіксованого списку імен.
 export function createRoster(size: number = STARTING_ROSTER_SIZE): Roster {
   if (!Number.isInteger(size) || size < 1) {
     throw new Error('Розмір ростеру має бути цілим числом від 1');
   }
   const soldiers: Unit[] = [];
-  for (let i = 0; i < size; i++) {
-    const base = SOLDIER_NAMES[i % SOLDIER_NAMES.length];
-    const name = i < SOLDIER_NAMES.length ? base : base + ' ' + (Math.floor(i / SOLDIER_NAMES.length) + 1);
-    soldiers.push(makeSoldier('s' + (i + 1), name));
-  }
+  for (let i = 0; i < size; i++) soldiers.push(rosterSoldier(i));
   return { soldiers, hired: size };
+}
+
+// Найм нового солдата за гроші (ADR-0021): списує HIRE_PRICE з економіки
+// (недостатньо грошей → помилка, ростер не змінюється) і додає солдата
+// в КІНЕЦЬ ростеру — ветерани залишаються першими у missionSquad.
+// Без RNG: id та ім'я — наступні за лічильником hired.
+export function hireSoldier(econ: EconomyState, roster: Roster): Unit {
+  spend(econ, HIRE_PRICE);
+  const soldier = rosterSoldier(roster.hired);
+  roster.hired += 1;
+  roster.soldiers.push(soldier);
+  return soldier;
+}
+
+// Звільнення солдата на прохання гравця: вилучає з ростеру за id
+// (як перма-смерть, але добровільно). Солдата з таким id немає → помилка.
+export function fireSoldier(roster: Roster, id: string): Unit {
+  const rec = roster.soldiers.find((s) => s.id === id);
+  if (!rec) throw new Error('Солдата немає в ростері: ' + id);
+  roster.soldiers = roster.soldiers.filter((s) => s.id !== id);
+  return rec;
 }
 
 // Загін на наступну місію: перші size живих солдатів ростеру.
