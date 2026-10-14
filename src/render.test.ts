@@ -1,14 +1,16 @@
 // src/render.test.ts
-// П6.7 (ADR-0029): юніт-тести векторних спрайтів на мок-контексті — запис викликів
-// Canvas 2D дозволяє перевірити: (1) малювання не виходить за клітинку (урок П6.6:
-// проміжки 1px між клітинками не бруднимось); (2) силуети і зброя солдата й
-// прибульця відрізняються; (3) малювання детерміноване (той самий вхід → той самий
-// потік викликів, без RNG); (4) читабельність стану (HP, вибір, заступа).
-// П6.8 (ADR-0029): тести анімаційного рушія — кадри (трасер/спалах/смерть/
+// П6.12 (ADR-0031): тести піксель-арт спрайтів — матриці розгортаються в мок
+// offscreen-канвас (по одному fillRect на піксель), далі drawImage на цільовий
+// мок-контекст: (1) малювання не виходить за клітинку (урок П6.6); (2) силуети
+// і зброя солдата й прибульця відрізняються (кольори пікселів растру); (3)
+// малювання детерміноване (той самий вхід → той самий потік викликів, без RNG);
+// (4) читабельність стану (HP, вибір, заступа); (5) кеш offscreen-канвасів і
+// nearest-neighbor (imageSmoothingEnabled = false, ціле кратне масштабування).
+// П6.7/П6.8 (ADR-0029): тести анімаційного рушія — кадри (трасер/спалах/смерть/
 // заступа/хід), черга з ін'єктованим планувальником (idle → 0 перерисовок) і
 // чистий перетворювач подій логу (лог байт-у-байт незмінний — критерій П6.8).
 
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import {
   AnimEngine,
   DEATH_MS,
@@ -16,6 +18,7 @@ import {
   MOVE_MS_PER_CELL,
   OW_FLASH_MS,
   RADAR_PULSE_MS,
+  SPRITE_SCALE,
   TRACER_MS,
   animT,
   animsFromEvents,
@@ -24,6 +27,7 @@ import {
   drawBaseSprite,
   drawSoldierSprite,
   drawUfoSprite,
+  initPixelSprites,
   makeDeathAnim,
   makeGeoPulseAnim,
   makeMoveAnim,
@@ -31,6 +35,7 @@ import {
   makeTracerAnim,
   moveAnimPos,
   type Anim,
+  type MakeOffscreen,
   type UnitSprite,
 } from './render';
 import { makeUnit, type GameEvent, type Unit } from './core/combat';
@@ -63,6 +68,7 @@ function mockCtx(): { ctx: CanvasRenderingContext2D; calls: Call[] } {
     fillRect: rec('fillRect'),
     strokeRect: rec('strokeRect'),
     fillText: rec('fillText'),
+    drawImage: rec('drawImage'),
   };
   return { ctx: ctx as unknown as CanvasRenderingContext2D, calls };
 }
@@ -80,9 +86,52 @@ const soldier = (over: Partial<UnitSprite> = {}): UnitSprite => ({
 
 const alien = (over: Partial<UnitSprite> = {}): UnitSprite => ({ ...soldier(), side: 'alien', ...over });
 
+// П6.12 (ADR-0031): мок-фабрика offscreen-канвасів — розгортання матриці пише
+// по одному fillRect на піксель; сам об'єкт «канваса» стає джерелом drawImage
+// (тотожність об'єктів у викликах = перевірка кешу), колір пікселя — у pixels.
+interface RasterCanvas {
+  width: number;
+  height: number;
+  pixels: Array<{ x: number; y: number; color: string }>;
+  getContext(type: '2d'): CanvasRenderingContext2D | null;
+}
+function rasterFactory(): { make: MakeOffscreen; canvases: RasterCanvas[] } {
+  const canvases: RasterCanvas[] = [];
+  const make: MakeOffscreen = (w, h) => {
+    const cv: RasterCanvas = {
+      width: w,
+      height: h,
+      pixels: [],
+      getContext: () => g as unknown as CanvasRenderingContext2D,
+    };
+    const style = { color: '' };
+    const g = {
+      get fillStyle(): string {
+        return style.color;
+      },
+      set fillStyle(c: string) {
+        style.color = c;
+      },
+      fillRect: (x: number, y: number): void => {
+        cv.pixels.push({ x, y, color: style.color });
+      },
+    };
+    canvases.push(cv);
+    return cv;
+  };
+  return { make, canvases };
+}
+
+// Кожен тест малює через свіжий мок-фабрик: initPixelSprites скидає кеш
+// розгорнутих спрайтів (ліниво + кеш — ADR-0031).
+beforeEach(() => {
+  initPixelSprites(rasterFactory().make);
+});
+
 // Піксельні межі всіх точок, яких торкається малювання: arc — центр ± r,
 // ellipse — центр ± rx/ry, moveTo/lineTo — точка, fillRect/strokeRect — прямокутник,
-// fillText — точка. Stroke розширює межі на lineWidth/2 — лишаємо запас ≥ 1px.
+// fillText — точка, drawImage — прямокутник (img, x, y, w, h). Stroke розширює
+// межі на lineWidth/2 — лишаємо запас ≥ 1px.
 function extent(calls: Call[]): { minX: number; maxX: number; minY: number; maxY: number } {
   const xs: number[] = [];
   const ys: number[] = [];
@@ -107,6 +156,11 @@ function extent(calls: Call[]): { minX: number; maxX: number; minY: number; maxY
       case 'strokeRect':
         xs.push(a[0], a[0] + a[2]);
         ys.push(a[1], a[1] + a[3]);
+        break;
+      case 'drawImage':
+        // args: (img, x, y, w, h)
+        xs.push(a[1], a[1] + a[3]);
+        ys.push(a[2], a[2] + a[4]);
         break;
       default:
         break; // beginPath/fill/stroke/closePath — без координат
@@ -137,48 +191,82 @@ describe('спрайти юнітів: межі клітинки (урок П6.6
   });
 });
 
-describe('солдат і прибульчик: різні силуети, зброя відрізняється (П6.7)', () => {
-  it('солдат — круглий корпус (arc), прибульчик — овал (ellipse)', () => {
+describe('піксель-арт: offscreen-канваси, nearest-neighbor, кеш (П6.12, ADR-0031)', () => {
+  it('drawImage з offscreen-канваса: цілий масштаб 2× (24px у клітинці 26), згладжування вимкнене', () => {
+    const s = animCtx(); // Proxy: записує і виклики, і присвоєння властивостей
+    drawSoldierSprite(s.ctx, soldier());
+    const d = s.calls.find((c) => c.m === 'drawImage');
+    expect(d).toBeDefined();
+    expect((d!.args as number[])[1]).toBe(CX - (12 * SPRITE_SCALE) / 2); // Math.round(13 - 12) = 1
+    expect((d!.args as number[])[2]).toBe(CY - (12 * SPRITE_SCALE) / 2);
+    expect((d!.args as number[])[3]).toBe(12 * SPRITE_SCALE);
+    expect((d!.args as number[])[4]).toBe(12 * SPRITE_SCALE);
+    expect(s.sets.some((x) => x.p === 'imageSmoothingEnabled' && x.v === false)).toBe(true);
+  });
+
+  it('кеш: повторне малювання — той самий offscreen-канвас, фабрика викликається один раз', () => {
+    const rf = rasterFactory();
+    initPixelSprites(rf.make);
+    const a = mockCtx();
+    const b = mockCtx();
+    drawSoldierSprite(a.ctx, soldier());
+    drawSoldierSprite(b.ctx, soldier());
+    const imgA = a.calls.find((c) => c.m === 'drawImage')!.args[0];
+    const imgB = b.calls.find((c) => c.m === 'drawImage')!.args[0];
+    expect(imgA).toBe(imgB);
+    expect(rf.canvases.length).toBe(1);
+  });
+
+  it('без фабрики — явна помилка (не мовчки порожній кадр)', () => {
+    initPixelSprites(null as unknown as MakeOffscreen);
+    const { ctx } = mockCtx();
+    expect(() => drawSoldierSprite(ctx, soldier())).toThrow(/initPixelSprites/);
+  });
+
+  it('кадри ходьби: frame 1 — інша матриця (інший offscreen-канвас)', () => {
+    const rf = rasterFactory();
+    initPixelSprites(rf.make);
+    const f0 = mockCtx();
+    drawSoldierSprite(f0.ctx, soldier());
+    const f1 = mockCtx();
+    drawSoldierSprite(f1.ctx, soldier({ frame: 1 }));
+    expect(f0.calls.find((c) => c.m === 'drawImage')!.args[0]).not.toBe(f1.calls.find((c) => c.m === 'drawImage')!.args[0]);
+    expect(rf.canvases.length).toBe(2);
+  });
+});
+
+describe('солдат і прибульчик: різні матриці, зброя відрізняється (П6.12)', () => {
+  it('різні силуети: інші джерела drawImage, кольори тіл різні', () => {
+    const rf = rasterFactory();
+    initPixelSprites(rf.make);
     const s = mockCtx();
     drawSoldierSprite(s.ctx, soldier());
-    expect(s.calls.some((c) => c.m === 'arc')).toBe(true);
-    expect(s.calls.some((c) => c.m === 'ellipse')).toBe(false);
-
     const a = mockCtx();
     drawAlienSprite(a.ctx, alien());
-    expect(a.calls.some((c) => c.m === 'ellipse')).toBe(true);
+    expect(s.calls.find((c) => c.m === 'drawImage')!.args[0]).not.toBe(a.calls.find((c) => c.m === 'drawImage')!.args[0]);
+    expect(rf.canvases[0].pixels.some((p) => p.color === '#6ea8ff')).toBe(true); // тіло солдата
+    expect(rf.canvases[1].pixels.some((p) => p.color === '#ff6b6b')).toBe(true); // мантія прибульця
   });
 
-  it('«АР-14 Гарт»: у солдата один довгий прямий сегмент — ствол (дуло за межами тіла)', () => {
-    const { ctx, calls } = mockCtx();
-    drawSoldierSprite(ctx, soldier());
-    const segs: number[] = [];
-    let cur: { x: number; y: number } | null = null;
-    for (const c of calls) {
-      if (c.m === 'moveTo') cur = { x: (c.args as number[])[0], y: (c.args as number[])[1] };
-      else if (c.m === 'lineTo' && cur) {
-        segs.push(Math.hypot((c.args as number[])[0] - cur.x, (c.args as number[])[1] - cur.y));
-        cur = { x: (c.args as number[])[0], y: (c.args as number[])[1] };
-      }
-    }
-    expect(segs.some((len) => len > R * 1.5)).toBe(true); // ствал довший за півтора радіуси
+  it('«АР-14 Гарт»: ствол кольором зброї, дуло — крайній правий піксель растру', () => {
+    const rf = rasterFactory();
+    initPixelSprites(rf.make);
+    drawSoldierSprite(mockCtx().ctx, soldier());
+    const ras = rf.canvases[0];
+    const barrel = ras.pixels.filter((p) => p.color === '#e8eef7');
+    expect(barrel.length).toBeGreaterThanOrEqual(4);
+    expect(barrel.some((p) => p.x === ras.width - 1)).toBe(true); // дуло за межами тіла
   });
 
-  it('«Імпульсний різак»: у прибульця немає прямих сегментів як у ствола — зброя «вилка» з піками над тілом', () => {
-    const { ctx, calls } = mockCtx();
-    drawAlienSprite(ctx, alien());
-    const segs: number[] = [];
-    let cur: { x: number; y: number } | null = null;
-    for (const c of calls) {
-      if (c.m === 'moveTo') cur = { x: (c.args as number[])[0], y: (c.args as number[])[1] };
-      else if (c.m === 'lineTo' && cur) {
-        segs.push(Math.hypot((c.args as number[])[0] - cur.x, (c.args as number[])[1] - cur.y));
-        cur = { x: (c.args as number[])[0], y: (c.args as number[])[1] };
-      }
-    }
-    expect(segs.every((len) => len < R * 1.5)).toBe(true); // жодного «ствола» — тільки щупальця і вилка
-    // піки вилки — точки різака вище тіла (y < cy − r)
-    expect(calls.some((c) => c.m === 'lineTo' && (c.args as number[])[1] < CY - R)).toBe(true);
+  it('«Імпульсний різак»: піки кольором різака над головою, кольору ствола в растрі нема', () => {
+    const rf = rasterFactory();
+    initPixelSprites(rf.make);
+    drawAlienSprite(mockCtx().ctx, alien());
+    const ras = rf.canvases[0];
+    const fork = ras.pixels.filter((p) => p.color === '#ffd27a');
+    expect(fork.length).toBeGreaterThanOrEqual(4);
+    expect(fork.every((p) => p.y < 3)).toBe(true); // верхні рядки — над головою (голова з y = 3)
+    expect(ras.pixels.some((p) => p.color === '#e8eef7')).toBe(false); // жодного ствола
   });
 });
 
@@ -236,31 +324,34 @@ describe('детермінованість малювання (ADR-0003 — бе
   });
 });
 
-describe('спрайти геосцени (статична інтеграція П6.7)', () => {
-  it('база: квадрат із контуром і написом «БАЗА» у центрі', () => {
+describe('спрайти геосцени (піксель-арт П6.12)', () => {
+  it('база: drawImage 16×16 у масштабі 2× (32px у клітинці 36) + напис «БАЗА» у центрі', () => {
     const { ctx, calls } = mockCtx();
     drawBaseSprite(ctx, { cx: 18, cy: 18, size: 36 });
-    expect(calls.some((c) => c.m === 'fillRect')).toBe(true);
-    expect(calls.some((c) => c.m === 'strokeRect')).toBe(true);
+    const d = calls.find((c) => c.m === 'drawImage');
+    expect(d).toBeDefined();
+    expect((d!.args as number[])[1]).toBe(18 - 16); // Math.round(cx - 32/2)
+    expect((d!.args as number[])[3]).toBe(32);
+    expect((d!.args as number[])[4]).toBe(32);
     expect(calls.some((c) => c.m === 'fillText' && c.args[0] === 'БАЗА')).toBe(true);
   });
 
-  it('НЛО (П6.9: м’якші позначки): приземлився — залите коло; «розвідник» — ромб; «збирач» — контур кола', () => {
-    const landed = mockCtx();
-    drawUfoSprite(landed.ctx, { cx: 18, cy: 18, r: 11, landed: true, kind: 'розвідник' });
-    expect(landed.calls.some((c) => c.m === 'arc')).toBe(true); // коло замість квадрата
-    expect(landed.calls.some((c) => c.m === 'fill')).toBe(true);
-    expect(landed.calls.some((c) => c.m === 'fillRect')).toBe(false);
-
-    const scout = mockCtx();
-    drawUfoSprite(scout.ctx, { cx: 18, cy: 18, r: 11, landed: false, kind: 'розвідник' });
-    expect(scout.calls.some((c) => c.m === 'closePath')).toBe(true); // ромб
-    expect(scout.calls.some((c) => c.m === 'strokeRect')).toBe(false);
-
-    const harv = mockCtx();
-    drawUfoSprite(harv.ctx, { cx: 18, cy: 18, r: 11, landed: false, kind: 'збирач' });
-    expect(harv.calls.some((c) => c.m === 'arc')).toBe(true); // контур кола
-    expect(harv.calls.some((c) => c.m === 'closePath')).toBe(false);
+  it('НЛО: три види — три різні матриці; приземлений залитий, «розвідник» — порожній ромб', () => {
+    const rf = rasterFactory();
+    initPixelSprites(rf.make);
+    const imgs: unknown[] = [];
+    for (const u of [
+      { cx: 18, cy: 18, landed: true, kind: 'розвідник' as const },
+      { cx: 18, cy: 18, landed: false, kind: 'розвідник' as const },
+      { cx: 18, cy: 18, landed: false, kind: 'збирач' as const },
+    ]) {
+      const s = mockCtx();
+      drawUfoSprite(s.ctx, u);
+      imgs.push(s.calls.find((c) => c.m === 'drawImage')!.args[0]);
+    }
+    expect(new Set(imgs).size).toBe(3);
+    expect(rf.canvases[0].pixels.length).toBeGreaterThan(30); // тарілка залита
+    expect(rf.canvases[1].pixels.length).toBeLessThan(rf.canvases[0].pixels.length); // ромб — контур
   });
 });
 
@@ -333,7 +424,7 @@ describe('анімаційний рушій: прогрес і позиція (�
 });
 
 describe('кадри анімаційного шару (П6.8)', () => {
-  it('хід: силует у проміжній позиції шляху (солдат — arc у центрі клітинки)', () => {
+  it('хід: силует у проміжній позиції шляху (drawImage центрований у клітинці)', () => {
     const a = makeMoveAnim(
       unit('s1', 'player', 0, 0),
       [
@@ -346,7 +437,30 @@ describe('кадри анімаційного шару (П6.8)', () => {
     a.start = 0;
     const { ctx, calls } = animCtx();
     drawAnimFrame(ctx, a, MOVE_MS_PER_CELL, 26, 8); // t = 0.5 → клітинка (1,0)
-    expect(calls.some((c) => c.m === 'arc' && (c.args as number[])[0] === 39 && (c.args as number[])[1] === 13)).toBe(true);
+    const d = calls.find((c) => c.m === 'drawImage');
+    expect(d).toBeDefined();
+    expect((d!.args as number[])[1]).toBe(39 - 12); // центр клітинки (1,0) мінус половина спрайта
+    expect((d!.args as number[])[2]).toBe(13 - 12);
+    expect((d!.args as number[])[3]).toBe(24);
+    expect((d!.args as number[])[4]).toBe(24);
+  });
+
+  it('хід (П6.12): кадри ходьби чергуються детерміновано — 2 кадри на клітинку шляху', () => {
+    const a = makeMoveAnim(
+      unit('s1', 'player', 0, 0),
+      [
+        { x: 0, y: 0 },
+        { x: 1, y: 0 },
+        { x: 1, y: 1 },
+      ],
+      false
+    );
+    a.start = 0;
+    const f0 = animCtx();
+    drawAnimFrame(f0.ctx, a, 0, 26, 8); // t = 0 → кадр «стій»
+    const f1 = animCtx();
+    drawAnimFrame(f1.ctx, a, MOVE_MS_PER_CELL / 2, 26, 8); // t = 0.25 → кадр «крок»
+    expect(f0.calls.find((c) => c.m === 'drawImage')!.args[0]).not.toBe(f1.calls.find((c) => c.m === 'drawImage')!.args[0]);
   });
 
   it('трасер: фаза польоту — відрізок від стрільця до цілі; влучання — кільце, що росте і гасне', () => {
@@ -387,7 +501,10 @@ describe('кадри анімаційного шару (П6.8)', () => {
     expect(a.at).toEqual({ x: 4, y: 7 });
     const { ctx, calls, sets } = animCtx();
     drawAnimFrame(ctx, a, DEATH_MS / 2, 26, 8); // t = 0.5
-    expect(calls.some((c) => c.m === 'ellipse')).toBe(true); // прибульчик
+    const d = calls.find((c) => c.m === 'drawImage'); // прибульчик — піксельний спрайт
+    expect(d).toBeDefined();
+    expect((d!.args as number[])[1]).toBe(4 * 26 + 13 - 12);
+    expect((d!.args as number[])[2]).toBe(7 * 26 + 13 - 12);
     const alphas = sets.filter((s) => s.p === 'globalAlpha').map((s) => s.v);
     expect(alphas[0]).toBeCloseTo(0.5, 5);
     expect(alphas[alphas.length - 1]).toBe(1);
@@ -544,9 +661,9 @@ describe('перетворювач подій логу → анімації (к�
 describe('П6.9: м’які позначки НЛО геосцени', () => {
   it('м’якість: alpha 0.85 на час малювання і відновлення до 1 (усі три види)', () => {
     for (const u of [
-      { cx: 18, cy: 18, r: 11, landed: true, kind: 'розвідник' as const },
-      { cx: 18, cy: 18, r: 11, landed: false, kind: 'розвідник' as const },
-      { cx: 18, cy: 18, r: 11, landed: false, kind: 'збирач' as const },
+      { cx: 18, cy: 18, landed: true, kind: 'розвідник' as const },
+      { cx: 18, cy: 18, landed: false, kind: 'розвідник' as const },
+      { cx: 18, cy: 18, landed: false, kind: 'збирач' as const },
     ]) {
       const s = animCtx();
       drawUfoSprite(s.ctx, u);
@@ -556,12 +673,12 @@ describe('П6.9: м’які позначки НЛО геосцени', () => {
     }
   });
 
-  it('позначка в межах клітинки 36px (урок П6.6)', () => {
+  it('позначка в межах клітинки 36px (урок П6.6): 10×10 у масштабі 2× → 20px', () => {
     const { ctx, calls } = mockCtx();
-    drawUfoSprite(ctx, { cx: 18, cy: 18, r: 11, landed: true, kind: 'збирач' });
+    drawUfoSprite(ctx, { cx: 18, cy: 18, landed: true, kind: 'збирач' });
     const e = extent(calls);
-    expect(e.maxX - e.minX).toBeLessThanOrEqual(11);
-    expect(e.maxY - e.minY).toBeLessThanOrEqual(11);
+    expect(e.maxX - e.minX).toBeLessThanOrEqual(20);
+    expect(e.maxY - e.minY).toBeLessThanOrEqual(20);
   });
 });
 

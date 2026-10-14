@@ -1,7 +1,10 @@
-// src/render.ts — шар відображення (ADR-0010/0029, П6.7/П6.8): векторні спрайти
-// Canvas 2D + анімаційний рушій превью.
-// Юніти йдуть з геометричних кружків на впізнавані силуети з характером:
-// солдат зі штурмовою гвинтівкою «АР-14 Гарт», прибульчик з «Імпульсним різаком».
+// src/render.ts — шар відображення (ADR-0010/0029/0031, П6.7/П6.8/П6.12):
+// піксель-арт спрайти Canvas 2D + анімаційний рушій превью.
+// Спрайти (солдат з «АР-14 Гарт», прибульчик з «Імпульсним різаком», база, НЛО) —
+// матриці пікселів у коді (ADR-0031): розгортаються ліниво в offscreen-канвас
+// низької роздільності з кешем і малюються drawImage з nearest-neighbor
+// (imageSmoothingEnabled = false) у ціле кратному масштабі — крайові пікселі
+// без розмиття. Кадри ходьби — окремі матриці, чергуються у анімації руху.
 // Чисті функції малювання: без DOM-стану і без RNG (ADR-0002/0003 — ядро не зачіпається);
 // експортовані для юніт-тестів (мок-контекст записує виклики).
 // П6.8 (ADR-0029): анімація — суто візуальний шар. Дії ядра застосовуються миттєво,
@@ -33,10 +36,14 @@ const UFO_LANDED_FILL = '#cbb05a';
 const UFO_LANDED_EDGE = '#e6d59a';
 const UFO_AIR = '#c79250';
 const UFO_SOFT_ALPHA = 0.85;
+const UFO_LEG = '#a8862f'; // П6.12 (ADR-0031): опори приземленого НЛО
 const RADAR_PULSE = '#4f8cff'; // колір пульсу радара — сімейство кольору бази
+const BASE_WALL = '#234083'; // П6.12 (ADR-0031): темні стіни бази геосцени
 
 // Дані для малювання юніта бойовища: cx/cy — центр клітинки в пікселях buffer'а,
-// r — радіус силуету (у превью 8 при клітинці 26). hp — читабельність стану (ADR-0007).
+// r — радіус маркерів (рамка вибору, заступа; у превью 8 при клітинці 26).
+// hp — читабельність стану (ADR-0007). frame — кадр ходьби (0 «стій», 1 «крок»):
+// передається лише анімацією руху (П6.12), у статиці малюється кадр «стій».
 export interface UnitSprite {
   side: Side;
   cx: number;
@@ -45,6 +52,7 @@ export interface UnitSprite {
   hp: number;
   selected: boolean;
   overwatch: boolean;
+  frame?: number;
 }
 
 export interface BaseSprite {
@@ -56,13 +64,88 @@ export interface BaseSprite {
 export interface UfoSprite {
   cx: number;
   cy: number;
-  r: number; // половина розміру позначки
   landed: boolean;
   kind: UfoKind;
 }
 
-// Маркер заступи — П6.6: строго в межах клітинки юніта
-// (гравець — над силуетом, прибульці — під; ті самі зсуви, що й у виправленні).
+// --- П6.12 (ADR-0031): піксель-арт — матриці пікселів + offscreen-канваси ---
+
+// Матриця спрайта: рядки рівної довжини, символ → колір палітри,
+// '.' (та будь-який символ поза палітрою) — прозорий піксель.
+interface PixelSprite {
+  rows: readonly string[];
+  palette: Readonly<Record<string, string>>;
+}
+
+// Offscreen-канвас, структурно сумісний із HTMLCanvasElement. Фабрика
+// ін'єктується (браузер: document.createElement; тести: мок) — render.ts
+// не знає DOM-глобалів (той самий патерн, що й планувальник AnimEngine, ADR-0029).
+export interface OffscreenCanvasLike {
+  width: number;
+  height: number;
+  getContext(type: '2d'): CanvasRenderingContext2D | null;
+}
+export type MakeOffscreen = (w: number, h: number) => OffscreenCanvasLike;
+
+let makeOffscreen: MakeOffscreen | null = null;
+
+// Ініціалізація піксельного рушія: реєструє фабрику offscreen-канвасів і
+// скидає кеш (тестовий код передає свій мок на кожен тест).
+export function initPixelSprites(make: MakeOffscreen): void {
+  makeOffscreen = make;
+  spriteCache.clear();
+}
+
+// Кеш розгорнутих спрайтів: матриця → offscreen-канвас (ліниво, один раз на
+// спрайт — ADR-0031). Ключ — сам об'єкт матриці (константи модуля, стабільні).
+const spriteCache = new Map<PixelSprite, { img: CanvasImageSource; w: number; h: number }>();
+
+// Розгортання матриці в offscreen-канвас 1 піксель на клітинку (детерміновано,
+// без RNG — ADR-0003; помилка явно краще за мовчки порожній кадр).
+function rasterSprite(def: PixelSprite): { img: CanvasImageSource; w: number; h: number } {
+  const cached = spriteCache.get(def);
+  if (cached !== undefined) return cached;
+  if (makeOffscreen === null) {
+    throw new Error('Піксельний рушій не ініціалізований — виклич initPixelSprites (ADR-0031)');
+  }
+  const h = def.rows.length;
+  const w = def.rows[0]?.length ?? 0;
+  const cv = makeOffscreen(w, h);
+  const g = cv.getContext('2d');
+  if (g === null) throw new Error('Offscreen-канвас без 2d-контексту (ADR-0031)');
+  for (let y = 0; y < h; y++) {
+    const row = def.rows[y] ?? '';
+    for (let x = 0; x < row.length; x++) {
+      const color = def.palette[row.charAt(x)];
+      if (color !== undefined) {
+        g.fillStyle = color;
+        g.fillRect(x, y, 1, 1); // один піксель матриці
+      }
+    }
+  }
+  const built = { img: cv as unknown as CanvasImageSource, w, h };
+  spriteCache.set(def, built);
+  return built;
+}
+
+// Ціле кратне масштаб у клітинці (ADR-0031): 12×12 → 24px у клітинці BCELL 26
+// (запас 1px з боків — маркери й рамка вибору в межах клітинки, урок П6.6),
+// на 520 і 720px пікселі лишаються рівними квадратами.
+export const SPRITE_SCALE = 2;
+
+// Малювання розгорнутого спрайта: nearest-neighbor (без розмиття крайових
+// пікселів — ADR-0031), позиція — цілі пікселі (Math.round).
+function drawPixelSprite(ctx: CanvasRenderingContext2D, def: PixelSprite, cx: number, cy: number, scale: number): void {
+  const s = rasterSprite(def);
+  const w = s.w * scale;
+  const h = s.h * scale;
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(s.img, Math.round(cx - w / 2), Math.round(cy - h / 2), w, h);
+}
+
+// Маркер заступи — П6.6: строго в межах клітинки юніта (ті самі зсуви, що й у
+// виправленні; П6.12: малюється ПОВЕРХ спрайта — силует тепер займає майже
+// всю клітинку, під ним маркер було б не видно).
 function drawOverwatchMarker(ctx: CanvasRenderingContext2D, u: UnitSprite): void {
   ctx.fillStyle = OW_MARKER;
   ctx.fillRect(u.cx - 2, u.side === 'player' ? u.cy - u.r - 4 : u.cy + u.r, 4, 4);
@@ -76,34 +159,57 @@ function drawHpText(ctx: CanvasRenderingContext2D, text: string, x: number, y: n
   ctx.fillText(text, x, y);
 }
 
-// Солдат: круглий корпус (броня) + шолом зверху + рюкзак зліва +
-// штурмова гвинтівка «АР-14 Гарт» — довгий прямий ствол вправо із магазином.
+// ADR-0031 (П6.12): солдат зі штурмовою гвинтівкою «АР-14 Гарт» — шолом з
+// темним визором, броня, рюкзак зліва, ствол вправо (дуло — крайній правий
+// піксель матриці, за межами тіла), магазин темний під стволом.
+const SOLDIER_PALETTE: Readonly<Record<string, string>> = {
+  H: PLAYER_HELMET,
+  O: PLAYER_OUTLINE,
+  B: PLAYER_BODY,
+  G: PLAYER_GEAR,
+  W: PLAYER_WEAPON,
+};
+
+const SOLDIER_STAND: PixelSprite = {
+  rows: [
+    '....HHHH....',
+    '...HHHHHH...',
+    '...HHHHHH...',
+    '...HOOOOH...',
+    '..BBBBBBBB..',
+    '.GBBBBBBBB..',
+    '.GGBBBBBBWW.',
+    '.GGBBBBBWWWW',
+    '..BBBBBBOO..',
+    '..GG..GG....',
+    '..OO..OO....',
+    '............',
+  ],
+  palette: SOLDIER_PALETTE,
+};
+
+// Кадр ходьби: ноги розставлені (крок) — решта силуету та сама (ADR-0031).
+const SOLDIER_STEP: PixelSprite = {
+  rows: [
+    '....HHHH....',
+    '...HHHHHH...',
+    '...HHHHHH...',
+    '...HOOOOH...',
+    '..BBBBBBBB..',
+    '.GBBBBBBBB..',
+    '.GGBBBBBBWW.',
+    '.GGBBBBBWWWW',
+    '..BBBBBBOO..',
+    '..GG...GG...',
+    '.OO.....OO..',
+    '............',
+  ],
+  palette: SOLDIER_PALETTE,
+};
+
 export function drawSoldierSprite(ctx: CanvasRenderingContext2D, u: UnitSprite): void {
+  drawPixelSprite(ctx, (u.frame ?? 0) === 1 ? SOLDIER_STEP : SOLDIER_STAND, u.cx, u.cy, SPRITE_SCALE);
   if (u.overwatch) drawOverwatchMarker(ctx, u);
-  ctx.beginPath();
-  ctx.arc(u.cx, u.cy, u.r, 0, Math.PI * 2);
-  ctx.fillStyle = PLAYER_BODY;
-  ctx.fill();
-  ctx.strokeStyle = PLAYER_OUTLINE;
-  ctx.lineWidth = 1;
-  ctx.stroke();
-  // рюкзак (верхній лівий сектор корпусу)
-  ctx.fillStyle = PLAYER_GEAR;
-  ctx.fillRect(u.cx - 6, u.cy - 6, 4, 5);
-  // шолом — менше коло над центром (HP лишається читабельним у центрі корпусу)
-  ctx.beginPath();
-  ctx.arc(u.cx, u.cy - 4, 2.5, 0, Math.PI * 2);
-  ctx.fillStyle = PLAYER_HELMET;
-  ctx.fill();
-  // «АР-14 Гарт»: ствол — пряма лінія нижньою частиною корпусу, дуло за межами тіла
-  ctx.strokeStyle = PLAYER_WEAPON;
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(u.cx - 4, u.cy + 5);
-  ctx.lineTo(u.cx + u.r + 3, u.cy + 5);
-  ctx.stroke();
-  ctx.fillStyle = PLAYER_OUTLINE;
-  ctx.fillRect(u.cx, u.cy + 6, 2, 3); // магазин
   drawHpText(ctx, String(u.hp), u.cx, u.cy);
   if (u.selected) {
     ctx.strokeStyle = SELECT_RING;
@@ -115,45 +221,59 @@ export function drawSoldierSprite(ctx: CanvasRenderingContext2D, u: UnitSprite):
   }
 }
 
-// Прибульчик: видовжений овал («мантія») з очима, щупальця позаду і
-// «Імпульсний різак» — яскрава енергетична «вилка» перед головою.
-// Силует і зброя свідомо відмінні від солдата (П6.7: різні силуети, зброя відрізняється).
+// ADR-0031 (П6.12): прибульчик з «Імпульсним різаком» — енергетична «вилка»
+// з двома піками над головою, мантія з темними очима, щупальця знизу.
+// Силует і зброя свідомо відмінні від солдата (критерій П6.12: зброя
+// відрізляється — колір, форма і розташування пікселів).
+const ALIEN_PALETTE: Readonly<Record<string, string>> = {
+  A: ALIEN_BODY,
+  E: ALIEN_EYES,
+  L: ALIEN_LIMBS,
+  Y: ALIEN_WEAPON,
+  R: ALIEN_OUTLINE,
+};
+
+const ALIEN_STAND: PixelSprite = {
+  rows: [
+    '....Y..Y....',
+    '....Y..Y....',
+    '.....YY.....',
+    '....AAAA....',
+    '...AAAAAA...',
+    '...AEAAEA...',
+    '..RAAAAAAR..',
+    '..RAAAAAAR..',
+    '..RAAAAAAR..',
+    '...RAAAAR...',
+    '...L.LL.L...',
+    '...L.LL.L...',
+  ],
+  palette: ALIEN_PALETTE,
+};
+
+// Кадр ходьби: щупальця зсунуті (колищо) — решта силуету та сама (ADR-0031).
+const ALIEN_STEP: PixelSprite = {
+  rows: [
+    '....Y..Y....',
+    '....Y..Y....',
+    '.....YY.....',
+    '....AAAA....',
+    '...AAAAAA...',
+    '...AEAAEA...',
+    '..RAAAAAAR..',
+    '..RAAAAAAR..',
+    '..RAAAAAAR..',
+    '...RAAAAR...',
+    '..L.LL.L....',
+    '..L.LL.L....',
+  ],
+  palette: ALIEN_PALETTE,
+};
+
 export function drawAlienSprite(ctx: CanvasRenderingContext2D, u: UnitSprite): void {
+  drawPixelSprite(ctx, (u.frame ?? 0) === 1 ? ALIEN_STEP : ALIEN_STAND, u.cx, u.cy, SPRITE_SCALE);
   if (u.overwatch) drawOverwatchMarker(ctx, u);
-  ctx.beginPath();
-  ctx.ellipse(u.cx, u.cy, u.r * 0.8, u.r * 0.95, 0, 0, Math.PI * 2);
-  ctx.fillStyle = ALIEN_BODY;
-  ctx.fill();
-  ctx.strokeStyle = ALIEN_OUTLINE;
-  ctx.lineWidth = 1;
-  ctx.stroke();
-  // очі
-  ctx.fillStyle = ALIEN_EYES;
-  ctx.fillRect(u.cx - 3, u.cy - 4, 2, 2);
-  ctx.fillRect(u.cx + 1, u.cy - 4, 2, 2);
-  // щупальця — трьома штрихами позаду (низ), кінці в межах клітинки
-  ctx.strokeStyle = ALIEN_LIMBS;
-  ctx.lineWidth = 1.5;
-  ctx.beginPath();
-  ctx.moveTo(u.cx - 4, u.cy + 5);
-  ctx.lineTo(u.cx - 6, u.cy + 9);
-  ctx.moveTo(u.cx, u.cy + 6);
-  ctx.lineTo(u.cx, u.cy + 11);
-  ctx.moveTo(u.cx + 4, u.cy + 5);
-  ctx.lineTo(u.cx + 6, u.cy + 9);
-  ctx.stroke();
-  // «Імпульсний різак»: енергетична вилка з двома піками перед головою (верх)
-  ctx.strokeStyle = ALIEN_WEAPON;
-  ctx.beginPath();
-  ctx.moveTo(u.cx - 3, u.cy - 9);
-  ctx.lineTo(u.cx - 2, u.cy - 12);
-  ctx.lineTo(u.cx - 1, u.cy - 9);
-  ctx.moveTo(u.cx + 1, u.cy - 9);
-  ctx.lineTo(u.cx + 2, u.cy - 12);
-  ctx.lineTo(u.cx + 3, u.cy - 9);
-  ctx.stroke();
-  ctx.lineWidth = 1;
-  drawHpText(ctx, String(u.hp), u.cx, u.cy + 2);
+  drawHpText(ctx, String(u.hp), u.cx, u.cy);
   if (u.selected) {
     ctx.strokeStyle = SELECT_RING;
     ctx.lineWidth = 2;
@@ -170,14 +290,37 @@ export function drawUnitSprite(ctx: CanvasRenderingContext2D, u: UnitSprite): vo
   else drawAlienSprite(ctx, u);
 }
 
-// База геосцени: колишній синій квадрат з написом, тепер із рамкою-контуром.
+// ADR-0031 (П6.12): база геосцени — фортеця з темних стін: радар-тарілка
+// зверху, внутрішній блок з освітленими вікнами, ворота світла знизу.
+// Напис «БАЗА» лишається векторним текстом поверх (читабельність, ADR-0007).
+const BASE_SPRITE: PixelSprite = {
+  rows: [
+    '.......OO.......',
+    '......OOOO......',
+    '.......DD.......',
+    '................',
+    'DDDDDDDDDDDDDDDD',
+    'DBBBBBBBBBBBBBBD',
+    'DBBBBBBBBBBBBBBD',
+    'DBBBBDDDDDBBBBBD',
+    'DBBBDOOOODBBBBBD',
+    'DBBBBDDDDDBBBBBD',
+    'DBBBBBBBBBBBBBBD',
+    'DBBBBBBBBBBBBBBD',
+    'DBBBBBBBBBBBBBBD',
+    'DDDDDDDOODDDDDDD',
+    'DDDDDDDDDDDDDDDD',
+    '................',
+  ],
+  palette: { B: BASE_FILL, O: BASE_OUTLINE, D: BASE_WALL },
+};
+
+const BASE_SPRITE_W = 16; // сторона матриці бази (px растру)
+
 export function drawBaseSprite(ctx: CanvasRenderingContext2D, b: BaseSprite): void {
-  const half = b.size / 2 - 6;
-  ctx.fillStyle = BASE_FILL;
-  ctx.fillRect(b.cx - half, b.cy - half, half * 2, half * 2);
-  ctx.strokeStyle = BASE_OUTLINE;
-  ctx.lineWidth = 1;
-  ctx.strokeRect(b.cx - half, b.cy - half, half * 2, half * 2);
+  // ціле кратне масштаб під клітинку геосцени (GCELL 36 → 2× → 32px), не менше 1
+  const scale = Math.max(1, Math.floor(b.size / BASE_SPRITE_W));
+  drawPixelSprite(ctx, BASE_SPRITE, b.cx, b.cy, scale);
   ctx.font = '10px system-ui';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
@@ -186,39 +329,61 @@ export function drawBaseSprite(ctx: CanvasRenderingContext2D, b: BaseSprite): vo
 }
 
 // Позначка НЛО геосцени (туман: лише виявлені потрапляють у виклик — фільтр у main.ts).
-// П6.9 (ADR-0029): м'якші позначки — приземлився: залите коло з тонким світлішим
-// контуром; у повітрі «розвідник» — ромб із заокругленими кутами (lineJoin round),
-// «збирач» — контур кола (м'якше за квадратний кут). Кислий жовтий → приглушений.
+// П6.9 (ADR-0029): м'якість (alpha 0.85 з відновленням) лишається.
+// П6.12 (ADR-0031): форми — піксельні: приземлений — тарілка з куполом і
+// опорами, «розвідник» — порожній ромб, «збирач» — контур кола з ядром-відсіком.
+const UFO_LANDED_SPRITE: PixelSprite = {
+  rows: [
+    '...SSSS...',
+    '..SSSSSS..',
+    '..SSSSSS..',
+    '.HHHHHHHH.',
+    'HHHHHHHHHH',
+    'HHHHHHHHHH',
+    '.HHHHHHHH.',
+    '..HHHHHH..',
+    '..G....G..',
+    '..G....G..',
+  ],
+  palette: { H: UFO_LANDED_FILL, S: UFO_LANDED_EDGE, G: UFO_LEG },
+};
+
+const UFO_SCOUT_SPRITE: PixelSprite = {
+  rows: [
+    '....AA....',
+    '...A..A...',
+    '..A....A..',
+    '.A......A.',
+    'A........A',
+    'A........A',
+    '.A......A.',
+    '..A....A..',
+    '...A..A...',
+    '....AA....',
+  ],
+  palette: { A: UFO_AIR },
+};
+
+const UFO_HARVESTER_SPRITE: PixelSprite = {
+  rows: [
+    '..AAAAAA..',
+    '.A......A.',
+    'A........A',
+    'A........A',
+    'A...AA...A',
+    'A...AA...A',
+    'A........A',
+    'A........A',
+    '.A......A.',
+    '..AAAAAA..',
+  ],
+  palette: { A: UFO_AIR },
+};
+
 export function drawUfoSprite(ctx: CanvasRenderingContext2D, u: UfoSprite): void {
   ctx.globalAlpha = UFO_SOFT_ALPHA;
-  if (u.landed) {
-    ctx.beginPath();
-    ctx.arc(u.cx, u.cy, u.r / 2, 0, Math.PI * 2);
-    ctx.fillStyle = UFO_LANDED_FILL;
-    ctx.fill();
-    ctx.strokeStyle = UFO_LANDED_EDGE;
-    ctx.lineWidth = 1;
-    ctx.stroke();
-    ctx.globalAlpha = 1;
-    return;
-  }
-  ctx.strokeStyle = UFO_AIR;
-  ctx.lineWidth = 1.5;
-  ctx.lineJoin = 'round';
-  if (u.kind === 'розвідник') {
-    ctx.beginPath();
-    ctx.moveTo(u.cx, u.cy - u.r / 2);
-    ctx.lineTo(u.cx + u.r / 2, u.cy);
-    ctx.lineTo(u.cx, u.cy + u.r / 2);
-    ctx.lineTo(u.cx - u.r / 2, u.cy);
-    ctx.closePath();
-    ctx.stroke();
-  } else {
-    ctx.beginPath();
-    ctx.arc(u.cx, u.cy, u.r / 2, 0, Math.PI * 2);
-    ctx.stroke();
-  }
-  ctx.lineWidth = 1;
+  const def = u.landed ? UFO_LANDED_SPRITE : u.kind === 'розвідник' ? UFO_SCOUT_SPRITE : UFO_HARVESTER_SPRITE;
+  drawPixelSprite(ctx, def, u.cx, u.cy, SPRITE_SCALE); // 10×10 → 20px у клітинці GCELL 36
   ctx.globalAlpha = 1;
 }
 
@@ -357,7 +522,19 @@ export function drawAnimFrame(ctx: CanvasRenderingContext2D, a: Anim, now: numbe
   }
   if (a.kind === 'move') {
     const p = moveAnimPos(a, t, cell);
-    drawUnitSprite(ctx, { side: a.side, cx: p.cx, cy: p.cy, r, hp: a.hp, selected: a.selected, overwatch: a.overwatch });
+    // П6.12 (ADR-0031): кадри ходьби — з прогресу шляху, детерміновано
+    // (2 кадри на клітинку, без RNG); у статиці малюється кадр «стій».
+    const frame = Math.floor(t * Math.max(1, a.path.length - 1) * 2) % 2;
+    drawUnitSprite(ctx, {
+      side: a.side,
+      cx: p.cx,
+      cy: p.cy,
+      r,
+      hp: a.hp,
+      selected: a.selected,
+      overwatch: a.overwatch,
+      frame,
+    });
     return;
   }
   if (a.kind === 'tracer') {
