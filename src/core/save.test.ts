@@ -160,6 +160,24 @@ describe('save: зіпсовані дані (критерій П5.2)', () => {
     expect(() => deserializeParty(broken((d) => delete (d.state as Record<string, unknown>).geo))).toThrow('гео-стан');
     expect(() => deserializeParty(broken((d) => delete (d.state as Record<string, unknown>).roster))).toThrow('ростер');
     expect(() => deserializeParty(broken((d) => delete (d.state as Record<string, unknown>).econ))).toThrow('економіка');
+    // П7.4 (ADR-0032): поле intercept опційне (старі сейви) — але якщо є, мусить бути цілим:
+    // пошкоджений rngState або fighter — throw українською без часткового стану
+    expect(() =>
+      deserializeParty(broken((d) => ((d.state as Record<string, unknown>).intercept = { rngState: 'x', fighter: {} })))
+    ).toThrow('перехоплення');
+    expect(() => deserializeParty(broken((d) => ((d.state as Record<string, unknown>).intercept = { rngState: 7 })))).toThrow(
+      'перехоплення'
+    );
+  });
+  it('П7.4: старий сейв без поля intercept — боєготовий винищувач на базі (зворотна сумісність)', () => {
+    const p = createParty(42);
+    for (let i = 0; i < 10; i++) partyTick(p);
+    const legacy = JSON.parse(serializeParty(p, 'T')) as Record<string, unknown>;
+    delete (legacy.state as Record<string, unknown>).intercept; // сейв до П7.4
+    const restored = deserializeParty(JSON.stringify(legacy));
+    expect(restored.intercept.fighter.status).toBe('на базі');
+    expect(restored.intercept.fighter.hp).toBe(4);
+    expect(restored.intercept.activeUfoId).toBeNull();
   });
 });
 
