@@ -17,7 +17,7 @@
 // симуляціями — П7.6, тут початкові MVP-значення.
 
 import { mulberry32, type RNG, type StatefulRng, type Vec2 } from './combat';
-import { WORLD_W, chebyshevWrap, type GeoState } from './geo';
+import { WORLD_W, chebyshevWrap, type GeoEvent, type GeoState } from './geo';
 
 export const FIGHTER_MAX_HP = 4; // MVP: один винищувач, без озброєння/досліджень
 export const FIGHTER_STEPS_PER_TICK = 2; // до 2 клітин за тік — швидший за будь-який НЛО (1 кл./тік)
@@ -100,6 +100,25 @@ export function createIntercept(seed: number = 4242): InterceptState {
   };
 }
 
+// П7.3 (ADR-0032): подія перехоплення в журнал геосцени. Туман (ADR-0006):
+// перехоплення можливе лише на виявлений НЛО, тож усі події — про виявлених;
+// шар застосунку фільтрує журнал як завжди (невиявлені НЛО у подіях не трапляються).
+function geoLog(state: InterceptState, geo: GeoState, e: InterceptEvent): void {
+  state.log.push(e);
+  geo.log.push(e as GeoEvent);
+}
+
+// Позначити збитий НЛО у геосцені (П7.3, ADR-0032): НЛО сідає на місці падіння
+// зі статусом «збитий» і стає місією через missionTargets (правила mission.ts
+// не змінюються — воно, як і раніше, шукає приземлених/збитих за статусом).
+function markShotDown(geo: GeoState, ufoId: string): void {
+  const ufo = geo.ufos.find((u) => u.id === ufoId);
+  if (ufo) {
+    ufo.status = 'збитий';
+    ufo.landedTicksLeft = 0; // не зникає сам — чекає тактичної місії
+  }
+}
+
 // Запуск перехоплення: лише виявлений НЛО у стані «летить» (ADR-0006); винищувач
 // боєготовий (на базі, повний HP — ремонт блокує запуск, П7.4).
 export function startIntercept(state: InterceptState, geo: GeoState, ufoId: string): void {
@@ -117,7 +136,7 @@ export function startIntercept(state: InterceptState, geo: GeoState, ufoId: stri
   state.fighter.targetId = ufoId;
   state.fighter.pos = { ...geo.base };
   state.ufoHp[ufoId] = state.ufoHp[ufoId] ?? UFO_INTERCEPT_HP[ufo.kind];
-  state.log.push({ type: 'intercept_start', ufoId, pos: { ...ufo.pos }, minute: geo.minute });
+  geoLog(state, geo, { type: 'intercept_start', ufoId, pos: { ...ufo.pos }, minute: geo.minute });
 }
 
 // Крок погоні до НЛО за Чебишевим з замиканням по X (куля по горизонталі, як радар).
@@ -142,7 +161,7 @@ export function interceptTick(state: InterceptState, geo: GeoState): void {
   const ufo = geo.ufos.find((u) => u.id === f.targetId);
   if (!ufo || !ufo.detected || ufo.status !== 'летить') {
     const reason = !ufo || !ufo.detected ? 'ufo_lost' : 'ufo_landed';
-    state.log.push({ type: 'intercept_aborted', ufoId: f.targetId!, reason, pos: { ...f.pos }, minute: geo.minute });
+    geoLog(state, geo, { type: 'intercept_aborted', ufoId: f.targetId!, reason, pos: { ...f.pos }, minute: geo.minute });
     returnToBase(state, geo);
     return;
   }
@@ -151,19 +170,19 @@ export function interceptTick(state: InterceptState, geo: GeoState): void {
       f.status = 'бій';
       state.activeUfoId = ufo.id;
       state.round = 0;
-      state.log.push({ type: 'intercept_engage', ufoId: ufo.id, pos: { ...ufo.pos }, minute: geo.minute });
+      geoLog(state, geo, { type: 'intercept_engage', ufoId: ufo.id, pos: { ...ufo.pos }, minute: geo.minute });
       return;
     }
     const from = { ...f.pos };
     f.pos = stepTowardWrap(f.pos, ufo.pos);
-    state.log.push({ type: 'intercept_move', from, to: { ...f.pos }, minute: geo.minute });
+    geoLog(state, geo, { type: 'intercept_move', from, to: { ...f.pos }, minute: geo.minute });
   }
   // фінальна перевірка: другим кроком досягли клітинки НЛО — бій з цього ж тіку
   if (chebyshevWrap(f.pos, ufo.pos) === 0) {
     f.status = 'бій';
     state.activeUfoId = ufo.id;
     state.round = 0;
-    state.log.push({ type: 'intercept_engage', ufoId: ufo.id, pos: { ...ufo.pos }, minute: geo.minute });
+    geoLog(state, geo, { type: 'intercept_engage', ufoId: ufo.id, pos: { ...ufo.pos }, minute: geo.minute });
   }
 }
 
@@ -176,13 +195,13 @@ export function interceptRound(state: InterceptState, geo: GeoState, choice: Int
   }
   const ufo = geo.ufos.find((u) => u.id === state.activeUfoId);
   if (!ufo) {
-    state.log.push({ type: 'intercept_aborted', ufoId: state.activeUfoId!, reason: 'ufo_lost', pos: { ...f.pos }, minute: geo.minute });
+    geoLog(state, geo, { type: 'intercept_aborted', ufoId: state.activeUfoId!, reason: 'ufo_lost', pos: { ...f.pos }, minute: geo.minute });
     returnToBase(state, geo);
     return;
   }
   state.round += 1;
   if (choice === 'відступ') {
-    state.log.push({
+    geoLog(state, geo, {
       type: 'intercept_round',
       round: state.round,
       choice,
@@ -192,7 +211,7 @@ export function interceptRound(state: InterceptState, geo: GeoState, choice: Int
       ufoDamage: 0,
       minute: geo.minute,
     });
-    state.log.push({ type: 'intercept_break_off', ufoId: ufo.id, minute: geo.minute });
+    geoLog(state, geo, { type: 'intercept_break_off', ufoId: ufo.id, minute: geo.minute });
     returnToBase(state, geo);
     return;
   }
@@ -203,14 +222,24 @@ export function interceptRound(state: InterceptState, geo: GeoState, choice: Int
   const ufoDamage = ufoHit ? p.ufoDamage[0] + Math.floor(state.rng() * (p.ufoDamage[1] - p.ufoDamage[0] + 1)) : 0;
   state.ufoHp[ufo.id] = Math.max(0, (state.ufoHp[ufo.id] ?? 0) - fighterDamage);
   f.hp = Math.max(0, f.hp - ufoDamage);
-  state.log.push({ type: 'intercept_round', round: state.round, choice, fighterHit, fighterDamage, ufoHit, ufoDamage, minute: geo.minute });
+  geoLog(state, geo, {
+    type: 'intercept_round',
+    round: state.round,
+    choice,
+    fighterHit,
+    fighterDamage,
+    ufoHit,
+    ufoDamage,
+    minute: geo.minute,
+  });
   if (state.ufoHp[ufo.id] === 0) {
-    state.log.push({ type: 'ufo_shot_down', ufoId: ufo.id, pos: { ...ufo.pos }, minute: geo.minute });
+    geoLog(state, geo, { type: 'ufo_shot_down', ufoId: ufo.id, pos: { ...ufo.pos }, minute: geo.minute });
+    markShotDown(geo, ufo.id);
     returnToBase(state, geo);
     return;
   }
   if (f.hp === 0) {
-    state.log.push({ type: 'intercept_aborted', ufoId: ufo.id, reason: 'fighter_damaged', pos: { ...f.pos }, minute: geo.minute });
+    geoLog(state, geo, { type: 'intercept_aborted', ufoId: ufo.id, reason: 'fighter_damaged', pos: { ...f.pos }, minute: geo.minute });
     returnToBase(state, geo);
     startRepair(state, geo);
   }
@@ -223,7 +252,7 @@ function returnToBase(state: InterceptState, geo: GeoState): void {
   state.fighter.targetId = null;
   state.activeUfoId = null;
   state.round = 0;
-  state.log.push({ type: 'fighter_returned', pos: { ...geo.base }, minute: geo.minute });
+  geoLog(state, geo, { type: 'fighter_returned', pos: { ...geo.base }, minute: geo.minute });
 }
 
 // Ремонт (гроші — П7.4, тут тіки): пошкоджений винищувач йде в ремонт і не може
@@ -247,7 +276,7 @@ export function repairTick(state: InterceptState, geo: GeoState): void {
     state.fighter.hp = FIGHTER_MAX_HP;
     state.fighter.status = 'на базі';
     delete state.fighter.repairTicksLeft;
-    state.log.push({ type: 'fighter_repair_done', minute: geo.minute });
+    geoLog(state, geo, { type: 'fighter_repair_done', minute: geo.minute });
   }
 }
 
