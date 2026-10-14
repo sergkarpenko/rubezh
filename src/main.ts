@@ -52,12 +52,16 @@ import { ALIEN_SPAWN, SQUAD_SPAWN, completeMission, createMission, missionOutcom
 import { applyMissionResult, hireSoldier, hospitalTick, isBankrupt, missionSquad, readySoldiers } from './core/squad';
 import { creditMissionBonus, economyTick, HIRE_PRICE, type EconomyEvent } from './core/economy';
 import {
+  OVERWATCH_AP_COST,
   calculateHitChance,
+  distance,
   endTurn,
+  hasLineOfSight,
   moveUnit,
   resolveAttack,
   setOverwatch,
   type GameEvent,
+  type GameState,
   type ShotMode,
   type Unit,
   type Vec2,
@@ -72,7 +76,9 @@ import {
   animT,
   drawAnimFrame,
   drawBaseSprite,
+  drawChanceLabel,
   drawNightTerrain,
+  drawTargetFrame,
   drawUfoSprite,
   drawUnitSprite,
   initPixelSprites,
@@ -125,6 +131,7 @@ let fireMode: ShotMode | null = null; // «зведений» режим пос�
 let hoverPath: Vec2[] | null = null; // прев'ю шляху під курсором
 let hoverAp = 0;
 let tapCell: Vec2 | null = null; // ADR-0027 (П6.4): клітинка першого тапу — повторний тап у неї робить хід
+let aimCell: Vec2 | null = null; // П6.14: клітинка цілі під наведенням/першим тапом у зведеному режимі
 
 // П6.8 (ADR-0029): анімаційний рушій — черга анімацій, rAF-цикл живе лише
 // поки черга непорожня (idle → 0 перерисовок; батарея iPad). Кожен кадр —
@@ -660,6 +667,13 @@ function renderBattle(): void {
     }
   }
 
+  // П6.14: у зведеному режимі пострілу — обведення всіх валідних цілей
+  // (видимі прибульці, дистанція і лінія вогню). Туман: невидимі цілі
+  // не підсвічуються (ADR-0006) — підказка лише про те, що гравець бачив.
+  let targets: Unit[] = [];
+  if (fireMode !== null && sel && playerTurnActive()) targets = validFireTargets(st, sel, vis);
+  for (const t of targets) drawTargetFrame(ctx, { gx: t.pos.x, gy: t.pos.y, cell: BCELL });
+
   // П6.7 (ADR-0029): векторні спрайти юнітів замість геометричних кружків —
   // силует, зброя, HP, рамка вибору і маркер заступи малює render.ts
   // (маркер заступи — строго в межах клітинки, П6.6).
@@ -685,17 +699,45 @@ function renderBattle(): void {
   if (activeAnim !== null && (activeAnim.kind !== 'move' || movingId !== null)) {
     drawAnimFrame(ctx, activeAnim, anim.now, BCELL, 8);
   }
+
+  // П6.14: шанс попадання біля клітинки цілі — при наведенні (aimCell) або
+  // першому тапі (tapCell у зведеному режимі — тап-тап, дзеркало руху П6.4).
+  if (fireMode !== null && sel && playerTurnActive()) {
+    const focus = [aimCell, tapCell].find((c) => c !== null && targets.some((t) => t.pos.x === c.x && t.pos.y === c.y));
+    if (focus) {
+      drawChanceLabel(ctx, {
+        gx: focus.x,
+        gy: focus.y,
+        cell: BCELL,
+        cw: cv.width,
+        text: '~' + Math.round(calculateHitChance(sel, fireMode) * 100) + '%',
+      });
+    }
+  }
   ctx.restore(); // П6.13: кінець зсуву тряски — кадр повертається у межі buffer'а
 
   // стан кнопок керування
   const busy = !playerTurnActive();
-  for (const id of ['btn-snap', 'btn-aimed', 'btn-auto', 'btn-ow', 'btn-end']) {
-    (el(id) as HTMLButtonElement).disabled = busy;
-  }
+  (el('btn-end') as HTMLButtonElement).disabled = busy;
   (el('btn-demo') as HTMLButtonElement).disabled = battleResult !== null;
+  // П6.14: кнопки режимів без достатку AP — приглушені (disabled) з причиною
+  // «не вистачає AP» у підказці; підказка з index.html зберігається (dataset).
   for (const m of ['snap', 'aimed', 'auto'] as ShotMode[]) {
-    el('btn-' + m).classList.toggle('armed', fireMode === m);
+    const b = el<HTMLButtonElement>('btn-' + m);
+    const cost = sel ? sel.weapon.modes[m].apCost : 0;
+    const noAp = sel !== undefined && sel.ap < cost;
+    b.disabled = busy || noAp;
+    const hint = b.dataset.hint || b.title;
+    b.dataset.hint = hint;
+    b.title = noAp ? hint + ' — не вистачає AP (потрібно ' + cost + ')' : hint;
+    b.classList.toggle('armed', fireMode === m);
   }
+  const ow = el<HTMLButtonElement>('btn-ow');
+  const owNoAp = sel !== undefined && sel.ap < OVERWATCH_AP_COST;
+  ow.disabled = busy || owNoAp;
+  const owHint = ow.dataset.hint || ow.title;
+  ow.dataset.hint = owHint;
+  ow.title = owNoAp ? owHint + ' — не вистачає AP (потрібно ' + OVERWATCH_AP_COST + ')' : owHint;
 }
 
 function renderAll(): void {
@@ -721,6 +763,7 @@ function closeBattle(): void {
   fireMode = null;
   hoverPath = null;
   tapCell = null;
+  aimCell = null; // П6.14
   seenBattleLog = 0;
   el('bresult').innerHTML = '';
   renderAll();
@@ -741,6 +784,7 @@ function launchMission(ufoId: string): void {
   fireMode = null;
   hoverPath = null;
   tapCell = null;
+  aimCell = null; // П6.14
   seenBattleLog = 0;
   journal('▶ Місія: загін висаджено біля НЛО ' + ufoId, '', 'battle');
   binfo('Ваш хід: клікніть свого солдата (синє коло), потім клітинку — прев’ю шляху; повторний клік у ту саму клітинку — хід.');
@@ -789,6 +833,7 @@ function battleCanvasClick(ev: MouseEvent): void {
     fireMode = null;
     hoverPath = null;
     tapCell = null;
+    aimCell = null; // П6.14
     binfo(u.name + ': HP ' + u.hp + '/' + u.maxHp + ' · AP ' + u.ap + '/' + u.maxAp + '. Клікніть клітинку — рух, або кнопку пострілу.');
     renderAll();
     return;
@@ -810,8 +855,35 @@ function battleCanvasClick(ev: MouseEvent): void {
       binfo('Виберіть режим пострілу (кнопка зліва), потім клікніть видимого прибульця.');
       return;
     }
+    // П6.14: причини невалідної цілі — ті самі перевірки, що й assertCanFire ядра
+    if (distance(sel.pos, u.pos) > sel.weapon.range) {
+      binfo('Ціль поза дальністю зброї (' + sel.weapon.range + ' клітинок).');
+      return;
+    }
+    if (!hasLineOfSight(st, sel.pos, u.pos)) {
+      binfo('Немає лінії вогню до цілі.');
+      return;
+    }
+    // П6.14: тап-тап і для пострілу (дзеркало руху П6.4): перший тап — шанс
+    // попадання біля клітинки, повторний тап у ту саму ціль — постріл.
+    if (tapCell === null || tapCell.x !== cell.x || tapCell.y !== cell.y) {
+      tapCell = cell;
+      aimCell = cell;
+      hoverPath = null;
+      binfo(
+        '~' +
+          Math.round(calculateHitChance(sel, fireMode) * 100) +
+          '% · повторний тап у цю саму ціль — постріл (' +
+          MODE_LABEL[fireMode] +
+          ').'
+      );
+      renderBattle();
+      return;
+    }
     const mode = fireMode;
     fireMode = null;
+    tapCell = null;
+    aimCell = null;
     try {
       const prevLen = st.log.length;
       resolveAttack(st, sel.id, u.id, mode);
@@ -831,6 +903,7 @@ function battleCanvasClick(ev: MouseEvent): void {
   // шляху (зелені крапки, AP вистачає; червоні — ні), повторний тап/клік у ту
   // саму клітинку — хід. Один патерн для тачу і мишки.
   fireMode = null;
+  aimCell = null; // П6.14: зведений режим знято — підказки прицілювання теж
   try {
     const path = findPath(st, sel.pos, cell);
     if (path === null) {
@@ -879,6 +952,23 @@ function battleCanvasHover(ev: MouseEvent): void {
   const sel = selectedUnit();
   if (!sel) return;
   const cell = cellFromEvent(ev);
+  // П6.14: у зведеному режимі наведення на валідну ціль показує шанс біля
+  // клітинки (плашка на канві); прев'ю шляху над ціллю не показуємо.
+  if (fireMode !== null) {
+    const t = mission.state.units.find((x) => x.alive && x.side === 'alien' && x.pos.x === cell.x && x.pos.y === cell.y);
+    const valid =
+      t !== undefined &&
+      visibleCells().has(cell.x + ',' + cell.y) &&
+      distance(sel.pos, t.pos) <= sel.weapon.range &&
+      hasLineOfSight(mission.state, sel.pos, t.pos);
+    const next: Vec2 | null = valid ? cell : null;
+    if (!sameCell(next, aimCell)) {
+      aimCell = next;
+      if (next !== null) hoverPath = null;
+      renderBattle();
+    }
+    if (aimCell !== null) return;
+  }
   if (cell.x === sel.pos.x && cell.y === sel.pos.y) {
     if (hoverPath !== null) {
       hoverPath = null;
@@ -898,8 +988,10 @@ function battleCanvasHover(ev: MouseEvent): void {
 }
 
 function battleCanvasLeave(): void {
-  if (hoverPath !== null) {
+  // П6.14: aimCell — лише наведення; тап-тап тримає підказку у tapCell
+  if (hoverPath !== null || aimCell !== null) {
     hoverPath = null;
+    aimCell = null;
     renderBattle();
   }
 }
@@ -911,10 +1003,18 @@ function armFire(mode: ShotMode): void {
     binfo('Спершу клікніть свого солдата.');
     return;
   }
+  // П6.14: без достатку AP режим не зводиться — кнопка приглушена, гаряча
+  // клавіша дає ту саму відмову з причиною (фідбек не розходиться з кнопками).
+  const cost = sel.weapon.modes[mode].apCost;
+  if (sel.ap < cost) {
+    binfo('Не вистачає AP: ' + MODE_LABEL[mode] + ' постріл коштує ' + cost + ', є ' + sel.ap + '.');
+    return;
+  }
   fireMode = mode;
-  const prof = sel.weapon.modes[mode];
+  tapCell = null; // П6.14: нове зведення — ціль обираємо заново (тап-тап з нуля)
+  aimCell = null;
   const chance = Math.round(calculateHitChance(sel, mode) * 100);
-  binfo(MODE_LABEL[mode] + ' постріл: ' + prof.apCost + ' AP · ~' + chance + '% · клікніть видимого прибульця.');
+  binfo(MODE_LABEL[mode] + ' постріл: ' + cost + ' AP · ~' + chance + '% · тапніть обведену ціль — шанс, повторний тап — постріл.');
   renderBattle();
 }
 
@@ -923,6 +1023,11 @@ function armOverwatch(): void {
   const sel = selectedUnit();
   if (!sel) {
     binfo('Спершу клікніть свого солдата.');
+    return;
+  }
+  // П6.14: та сама перевірка AP, що й у кнопки (підказка причини в binfo)
+  if (sel.ap < OVERWATCH_AP_COST) {
+    binfo('Не вистачає AP: заступа коштує ' + OVERWATCH_AP_COST + ', є ' + sel.ap + '.');
     return;
   }
   try {
@@ -941,6 +1046,7 @@ function endPlayerTurn(): void {
   hoverPath = null;
   fireMode = null;
   tapCell = null;
+  aimCell = null; // П6.14
   try {
     const prevLen = mission.state.log.length;
     endTurn(mission.state); // передати хід прибульцям (aliensTurn очікує їхній хід)
@@ -1017,6 +1123,28 @@ export function samePath(a: Vec2[] | null, b: Vec2[] | null): boolean {
   return a.length === b.length && a.every((p, i) => p.x === b[i].x && p.y === b[i].y);
 }
 
+// П6.14: та сама клітинка? (порівняння nullable-клітинок без перерисовок)
+export function sameCell(a: Vec2 | null, b: Vec2 | null): boolean {
+  if (a === null || b === null) return a === b;
+  return a.x === b.x && a.y === b.y;
+}
+
+// П6.14: валідні цілі стрільця — живі видимі прибульці (туман, ADR-0006) у
+// дальності зброї з лінією вогню — ті самі перевірки, що й assertCanFire у
+// ядрі (ADR-0004: влучність від відстані не залежить, дальність — ліміт
+// зброї). Чиста функція: стан лише читається (ADR-0002), без RNG (ADR-0003).
+export function validFireTargets(state: GameState, shooter: Unit, vis: ReadonlySet<string>): Unit[] {
+  const out: Unit[] = [];
+  for (const t of state.units) {
+    if (t.side !== 'alien' || !t.alive) continue;
+    if (!vis.has(t.pos.x + ',' + t.pos.y)) continue; // туман: невидима ціль не підсвічується
+    if (distance(shooter.pos, t.pos) > shooter.weapon.range) continue;
+    if (!hasLineOfSight(state, shooter.pos, t.pos)) continue;
+    out.push(t);
+  }
+  return out;
+}
+
 // ADR-0027 (П6.4): Esc — скасовує спершу зведений режим пострілу,
 // за його відсутності — вибір солдата (разом із прев'ю шляху).
 function cancelSelection(): void {
@@ -1024,6 +1152,7 @@ function cancelSelection(): void {
   if (fireMode !== null) {
     fireMode = null;
     tapCell = null;
+    aimCell = null; // П6.14
     binfo('Режим пострілу скасовано.');
     renderBattle();
     return;
@@ -1032,6 +1161,7 @@ function cancelSelection(): void {
     selectedId = null;
     hoverPath = null;
     tapCell = null;
+    aimCell = null; // П6.14
     binfo('Вибір знято.');
     renderBattle();
   }

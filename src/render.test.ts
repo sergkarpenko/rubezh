@@ -16,6 +16,8 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
   AnimEngine,
+  CHANCE_LABEL_BG,
+  CHANCE_LABEL_TEXT,
   DEATH_MS,
   IMPACT_MS,
   MOVE_MS_PER_CELL,
@@ -24,6 +26,7 @@ import {
   RADAR_PULSE_MS,
   SHAKE_PX,
   SPRITE_SCALE,
+  TARGET_FRAME_COLOR,
   TRACER_MS,
   animT,
   animsFromEvents,
@@ -31,8 +34,10 @@ import {
   drawAlienSprite,
   drawAnimFrame,
   drawBaseSprite,
+  drawChanceLabel,
   drawNightTerrain,
   drawSoldierSprite,
+  drawTargetFrame,
   drawUfoSprite,
   initPixelSprites,
   makeDeathAnim,
@@ -972,5 +977,50 @@ describe('П6.13: яскравіші неонові трасери/спалах�
     const glows = boom.sets.filter((x) => x.p === 'shadowBlur').map((x) => x.v);
     expect(glows[0]).toBe(8);
     expect(glows[glows.length - 1]).toBe(0);
+  });
+});
+
+// --- П6.14: UX прицілювання — обведення валідних цілей і шанс попадання ---
+
+describe('П6.14: рамка валідної цілі (drawTargetFrame)', () => {
+  it('пунктирна неонова рамка строго в межах клітинки; dash скидається save/restore', () => {
+    const s = seqCtx();
+    drawTargetFrame(s.ctx, { gx: 4, gy: 7, cell: 26 });
+    const dash = s.ops.find((o) => 'm' in o && o.m === 'setLineDash');
+    expect(dash).toEqual({ m: 'setLineDash', args: [[4, 3]] });
+    expect(s.ops.some((o) => 'set' in o && o.set === 'strokeStyle' && o.v === TARGET_FRAME_COLOR)).toBe(true);
+    expect(s.ops).toContainEqual({ m: 'strokeRect', args: [4 * 26 + 2, 7 * 26 + 2, 22, 22] });
+    expect(s.ops[0]).toEqual({ m: 'save', args: [] });
+    expect(s.ops[s.ops.length - 1]).toEqual({ m: 'restore', args: [] });
+  });
+
+  it('детермінізм: той самий вхід → той самий потік операцій (ADR-0003)', () => {
+    const a = seqCtx();
+    const b = seqCtx();
+    drawTargetFrame(a.ctx, { gx: 0, gy: 19, cell: 26 });
+    drawTargetFrame(b.ctx, { gx: 0, gy: 19, cell: 26 });
+    expect(a.ops).toEqual(b.ops);
+  });
+});
+
+describe('П6.14: шанс попадання біля клітинки (drawChanceLabel)', () => {
+  it('плашка над клітинкою: темний фон, неоновий текст ~NN%, зверху зліва', () => {
+    const s = seqCtx();
+    drawChanceLabel(s.ctx, { gx: 4, gy: 7, cell: 26, cw: 520, text: '~62%' });
+    const w = 4 * 6 + 4; // 4 символи × 6px + рамка
+    expect(s.ops).toContainEqual({ m: 'fillRect', args: [4 * 26 + 1, 7 * 26 - 14, w, 13] });
+    expect(s.ops).toContainEqual({ m: 'fillText', args: ['~62%', 4 * 26 + 3, 7 * 26 - 12] });
+    const fills = s.ops.filter((o) => 'set' in o && o.set === 'fillStyle').map((o) => (o as { v: unknown }).v);
+    expect(fills).toContain(CHANCE_LABEL_BG);
+    expect(fills).toContain(CHANCE_LABEL_TEXT);
+  });
+
+  it('верхній рядок: плашка під клітинкою; правий край: не виходить за канву', () => {
+    const s = seqCtx();
+    drawChanceLabel(s.ctx, { gx: 19, gy: 0, cell: 26, cw: 520, text: '~62%' });
+    const w = 4 * 6 + 4;
+    const x = Math.min(19 * 26 + 1, 520 - w - 1);
+    expect(s.ops).toContainEqual({ m: 'fillRect', args: [x, 26 + 1, w, 13] }); // під клітинкою (y=0)
+    expect(x + w).toBeLessThanOrEqual(520);
   });
 });
