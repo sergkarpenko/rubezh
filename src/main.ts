@@ -66,7 +66,17 @@ import { computeVisibleCells, findPath, pathApCost } from './core/map';
 import { aliensTurn, autoBattle } from './bot';
 // П6.7 (ADR-0029): векторні спрайти — чисті функції малювання шару відображення.
 // П6.8 (ADR-0029): анімаційний рушій — черга + rAF лише під час активних анімацій.
-import { AnimEngine, animsFromEvents, animT, drawAnimFrame, drawBaseSprite, drawUfoSprite, drawUnitSprite, moveAnimPos } from './render';
+import {
+  AnimEngine,
+  animsFromEvents,
+  animT,
+  drawAnimFrame,
+  drawBaseSprite,
+  drawUfoSprite,
+  drawUnitSprite,
+  makeGeoPulseAnim,
+  moveAnimPos,
+} from './render';
 // П5.3 (ADR-0026): партія і слоти збереження — із чистого ядра save.ts.
 import { SAVE_SLOTS, createParty, eraseSlot, loadFromSlot, saveToSlot, slotMeta, type Party, type SlotStore } from './core/save';
 
@@ -112,6 +122,15 @@ const anim = new AnimEngine({
   schedule: (cb) => requestAnimationFrame(cb),
   cancel: (h) => cancelAnimationFrame(h as number),
   draw: () => renderBattle(),
+});
+// П6.9 (ADR-0029): пульс радара геосцени — той самий рушій (черга + rAF лише
+// під час активних анімацій, idle → 0 перерисовок), окремий інстанс зі своєю
+// перерисовкою renderGeo. Суто візуальний: geo.rng не чіпається, траєкторія
+// геосцени незмінна; туман — невиявлені НЛО у кадр не потрапляють (ADR-0006).
+const geoAnim = new AnimEngine({
+  schedule: (cb) => requestAnimationFrame(cb),
+  cancel: (h) => cancelAnimationFrame(h as number),
+  draw: () => renderGeo(),
 });
 
 // П6.8: нові події логу бою → анімації (суто відображення: дії ядра вже
@@ -248,6 +267,12 @@ function partyTick(): void {
   advanceTime(party.geo, 1);
   economyTick(party.econ, party.geo);
   hospitalTick(party.roster);
+  // П6.9 (ADR-0029): пульс радара на тік часу — серія тіків (доба) дає один
+  // пульс (coalesce за busy), idle → 0 перерисовок. Лише візуальний ефект.
+  if (hasRaf && !geoAnim.busy) {
+    const b = party.geo.base;
+    geoAnim.push(makeGeoPulseAnim(b.x * GCELL + GCELL / 2, b.y * GCELL + GCELL / 2, (RADAR_RANGE + 0.5) * GCELL));
+  }
   if (!gameOver && isBankrupt(party.econ, party.roster)) {
     gameOver = true;
     journal('✗ Банкрутство: немає боєготових солдатів і грошей на найм — партію програно.', 'lose', 'econ');
@@ -295,6 +320,11 @@ function renderGeo(): void {
       kind: u.kind,
     });
   }
+
+  // П6.9 (ADR-0029): анімаційний шар геосцени — пульс радара поверх статичного
+  // кадру (кадр малюється з нуля — clearRect вище; урок П6.6).
+  const ga = geoAnim.active();
+  if (ga !== null) drawAnimFrame(ctx, ga, geoAnim.now, GCELL, 0);
 
   el('clock').textContent = geoClock(party.geo);
   const busy = mission !== null;
@@ -675,6 +705,7 @@ function closeBattle(): void {
 function launchMission(ufoId: string): void {
   if (mission) return;
   anim.cancel(); // П6.8: новий бій — без залишків черги попереднього
+  geoAnim.cancel(); // П6.9: геосцену сховано — пульс радара скидаємо
   try {
     mission = createMission(party.geo, ufoId, { squad: missionSquad(party.roster) });
   } catch (e) {
@@ -949,6 +980,7 @@ function finishBattle(outcome: 'перемога' | 'поразка'): void {
 
 function restart(): void {
   closeBattle();
+  geoAnim.cancel(); // П6.9: нова партія — пульс старої бази не відтворюємо
   const seed = Number(el<HTMLInputElement>('seed').value) || 42;
   party = newParty(seed);
   renderAll();

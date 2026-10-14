@@ -27,8 +27,13 @@ const OW_MARKER = '#d8b25a';
 const SELECT_RING = '#d7e4f7';
 const BASE_FILL = '#4f8cff';
 const BASE_OUTLINE = '#9fc3ff';
-const UFO_LANDED = '#e8c545';
-const UFO_AIR = '#e0a24a';
+// П6.9 (ADR-0029): м'якші позначки НЛО — приглушені кольори (менш кислотні,
+// ніж #e8c545/#e0a24a) і прозорість 0.85 з обов'язковим відновленням alpha.
+const UFO_LANDED_FILL = '#cbb05a';
+const UFO_LANDED_EDGE = '#e6d59a';
+const UFO_AIR = '#c79250';
+const UFO_SOFT_ALPHA = 0.85;
+const RADAR_PULSE = '#4f8cff'; // колір пульсу радара — сімейство кольору бази
 
 // Дані для малювання юніта бойовища: cx/cy — центр клітинки в пікселях buffer'а,
 // r — радіус силуету (у превью 8 при клітинці 26). hp — читабельність стану (ADR-0007).
@@ -180,16 +185,26 @@ export function drawBaseSprite(ctx: CanvasRenderingContext2D, b: BaseSprite): vo
   ctx.fillText('БАЗА', b.cx, b.cy);
 }
 
-// Позначка НЛО геосцени (туман: лише виявлені потрапляють у виклик — фільтр у main.ts):
-// приземлився — залитий квадрат; у повітрі «розвідник» — ромб, «збирач» — контур квадрата.
+// Позначка НЛО геосцени (туман: лише виявлені потрапляють у виклик — фільтр у main.ts).
+// П6.9 (ADR-0029): м'якші позначки — приземлився: залите коло з тонким світлішим
+// контуром; у повітрі «розвідник» — ромб із заокругленими кутами (lineJoin round),
+// «збирач» — контур кола (м'якше за квадратний кут). Кислий жовтий → приглушений.
 export function drawUfoSprite(ctx: CanvasRenderingContext2D, u: UfoSprite): void {
+  ctx.globalAlpha = UFO_SOFT_ALPHA;
   if (u.landed) {
-    ctx.fillStyle = UFO_LANDED;
-    ctx.fillRect(u.cx - u.r / 2, u.cy - u.r / 2, u.r, u.r);
+    ctx.beginPath();
+    ctx.arc(u.cx, u.cy, u.r / 2, 0, Math.PI * 2);
+    ctx.fillStyle = UFO_LANDED_FILL;
+    ctx.fill();
+    ctx.strokeStyle = UFO_LANDED_EDGE;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.globalAlpha = 1;
     return;
   }
   ctx.strokeStyle = UFO_AIR;
-  ctx.lineWidth = 1;
+  ctx.lineWidth = 1.5;
+  ctx.lineJoin = 'round';
   if (u.kind === 'розвідник') {
     ctx.beginPath();
     ctx.moveTo(u.cx, u.cy - u.r / 2);
@@ -199,8 +214,12 @@ export function drawUfoSprite(ctx: CanvasRenderingContext2D, u: UfoSprite): void
     ctx.closePath();
     ctx.stroke();
   } else {
-    ctx.strokeRect(u.cx - u.r / 2, u.cy - u.r / 2, u.r, u.r);
+    ctx.beginPath();
+    ctx.arc(u.cx, u.cy, u.r / 2, 0, Math.PI * 2);
+    ctx.stroke();
   }
+  ctx.lineWidth = 1;
+  ctx.globalAlpha = 1;
 }
 
 // --- П6.8 (ADR-0029): анімаційний рушій — черга + rAF лише під час активних анімацій ---
@@ -211,6 +230,7 @@ export const TRACER_MS = 150; // трасер кулі від стрільця �
 export const IMPACT_MS = 200; // спалах влучання (лише при попаданні)
 export const DEATH_MS = 350; // згасання силуета загиблого
 export const OW_FLASH_MS = 300; // спалах заступи (озброєння реакційного вогню)
+export const RADAR_PULSE_MS = 1200; // П6.9: пульс радара — від бази до краю зони виявлення
 
 // Один елемент черги анімацій. start — мітка часу початку відтворення
 // (призначає рушій на першому кадрі; null — ще не починалось).
@@ -248,7 +268,18 @@ export interface OwFlashAnim {
   dur: number;
   start: number | null;
 }
-export type Anim = MoveAnim | TracerAnim | DeathAnim | OwFlashAnim;
+// П6.9 (ADR-0029): пульс радара геосцени — кільце, що розходиться від бази
+// до краю зони виявлення і гасне. Суто візуальний: не читає ні НЛО, ні geo.rng;
+// невиявлені НЛО не показуються і не анімуються (туман — ADR-0006/0029).
+export interface GeoPulseAnim {
+  kind: 'gpulse';
+  cx: number; // центр бази в пікселях buffer'а
+  cy: number;
+  maxR: number; // радіус зони виявлення в пікселях
+  dur: number;
+  start: number | null;
+}
+export type Anim = MoveAnim | TracerAnim | DeathAnim | OwFlashAnim | GeoPulseAnim;
 
 // Знімки стану беруться ПІСЛЯ застосування дії ядром (позиція/HP уже фінальні,
 // лог — джерело істини про те, що відбулося).
@@ -273,6 +304,9 @@ export function makeDeathAnim(u: Unit): DeathAnim {
 }
 export function makeOwFlashAnim(u: Unit): OwFlashAnim {
   return { kind: 'owflash', side: u.side, at: { ...u.pos }, dur: OW_FLASH_MS, start: null };
+}
+export function makeGeoPulseAnim(cx: number, cy: number, maxR: number): GeoPulseAnim {
+  return { kind: 'gpulse', cx, cy, maxR, dur: RADAR_PULSE_MS, start: null };
 }
 
 // Прогрес анімації 0..1 (за межами — клімпиться; start === null → ще не почалась).
@@ -308,6 +342,19 @@ const OW_FLASH = '#d8b25a';
 // пульсуюче кільце заступи. Усі координати — у межах клітинок (урок П6.6).
 export function drawAnimFrame(ctx: CanvasRenderingContext2D, a: Anim, now: number, cell: number, r: number): void {
   const t = animT(a, now);
+  // П6.9: пульс радара геосцени — кільце від бази до maxR, що гасне.
+  // Клітинка і радіус силуету не потрібні (cell/r — параметри бойовища).
+  if (a.kind === 'gpulse') {
+    ctx.globalAlpha = 0.6 * (1 - t);
+    ctx.strokeStyle = RADAR_PULSE;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(a.cx, a.cy, 2 + (a.maxR - 2) * t, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.lineWidth = 1;
+    ctx.globalAlpha = 1;
+    return;
+  }
   if (a.kind === 'move') {
     const p = moveAnimPos(a, t, cell);
     drawUnitSprite(ctx, { side: a.side, cx: p.cx, cy: p.cy, r, hp: a.hp, selected: a.selected, overwatch: a.overwatch });

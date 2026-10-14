@@ -15,6 +15,7 @@ import {
   IMPACT_MS,
   MOVE_MS_PER_CELL,
   OW_FLASH_MS,
+  RADAR_PULSE_MS,
   TRACER_MS,
   animT,
   animsFromEvents,
@@ -24,6 +25,7 @@ import {
   drawSoldierSprite,
   drawUfoSprite,
   makeDeathAnim,
+  makeGeoPulseAnim,
   makeMoveAnim,
   makeOwFlashAnim,
   makeTracerAnim,
@@ -243,11 +245,12 @@ describe('спрайти геосцени (статична інтеграція
     expect(calls.some((c) => c.m === 'fillText' && c.args[0] === 'БАЗА')).toBe(true);
   });
 
-  it('НЛО: приземлився — залитий квадрат; «розвідник» — ромб; «збирач» — контур квадрата', () => {
+  it('НЛО (П6.9: м’якші позначки): приземлився — залите коло; «розвідник» — ромб; «збирач» — контур кола', () => {
     const landed = mockCtx();
     drawUfoSprite(landed.ctx, { cx: 18, cy: 18, r: 11, landed: true, kind: 'розвідник' });
-    expect(landed.calls.some((c) => c.m === 'fillRect')).toBe(true);
-    expect(landed.calls.some((c) => c.m === 'strokeRect')).toBe(false);
+    expect(landed.calls.some((c) => c.m === 'arc')).toBe(true); // коло замість квадрата
+    expect(landed.calls.some((c) => c.m === 'fill')).toBe(true);
+    expect(landed.calls.some((c) => c.m === 'fillRect')).toBe(false);
 
     const scout = mockCtx();
     drawUfoSprite(scout.ctx, { cx: 18, cy: 18, r: 11, landed: false, kind: 'розвідник' });
@@ -256,7 +259,7 @@ describe('спрайти геосцени (статична інтеграція
 
     const harv = mockCtx();
     drawUfoSprite(harv.ctx, { cx: 18, cy: 18, r: 11, landed: false, kind: 'збирач' });
-    expect(harv.calls.some((c) => c.m === 'strokeRect')).toBe(true);
+    expect(harv.calls.some((c) => c.m === 'arc')).toBe(true); // контур кола
     expect(harv.calls.some((c) => c.m === 'closePath')).toBe(false);
   });
 });
@@ -533,5 +536,96 @@ describe('перетворювач подій логу → анімації (к�
       { type: 'move', unitId: 'ghost', from: { x: 0, y: 0 }, to: { x: 1, y: 0 } },
     ];
     expect(animsFromEvents(events, [unit('s1', 'player', 0, 0)])).toEqual([]);
+  });
+});
+
+// --- П6.9 (ADR-0029): мінімальний арт геосцени — м’які позначки НЛО, пульс радара ---
+
+describe('П6.9: м’які позначки НЛО геосцени', () => {
+  it('м’якість: alpha 0.85 на час малювання і відновлення до 1 (усі три види)', () => {
+    for (const u of [
+      { cx: 18, cy: 18, r: 11, landed: true, kind: 'розвідник' as const },
+      { cx: 18, cy: 18, r: 11, landed: false, kind: 'розвідник' as const },
+      { cx: 18, cy: 18, r: 11, landed: false, kind: 'збирач' as const },
+    ]) {
+      const s = animCtx();
+      drawUfoSprite(s.ctx, u);
+      const alphas = s.sets.filter((p) => p.p === 'globalAlpha').map((p) => p.v);
+      expect(alphas[0]).toBeCloseTo(0.85);
+      expect(alphas[alphas.length - 1]).toBe(1);
+    }
+  });
+
+  it('позначка в межах клітинки 36px (урок П6.6)', () => {
+    const { ctx, calls } = mockCtx();
+    drawUfoSprite(ctx, { cx: 18, cy: 18, r: 11, landed: true, kind: 'збирач' });
+    const e = extent(calls);
+    expect(e.maxX - e.minX).toBeLessThanOrEqual(11);
+    expect(e.maxY - e.minY).toBeLessThanOrEqual(11);
+  });
+});
+
+describe('П6.9: пульс радара геосцени (критерії: туман і траєкторія незмінні)', () => {
+  const MAXR = 162; // (RADAR_RANGE + 0.5) * GCELL = 4.5 * 36
+
+  it('makeGeoPulseAnim: тривалість RADAR_PULSE_MS, start null', () => {
+    const a = makeGeoPulseAnim(18, 18, MAXR);
+    expect(a.kind).toBe('gpulse');
+    expect(a.dur).toBe(RADAR_PULSE_MS);
+    expect(a.start).toBeNull();
+  });
+
+  it('кільце росте від бази до maxR і гасне; alpha відновлюється до 1', () => {
+    const a = makeGeoPulseAnim(18, 18, MAXR);
+    a.start = 1000;
+    const mid = animCtx();
+    drawAnimFrame(mid.ctx, a, 1000 + RADAR_PULSE_MS / 2, 36, 0);
+    const midArc = mid.calls.find((c) => c.m === 'arc');
+    expect(midArc).toBeDefined();
+    const midR = (midArc!.args as number[])[2];
+    expect(midR).toBeGreaterThan(2);
+    expect(midR).toBeLessThan(MAXR);
+    const end = animCtx();
+    drawAnimFrame(end.ctx, a, 1000 + RADAR_PULSE_MS, 36, 0);
+    const endR = (end.calls.find((c) => c.m === 'arc')!.args as number[])[2];
+    expect(endR).toBeCloseTo(MAXR);
+    for (const s of [mid, end]) {
+      const alphas = s.sets.filter((p) => p.p === 'globalAlpha').map((p) => p.v);
+      expect(alphas[alphas.length - 1]).toBe(1); // alpha завжди відновлюється
+    }
+    const midAlpha = mid.sets.find((p) => p.p === 'globalAlpha')!.v as number;
+    const endAlpha = end.sets.find((p) => p.p === 'globalAlpha')!.v as number;
+    expect(midAlpha).toBeGreaterThan(0);
+    expect(midAlpha).toBeLessThan(0.6);
+    expect(endAlpha).toBe(0); // останній кадр — кільце повністю погасло
+    // кільце гасне: альфа серединного кадру нижча за початкову
+    const a0 = animCtx();
+    drawAnimFrame(a0.ctx, a, 1000, 36, 0);
+    const alpha0 = a0.sets.find((p) => p.p === 'globalAlpha')!.v as number;
+    const alphaMid = mid.sets.find((p) => p.p === 'globalAlpha')!.v as number;
+    expect(alphaMid).toBeLessThan(alpha0);
+  });
+
+  it('пульс не анімує НЛО: лише кільце — без спрайтів, заливок і тексту (туман, критерій П6.9)', () => {
+    const a = makeGeoPulseAnim(18, 18, MAXR);
+    a.start = 1000;
+    const s = animCtx();
+    drawAnimFrame(s.ctx, a, 1150, 36, 0);
+    expect(s.calls.some((c) => c.m === 'arc')).toBe(true);
+    expect(s.calls.some((c) => c.m === 'fillText' || c.m === 'ellipse' || c.m === 'fillRect' || c.m === 'fill')).toBe(false);
+  });
+
+  it('детермінізм (ADR-0003): той самий вхід → той самий потік викликів і присвоєнь', () => {
+    const mk = (): ReturnType<typeof makeGeoPulseAnim> => {
+      const a = makeGeoPulseAnim(18, 18, MAXR);
+      a.start = 1000;
+      return a;
+    };
+    const s1 = animCtx();
+    drawAnimFrame(s1.ctx, mk(), 1150, 36, 0);
+    const s2 = animCtx();
+    drawAnimFrame(s2.ctx, mk(), 1150, 36, 0);
+    expect(s1.calls).toEqual(s2.calls);
+    expect(s1.sets).toEqual(s2.sets);
   });
 });
