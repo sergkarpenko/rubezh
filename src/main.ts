@@ -32,6 +32,10 @@
 // місії, заморожений час, чий хід, активний юніт HP/AP), панель керування
 // під бойовищем, колонка стану в бою приглушена й неактивна (клас dimmed);
 // збереження лише на геосцені (ADR-0026).
+// Фаза 6a (П6.4, ADR-0027): керування — гарячі клавіші 1/2/3/O/E/Esc
+// (ігноруються у полях вводу; Esc — спершу режим пострілу, потім вибір)
+// і тач-патерн руху «тап — прев'ю шляху, повторний тап у ту саму
+// клітинку — хід»; той самий патерн для мишки (click). Ядро без змін.
 
 import {
   RADAR_RANGE,
@@ -93,6 +97,7 @@ let selectedId: string | null = null; // вибраний солдат
 let fireMode: ShotMode | null = null; // «зведений» режим пострілу
 let hoverPath: Vec2[] | null = null; // прев'ю шляху під курсором
 let hoverAp = 0;
+let tapCell: Vec2 | null = null; // ADR-0027 (П6.4): клітинка першого тапу — повторний тап у неї робить хід
 
 // Прийняти партію у UI-шар: історію журналу не відтворюємо (лише нові події
 // після точки входу), трекінг НЛО перебудовуємо з логу (ADR-0006), банкрутство
@@ -656,6 +661,7 @@ function closeBattle(): void {
   selectedId = null;
   fireMode = null;
   hoverPath = null;
+  tapCell = null;
   seenBattleLog = 0;
   el('bresult').innerHTML = '';
   renderAll();
@@ -673,9 +679,10 @@ function launchMission(ufoId: string): void {
   selectedId = null;
   fireMode = null;
   hoverPath = null;
+  tapCell = null;
   seenBattleLog = 0;
   journal('▶ Місія: загін висаджено біля НЛО ' + ufoId, '', 'battle');
-  binfo('Ваш хід: клікніть свого солдата (синє коло), потім клітинку — рух.');
+  binfo('Ваш хід: клікніть свого солдата (синє коло), потім клітинку — прев’ю шляху; повторний клік у ту саму клітинку — хід.');
   renderAll();
 }
 
@@ -720,6 +727,7 @@ function battleCanvasClick(ev: MouseEvent): void {
     selectedId = u.id;
     fireMode = null;
     hoverPath = null;
+    tapCell = null;
     binfo(u.name + ': HP ' + u.hp + '/' + u.maxHp + ' · AP ' + u.ap + '/' + u.maxAp + '. Клікніть клітинку — рух, або кнопку пострілу.');
     renderAll();
     return;
@@ -756,21 +764,41 @@ function battleCanvasClick(ev: MouseEvent): void {
     return;
   }
 
-  // порожня клітинка — рух (клік скасовує зведений режим)
+  // порожня клітинка — тач-патерн (ADR-0027, П6.4): перший тап/клік — прев'ю
+  // шляху (зелені крапки, AP вистачає; червоні — ні), повторний тап/клік у ту
+  // саму клітинку — хід. Один патерн для тачу і мишки.
   fireMode = null;
   try {
     const path = findPath(st, sel.pos, cell);
     if (path === null) {
+      tapCell = null;
       binfo('Туди не дістатись.');
       renderAll();
       return;
     }
-    if (pathApCost(path) > sel.ap) {
-      binfo('Не вистачає AP: шлях ' + pathApCost(path) + ' проти ' + sel.ap + '.');
-      renderAll();
+    const ap = pathApCost(path);
+    hoverPath = path;
+    hoverAp = ap;
+    if (tapCell === null || tapCell.x !== cell.x || tapCell.y !== cell.y) {
+      // перший тап — лише прев'ю (Esc скасовує)
+      tapCell = cell;
+      binfo(
+        ap > sel.ap
+          ? 'Не вистачає AP: шлях ' + ap + ' проти ' + sel.ap + ' — ходу не буде.'
+          : 'Шлях: ' + ap + ' AP — повторний тап у ту саму клітинку — хід.'
+      );
+      renderBattle();
+      return;
+    }
+    // повторний тап у ту саму клітинку — хід
+    tapCell = null;
+    if (ap > sel.ap) {
+      binfo('Не вистачає AP: шлях ' + ap + ' проти ' + sel.ap + '.');
+      renderBattle();
       return;
     }
     moveUnit(st, sel.id, path);
+    hoverPath = null;
     if (!checkOutcome()) {
       binfo(sel.name + ': рух. AP ' + sel.ap + '/' + sel.maxAp + '.');
       renderAll();
@@ -845,6 +873,7 @@ function endPlayerTurn(): void {
   if (!playerTurnActive() || !mission) return;
   hoverPath = null;
   fireMode = null;
+  tapCell = null;
   try {
     endTurn(mission.state); // передати хід прибульцям (aliensTurn очікує їхній хід)
     const actions = aliensTurn(mission.state); // синхронно, одним кліком (5.1.4)
@@ -916,6 +945,44 @@ export function samePath(a: Vec2[] | null, b: Vec2[] | null): boolean {
   return a.length === b.length && a.every((p, i) => p.x === b[i].x && p.y === b[i].y);
 }
 
+// ADR-0027 (П6.4): Esc — скасовує спершу зведений режим пострілу,
+// за його відсутності — вибір солдата (разом із прев'ю шляху).
+function cancelSelection(): void {
+  if (!mission) return;
+  if (fireMode !== null) {
+    fireMode = null;
+    tapCell = null;
+    binfo('Режим пострілу скасовано.');
+    renderBattle();
+    return;
+  }
+  if (selectedId !== null || hoverPath !== null) {
+    selectedId = null;
+    hoverPath = null;
+    tapCell = null;
+    binfo('Вибір знято.');
+    renderBattle();
+  }
+}
+
+// ADR-0027 (П6.4): гарячі клавіші керування боєм — 1/2/3 (режими пострілу),
+// O (заступа), E (кінець ходу), Esc (скасувати). Ключ — за ev.code
+// (фізична клавіша, незалежно від розкладки), цифри — ще й за ev.key.
+// Поля вводу (сід) клавіші не перехоплюють — подія з них ігнорується.
+function isTypingTarget(t: EventTarget | null): boolean {
+  return t instanceof HTMLElement && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
+}
+
+function onKeyDown(ev: KeyboardEvent): void {
+  if (isTypingTarget(ev.target)) return;
+  if (ev.code === 'Digit1' || ev.key === '1') armFire('snap');
+  else if (ev.code === 'Digit2' || ev.key === '2') armFire('aimed');
+  else if (ev.code === 'Digit3' || ev.key === '3') armFire('auto');
+  else if (ev.code === 'KeyO') armOverwatch();
+  else if (ev.code === 'KeyE') endPlayerTurn();
+  else if (ev.key === 'Escape') cancelSelection();
+}
+
 // П7: у node-середовищі (vitest) DOM відсутній — ініціалізацію керування
 // пропускаємо; чисті функції вище імпортуються тестами напряму.
 if (typeof document !== 'undefined') {
@@ -956,6 +1023,8 @@ if (typeof document !== 'undefined') {
   bc.addEventListener('click', battleCanvasClick);
   bc.addEventListener('mousemove', battleCanvasHover);
   bc.addEventListener('mouseleave', battleCanvasLeave);
+  // ADR-0027 (П6.4): гарячі клавіші — на document (бій у фокусі канви не потрібен)
+  document.addEventListener('keydown', onKeyDown);
   detectStorage();
   renderAll();
   journal('Партію розпочато. Рухайте час — радар шукає НЛО.');
