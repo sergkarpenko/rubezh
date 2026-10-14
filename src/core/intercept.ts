@@ -17,7 +17,7 @@
 // симуляціями — П7.6, тут початкові MVP-значення.
 
 import { mulberry32, type RNG, type StatefulRng, type Vec2 } from './combat';
-import { spend, type EconomyState } from './economy';
+import { creditShotDownBonus, spend, type EconomyState } from './economy';
 import { WORLD_W, chebyshevWrap, type GeoEvent, type GeoState } from './geo';
 
 export const FIGHTER_MAX_HP = 4; // MVP: один винищувач, без озброєння/досліджень
@@ -239,6 +239,8 @@ export function interceptRound(state: InterceptState, geo: GeoState, choice: Int
     geoLog(state, geo, { type: 'ufo_shot_down', ufoId: ufo.id, pos: { ...ufo.pos }, minute: geo.minute });
     markShotDown(geo, ufo.id);
     returnToBase(state, geo);
+    // П7.6: премія за збиття у повітрі — одразу після бою (економічна крива П7.6, ADR-0021).
+    if (econ) creditShotDownBonus(econ, ufo.kind);
     return;
   }
   if (f.hp === 0) {

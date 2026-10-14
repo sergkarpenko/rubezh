@@ -340,6 +340,9 @@ export function economyEventText(e: EconomyEvent): { text: string; cls: string }
       return { text: 'Дотація за добу ' + e.day + ': +' + e.amount, cls: '' };
     case 'mission_bonus':
       return { text: 'Премія за місію (' + e.kind + '): +' + e.amount, cls: 'win' };
+    // П7.6: премія за збиття НЛО у повітрі перехопленням (SHOT_DOWN_BONUS, ADR-0032).
+    case 'shot_down_bonus':
+      return { text: 'Збиття у повітрі (' + e.kind + '): +' + e.amount, cls: 'win' };
     case 'spend':
       return { text: 'Витрати: −' + e.amount, cls: 'lose' };
   }
