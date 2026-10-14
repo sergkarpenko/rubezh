@@ -52,6 +52,17 @@ import { ALIEN_SPAWN, SQUAD_SPAWN, completeMission, createMission, missionOutcom
 import { applyMissionResult, hireSoldier, hospitalTick, isBankrupt, missionSquad, readySoldiers } from './core/squad';
 import { creditMissionBonus, economyTick, HIRE_PRICE, type EconomyEvent } from './core/economy';
 import {
+  FIGHTER_MAX_HP,
+  FIGHTER_REPAIR_COST,
+  RANGE_PROFILES,
+  interceptRound,
+  interceptTick,
+  repairTick,
+  startIntercept,
+  startRepair,
+  type InterceptChoice,
+} from './core/intercept';
+import {
   OVERWATCH_AP_COST,
   calculateHitChance,
   distance,
@@ -263,6 +274,28 @@ export function geoEventText(e: GeoEvent, knownDetected: ReadonlySet<string>): {
       return { text: 'Місію зачищено ✓', cls: 'win' };
     case 'mission_lost':
       return { text: 'Загін втрачено ✗', cls: 'lose' };
+    case 'intercept_start':
+      return { text: '✦ Перехоплення: винищувач піднявся на НЛО ' + e.ufoId, cls: '' };
+    case 'intercept_engage':
+      return { text: '✦ Винищувач зблизився з НЛО ' + e.ufoId + ' — повітряний бій', cls: '' };
+    case 'intercept_break_off':
+      return { text: '✦ Розрив контакту — винищувач повернувся на базу', cls: '' };
+    case 'intercept_aborted':
+      return {
+        text:
+          e.reason === 'fighter_damaged'
+            ? '✦ Винищувач пошкоджений — вимушене переривання бою'
+            : '✦ НЛО ' + e.ufoId + ' зник з трекінгу — перехоплення перервано',
+        cls: e.reason === 'fighter_damaged' ? 'lose' : '',
+      };
+    case 'ufo_shot_down':
+      return { text: '✦ НЛО ' + e.ufoId + ' збитий! На місці падіння — місія', cls: 'win' };
+    case 'fighter_returned':
+      return { text: '✦ Винищувач повернувся на базу', cls: '' };
+    case 'fighter_repair_start':
+      return { text: '✦ Ремонт винищувача оплачено (−' + FIGHTER_REPAIR_COST + ')', cls: 'lose' };
+    case 'fighter_repair_done':
+      return { text: '✦ Ремонт винищувача завершено — знову боєготовий', cls: 'win' };
     default:
       return null; // ufo_spawned / ufo_move — приховано туманом
   }
@@ -304,6 +337,9 @@ function partyTick(): void {
   advanceTime(party.geo, 1);
   economyTick(party.econ, party.geo);
   hospitalTick(party.roster);
+  // П7.4 (ADR-0032): погоня й ремонт живуть тіками геосцени разом з партією
+  interceptTick(party.intercept, party.geo);
+  repairTick(party.intercept, party.geo);
   // П6.9 (ADR-0029): пульс радара на тік часу — серія тіків (доба) дає один
   // пульс (coalesce за busy), idle → 0 перерисовок. Лише візуальний ефект.
   if (hasRaf && !geoAnim.busy) {
@@ -383,6 +419,26 @@ function renderUfos(): void {
     const info = u.status === 'приземлився' ? 'вікно ' + (u.landedTicksLeft * TICK_MINUTES) / 60 + ' год' : 'у повітрі';
     div.innerHTML =
       '<b>' + u.kind + '</b> · ' + u.status + '<br><span class="meta">(' + u.pos.x + ',' + u.pos.y + ') · ' + info + '</span>';
+    // П7.4 (ADR-0032): «Перехопити» — лише для виявленого НЛО в повітрі; під час ремонту
+    // або погоні запуск заблокований (пошкоджений винищувач не стартує)
+    if (u.status === 'летить' && party.intercept.fighter.status === 'на базі') {
+      const ib = document.createElement('button');
+      ib.className = 'intercept';
+      ib.textContent = '✦ Перехопити';
+      const readyFighter = party.intercept.fighter.hp === FIGHTER_MAX_HP;
+      ib.disabled = mission !== null || gameOver || !readyFighter;
+      ib.title = !readyFighter ? 'Винищувач пошкоджений — спочатку ремонт' : 'Підняти винищувач на перехоплення';
+      ib.onclick = () => {
+        if (mission) return;
+        try {
+          startIntercept(party.intercept, party.geo, u.id);
+        } catch (e) {
+          journal('✗ ' + (e as Error).message, 'lose');
+        }
+        renderAll();
+      };
+      div.appendChild(ib);
+    }
     if (targets.has(u.id)) {
       const btn = document.createElement('button');
       btn.className = 'mission';
@@ -418,6 +474,83 @@ function renderFinances(): void {
   const hire = el<HTMLButtonElement>('btn-hire');
   hire.disabled = gameOver || party.econ.money < HIRE_PRICE;
   hire.title = hire.disabled ? 'Недостатньо грошей (ціна найму ' + HIRE_PRICE + ')' : 'Новий солдат у кінець ростеру (−' + HIRE_PRICE + ')';
+}
+
+// П7.4 (ADR-0032): панель винищувача — статус/HP у колонці стану; кнопки дій залежно
+// від стану: «Перехопити» (боєготовий + виявлений НЛО в повітрі), «Ремонт (50)»
+// (пошкоджений на базі), дистанції бою (стан «бій» — рішення гравця кожен раунд).
+function renderFighter(): void {
+  const box = el('fighter');
+  box.innerHTML = '';
+  const f = party.intercept.fighter;
+  const statusText =
+    f.status === 'ремонт'
+      ? 'ремонт: ' + f.repairTicksLeft + ' тік(и)'
+      : f.status === 'на базі'
+        ? f.hp < FIGHTER_MAX_HP
+          ? 'на базі · пошкоджений'
+          : 'боєготовий'
+        : f.status;
+  const head = document.createElement('div');
+  head.className = 'meta';
+  head.style.marginBottom = '4px';
+  head.innerHTML =
+    'Статус: <b>' +
+    statusText +
+    '</b> · HP <span style="color:' +
+    hpColor(f.hp, FIGHTER_MAX_HP) +
+    '">' +
+    f.hp +
+    '/' +
+    FIGHTER_MAX_HP +
+    '</span>';
+  box.appendChild(head);
+  if (f.status === 'бій') {
+    const ufo = party.geo.ufos.find((u) => u.id === party.intercept.activeUfoId);
+    const ctx = document.createElement('div');
+    ctx.className = 'meta';
+    ctx.style.marginBottom = '4px';
+    ctx.textContent =
+      'Бій з ' + (ufo ? ufo.id : '?') + ' · раунд ' + party.intercept.round + ' · НЛО HP ' + (ufo ? party.intercept.ufoHp[ufo.id] : '?');
+    box.appendChild(ctx);
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap;margin-bottom:4px';
+    for (const c of ['далека', 'середня', 'впритул', 'відступ'] as const) {
+      const b = document.createElement('button');
+      b.className = 'intercept-range';
+      b.dataset.choice = c;
+      b.textContent = c + (c !== 'відступ' ? ' (~' + Math.round(RANGE_PROFILES[c].fighterHitChance * 100) + '%)' : '');
+      b.disabled = mission !== null;
+      b.onclick = () => {
+        try {
+          interceptRound(party.intercept, party.geo, c as InterceptChoice, party.econ);
+        } catch (e) {
+          journal('✗ ' + (e as Error).message, 'lose');
+        }
+        renderAll();
+      };
+      row.appendChild(b);
+    }
+    box.appendChild(row);
+  }
+  if (f.status === 'на базі' && f.hp < FIGHTER_MAX_HP) {
+    const b = document.createElement('button');
+    b.id = 'btn-repair';
+    b.textContent = 'Ремонт (' + FIGHTER_REPAIR_COST + ')';
+    b.disabled = gameOver || party.econ.money < FIGHTER_REPAIR_COST;
+    b.title = b.disabled
+      ? 'Недостатньо грошей (ціна ремонту ' + FIGHTER_REPAIR_COST + ')'
+      : 'Повний HP після ремонту (−' + FIGHTER_REPAIR_COST + ')';
+    b.onclick = () => {
+      try {
+        startRepair(party.intercept, party.geo, party.econ);
+      } catch (e) {
+        journal('✗ ' + (e as Error).message, 'lose', 'econ');
+      }
+      renderAll();
+    };
+    box.appendChild(b);
+  }
 }
 
 function renderRoster(): void {
@@ -765,6 +898,7 @@ function renderAll(): void {
   el('status').classList.toggle('dimmed', mission !== null);
   renderGeo();
   renderUfos();
+  renderFighter();
   renderFinances();
   renderRoster();
   renderSavePanel();

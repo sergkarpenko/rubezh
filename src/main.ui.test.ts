@@ -640,3 +640,75 @@ describe('П6.14: UX прицілювання — обведення цілей,
     expect(btn('btn-aimed').classList.contains('armed')).toBe(false);
   });
 });
+
+// П7.4 (ADR-0021/0032): критичний флоу економіки винищувача — «запуск → бій →
+// пошкодження → ремонт → знову готовий». Ремонт — гроші + тіки (патерн лікарні);
+// під час ремонту запуск перехоплення заблокований; банкрутство не змінюється.
+describe('П7.4: винищувач — запуск → бій → пошкодження → ремонт → знову готовий', () => {
+  const fighterText = (): string => $('fighter').textContent ?? '';
+  const interceptBtn = (): HTMLButtonElement | null => {
+    for (const b of document.querySelectorAll<HTMLButtonElement>('button.intercept')) {
+      if (!b.disabled) return b;
+    }
+    return null;
+  };
+
+  it('критичний флоу: перехоплення → бій → пошкодження → ремонт (−50) → знову боєготовий', () => {
+    ($('seed') as HTMLInputElement).value = '42';
+    btn('btn-new').click();
+    expect(fighterText()).toContain('боєготовий');
+    expect(fighterText()).toContain('HP 4/4');
+    // спроби перехоплення: НЛО може сісти/зникнути під час погоні (EARS, ADR-0032) —
+    // тоді винищувач на базі й чекаємо нову ціль; раунди бою розв'язують бій до результату
+    let battleMoney = -1;
+    let rounds = 0;
+    let guard = 0;
+    while (guard++ < 6000) {
+      if (fighterText().includes('Бій з')) {
+        if (battleMoney < 0) battleMoney = Number($('money').textContent);
+        const choice = document.querySelector<HTMLButtonElement>('button.intercept-range[data-choice="впритул"]');
+        if (!choice) break; // бій завершився попереднім кліком
+        choice.click();
+        rounds++;
+        continue;
+      }
+      if (fighterText().includes('ремонт') || fighterText().includes('пошкоджений') || $('log').textContent.includes('збитий')) break;
+      if (fighterText().includes('на базі') || fighterText().includes('боєготовий')) {
+        const b = interceptBtn();
+        if (b) {
+          b.click();
+          continue;
+        }
+      }
+      btn('btn-tick').click();
+    }
+    expect(rounds).toBeGreaterThan(0);
+    // результат: збиття (боєготовий) або пошкодження → платний ремонт (−50)
+    if (fighterText().includes('ремонт') || fighterText().includes('пошкоджений')) {
+      // пошкоджений винищувач: авто-ремонт (HP 0) або кнопка «Ремонт (50)» (HP 1..3)
+      const repairBtn = document.getElementById('btn-repair') as HTMLButtonElement | null;
+      if (repairBtn && !repairBtn.disabled) repairBtn.click();
+      expect(battleMoney).toBeGreaterThan(0);
+      expect(fighterText()).toMatch(/ремонт: \d+ тік/);
+      // критерій: ремонт оплачено — запис у журналі про списання
+      expect($('log').textContent).toContain('оплачено');
+      // під час ремонту нове перехоплення недоступне; тікаємо ремонт до кінця
+      let ready = false;
+      for (let i = 0; i < 40 && !ready; i++) {
+        btn('btn-tick').click();
+        ready = fighterText().includes('боєготовий');
+      }
+      expect(ready).toBe(true);
+      expect(fighterText()).toContain('HP 4/4');
+      expect($('log').textContent).toContain('Ремонт винищувача завершено');
+    } else {
+      expect(fighterText()).toContain('боєготовий');
+      expect($('log').textContent).toContain('збитий');
+    }
+  });
+
+  it('кнопка «Ремонт (50)» з’являється лише для пошкодженого винищувача', () => {
+    btn('btn-new').click(); // чиста партія — здоровий винищувач
+    expect(document.getElementById('btn-repair')).toBeNull(); // здоровий — кнопки немає
+  });
+});

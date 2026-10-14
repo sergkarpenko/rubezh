@@ -3,9 +3,11 @@
 // Логіка всіх сценаріїв попередньо перевірена вручну; покриття intercept.ts ≥ 80% (ADR-0017).
 
 import { describe, expect, it } from 'vitest';
+import { createEconomy } from './economy';
 import { advanceTime, createGeoGame, type GeoState, type Ufo } from './geo';
 import {
   FIGHTER_MAX_HP,
+  FIGHTER_REPAIR_COST,
   FIGHTER_REPAIR_TICKS,
   RANGE_PROFILES,
   UFO_INTERCEPT_HP,
@@ -183,7 +185,7 @@ describe('intercept: раундовий бій', () => {
     ic.ufoHp['u1'] = 999; // ізолюємо: НЛО не буде збитий раніше за пошкодження
     let guard = 0;
     while (ic.fighter.status !== 'ремонт' && guard++ < 2000) {
-      interceptRound(ic, geo, 'впритул');
+      interceptRound(ic, geo, 'впритул', createEconomy()); // П7.4: авто-ремонт за гроші
     }
     const aborted = ic.log.find((e) => e.type === 'intercept_aborted');
     expect(aborted && aborted.reason).toBe('fighter_damaged');
@@ -201,6 +203,7 @@ describe('intercept: раундовий бій', () => {
 describe('intercept: ремонт', () => {
   it('ремонт: FIGHTER_REPAIR_TICKS тіків — знову боєготовий', () => {
     const ic = createIntercept(3);
+    const econ = createEconomy();
     const geo = geoWith(mkUfo({ id: 'u1', pos: { x: 8, y: 4 }, target: { x: 15, y: 7 }, detected: true }));
     startIntercept(ic, geo, 'u1');
     ic.fighter.pos = { ...geo.ufos[0].pos };
@@ -208,7 +211,7 @@ describe('intercept: ремонт', () => {
     ic.ufoHp['u1'] = 999;
     let guard = 0;
     while (ic.fighter.status !== 'ремонт' && guard++ < 2000) {
-      interceptRound(ic, geo, 'впритул');
+      interceptRound(ic, geo, 'впритул', econ);
     }
     expect(ic.fighter.status).toBe('ремонт');
     let ticks = 0;
@@ -229,7 +232,7 @@ describe('intercept: ремонт', () => {
   it('startRepair на здоровому винищувачі — помилка', () => {
     const ic = createIntercept();
     const geo = createGeoGame({ seed: 1 });
-    expect(() => startRepair(ic, geo)).toThrow('не потребує');
+    expect(() => startRepair(ic, geo, createEconomy())).toThrow('не потребує');
   });
 
   it('startRepair не на базі (у погоні) — помилка', () => {
@@ -237,7 +240,7 @@ describe('intercept: ремонт', () => {
     const geo = geoWith(mkUfo({ id: 'u1', pos: { x: 8, y: 4 }, target: { x: 15, y: 7 }, detected: true }));
     startIntercept(ic, geo, 'u1');
     ic.fighter.hp = 1;
-    expect(() => startRepair(ic, geo)).toThrow('на базі');
+    expect(() => startRepair(ic, geo, createEconomy())).toThrow('на базі');
   });
 
   it('НЛО зник під час бою — переривання, винищувач на базі', () => {
@@ -252,6 +255,84 @@ describe('intercept: ремонт', () => {
     const aborted = ic.log.find((e) => e.type === 'intercept_aborted');
     expect(aborted && aborted.reason).toBe('ufo_lost');
     expect(ic.fighter.status).toBe('на базі');
+  });
+});
+
+// П7.4 (ADR-0021/0032): ремонт — гроші + тіки геосцени (патерн лікарні);
+// правило банкрутства не змінюється — неспроможність перехоплення не прогараш.
+describe('intercept: ремонт — економіка (П7.4)', () => {
+  function damagedFighter(): { ic: InterceptState; geo: GeoState } {
+    const ic = createIntercept(3);
+    const geo = geoWith(mkUfo({ id: 'u1', pos: { x: 8, y: 4 }, target: { x: 15, y: 7 }, detected: true }));
+    startIntercept(ic, geo, 'u1');
+    ic.fighter.pos = { ...geo.ufos[0].pos };
+    interceptTick(ic, geo);
+    ic.ufoHp['u1'] = 999;
+    return { ic, geo };
+  }
+
+  it('пошкодження до нуля з грошима — ремонт стартує автоматично, гроші списано', () => {
+    const { ic, geo } = damagedFighter();
+    const econ = createEconomy();
+    const moneyBefore = econ.money;
+    let guard = 0;
+    while (ic.fighter.status !== 'ремонт' && ic.fighter.status !== 'на базі' && guard++ < 2000) {
+      interceptRound(ic, geo, 'впритул', econ);
+    }
+    expect(ic.fighter.hp).toBe(0);
+    expect(ic.fighter.status).toBe('ремонт');
+    expect(econ.money).toBe(moneyBefore - FIGHTER_REPAIR_COST);
+    expect(econ.log.some((e) => e.type === 'spend' && e.amount === FIGHTER_REPAIR_COST)).toBe(true);
+    expect(ic.log.some((e) => e.type === 'fighter_repair_start')).toBe(true);
+  });
+
+  it('без грошей — винищувач чекає пошкоджений на базі; ремонт можна оплатити пізніше', () => {
+    const { ic, geo } = damagedFighter();
+    const econ = createEconomy();
+    econ.money = 0; // немає грошей — авточин не спрацює
+    let guard = 0;
+    while (ic.fighter.status !== 'на базі' && guard++ < 2000) {
+      interceptRound(ic, geo, 'впритул', econ);
+    }
+    expect(ic.fighter.hp).toBe(0);
+    expect(ic.fighter.status).toBe('на базі');
+    expect(ic.fighter.repairTicksLeft).toBeUndefined();
+    expect(() => startRepair(ic, geo, econ)).toThrow('грошей');
+    econ.money = FIGHTER_REPAIR_COST; // з'явилися гроші — ремонт оплачується
+    startRepair(ic, geo, econ);
+    expect(ic.fighter.status).toBe('ремонт');
+    expect(econ.money).toBe(0);
+  });
+
+  it('під час ремонту запуск перехоплення заблокований; після FIGHTER_REPAIR_TICKS — знову боєготовий', () => {
+    const { ic, geo } = damagedFighter();
+    const econ = createEconomy();
+    let guard = 0;
+    while (ic.fighter.status !== 'ремонт' && ic.fighter.status !== 'на базі' && guard++ < 2000) {
+      interceptRound(ic, geo, 'впритул', econ);
+    }
+    geo.ufos.push(mkUfo({ id: 'u2', pos: { x: 3, y: 3 }, target: { x: 10, y: 3 }, detected: true }));
+    expect(ic.fighter.status).toBe('ремонт');
+    expect(() => startIntercept(ic, geo, 'u2')).toThrow(); // критерій 1: запуск заблокований
+    let ticks = 0;
+    while (ic.fighter.status === 'ремонт') {
+      advanceTime(geo, 1);
+      repairTick(ic, geo);
+      ticks++;
+    }
+    expect(ticks).toBe(FIGHTER_REPAIR_TICKS);
+    expect(ic.fighter.hp).toBe(FIGHTER_MAX_HP);
+    expect(ic.log.some((e) => e.type === 'fighter_repair_done')).toBe(true);
+    // за тіки ремонту геосцена могла посадити/скинути u2 — свіжий виявлений НЛО в повітрі
+    geo.ufos = geo.ufos.filter((u) => u.id !== 'u2');
+    geo.ufos.push(mkUfo({ id: 'u3', pos: { x: 3, y: 3 }, target: { x: 10, y: 3 }, detected: true }));
+    startIntercept(ic, geo, 'u3'); // знову готовий
+    expect(ic.fighter.status).toBe('погоня');
+  });
+
+  it('стартові гроші партії покривають ремонт: 300 > 50', () => {
+    const econ = createEconomy();
+    expect(econ.money).toBeGreaterThan(FIGHTER_REPAIR_COST); // банкрутство не спрацює від одного ремонту
   });
 });
 

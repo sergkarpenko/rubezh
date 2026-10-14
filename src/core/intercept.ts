@@ -17,6 +17,7 @@
 // симуляціями — П7.6, тут початкові MVP-значення.
 
 import { mulberry32, type RNG, type StatefulRng, type Vec2 } from './combat';
+import { spend, type EconomyState } from './economy';
 import { WORLD_W, chebyshevWrap, type GeoEvent, type GeoState } from './geo';
 
 export const FIGHTER_MAX_HP = 4; // MVP: один винищувач, без озброєння/досліджень
@@ -73,6 +74,7 @@ export type InterceptEvent =
   | { type: 'intercept_aborted'; ufoId: string; reason: 'ufo_lost' | 'ufo_landed' | 'fighter_damaged'; pos: Vec2; minute: number }
   | { type: 'ufo_shot_down'; ufoId: string; pos: Vec2; minute: number }
   | { type: 'fighter_returned'; pos: Vec2; minute: number }
+  | { type: 'fighter_repair_start'; minute: number }
   | { type: 'fighter_repair_done'; minute: number };
 
 export interface InterceptState {
@@ -89,9 +91,10 @@ export interface InterceptOptions {
   rng?: RNG;
 }
 
-export function createIntercept(seed: number = 4242): InterceptState {
+export function createIntercept(seedOrOpts: number | { seed?: number; rng?: RNG } = 4242): InterceptState {
+  const opts = typeof seedOrOpts === 'number' ? { seed: seedOrOpts } : seedOrOpts;
   return {
-    rng: mulberry32(seed),
+    rng: opts.rng ?? mulberry32(opts.seed ?? 4242),
     fighter: { hp: FIGHTER_MAX_HP, pos: { x: 0, y: 0 }, status: 'на базі', targetId: null },
     ufoHp: {},
     activeUfoId: null,
@@ -188,7 +191,7 @@ export function interceptTick(state: InterceptState, geo: GeoState): void {
 
 // Раунд бою — рішення гравця (дистанція або відступ); тіки геосцени не споживає.
 // Відступ: розрив контакту, винищувач повертається на базу (НЛО продовжує цикл).
-export function interceptRound(state: InterceptState, geo: GeoState, choice: InterceptChoice): void {
+export function interceptRound(state: InterceptState, geo: GeoState, choice: InterceptChoice, econ?: EconomyState): void {
   const f = state.fighter;
   if (f.status !== 'бій') {
     throw new Error('Активний бій відсутній: раунд неможливий');
@@ -241,7 +244,12 @@ export function interceptRound(state: InterceptState, geo: GeoState, choice: Int
   if (f.hp === 0) {
     geoLog(state, geo, { type: 'intercept_aborted', ufoId: ufo.id, reason: 'fighter_damaged', pos: { ...f.pos }, minute: geo.minute });
     returnToBase(state, geo);
-    startRepair(state, geo);
+    // П7.4: ремонт платний; за наявності грошей стартує автоматично (досвід X-COM),
+    // без грошей — винищувач чекає пошкоджений, ремонт можна оплатити пізніше.
+    // Неспроможність перехоплення — не прогараш (ADR-0021).
+    if (econ && econ.money >= FIGHTER_REPAIR_COST) {
+      startRepair(state, geo, econ);
+    }
   }
 }
 
@@ -257,16 +265,18 @@ function returnToBase(state: InterceptState, geo: GeoState): void {
 
 // Ремонт (гроші — П7.4, тут тіки): пошкоджений винищувач йде в ремонт і не може
 // стартувати нове перехоплення до завершення (EARS, ADR-0032).
-export function startRepair(state: InterceptState, geo: GeoState): void {
+export function startRepair(state: InterceptState, geo: GeoState, econ: EconomyState): void {
   if (state.fighter.status !== 'на базі') {
     throw new Error('Ремонт можливий лише на базі');
   }
   if (state.fighter.hp >= FIGHTER_MAX_HP) {
     throw new Error('Винищувач не потребує ремонту');
   }
+  spend(econ, FIGHTER_REPAIR_COST); // П7.4: гроші + тіки, патерн лікарні (ADR-0021)
   state.fighter.status = 'ремонт';
   state.fighter.pos = { ...geo.base };
   state.fighter.repairTicksLeft = FIGHTER_REPAIR_TICKS;
+  geoLog(state, geo, { type: 'fighter_repair_start', minute: geo.minute });
 }
 
 export function repairTick(state: InterceptState, geo: GeoState): void {
