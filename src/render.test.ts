@@ -296,23 +296,25 @@ describe('читабельність стану (ADR-0007)', () => {
     expect(notSel.calls.some((c) => c.m === 'moveTo' || c.m === 'lineTo')).toBe(false);
   });
 
-  it('маркер заступи — піксельна «блискавка» 8×8 золотом: солдат згори, прибульчик знизу (доробка П6.12)', () => {
+  it('маркер заступи — «блискавка» з кантом у кутку клітинки 10×10: солдат згори ліворуч, прибульчик знизу праворуч (П6.12b)', () => {
     const rf = rasterFactory();
     initPixelSprites(rf.make);
     const s = mockCtx();
     drawSoldierSprite(s.ctx, soldier({ overwatch: true }));
-    const owS = s.calls.find((c) => c.m === 'drawImage' && (c.args as number[])[3] === 8);
+    const owS = s.calls.find((c) => c.m === 'drawImage' && (c.args as number[])[3] === 10);
     expect(owS).toBeDefined();
-    expect((owS!.args as number[])[1]).toBe(CX - 4); // центр по x
-    expect((owS!.args as number[])[2]).toBe(CY - R - 5); // згори, в межах клітинки
+    expect((owS!.args as number[])[1]).toBe(CX - 13); // верхній лівий кут клітинки
+    expect((owS!.args as number[])[2]).toBe(CY - 13);
     const bolt = rf.canvases[1]; // перша матриця після силуета — блискавка
-    expect(bolt.pixels.every((p) => p.color === '#d8b25a')).toBe(true); // золото заступи
+    expect(bolt.pixels.some((p) => p.color === '#d8b25a')).toBe(true); // золото знака
+    expect(bolt.pixels.some((p) => p.color === '#0b0e15')).toBe(true); // темний кант
 
     const a = mockCtx();
     drawAlienSprite(a.ctx, alien({ overwatch: true }));
-    const owA = a.calls.find((c) => c.m === 'drawImage' && (c.args as number[])[3] === 8);
+    const owA = a.calls.find((c) => c.m === 'drawImage' && (c.args as number[])[3] === 10);
     expect(owA).toBeDefined();
-    expect((owA!.args as number[])[2]).toBe(CY + R - 4); // знизу
+    expect((owA!.args as number[])[1]).toBe(CX + 2); // нижній правий кут, в межах клітинки
+    expect((owA!.args as number[])[2]).toBe(CY + 2);
   });
 });
 

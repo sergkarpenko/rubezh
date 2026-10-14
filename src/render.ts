@@ -27,6 +27,7 @@ const ALIEN_LIMBS = '#c95454';
 const ALIEN_WEAPON = '#ffd27a';
 const HP_TEXT = '#0b0e15';
 const OW_MARKER = '#d8b25a';
+const OW_OUTLINE = '#0b0e15'; // П6.12b: темний кант знака заступи — контраст на будь-якому тлі
 const SELECT_RING = '#d7e4f7';
 const BASE_FILL = '#4f8cff';
 const BASE_OUTLINE = '#9fc3ff';
@@ -143,17 +144,20 @@ function drawPixelSprite(ctx: CanvasRenderingContext2D, def: PixelSprite, cx: nu
   ctx.drawImage(s.img, Math.round(cx - w / 2), Math.round(cy - h / 2), w, h);
 }
 
-// Маркер заступи (доробка П6.12 за валідацією власника): піксельна «блискавка»
-// золотом — «заряджений / готовий до реакційного вогню»; читається краще за
-// суцільний квадрат. Ті самі зони клітинки, що й раніше (гравець — згори,
-// прибульці — знизу), строго в межах клітинки (урок П6.6): 8×8 у клітинці 26.
+// Маркер заступи (доробка П6.12b за повторною валідацією власника):
+// піксельна «блискавка» з ТЕМНИМ КАНТОМ у кутку клітинки — гравець верхній
+// лівий, прибульці нижній правий. Урок: золотий знак на пікселях спрайта
+// (світлий шолом / червона мантія) без канту губився; кути матриць спрайтів
+// прозорі, тло клітинки темне — золото з кантом видно на будь-якому тлі,
+// силует не перекривається, HP-число в центрі не зачіпається. 5×5 @2× = 10×10.
 const OW_BOLT: PixelSprite = {
-  rows: ['.AA.', 'AA..', 'AAAA', '..AA'],
-  palette: { A: OW_MARKER },
+  rows: ['.KKK.', 'KKAK.', 'KAAKK', 'KKAAK', '.KKKK'],
+  palette: { A: OW_MARKER, K: OW_OUTLINE },
 };
 
 function drawOverwatchMarker(ctx: CanvasRenderingContext2D, u: UnitSprite): void {
-  drawPixelSprite(ctx, OW_BOLT, u.cx, u.side === 'player' ? u.cy - u.r - 1 : u.cy + u.r, SPRITE_SCALE);
+  const off = u.side === 'player' ? -8 : 7; // кути клітинки: згори-ліворуч / знизу-праворуч
+  drawPixelSprite(ctx, OW_BOLT, u.cx + off, u.cy + off, SPRITE_SCALE);
 }
 
 // Рамка вибору (доробка П6.12 за валідацією власника): кутові дужки по кутах
