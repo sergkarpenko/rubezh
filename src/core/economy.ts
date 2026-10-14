@@ -25,10 +25,19 @@ export const MISSION_BONUS: Record<UfoKind, number> = {
   розвідник: 150,
   збирач: 250,
 };
+// П7.6 (ADR-0032): премія за збиття НЛО у повітрі перехопленням — окрема стаття доходу,
+// поверх премії за тактичну місію на місці падіння. Затверджено симуляціями П7.6 (128 сідів,
+// bot.ts): доплата покриває середній ремонт винищувача і робить перехоплення
+// прибутковимшим за пасивне очікування, не роблячи винищувача невразимим.
+export const SHOT_DOWN_BONUS: Record<UfoKind, number> = {
+  розвідник: 75,
+  збирач: 150,
+};
 
 export type EconomyEvent =
   | { type: 'allowance'; day: number; amount: number }
   | { type: 'mission_bonus'; kind: UfoKind; amount: number }
+  | { type: 'shot_down_bonus'; kind: UfoKind; amount: number }
   | { type: 'spend'; amount: number };
 
 export interface EconomyState {
@@ -60,6 +69,14 @@ export function creditMissionBonus(state: EconomyState, kind: UfoKind): void {
   const amount = MISSION_BONUS[kind];
   state.money += amount;
   state.log.push({ type: 'mission_bonus', kind, amount });
+}
+
+// П7.6 (ADR-0032): премія за збиття НЛО у повітрі перехопленням — відрізняється від премії
+// за тактичну місію (окрема стаття доходу, константи SHOT_DOWN_BONUS вище).
+export function creditShotDownBonus(state: EconomyState, kind: UfoKind): void {
+  const amount = SHOT_DOWN_BONUS[kind];
+  state.money += amount;
+  state.log.push({ type: 'shot_down_bonus', kind, amount });
 }
 
 // Списати гроші (найм у П4.3; сума валідується — ціла і додатна).

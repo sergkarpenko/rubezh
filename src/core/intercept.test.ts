@@ -3,7 +3,7 @@
 // Логіка всіх сценаріїв попередньо перевірена вручну; покриття intercept.ts ≥ 80% (ADR-0017).
 
 import { describe, expect, it } from 'vitest';
-import { createEconomy } from './economy';
+import { SHOT_DOWN_BONUS, createEconomy } from './economy';
 import { advanceTime, createGeoGame, type GeoState, type Ufo } from './geo';
 import {
   FIGHTER_MAX_HP,
@@ -165,6 +165,25 @@ describe('intercept: раундовий бій', () => {
     expect(ic.ufoHp['u1']).toBe(0);
     expect(ic.fighter.status).toBe('на базі');
     expect(ic.activeUfoId).toBeNull();
+  });
+
+  it('П7.6: збиття з економікою — премія SHOT_DOWN_BONUS одразу після бою; без econ — без премії', () => {
+    // Дві ідентичні партії: з econ і без; різниця грошей = премія за збиття розвідника.
+    const econ = createEconomy();
+    const a = engaged();
+    a.ic.ufoHp['u1'] = 1; // розвідник
+    const moneyBefore = econ.money;
+    interceptRound(a.ic, a.geo, 'впритул', econ);
+    expect(a.ic.log.some((e) => e.type === 'ufo_shot_down')).toBe(true);
+    expect(econ.money - moneyBefore).toBeGreaterThanOrEqual(0);
+    if (a.ic.log.some((e) => e.type === 'ufo_shot_down')) {
+      expect(econ.money).toBe(moneyBefore + SHOT_DOWN_BONUS['розвідник']);
+      expect(econ.log.some((e) => e.type === 'shot_down_bonus' && e.amount === SHOT_DOWN_BONUS['розвідник'])).toBe(true);
+    }
+    // Без econ — виклик не падає, премії ніде не нараховується.
+    const b = engaged();
+    b.ic.ufoHp['u1'] = 1;
+    expect(() => interceptRound(b.ic, b.geo, 'впритул')).not.toThrow();
   });
 
   it('відступ: розрив контакту, винищувач на базі, НЛО живий', () => {
