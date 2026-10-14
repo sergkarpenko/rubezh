@@ -16,9 +16,18 @@
           14px/1.45 system-ui,
           sans-serif;
       }
-      header {
-        padding: 12px 16px;
+      /* ADR-0027: топбар — завжди видний; стан партії одним поглядом */
+      header#topbar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px 16px;
+        align-items: center;
+        padding: 10px 16px;
         border-bottom: 1px solid #232a36;
+        position: sticky;
+        top: 0;
+        background: #0d1017;
+        z-index: 10;
       }
       h1 {
         font-size: 20px;
@@ -30,12 +39,67 @@
         font-size: 12px;
         margin-top: 2px;
       }
-      main {
+      #topbar .chips {
         display: flex;
+        gap: 8px;
+        align-items: center;
         flex-wrap: wrap;
+      }
+      .chip {
+        background: #131824;
+        border: 1px solid #232a36;
+        border-radius: 999px;
+        padding: 4px 12px;
+        font-size: 12px;
+        color: #9aa7b5;
+        white-space: nowrap;
+      }
+      .chip b {
+        color: #d7dde6;
+        font-variant-numeric: tabular-nums;
+      }
+      #topbar .actions {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-left: auto;
+      }
+      /* ADR-0027: сітка «фокусна зона + колонка стану»; журнал — під фокусною */
+      main#layout {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 320px;
+        grid-template-areas:
+          'focus status'
+          'journal status';
         gap: 16px;
         padding: 16px;
-        align-items: flex-start;
+        align-items: start;
+      }
+      #focus {
+        grid-area: focus;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+      }
+      #journal {
+        grid-area: journal;
+      }
+      aside#status {
+        grid-area: status;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+      }
+      /* ADR-0027: двоколонковий каркас до ~900px (iPad Pro 1024/1366), нижче — складання */
+      @media (max-width: 899px) {
+        main#layout {
+          grid-template-columns: minmax(0, 1fr);
+          grid-template-areas:
+            'focus'
+            'journal'
+            'status';
+        }
       }
       section.panel {
         background: #131824;
@@ -76,7 +140,7 @@
         border: 1px solid #31435f;
         color: inherit;
         border-radius: 6px;
-        padding: 6px 8px;
+        padding: 4px 8px;
         width: 72px;
         font: inherit;
       }
@@ -85,10 +149,14 @@
         background: #0a0d12;
         border-radius: 6px;
       }
+      /* ADR-0027: геосцена тягнеться на ширину фокусної колонки */
+      #geo {
+        width: 100%;
+        height: auto;
+      }
       .clock {
-        font-size: 20px;
+        font-size: 14px;
         font-weight: 600;
-        font-variant-numeric: tabular-nums;
       }
       .ufo {
         margin: 6px 0;
@@ -140,12 +208,26 @@
         background: #341418;
         color: #ff9c9c;
       }
+      /* ADR-0027: єдиний журнал подій з фільтрами-вкладками */
+      #log-tabs {
+        display: flex;
+        gap: 6px;
+        margin: 0 0 8px;
+        flex-wrap: wrap;
+      }
+      #log-tabs button {
+        padding: 4px 10px;
+        font-size: 12px;
+      }
+      #log-tabs button.active {
+        background: #31435f;
+        border-color: #6ea8ff;
+      }
       #log {
         list-style: none;
         margin: 0;
         padding: 0;
-        max-height: 560px;
-        width: 340px;
+        max-height: 420px;
         overflow: auto;
         font-size: 12px;
         color: #9aa7b5;
@@ -170,54 +252,76 @@
     </style>
   </head>
   <body>
-    <header>
-      <h1>РУБІЖ</h1>
-      <div class="sub">превью: геосцена + інтерактивний тактичний бій + ростер (ітерації 4.1–5.3)</div>
+    <header id="topbar">
+      <div>
+        <h1>РУБІЖ</h1>
+        <div class="sub">превью · фаза 6a: єдиний каркас (топбар + фокус + стан)</div>
+      </div>
+      <div class="chips">
+        <span class="chip clock" id="clock">—</span>
+        <input id="seed" type="number" value="42" title="Сід партії" />
+        <span class="chip">Баланс: <b id="money">—</b></span>
+        <span class="chip">Боєготові: <b id="ready">—</b></span>
+      </div>
+      <div class="actions">
+        <button id="btn-tick">+1 тік (30 хв)</button>
+        <button id="btn-day">+1 доба</button>
+        <button id="btn-new">Нова партія</button>
+      </div>
     </header>
-    <main>
-      <section class="panel">
-        <h2>Геосцена</h2>
-        <div class="clock" id="clock">—</div>
-        <div style="display: flex; gap: 8px; margin: 10px 0; flex-wrap: wrap">
-          <button id="btn-tick">+1 тік (30 хв)</button>
-          <button id="btn-day">+1 доба</button>
-          <input id="seed" type="number" value="42" title="Сід партії" />
-          <button id="btn-new">Нова партія</button>
-        </div>
-        <canvas id="geo" width="576" height="288"></canvas>
-      </section>
-      <section class="panel">
-        <h2>Сканери (виявлені НЛО)</h2>
-        <div id="ufos"></div>
-        <h2 style="margin-top: 14px">Фінанси</h2>
-        <div style="margin-bottom: 8px">
-          Баланс: <b id="money">—</b>
-          <span class="meta">· дотація 100/добу · премія за місію</span>
-        </div>
-        <button id="btn-hire">Найм солдата (100)</button>
-        <h2 style="margin-top: 14px">Ростер загону</h2>
-        <div id="roster"></div>
-        <h2 style="margin-top: 14px">Збереження</h2>
-        <div id="save-panel"></div>
-      </section>
-      <section class="panel hidden" id="battle-panel">
-        <h2>Тактичний бій <span id="bturn" style="color: #7d8794"></span></h2>
-        <div id="bresult"></div>
-        <div id="binfo" style="margin: 8px 0; min-height: 18px">—</div>
-        <div style="display: flex; gap: 8px; margin: 0 0 10px; flex-wrap: wrap">
-          <button id="btn-snap" title="3 AP · ×0.8 · 1 куля">Швидкий</button>
-          <button id="btn-aimed" title="5 AP · ×1.15 · 1 куля">Прицільний</button>
-          <button id="btn-auto" title="4 AP · ×0.5 · 3 кулі">Черга</button>
-          <button id="btn-ow" title="3 AP · реакційний вогонь у хід прибульців">Заступа</button>
-          <button id="btn-end">Кінець ходу</button>
-          <button id="btn-demo" title="Бій дограють боти (демо ітерації P)">Демо-бій</button>
-        </div>
-        <canvas id="battle" width="520" height="520"></canvas>
-      </section>
-      <section class="panel">
+    <main id="layout">
+      <div id="focus">
+        <section class="panel" id="geo-panel">
+          <h2>Геосцена</h2>
+          <canvas id="geo" width="576" height="288"></canvas>
+        </section>
+        <section class="panel hidden" id="battle-panel">
+          <h2>Тактичний бій <span id="bturn" style="color: #7d8794"></span></h2>
+          <div id="bresult"></div>
+          <div id="binfo" style="margin: 8px 0; min-height: 18px">—</div>
+          <div style="display: flex; gap: 8px; margin: 0 0 10px; flex-wrap: wrap">
+            <button id="btn-snap" title="3 AP · ×0.8 · 1 куля">Швидкий</button>
+            <button id="btn-aimed" title="5 AP · ×1.15 · 1 куля">Прицільний</button>
+            <button id="btn-auto" title="4 AP · ×0.5 · 3 кулі">Черга</button>
+            <button id="btn-ow" title="3 AP · реакційний вогонь у хід прибульців">Заступа</button>
+            <button id="btn-end">Кінець ходу</button>
+            <button id="btn-demo" title="Бій дограють боти (демо ітерації P)">Демо-бій</button>
+          </div>
+          <canvas id="battle" width="520" height="520"></canvas>
+        </section>
+      </div>
+      <section class="panel" id="journal">
         <h2>Журнал</h2>
+        <div id="log-tabs">
+          <button class="active" data-filter="all" id="log-tab-all">Усе</button>
+          <button data-filter="geo" id="log-tab-geo">Геосцена</button>
+          <button data-filter="econ" id="log-tab-econ">Економіка</button>
+          <button data-filter="battle" id="log-tab-battle">Бій</button>
+        </div>
         <ul id="log"></ul>
       </section>
+      <aside id="status">
+        <section class="panel">
+          <h2>Сканери (виявлені НЛО)</h2>
+          <div id="ufos"></div>
+        </section>
+        <section class="panel">
+          <h2>Фінанси</h2>
+          <div style="margin-bottom: 8px">
+            Баланс: <b id="money-card">—</b>
+            <span class="meta">· дотація 100/добу · премія за місію</span>
+          </div>
+          <button id="btn-hire">Найм солдата (100)</button>
+        </section>
+        <section class="panel">
+          <h2>Ростер загону</h2>
+          <div id="roster"></div>
+        </section>
+        <section class="panel">
+          <h2>Збереження</h2>
+          <div id="save-panel"></div>
+        </section>
+      </aside>
     </main>
     <script type="module" src="/src/main.ts"></script>
   </body>

@@ -23,6 +23,11 @@
 // Фаза 5 (П5.3, ADR-0026): панель збереження — 3 слоти (зберегти/
 // завантажити/видалити), активна лише на геосцені (місія не переривається);
 // сховище — localStorage через адаптер SlotStore (ядро без DOM — save.ts).
+// Фаза 6a (П6.2, ADR-0027): єдиний каркас — топбар (годинник, сід, чипи
+// балансу і боєготових, кнопки часу), фокусна зона (геосцена або бій),
+// колонка стану (сканери, фінанси, ростер, збереження), журнал з фільтрами-
+// вкладками (геосцена/економіка/бій). Дублювання балансу чипом і карткою —
+// свідомо прийнято (ADR-0027).
 
 import {
   RADAR_RANGE,
@@ -67,6 +72,11 @@ function el<T extends HTMLElement>(id: string): T {
 
 // Порядок оголошень важливий (TDZ — див. docs/workflow.md): усі змінні стану,
 // які newParty() чи обробники пишуть, оголошуються ДО першого виклику newParty().
+// ADR-0027: категорії записів єдиного журналу (фільтри-вкладки).
+type LogCat = 'geo' | 'econ' | 'battle';
+type LogFilter = 'all' | LogCat;
+let logFilter: LogFilter = 'all';
+
 let seenGeoLog = 0;
 const knownDetected = new Set<string>();
 let seenBattleLog = 0;
@@ -96,13 +106,27 @@ function newParty(seed: number): Party {
   return adoptParty(createParty(seed));
 }
 
-function journal(text: string, cls = ''): void {
+function journal(text: string, cls = '', cat: LogCat = 'geo'): void {
   const li = document.createElement('li');
   li.textContent = text;
   if (cls) li.className = cls;
+  li.dataset.cat = cat; // ADR-0027: категорія для фільтрів-вкладок журналу
+  if (logFilter !== 'all' && cat !== logFilter) li.style.display = 'none';
   const log = el('log');
   log.prepend(li);
   while (log.childElementCount > 80) log.removeChild(log.lastChild!);
+}
+
+// ADR-0027: перемикання фільтра журналу — активна вкладка підсвічується,
+// невідповідні записи ховаються (наявні і нові — одним правилом).
+function setLogFilter(f: LogFilter): void {
+  logFilter = f;
+  for (const b of document.querySelectorAll<HTMLButtonElement>('#log-tabs button')) {
+    b.classList.toggle('active', b.dataset.filter === f);
+  }
+  for (const li of document.querySelectorAll<HTMLLIElement>('#log li')) {
+    li.style.display = f === 'all' || li.dataset.cat === f ? '' : 'none';
+  }
 }
 
 function unitName(id: string): string {
@@ -131,7 +155,7 @@ function drainBattleLog(): void {
   const log = mission.state.log;
   for (; seenBattleLog < log.length; seenBattleLog++) {
     const msg = battleEventText(log[seenBattleLog], unitName);
-    if (msg) journal(msg.text, msg.cls);
+    if (msg) journal(msg.text, msg.cls, 'battle');
   }
 }
 
@@ -183,7 +207,7 @@ function drainEconLog(): void {
   const log = party.econ.log;
   for (; seenEconLog < log.length; seenEconLog++) {
     const msg = economyEventText(log[seenEconLog]);
-    journal(msg.text, msg.cls);
+    journal(msg.text, msg.cls, 'econ');
   }
 }
 
@@ -195,7 +219,7 @@ function partyTick(): void {
   hospitalTick(party.roster);
   if (!gameOver && isBankrupt(party.econ, party.roster)) {
     gameOver = true;
-    journal('✗ Банкрутство: немає боєготових солдатів і грошей на найм — партію програно.', 'lose');
+    journal('✗ Банкрутство: немає боєготових солдатів і грошей на найм — партію програно.', 'lose', 'econ');
   }
 }
 
@@ -306,7 +330,10 @@ export function hpColor(hp: number, maxHp: number): string {
 // П4.5 (ADR-0021): панель фінансів — баланс, кнопка найму, надходження в журнал.
 function renderFinances(): void {
   drainEconLog();
-  el('money').textContent = gameOver ? 'БАНКРУТ' : String(party.econ.money);
+  // ADR-0027: баланс у двох місцях — чип топбару і картка «Фінанси» (дублювання свідоме)
+  const moneyText = gameOver ? 'БАНКРУТ' : String(party.econ.money);
+  el('money').textContent = moneyText;
+  el('money-card').textContent = moneyText;
   const hire = el<HTMLButtonElement>('btn-hire');
   hire.disabled = gameOver || party.econ.money < HIRE_PRICE;
   hire.title = hire.disabled ? 'Недостатньо грошей (ціна найму ' + HIRE_PRICE + ')' : 'Новий солдат у кінець ростеру (−' + HIRE_PRICE + ')';
@@ -316,6 +343,9 @@ function renderRoster(): void {
   const box = el('roster');
   box.innerHTML = '';
   const soldiers = party.roster.soldiers;
+  // ADR-0027: чип боєготових у топбарі — завжди видний стан партії
+  const readyN = readySoldiers(party.roster).length;
+  el('ready').textContent = readyN + '/' + soldiers.length;
   if (soldiers.length === 0) {
     box.innerHTML =
       '<div style="color:#ff9c9c">Загін втрачено.</div>' +
@@ -327,7 +357,7 @@ function renderRoster(): void {
   const head = document.createElement('div');
   head.className = 'meta';
   head.style.marginBottom = '4px';
-  head.textContent = soldiers.length + ' солдатів (' + readySoldiers(party.roster).length + ' боєготових)';
+  head.textContent = soldiers.length + ' солдатів (' + readyN + ' боєготових)';
   box.appendChild(head);
   for (const s of soldiers) {
     const heal = party.roster.hospital[s.id];
@@ -593,13 +623,15 @@ function renderBattle(): void {
 }
 
 function renderAll(): void {
+  // ADR-0027: фокусна зона — геосцена або бій (не «два екрани»)
+  el('geo-panel').classList.toggle('hidden', mission !== null);
+  el('battle-panel').classList.toggle('hidden', mission === null);
   renderGeo();
   renderUfos();
   renderFinances();
   renderRoster();
   renderSavePanel();
   if (mission) renderBattle();
-  else el('battle-panel').classList.add('hidden');
 }
 
 function closeBattle(): void {
@@ -626,8 +658,7 @@ function launchMission(ufoId: string): void {
   fireMode = null;
   hoverPath = null;
   seenBattleLog = 0;
-  el('battle-panel').classList.remove('hidden');
-  journal('▶ Місія: загін висаджено біля НЛО ' + ufoId);
+  journal('▶ Місія: загін висаджено біля НЛО ' + ufoId, '', 'battle');
   binfo('Ваш хід: клікніть свого солдата (синє коло), потім клітинку — рух.');
   renderAll();
 }
@@ -831,8 +862,9 @@ function finishBattle(outcome: 'перемога' | 'поразка'): void {
   battleResult = outcome;
   const aftermath = applyMissionResult(party.roster, mission.state);
   completeMission(party.geo, mission.briefing.ufoId, outcome);
-  for (const s of aftermath.lost) journal('✝ ' + s.name + ' загинув у бою', 'lose');
-  for (const s of aftermath.wounded) journal('✚ ' + s.name + ' поранений — лікарня: ' + party.roster.hospital[s.id] + ' тик(и)');
+  for (const s of aftermath.lost) journal('✝ ' + s.name + ' загинув у бою', 'lose', 'battle');
+  for (const s of aftermath.wounded)
+    journal('✚ ' + s.name + ' поранений — лікарня: ' + party.roster.hospital[s.id] + ' тик(и)', '', 'battle');
   if (outcome === 'перемога') {
     // П4.5 (ADR-0021): премія за перемогу за тип НЛО; надходження — у журнал
     creditMissionBonus(party.econ, mission.briefing.kind);
@@ -888,10 +920,10 @@ if (typeof document !== 'undefined') {
   el('btn-hire').onclick = () => {
     try {
       const s = hireSoldier(party.econ, party.roster);
-      journal('+ Найм: ' + s.name + ' у ростері');
+      journal('+ Найм: ' + s.name + ' у ростері', '', 'econ');
       renderAll();
     } catch (e) {
-      journal('✗ ' + (e as Error).message, 'lose');
+      journal('✗ ' + (e as Error).message, 'lose', 'econ');
     }
   };
   el('btn-snap').onclick = () => armFire('snap');
@@ -900,6 +932,10 @@ if (typeof document !== 'undefined') {
   el('btn-ow').onclick = armOverwatch;
   el('btn-end').onclick = endPlayerTurn;
   el('btn-demo').onclick = demoBattle;
+  // ADR-0027: фільтри-вкладки єдиного журналу
+  for (const b of document.querySelectorAll<HTMLButtonElement>('#log-tabs button')) {
+    b.onclick = () => setLogFilter(b.dataset.filter as LogFilter);
+  }
   const bc = el<HTMLCanvasElement>('battle');
   bc.addEventListener('click', battleCanvasClick);
   bc.addEventListener('mousemove', battleCanvasHover);
