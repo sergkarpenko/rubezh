@@ -419,6 +419,33 @@ const UFO_HARVESTER_SPRITE: PixelSprite = {
   palette: { A: UFO_AIR },
 };
 
+// П7.5 (ADR-0031/0032): піксель-арт винищувача на геосцені — дельта-крило гравця, холодний
+// блакит з темним кантом (контраст на будь-якому тлі — урок П6.12b), 10×10 @2× = 20px у клітинці GCELL 36.
+const FIGHTER_SPRITE: PixelSprite = {
+  rows: [
+    '....FF....',
+    '....FF....',
+    '...FFFF...',
+    '.FFFFFFFF.',
+    'F.KKFFKK.F',
+    'F..FFFF..F',
+    '....FF....',
+    '...F..F...',
+    '...F..F...',
+    '...F..F...',
+  ],
+  palette: { F: '#6fd3ff', K: '#0b0e15' },
+};
+
+export interface FighterSprite {
+  cx: number;
+  cy: number;
+}
+
+export function drawFighterSprite(ctx: CanvasRenderingContext2D, f: FighterSprite): void {
+  drawPixelSprite(ctx, FIGHTER_SPRITE, f.cx, f.cy, SPRITE_SCALE);
+}
+
 export function drawUfoSprite(ctx: CanvasRenderingContext2D, u: UfoSprite): void {
   ctx.globalAlpha = UFO_SOFT_ALPHA;
   const def = u.landed ? UFO_LANDED_SPRITE : u.kind === 'розвідник' ? UFO_SCOUT_SPRITE : UFO_HARVESTER_SPRITE;
