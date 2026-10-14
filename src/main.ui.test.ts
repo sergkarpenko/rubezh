@@ -10,6 +10,9 @@
 // фокусна зона (гео/бій), журнал з фільтрами-вкладками.
 // П6.3 (ADR-0027): бойова фокусна зона — контекст-стрічка бою, керування
 // під бойовищем, приглушена колонка стану в бою, збереження лише на геосцені.
+// П6.4 (ADR-0027): керування — гарячі клавіші 1/2/3/O/E/Esc (поля вводу
+// ігнорують) і тач-патерн «тап — прев'ю — повторний тап у ту саму
+// клітинку — хід» (мишка — той самий патерн, click).
 
 import { beforeAll, describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
@@ -420,5 +423,80 @@ describe('бойова фокусна зона (П6.3, ADR-0027)', () => {
     expect(btn('btn-save-1').disabled).toBe(false);
     expect(btn('btn-load-1').disabled).toBe(false); // слот 1 має дані з флоу збереження вище
     expect(btn('btn-del-1').disabled).toBe(false);
+  });
+});
+
+describe('керування: гарячі клавіші і тач-патерн (П6.4, ADR-0027)', () => {
+  const key = (k: string, code: string, target: EventTarget = document): void => {
+    target.dispatchEvent(new KeyboardEvent('keydown', { key: k, code: code, bubbles: true }));
+  };
+  const tap = (x: number, y: number): void => {
+    $('battle').dispatchEvent(new MouseEvent('click', { clientX: x * 26 + 13, clientY: y * 26 + 13 }));
+  };
+
+  it('підготовка: нова партія (сід 42) → місія → вибір солдата у зоні висадки', () => {
+    ($('seed') as HTMLInputElement).value = '42';
+    btn('btn-new').click();
+    let found = false;
+    for (let i = 0; i < 1500 && !found; i++) {
+      btn('btn-tick').click();
+      found = document.querySelector('button.mission') !== null;
+    }
+    expect(found).toBe(true);
+    (document.querySelector('button.mission') as HTMLButtonElement).click();
+    tap(2, 2); // зона висадки — свій солдат
+    expect($('bctx-unit').textContent).toContain('AP 10/10');
+  });
+
+  it('тап-тап: перший тап — лише прев’ю (AP лишається), повторний у ту саму клітинку — рух', () => {
+    tap(3, 3); // перший тап — прев’ю шляху (обхід сусідів по висадці: 6 клітинок)
+    expect($('binfo').textContent).toContain('Шлях: 6 AP');
+    expect($('binfo').textContent).toContain('повторний тап');
+    expect($('bctx-unit').textContent).toContain('AP 10/10'); // ходу ще не було
+    tap(3, 3); // повторний тап у ту саму клітинку — хід
+    expect($('binfo').textContent).toContain('рух');
+    expect($('bctx-unit').textContent).toContain('AP 4/10');
+  });
+
+  it('тап у ІНШУ клітинку — нове прев’ю; шлях без AP: повторний тап ходу не робить', () => {
+    tap(2, 2); // шлях 6 AP проти 4 — прев’ю «червоними крапками» (AP не вистачає)
+    expect($('binfo').textContent).toContain('Не вистачає AP: шлях 6 проти 4');
+    expect($('bctx-unit').textContent).toContain('AP 4/10'); // ходу не було
+    tap(2, 2); // повторний тап у ту саму клітинку — ходу все одно немає
+    expect($('binfo').textContent).toContain('Не вистачає AP: шлях 6 проти 4');
+    expect($('bctx-unit').textContent).toContain('AP 4/10');
+  });
+
+  it('гарячі клавіші 1/2/3: зводять режим пострілу, кнопка підсвічена (armed)', () => {
+    key('1', 'Digit1');
+    expect(btn('btn-snap').classList.contains('armed')).toBe(true);
+    expect($('binfo').textContent).toContain('швидкий');
+    key('2', 'Digit2');
+    expect(btn('btn-aimed').classList.contains('armed')).toBe(true);
+    expect(btn('btn-snap').classList.contains('armed')).toBe(false); // режим перемкнувся
+    key('3', 'Digit3');
+    expect(btn('btn-auto').classList.contains('armed')).toBe(true);
+  });
+
+  it('Esc скасовує режим пострілу (armed знято, підказка в binfo)', () => {
+    key('Escape', 'Escape');
+    expect(btn('btn-auto').classList.contains('armed')).toBe(false);
+    expect($('binfo').textContent).toContain('Режим пострілу скасовано');
+  });
+
+  it('E завершує хід: ШІ відпрацьовує синхронно, хід 2 гравцю', () => {
+    key('e', 'KeyE');
+    expect($('bctx-turn').textContent).toContain('хід 2');
+    expect($('binfo').textContent).toContain('Хід прибульців відпрацьовано');
+  });
+
+  it('поля вводу: гарячі клавіші ігноруються (сід) — хід не завершується', () => {
+    const seed = $('seed') as HTMLInputElement;
+    seed.focus();
+    key('e', 'KeyE', seed); // keydown із поля вводу — ігнорується
+    expect($('bctx-turn').textContent).toContain('хід 2'); // хід не передано
+    key('1', 'Digit1', seed); // і режим пострілу не зводиться
+    expect(btn('btn-snap').classList.contains('armed')).toBe(false);
+    seed.blur();
   });
 });
