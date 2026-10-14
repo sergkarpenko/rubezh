@@ -61,6 +61,7 @@ import {
   startIntercept,
   startRepair,
   type InterceptChoice,
+  type InterceptEvent,
 } from './core/intercept';
 import {
   OVERWATCH_AP_COST,
@@ -88,14 +89,17 @@ import {
   drawAnimFrame,
   drawBaseSprite,
   drawChanceLabel,
+  drawFighterSprite,
   drawNightTerrain,
   drawTargetFrame,
   drawUfoSprite,
   drawUnitSprite,
   initPixelSprites,
   makeGeoPulseAnim,
+  makeTracerAnim,
   moveAnimPos,
   shakeOffset,
+  type Anim,
   type TerrainCell,
 } from './render';
 // П5.3 (ADR-0026): партія і слоти збереження — із чистого ядра save.ts.
@@ -308,7 +312,25 @@ function drainGeoLog(): void {
     if (e.type === 'ufo_detected') knownDetected.add(e.ufoId);
     const msg = geoEventText(e, knownDetected);
     if (msg) journal(msg.text, msg.cls);
+    // П7.5 (ADR-0032): події перехоплення — джерело анімацій трасерів повітряного бою
+    // (сутово відображення: дії ядра вже застосовані; лог лише читається).
+    if (hasRaf) geoAnim.push(...interceptAnims(e as InterceptEvent));
   }
+}
+
+// П7.5 (ADR-0032): подія перехоплення → анімації геосцени. Трасер винищувача — холодний
+// блакит (колір гравця), трасер НЛО — розпечений оранж (колір прибульців); куля летить
+// між поточними позиціями винищувача і НЛО у клітинках геосцени (GCELL задає drawAnimFrame).
+// Промахи не анімуємо (лише влучання — спалах удару), відступ/ремонт — без анімацій.
+function interceptAnims(e: InterceptEvent): Anim[] {
+  if (e.type !== 'intercept_round' || e.choice === 'відступ') return [];
+  const ufo = party.geo.ufos.find((u) => u.id === party.intercept.activeUfoId);
+  if (!ufo) return [];
+  const fpos = party.intercept.fighter.pos;
+  const anims: Anim[] = [];
+  if (e.fighterHit) anims.push(makeTracerAnim('player', { ...fpos }, { ...ufo.pos }, true));
+  if (e.ufoHit) anims.push(makeTracerAnim('alien', { ...ufo.pos }, { ...fpos }, true));
+  return anims;
 }
 
 // П4.5: чистий перетворювач події економіки → рядок журналу (для юніт-тестів).
@@ -391,6 +413,12 @@ function renderGeo(): void {
       landed: u.status === 'приземлився',
       kind: u.kind,
     });
+  }
+  // П7.5 (ADR-0032): маркер винищувача на геосцені — лише поза базою (на базі він у
+  // спрайті бази; погоня/бій — дельта-крило поруч із позначкою НЛО).
+  const fgt = party.intercept.fighter;
+  if (fgt.status === 'погоня' || fgt.status === 'бій') {
+    drawFighterSprite(ctx, { cx: fgt.pos.x * GCELL + GCELL / 2, cy: fgt.pos.y * GCELL + GCELL / 2 });
   }
 
   // П6.9 (ADR-0029): анімаційний шар геосцени — пульс радара поверх статичного
@@ -476,6 +504,21 @@ function renderFinances(): void {
   hire.title = hire.disabled ? 'Недостатньо грошей (ціна найму ' + HIRE_PRICE + ')' : 'Новий солдат у кінець ростеру (−' + HIRE_PRICE + ')';
 }
 
+// П7.5 (ADR-0032/0027): контекст-стрічка повітряного бою у фокусній зоні — видима лише
+// під час погоні/бою (на базі/ремонті джерело правди — панель «Винищувач» у колонці стану).
+function renderInterceptCtx(): void {
+  const f = party.intercept.fighter;
+  const active = f.status === 'погоня' || f.status === 'бій';
+  el('ictx').classList.toggle('hidden', !active);
+  if (!active) return;
+  el('ictx-target').textContent = f.targetId ?? '—';
+  el('ictx-status').textContent = f.status;
+  el('ictx-round').textContent = f.status === 'бій' ? String(party.intercept.round) : '—';
+  el('ictx-fighter').textContent = 'HP ' + f.hp + '/' + FIGHTER_MAX_HP;
+  const ufo = party.geo.ufos.find((u) => u.id === party.intercept.activeUfoId);
+  el('ictx-ufo').textContent = ufo ? 'HP ' + party.intercept.ufoHp[ufo.id] : '—';
+}
+
 // П7.4 (ADR-0032): панель винищувача — статус/HP у колонці стану; кнопки дій залежно
 // від стану: «Перехопити» (боєготовий + виявлений НЛО в повітрі), «Ремонт (50)»
 // (пошкоджений на базі), дистанції бою (стан «бій» — рішення гравця кожен раунд).
@@ -483,6 +526,7 @@ function renderFighter(): void {
   const box = el('fighter');
   box.innerHTML = '';
   const f = party.intercept.fighter;
+  renderInterceptCtx(); // П7.5: контекст-стрічка повітряного бою у фокусній зоні
   const statusText =
     f.status === 'ремонт'
       ? 'ремонт: ' + f.repairTicksLeft + ' тік(и)'
@@ -631,7 +675,8 @@ function renderSavePanel(): void {
     box.innerHTML = '<div class="meta">Сховище недоступне (приватний режим?) — збереження вимкнено.</div>';
     return;
   }
-  const busy = mission !== null; // збереження лише на геосцені (ADR-0026)
+  // П7.5 (ADR-0026): збереження вимкнене і в повітряному бою — погоня/бій не переривається
+  const busy = mission !== null || party.intercept.fighter.status === 'погоня' || party.intercept.fighter.status === 'бій';
   for (let slot = 1; slot <= SAVE_SLOTS; slot++) {
     const row = document.createElement('div');
     row.className = 'save-row';
@@ -686,7 +731,8 @@ function renderSavePanel(): void {
 
 // ADR-0026: збереження можливе лише на геосцені (місія не переривається).
 function saveSlot(slot: number): void {
-  if (mission !== null || gameOver) return;
+  // П7.5 (ADR-0026): під час погоні/бою збереження вимкнене (патерн П6.3 — бій не переривається)
+  if (mission !== null || gameOver || party.intercept.fighter.status === 'погоня' || party.intercept.fighter.status === 'бій') return;
   try {
     saveToSlot(store, slot, party, new Date().toISOString());
     journal('Збережено: слот ' + slot + '.');

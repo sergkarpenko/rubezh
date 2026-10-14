@@ -267,6 +267,13 @@
         color: #9fb0c3;
         font-size: 12px;
       }
+      /* П7.5 (ADR-0027): контекст-стрічка повітряного бою — той самий патерн, що й #bctx */
+      #ictx {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin: 10px 0 0;
+      }
       .hidden {
         display: none !important;
       }
@@ -295,6 +302,14 @@
         <section class="panel" id="geo-panel">
           <h2>Геосцена</h2>
           <canvas id="geo" width="576" height="288"></canvas>
+          <!-- П7.5 (ADR-0027/0032): контекст-стрічка повітряного бою — цель, статус, раунд, HP обох сторін -->
+          <div id="ictx" class="hidden">
+            <span class="chip">Перехоплення: <b id="ictx-target">—</b></span>
+            <span class="chip">Статус: <b id="ictx-status">—</b></span>
+            <span class="chip">Раунд: <b id="ictx-round">—</b></span>
+            <span class="chip">Винищувач: <b id="ictx-fighter">—</b></span>
+            <span class="chip">НЛО: <b id="ictx-ufo">—</b></span>
+          </div>
         </section>
         <section class="panel hidden" id="battle-panel">
           <h2>Тактичний бій</h2>

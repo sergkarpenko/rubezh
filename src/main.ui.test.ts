@@ -712,3 +712,64 @@ describe('П7.4: винищувач — запуск → бій → пошкод
     expect(document.getElementById('btn-repair')).toBeNull(); // здоровий — кнопки немає
   });
 });
+
+// П7.5 (ADR-0026/0032): прев'ю UI повітряного бою — контекст-стрічка у фокусній зоні
+// (видима лише під час погоні/бою), збереження вимкнене в повітряному бою.
+describe('П7.5: повітряний бій — контекст-стрічка і збереження', () => {
+  const fighterText = (): string => $('fighter').textContent ?? '';
+  const interceptBtn = (): HTMLButtonElement | null => {
+    for (const b of document.querySelectorAll<HTMLButtonElement>('button.intercept')) {
+      if (!b.disabled) return b;
+    }
+    return null;
+  };
+  // Погоня/бій: клікаємо «Перехопити» при нагоді, тікаємо час до бою; guard — страховка від зависання.
+  const pursueBattle = (maxTicks = 200): boolean => {
+    for (let i = 0; i < maxTicks; i++) {
+      if (fighterText().includes('Бій з')) return true;
+      const b = interceptBtn();
+      if (b) b.click();
+      btn('btn-tick').click();
+    }
+    return fighterText().includes('Бій з');
+  };
+
+  it('контекст-стрічка прихована на геосцені, видима в погоню/бій, ховається після бою', () => {
+    ($('seed') as HTMLInputElement).value = '42';
+    btn('btn-new').click();
+    // на базі — прихована (джерело правди — панель «Винищувач» у колонці стану)
+    expect($('ictx').classList.contains('hidden')).toBe(true);
+    // запускаємо перехоплення: кнопка лише для виявленого НЛО в повітрі (критерій 1)
+    let launched = false;
+    for (let i = 0; i < 300 && !launched; i++) {
+      const b = interceptBtn();
+      if (b) {
+        b.click();
+        launched = fighterText().includes('погоня') || fighterText().includes('Бій з');
+      }
+      if (!launched) btn('btn-tick').click();
+    }
+    expect(launched).toBe(true);
+    // погоня: стрічка видима, ціль відома
+    expect($('ictx').classList.contains('hidden')).toBe(false);
+    expect($('ictx-status').textContent).toMatch(/погоня|бій/);
+    expect($('ictx-target').textContent).not.toBe('—');
+    // збереження вимкнене в повітряному бою (ADR-0026, патерн П6.3)
+    expect(btn('btn-save-1').disabled).toBe(true);
+    // бій: раунд і HP обох сторін
+    expect(pursueBattle()).toBe(true);
+    expect($('ictx-round').textContent).toMatch(/^\d+$/);
+    expect($('ictx-fighter').textContent).toContain('HP 4/4');
+    expect($('ictx-ufo').textContent).toMatch(/HP \d+/);
+    // доводимо бій до результату — стрічка ховається, збереження повертається
+    let guard = 0;
+    while (guard++ < 6000 && fighterText().includes('Бій з')) {
+      const choice = document.querySelector<HTMLButtonElement>('button.intercept-range[data-choice="впритул"]');
+      if (!choice || choice.disabled) break;
+      choice.click();
+    }
+    expect(fighterText()).not.toContain('Бій з');
+    expect($('ictx').classList.contains('hidden')).toBe(true);
+    expect(btn('btn-save-1').disabled).toBe(false);
+  });
+});
