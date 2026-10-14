@@ -248,7 +248,8 @@ git push origin iter-X.Y
 | ADR-0031 | Піксель-арт спрайти кодом Canvas (частково Supersedes: ADR-0029) | accepted | 2026-10-14 |
 | ADR-0032 | Перехоплення НЛО в повітрі — винищувач, раундовий повітряний бій | accepted | 2026-10-14 |
 | ADR-0033 | Мета кампанії: перемога на 30-ту добу, рахунок, пресети складності | proposed | 2026-10-14 |
-| ADR-0034 | Гейт покриття на PR — codecov/patch 95% як required check | proposed | 2026-10-14 |
+| ADR-0034 | Гейт покриття на PR — codecov/patch 95% як required check | accepted | 2026-10-14 |
+| ADR-0035 | Звіт Codecov на PR — гейт codecov/patch стає реальним (доповнює ADR-0025/0034) | proposed | 2026-10-14 |
 
 **Нове рішення?** Створіть новий ADR з порядковим номером.
 
