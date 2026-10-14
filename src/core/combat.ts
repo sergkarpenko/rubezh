@@ -246,7 +246,7 @@ export function setOverwatch(state: GameState, unitId: string): void {
   const u = getUnit(state, unitId);
   requireActive(state, u);
   if (u.overwatch) return;
-  if (u.ap < OVERWATCH_AP_COST) throw new Error('Недостатньо очок дій для заступи');
+  if (u.ap < OVERWATCH_AP_COST) throw new Error('Недостатньо очок дій для дозору');
   u.ap -= OVERWATCH_AP_COST;
   u.overwatch = true;
   state.log.push({ type: 'overwatch', unitId: u.id, armed: true });

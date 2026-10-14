@@ -56,7 +56,7 @@ describe('nearestEnemy', () => {
 });
 
 describe('bestPathToNeighbors', () => {
-  it("бюджет 0 → null (резерв на заступу з'ївся)", () => {
+  it("бюджет 0 → null (резерв на дозор з'ївся)", () => {
     const g = game();
     expect(bestPathToNeighbors(g, g.units[1], [{ x: 2, y: 2 }], 0)).toBe(null);
   });

@@ -28,7 +28,7 @@ const ALIEN_LIMBS = '#c95454';
 const ALIEN_WEAPON = '#ffd27a';
 const HP_TEXT = '#0b0e15';
 const OW_MARKER = '#d8b25a';
-const OW_OUTLINE = '#0b0e15'; // П6.12b: темний кант знака заступи — контраст на будь-якому тлі
+const OW_OUTLINE = '#0b0e15'; // П6.12b: темний кант знака дозору — контраст на будь-якому тлі
 const SELECT_RING = '#d7e4f7';
 const BASE_FILL = '#4f8cff';
 const BASE_OUTLINE = '#9fc3ff';
@@ -65,7 +65,7 @@ export const GRID_COLOR = 'rgba(110,168,255,0.07)';
 const FOG_EDGE = 'rgba(21,27,40,0.45)';
 
 // Дані для малювання юніта бойовища: cx/cy — центр клітинки в пікселях buffer'а,
-// r — радіус маркерів (рамка вибору, заступа; у превью 8 при клітинці 26).
+// r — радіус маркерів (рамка вибору, дозор; у превью 8 при клітинці 26).
 // hp — читабельність стану (ADR-0007). frame — кадр ходьби (0 «стій», 1 «крок»):
 // передається лише анімацією руху (П6.12), у статиці малюється кадр «стій».
 export interface UnitSprite {
@@ -167,7 +167,7 @@ function drawPixelSprite(ctx: CanvasRenderingContext2D, def: PixelSprite, cx: nu
   ctx.drawImage(s.img, Math.round(cx - w / 2), Math.round(cy - h / 2), w, h);
 }
 
-// Маркер заступи (доробка П6.12b за повторною валідацією власника):
+// Маркер дозору (доробка П6.12b за повторною валідацією власника):
 // піксельна «блискавка» з ТЕМНИМ КАНТОМ у кутку клітинки — гравець верхній
 // лівий, прибульці нижній правий. Урок: золотий знак на пікселях спрайта
 // (світлий шолом / червона мантія) без канту губився; кути матриць спрайтів
@@ -536,7 +536,7 @@ export const MOVE_MS_PER_CELL = 90; // хід: 90 мс на клітинку ш�
 export const TRACER_MS = 150; // трасер кулі від стрільця до цілі
 export const IMPACT_MS = 200; // спалах влучання (лише при попаданні)
 export const DEATH_MS = 350; // згасання силуета загиблого
-export const OW_FLASH_MS = 300; // спалах заступи (озброєння реакційного вогню)
+export const OW_FLASH_MS = 300; // спалах дозору (озброєння реакційного вогню)
 export const RADAR_PULSE_MS = 1200; // П6.9: пульс радара — від бази до краю зони виявлення
 
 // Один елемент черги анімацій. start — мітка часу початку відтворення
@@ -670,7 +670,7 @@ const OW_FLASH = '#d8b25a';
 // Один кадр анімаційного шару (малюється поверх статичного стану).
 // move — силует у проміжній позиції; tracer — куля летить від стрільця до цілі,
 // при влучанні друга фаза — спалах-кільце; death — згасання силуета; owflash —
-// пульсуюче кільце заступи. Усі координати — у межах клітинок (урок П6.6).
+// пульсуюче кільце дозору. Усі координати — у межах клітинок (урок П6.6).
 export function drawAnimFrame(ctx: CanvasRenderingContext2D, a: Anim, now: number, cell: number, r: number): void {
   const t = animT(a, now);
   // П6.9: пульс радара геосцени — кільце від бази до maxR, що гасне.
@@ -754,7 +754,7 @@ export function drawAnimFrame(ctx: CanvasRenderingContext2D, a: Anim, now: numbe
     ctx.globalAlpha = 1;
     return;
   }
-  // owflash: кільце заступи, що росте і гасне (колір — як маркер заступи)
+  // owflash: кільце дозору, що росте і гасне (колір — як маркер дозору)
   ctx.globalAlpha = 1 - t;
   ctx.strokeStyle = OW_FLASH;
   ctx.lineWidth = 2;

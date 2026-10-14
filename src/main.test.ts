@@ -124,7 +124,7 @@ describe('battleEventText: події бою → журнал', () => {
     ).toContain('промах');
   });
 
-  it('смерть — клас lose; рух/хід/заступа — не для журналу', () => {
+  it('смерть — клас lose; рух/хід/дозор — не для журналу', () => {
     expect(battleEventText(ev({ type: 'death', unitId: 'a1', killerId: 's1' }), name)).toEqual({ text: '✝ Морок загинув', cls: 'lose' });
     expect(battleEventText(ev({ type: 'move', unitId: 's1', from: { x: 0, y: 0 }, to: { x: 1, y: 0 } }), name)).toBe(null);
     expect(battleEventText(ev({ type: 'turn', turn: 2, side: 'alien' }), name)).toBe(null);
