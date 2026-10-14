@@ -1,5 +1,6 @@
-// src/render.ts — шар відображення (ADR-0010/0029/0031, П6.7/П6.8/П6.12):
-// піксель-арт спрайти Canvas 2D + анімаційний рушій превью.
+// src/render.ts — шар відображення (ADR-0010/0029/0031, П6.7/П6.8/П6.12/П6.13):
+// піксель-арт спрайти Canvas 2D + анімаційний рушій превью + нічна палітра
+// бойовища (терен з хеш-варіацією, тонка сітка, м'який край туману, тряска).
 // Спрайти (солдат з «АР-14 Гарт», прибульчик з «Імпульсним різаком», база, НЛО) —
 // матриці пікселів у коді (ADR-0031): розгортаються ліниво в offscreen-канвас
 // низької роздільності з кешем і малюються drawImage з nearest-neighbor
@@ -40,6 +41,28 @@ const UFO_SOFT_ALPHA = 0.85;
 const UFO_LEG = '#a8862f'; // П6.12 (ADR-0031): опори приземленого НЛО
 const RADAR_PULSE = '#4f8cff'; // колір пульсу радара — сімейство кольору бази
 const BASE_WALL = '#234083'; // П6.12 (ADR-0031): темні стіни бази геосцени
+
+// --- П6.13: нічна палітра бойовища (темно-графітовий терен, тонка сітка) ---
+// Фон канви — той самий колір, що й CSS-тло елемента (index.html): при трясці
+// translate оголює край 1–2px, і збіг кольорів лишає його непомітним.
+export const NIGHT_BG = '#0a0d12';
+// Двотоновий терен: відкритий / завалений, у тумані — приглушені ті самі
+// тони (туман — лише рельєф, ADR-0006). «Легка варіація клітинок» — по одному
+// з чотирьох відтінків на клітинку за детермінованим хешем координат (без RNG,
+// ADR-0003): сусідні клітинки розрізняються, мозаїка стабільна між кадрами.
+const TERRAIN_OPEN = ['#151b28', '#171e2c', '#131926', '#161d2b'];
+const TERRAIN_BLOCKED = ['#3d4657', '#414b5d', '#38414f', '#3f4a5c'];
+const TERRAIN_OPEN_FOG = ['#0b0e15', '#0c0f17', '#0a0d13', '#0d1018'];
+const TERRAIN_BLOCKED_FOG = ['#232936', '#252b39', '#202633', '#242a38'];
+// Тонка напівпрозора сітка: 1px у проміжках між клітинками (клітинки
+// малюються зі стороною cell−1 — сітка заповнює проміжок, урок П6.6).
+export const GRID_COLOR = 'rgba(110,168,255,0.07)';
+// М'який край туману: клітинка туману з видимим сусідом (4 напрямки)
+// перекривається напівпрозорим тоном відкритої видимої клітинки — межа
+// «видимо → туман» стає градієнтною. Сенс туману незмінний (ADR-0006):
+// рельєф туману видно і так, вміст клітинки (юніти) не розкривається,
+// перекриття однакове для порожньої і заваленої клітинки.
+const FOG_EDGE = 'rgba(21,27,40,0.45)';
 
 // Дані для малювання юніта бойовища: cx/cy — центр клітинки в пікселях buffer'а,
 // r — радіус маркерів (рамка вибору, заступа; у превью 8 при клітинці 26).
@@ -403,6 +426,58 @@ export function drawUfoSprite(ctx: CanvasRenderingContext2D, u: UfoSprite): void
   ctx.globalAlpha = 1;
 }
 
+// --- П6.13: нічна палітра бойовища — терен, сітка, м'який край туману ---
+
+// Клітинка терену для drawNightTerrain: blocked — завалення (рельєф туману
+// видно і в тумані, ADR-0006), visible — у зоні видимості гравця.
+export interface TerrainCell {
+  x: number;
+  y: number;
+  blocked: boolean;
+  visible: boolean;
+}
+
+// Детермінований хеш від координат (П6.13, без RNG — ADR-0003): той самий
+// (x, y) завжди дає той самий відтінок — мозаїка терену стабільна між кадрами.
+export function cellHash(x: number, y: number): number {
+  let h = (x * 374761393 + y * 668265263) | 0;
+  h = (h ^ (h >>> 13)) | 0;
+  h = (h * 1274126177) | 0;
+  return (h ^ (h >>> 16)) >>> 0;
+}
+
+// Нічний терен: фон → клітинки (двотоновий терен з хеш-варіацією) → м'який
+// край туману → тонка сітка в проміжках. Чиста функція без RNG і DOM-стану;
+// викликається кожен кадр після clearRect (урок П6.6) — кадр еквівалентний
+// малюванню з нуля. w/h — розмір buffer'а канви в пікселях, cell — BCELL.
+export function drawNightTerrain(ctx: CanvasRenderingContext2D, w: number, h: number, cells: readonly TerrainCell[], cell: number): void {
+  // фон на весь buffer (при трясці translate оголює край — колір збігається з CSS-тлом)
+  ctx.fillStyle = NIGHT_BG;
+  ctx.fillRect(0, 0, w, h);
+  // мапа видимості для м'якого краю туману (сусідство за 4 напрямками)
+  const vis = new Set(cells.filter((c) => c.visible).map((c) => c.x + ',' + c.y));
+  // клітинки: два тони (відкритий / завалений) × туман/видимо, відтінок — хеш
+  for (const c of cells) {
+    const shades = c.blocked ? (c.visible ? TERRAIN_BLOCKED : TERRAIN_BLOCKED_FOG) : c.visible ? TERRAIN_OPEN : TERRAIN_OPEN_FOG;
+    ctx.fillStyle = shades[cellHash(c.x, c.y) % shades.length] ?? shades[0]!;
+    ctx.fillRect(c.x * cell, c.y * cell, cell - 1, cell - 1);
+  }
+  // м'який край туману: напівпрозоре перекриття на клітинках туману біля видимих
+  ctx.fillStyle = FOG_EDGE;
+  for (const c of cells) {
+    if (c.visible) continue;
+    const nearVisible =
+      vis.has(c.x - 1 + ',' + c.y) || vis.has(c.x + 1 + ',' + c.y) || vis.has(c.x + ',' + (c.y - 1)) || vis.has(c.x + ',' + (c.y + 1));
+    if (nearVisible) ctx.fillRect(c.x * cell, c.y * cell, cell - 1, cell - 1);
+  }
+  // тонка сітка: 1px у проміжках між клітинками (стовпці і рядки)
+  ctx.fillStyle = GRID_COLOR;
+  const cols = Math.floor(w / cell);
+  const rows = Math.floor(h / cell);
+  for (let i = 1; i < cols; i++) ctx.fillRect(i * cell - 1, 0, 1, h);
+  for (let j = 1; j < rows; j++) ctx.fillRect(0, j * cell - 1, w, 1);
+}
+
 // --- П6.8 (ADR-0029): анімаційний рушій — черга + rAF лише під час активних анімацій ---
 
 // Тривалості фаз (мс): стримка анімація, без поспіху (дизайн-сесія 6b).
@@ -512,9 +587,33 @@ export function moveAnimPos(a: MoveAnim, t: number, cell: number): { cx: number;
   return { cx: x * cell + cell / 2, cy: y * cell + cell / 2 };
 }
 
-const TRACER_PLAYER = '#cfe3ff';
-const TRACER_ALIEN = '#ffb36b';
-const IMPACT = '#ffd27a';
+// П6.13: легка тряска канвасу при влучанні — зсув кадру на фазі спалаху
+// трасера (той самий AnimEngine: тряска живе лише в кадрах анімації, idle →
+// 0 перерисовок не порушується). Детерміновано, без RNG (ADR-0003): амплітуда
+// спадає до кінця спалаху, коливання — синус/косинус від прогресу фази.
+// Викликаюч робить ctx.translate(dx, dy) на весь кадр; фон канви збігається з
+// CSS-тлом — оголений край непомітний. Промах не трясе.
+export const SHAKE_PX = 2; // максимальна амплітуда (легка тряска)
+export function shakeOffset(a: Anim | null, now: number): { dx: number; dy: number } {
+  if (a === null || a.kind !== 'tracer' || !a.hit || a.start === null) return { dx: 0, dy: 0 };
+  const t = animT(a, now);
+  const share = TRACER_MS / a.dur;
+  if (t <= share || t >= 1) return { dx: 0, dy: 0 }; // лише фаза спалаху влучання
+  const f = (t - share) / (1 - share);
+  const amp = SHAKE_PX * (1 - f); // спадає до нуля до кінця спалаху
+  // + 0 нормалізує -0 від Math.round малих від'ємних значень (0 === -0, але
+  // зсув кадру лишається «строго нульовим» і детермінованим у тестах)
+  return { dx: Math.round(amp * Math.sin(f * Math.PI * 4)) + 0, dy: Math.round(amp * Math.cos(f * Math.PI * 4)) + 0 };
+}
+
+// П6.13: яскравіші неонові трасери/спалахи (нічна палітра — «дарк» терен,
+// неонові акценти): холодний блакитний у гравця, розпечений оранж у прибульців;
+// свічення — shadowBlur навколо лінії/кільця (обов'язково скидається).
+const TRACER_PLAYER = '#6fd3ff';
+const TRACER_ALIEN = '#ff9a52';
+const IMPACT = '#ffe38a';
+const TRACER_GLOW = 6; // радіус свічення трасера
+const IMPACT_GLOW = 8; // радіус свічення спалаху
 const OW_FLASH = '#d8b25a';
 
 // Один кадр анімаційного шару (малюється поверх статичного стану).
@@ -562,12 +661,16 @@ export function drawAnimFrame(ctx: CanvasRenderingContext2D, a: Anim, now: numbe
     if (t < share) {
       // фаза 1: куля летить — відрізок від стрільця до поточного «заголовка»
       const f = t / share;
-      ctx.strokeStyle = a.side === 'player' ? TRACER_PLAYER : TRACER_ALIEN;
+      const color = a.side === 'player' ? TRACER_PLAYER : TRACER_ALIEN;
+      ctx.strokeStyle = color;
       ctx.lineWidth = 2;
+      ctx.shadowColor = color; // П6.13: неонове свічення трасера
+      ctx.shadowBlur = TRACER_GLOW;
       ctx.beginPath();
       ctx.moveTo(x0, y0);
       ctx.lineTo(x0 + (x1 - x0) * f, y0 + (y1 - y0) * f);
       ctx.stroke();
+      ctx.shadowBlur = 0;
       ctx.lineWidth = 1;
     } else if (a.hit) {
       // фаза 2: спалах у цілі — кільце, що росте і гасне
@@ -575,9 +678,12 @@ export function drawAnimFrame(ctx: CanvasRenderingContext2D, a: Anim, now: numbe
       ctx.globalAlpha = 1 - f;
       ctx.strokeStyle = IMPACT;
       ctx.lineWidth = 2;
+      ctx.shadowColor = IMPACT; // П6.13: свічення спалаху
+      ctx.shadowBlur = IMPACT_GLOW;
       ctx.beginPath();
       ctx.arc(x1, y1, 3 + 5 * f, 0, Math.PI * 2);
       ctx.stroke();
+      ctx.shadowBlur = 0;
       ctx.lineWidth = 1;
       ctx.globalAlpha = 1;
     }
