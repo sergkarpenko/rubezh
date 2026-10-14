@@ -4,9 +4,34 @@
 // проміжки 1px між клітинками не бруднимось); (2) силуети і зброя солдата й
 // прибульця відрізняються; (3) малювання детерміноване (той самий вхід → той самий
 // потік викликів, без RNG); (4) читабельність стану (HP, вибір, заступа).
+// П6.8 (ADR-0029): тести анімаційного рушія — кадри (трасер/спалах/смерть/
+// заступа/хід), черга з ін'єктованим планувальником (idle → 0 перерисовок) і
+// чистий перетворювач подій логу (лог байт-у-байт незмінний — критерій П6.8).
 
 import { describe, expect, it } from 'vitest';
-import { drawAlienSprite, drawBaseSprite, drawSoldierSprite, drawUfoSprite, type UnitSprite } from './render';
+import {
+  AnimEngine,
+  DEATH_MS,
+  IMPACT_MS,
+  MOVE_MS_PER_CELL,
+  OW_FLASH_MS,
+  TRACER_MS,
+  animT,
+  animsFromEvents,
+  drawAlienSprite,
+  drawAnimFrame,
+  drawBaseSprite,
+  drawSoldierSprite,
+  drawUfoSprite,
+  makeDeathAnim,
+  makeMoveAnim,
+  makeOwFlashAnim,
+  makeTracerAnim,
+  moveAnimPos,
+  type Anim,
+  type UnitSprite,
+} from './render';
+import { makeUnit, type GameEvent, type Unit } from './core/combat';
 
 // Клітиночка превью: BCELL = 26, центр (13, 13), радіус силуету 8 (як у renderBattle).
 const CX = 13;
@@ -233,5 +258,280 @@ describe('спрайти геосцени (статична інтеграція
     drawUfoSprite(harv.ctx, { cx: 18, cy: 18, r: 11, landed: false, kind: 'збирач' });
     expect(harv.calls.some((c) => c.m === 'strokeRect')).toBe(true);
     expect(harv.calls.some((c) => c.m === 'closePath')).toBe(false);
+  });
+});
+
+// --- П6.8 (ADR-0029): анімаційний рушій ---
+
+// Мок контексту для анімаційних кадрів: методи записуються у calls,
+// присвоєння властивостей (globalAlpha, strokeStyle...) — у sets.
+function animCtx(): { ctx: CanvasRenderingContext2D; calls: Call[]; sets: { p: string; v: unknown }[] } {
+  const calls: Call[] = [];
+  const sets: { p: string; v: unknown }[] = [];
+  const rec =
+    (m: string) =>
+    (...args: unknown[]): void => {
+      calls.push({ m, args });
+    };
+  const ctx = new Proxy(
+    {},
+    {
+      get: (_t, p) => (typeof p === 'string' ? rec(p) : undefined),
+      set: (_t, p, v) => {
+        sets.push({ p: String(p), v });
+        return true;
+      },
+    }
+  );
+  return { ctx: ctx as unknown as CanvasRenderingContext2D, calls, sets };
+}
+
+const unit = (id: string, side: 'player' | 'alien', x: number, y: number): Unit => makeUnit({ id, side, pos: { x, y } });
+
+describe('анімаційний рушій: прогрес і позиція (П6.8)', () => {
+  it('animT: start === null → 0; у межах — частка; після dur — 1 (клімпиться)', () => {
+    const a = makeOwFlashAnim(unit('s1', 'player', 2, 2));
+    expect(a.dur).toBe(OW_FLASH_MS);
+    expect(animT(a, 1000)).toBe(0); // ще не почалась
+    a.start = 100;
+    expect(animT(a, 100 + OW_FLASH_MS / 2)).toBe(0.5);
+    expect(animT(a, 100 + OW_FLASH_MS * 10)).toBe(1);
+  });
+
+  it('makeMoveAnim: тривалість — 90 мс на клітинку шляху', () => {
+    const u = unit('s1', 'player', 0, 0);
+    const a = makeMoveAnim(
+      u,
+      [
+        { x: 0, y: 0 },
+        { x: 1, y: 0 },
+        { x: 1, y: 1 },
+      ],
+      false
+    );
+    expect(a.dur).toBe(2 * MOVE_MS_PER_CELL);
+  });
+
+  it('moveAnimPos: t=0 → центр першої клітинки, t=1 → останньої, середина — на ламаній', () => {
+    const a = makeMoveAnim(
+      unit('s1', 'player', 0, 0),
+      [
+        { x: 0, y: 0 },
+        { x: 1, y: 0 },
+        { x: 1, y: 1 },
+      ],
+      false
+    );
+    expect(moveAnimPos(a, 0, 26)).toEqual({ cx: 13, cy: 13 });
+    expect(moveAnimPos(a, 1, 26)).toEqual({ cx: 39, cy: 39 });
+    expect(moveAnimPos(a, 0.25, 26)).toEqual({ cx: 26, cy: 13 }); // середина першого сегмента (0,0)→(1,0)
+    expect(moveAnimPos(a, 0.5, 26)).toEqual({ cx: 39, cy: 13 }); // кут повороту (1,0)
+  });
+});
+
+describe('кадри анімаційного шару (П6.8)', () => {
+  it('хід: силует у проміжній позиції шляху (солдат — arc у центрі клітинки)', () => {
+    const a = makeMoveAnim(
+      unit('s1', 'player', 0, 0),
+      [
+        { x: 0, y: 0 },
+        { x: 1, y: 0 },
+        { x: 1, y: 1 },
+      ],
+      false
+    );
+    a.start = 0;
+    const { ctx, calls } = animCtx();
+    drawAnimFrame(ctx, a, MOVE_MS_PER_CELL, 26, 8); // t = 0.5 → клітинка (1,0)
+    expect(calls.some((c) => c.m === 'arc' && (c.args as number[])[0] === 39 && (c.args as number[])[1] === 13)).toBe(true);
+  });
+
+  it('трасер: фаза польоту — відрізок від стрільця до цілі; влучання — кільце, що росте і гасне', () => {
+    const a = makeTracerAnim('player', { x: 1, y: 1 }, { x: 3, y: 1 }, true);
+    a.start = 0;
+    expect(a.dur).toBe(TRACER_MS + IMPACT_MS);
+    const fly = animCtx();
+    drawAnimFrame(fly.ctx, a, TRACER_MS / 2, 26, 8); // t* — куля на півдорозі
+    const head = fly.calls.find((c) => c.m === 'lineTo');
+    expect(head).toBeDefined();
+    expect((head!.args as number[])[0]).toBeCloseTo(65, 5); // 39 + 52 * 0.5
+    expect(fly.calls.some((c) => c.m === 'arc')).toBe(false); // спалаху ще немає
+
+    const boom = animCtx();
+    drawAnimFrame(boom.ctx, a, TRACER_MS + IMPACT_MS / 2, 26, 8); // фаза 2: спалах
+    const ring = boom.calls.find((c) => c.m === 'arc');
+    expect(ring).toBeDefined();
+    expect((ring!.args as number[])[0]).toBe(91); // центр клітинки цілі (3,1)
+    const alphas = boom.sets.filter((s) => s.p === 'globalAlpha').map((s) => s.v);
+    expect(alphas[0]).toBeLessThan(1); // кільце гасне
+    expect(alphas[alphas.length - 1]).toBe(1); // альфа відновлена
+  });
+
+  it('трасер-промах: лише політ кулі — без спалаху-кільця', () => {
+    const a = makeTracerAnim('alien', { x: 5, y: 5 }, { x: 3, y: 5 }, false);
+    a.start = 0;
+    expect(a.dur).toBe(TRACER_MS);
+    const { ctx, calls } = animCtx();
+    drawAnimFrame(ctx, a, TRACER_MS - 10, 26, 8);
+    expect(calls.some((c) => c.m === 'lineTo')).toBe(true);
+    expect(calls.some((c) => c.m === 'arc')).toBe(false);
+  });
+
+  it('смерть: силует згасає (alpha спадає і відновлюється), позиція — клітинка загиблого', () => {
+    const a = makeDeathAnim(unit('a1', 'alien', 4, 7));
+    a.start = 0;
+    expect(a.dur).toBe(DEATH_MS);
+    expect(a.at).toEqual({ x: 4, y: 7 });
+    const { ctx, calls, sets } = animCtx();
+    drawAnimFrame(ctx, a, DEATH_MS / 2, 26, 8); // t = 0.5
+    expect(calls.some((c) => c.m === 'ellipse')).toBe(true); // прибульчик
+    const alphas = sets.filter((s) => s.p === 'globalAlpha').map((s) => s.v);
+    expect(alphas[0]).toBeCloseTo(0.5, 5);
+    expect(alphas[alphas.length - 1]).toBe(1);
+  });
+
+  it('заступа: пульс-кільце кольору маркера заступи, що росте і гасне', () => {
+    const a = makeOwFlashAnim(unit('s2', 'player', 6, 9));
+    a.start = 0;
+    const { ctx, calls, sets } = animCtx();
+    drawAnimFrame(ctx, a, OW_FLASH_MS / 2, 26, 8);
+    const ring = calls.find((c) => c.m === 'arc');
+    expect(ring).toBeDefined();
+    expect((ring!.args as number[])[0]).toBe(6 * 26 + 13);
+    expect((ring!.args as number[])[1]).toBe(9 * 26 + 13);
+    expect(sets.some((s) => s.p === 'strokeStyle' && s.v === '#d8b25a')).toBe(true);
+    expect(sets.filter((s) => s.p === 'globalAlpha').map((s) => s.v)[0]).toBeCloseTo(0.5, 5);
+  });
+});
+
+describe('черга анімацій: rAF лише під час активних анімацій (ADR-0029)', () => {
+  // Фейковий планувальник: кадри виконує тест («пропускаємо час»), рахує
+  // заплановані кадри, перерисовки та скасування.
+  function fakeDeps() {
+    const st = { schedules: 0, draws: 0, canceled: 0, frames: [] as Array<(now: number) => void> };
+    const run = (now: number): void => {
+      const batch = st.frames.splice(0);
+      for (const cb of batch) cb(now);
+    };
+    const deps = {
+      schedule: (cb: (now: number) => void): number => {
+        st.schedules++;
+        st.frames.push(cb);
+        return st.frames.length;
+      },
+      cancel: (): void => {
+        st.canceled++;
+      },
+      draw: (): void => {
+        st.draws++;
+      },
+    };
+    return { st, run, deps };
+  }
+
+  it('idle → 0 перерисовок: без анімацій рушій не планує жодного кадру', () => {
+    const { st, run, deps } = fakeDeps();
+    const eng = new AnimEngine(deps); // черга порожня
+    expect(eng.busy).toBe(false);
+    expect(eng.active()).toBeNull();
+    run(0);
+    run(1000);
+    expect(st.schedules).toBe(0);
+    expect(st.draws).toBe(0);
+  });
+
+  it('послідовне відтворення і зупинка: останній кадр статичний, далі 0 перерисовок', () => {
+    const { st, run, deps } = fakeDeps();
+    const eng = new AnimEngine(deps);
+    const a = makeOwFlashAnim(unit('s1', 'player', 0, 0)); // dur 300
+    const b = makeDeathAnim(unit('a1', 'alien', 1, 1)); // dur 350
+    eng.push(a, b);
+    expect(st.schedules).toBe(1); // один rAF на push
+    expect(eng.active()).toBe(a);
+
+    run(0); // кадр 1: a почалась
+    expect(st.draws).toBe(1);
+    expect(st.schedules).toBe(2); // черга непорожня → наступний кадр
+    expect(a.start).toBe(0);
+
+    run(150); // кадр 2: a триває
+    expect(animT(eng.active() as Anim, 150)).toBeCloseTo(0.5, 5);
+
+    run(300); // кадр 3: a завершена → b почалась
+    expect(eng.active()).toBe(b);
+    expect(b.start).toBe(300);
+    expect(st.schedules).toBe(4);
+
+    run(650); // кадр 4: b завершена → черга порожня
+    expect(eng.busy).toBe(false);
+    expect(eng.active()).toBeNull();
+    expect(st.draws).toBe(4); // останній кадр — фінальна перерисовка (статика)
+
+    run(1000); // після idle: жодного нового кадру
+    expect(st.schedules).toBe(4);
+    expect(st.draws).toBe(4);
+  });
+
+  it('cancel: черга скидається, запланований кадр скасовується', () => {
+    const { st, deps } = fakeDeps();
+    const eng = new AnimEngine(deps);
+    eng.push(makeOwFlashAnim(unit('s1', 'player', 0, 0)));
+    expect(st.schedules).toBe(1);
+    eng.cancel();
+    expect(eng.busy).toBe(false);
+    expect(st.canceled).toBe(1);
+    expect(st.draws).toBe(0);
+    eng.cancel(); // повторний cancel — безпомилковий (handle null)
+    expect(st.canceled).toBe(1);
+  });
+});
+
+describe('перетворювач подій логу → анімації (критерій: лог байт-у-байт незмінний)', () => {
+  it("кроки руху об'єднуються в один хід; смерть-перед-пострілом → трасер потім смерть", () => {
+    const s1 = unit('s1', 'player', 2, 2);
+    const a1 = unit('a1', 'alien', 5, 2);
+    const events: GameEvent[] = [
+      { type: 'overwatch', unitId: 's1', armed: true },
+      { type: 'move', unitId: 'a1', from: { x: 3, y: 2 }, to: { x: 4, y: 2 } },
+      { type: 'move', unitId: 'a1', from: { x: 4, y: 2 }, to: { x: 5, y: 2 } },
+      { type: 'death', unitId: 'a1', killerId: 's1' }, // fireOnce пише смерть РАНІШЕ пострілу
+      { type: 'shot', shooterId: 's1', targetId: 'a1', mode: 'snap', hit: true, damage: 10 },
+      { type: 'turn', turn: 2, side: 'player' },
+    ];
+    const before = JSON.stringify(events);
+    const unitsBefore = JSON.stringify([s1, a1]);
+    const anims = animsFromEvents(events, [s1, a1]);
+    expect(anims.map((x) => x.kind)).toEqual(['owflash', 'move', 'tracer', 'death']);
+    expect(anims[1].kind === 'move' && anims[1].path).toEqual([
+      { x: 3, y: 2 },
+      { x: 4, y: 2 },
+      { x: 5, y: 2 },
+    ]);
+    expect(anims[2].kind === 'tracer' && anims[2].hit).toBe(true);
+    expect(anims[3].kind === 'death' && anims[3].at).toEqual({ x: 5, y: 2 });
+    // лог і юніти лише читались — байт-у-байт незмінні
+    expect(JSON.stringify(events)).toBe(before);
+    expect(JSON.stringify([s1, a1])).toBe(unitsBefore);
+  });
+
+  it('реакційний вогень перериває рух: постріл між кроками розбиває хід на два', () => {
+    const s1 = unit('s1', 'player', 2, 2);
+    const a1 = unit('a1', 'alien', 5, 2);
+    const events: GameEvent[] = [
+      { type: 'move', unitId: 'a1', from: { x: 3, y: 2 }, to: { x: 4, y: 2 } },
+      { type: 'shot', shooterId: 's1', targetId: 'a1', mode: 'snap', hit: false, damage: 0 },
+      { type: 'move', unitId: 'a1', from: { x: 4, y: 2 }, to: { x: 5, y: 2 } },
+    ];
+    const anims = animsFromEvents(events, [s1, a1]);
+    expect(anims.map((x) => x.kind)).toEqual(['move', 'tracer', 'move']);
+    expect(anims[1].kind === 'tracer' && anims[1].hit).toBe(false);
+  });
+
+  it('події без анімації (turn) і невідомі юніти пропускаються', () => {
+    const events: GameEvent[] = [
+      { type: 'turn', turn: 2, side: 'alien' },
+      { type: 'move', unitId: 'ghost', from: { x: 0, y: 0 }, to: { x: 1, y: 0 } },
+    ];
+    expect(animsFromEvents(events, [unit('s1', 'player', 0, 0)])).toEqual([]);
   });
 });

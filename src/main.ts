@@ -65,7 +65,8 @@ import {
 import { computeVisibleCells, findPath, pathApCost } from './core/map';
 import { aliensTurn, autoBattle } from './bot';
 // П6.7 (ADR-0029): векторні спрайти — чисті функції малювання шару відображення.
-import { drawBaseSprite, drawUfoSprite, drawUnitSprite } from './render';
+// П6.8 (ADR-0029): анімаційний рушій — черга + rAF лише під час активних анімацій.
+import { AnimEngine, animsFromEvents, animT, drawAnimFrame, drawBaseSprite, drawUfoSprite, drawUnitSprite, moveAnimPos } from './render';
 // П5.3 (ADR-0026): партія і слоти збереження — із чистого ядра save.ts.
 import { SAVE_SLOTS, createParty, eraseSlot, loadFromSlot, saveToSlot, slotMeta, type Party, type SlotStore } from './core/save';
 
@@ -100,6 +101,25 @@ let fireMode: ShotMode | null = null; // «зведений» режим пос�
 let hoverPath: Vec2[] | null = null; // прев'ю шляху під курсором
 let hoverAp = 0;
 let tapCell: Vec2 | null = null; // ADR-0027 (П6.4): клітинка першого тапу — повторний тап у неї робить хід
+
+// П6.8 (ADR-0029): анімаційний рушій — черга анімацій, rAF-цикл живе лише
+// поки черга непорожня (idle → 0 перерисовок; батарея iPad). Кожен кадр —
+// renderBattle з clearRect на весь buffer (урок П6.6). rAF може бути
+// відсутній у тестовому середовищі — тоді анімації не ставляться в чергу
+// (стан і лог бою від анімації не залежать — критерій «байт-у-байт»).
+const hasRaf = typeof requestAnimationFrame === 'function';
+const anim = new AnimEngine({
+  schedule: (cb) => requestAnimationFrame(cb),
+  cancel: (h) => cancelAnimationFrame(h as number),
+  draw: () => renderBattle(),
+});
+
+// П6.8: нові події логу бою → анімації (суто відображення: дії ядра вже
+// застосовані миттєво, лог лише читається і не змінюється).
+function enqueueBattleAnims(prevLen: number): void {
+  if (!mission || !hasRaf) return;
+  anim.push(...animsFromEvents(mission.state.log.slice(prevLen), mission.state.units));
+}
 
 // Прийняти партію у UI-шар: історію журналу не відтворюємо (лише нові події
 // після точки входу), трекінг НЛО перебудовуємо з логу (ADR-0006), банкрутство
@@ -546,6 +566,18 @@ function renderBattle(): void {
   const st = mission.state;
 
   const vis = visibleCells();
+
+  // П6.8: активна анімація руху — юніт малює анімаційний шар у проміжній
+  // позиції, статичний прохід його пропускає. Туман: рух прибульця показуємо
+  // лише у видимих клітинках — невидимий рух не розкриває позицію (ADR-0006).
+  const activeAnim = anim.active();
+  let movingId: string | null = null;
+  if (activeAnim !== null && activeAnim.kind === 'move') {
+    const p = moveAnimPos(activeAnim, animT(activeAnim, anim.now), BCELL);
+    const cellK = Math.floor(p.cx / BCELL) + ',' + Math.floor(p.cy / BCELL);
+    if (activeAnim.side === 'player' || vis.has(cellK)) movingId = activeAnim.unitId;
+  }
+
   for (let y = 0; y < st.map.height; y++) {
     for (let x = 0; x < st.map.width; x++) {
       const k2 = x + ',' + y;
@@ -580,6 +612,7 @@ function renderBattle(): void {
   // (маркер заступи — строго в межах клітинки, П6.6).
   for (const u of st.units) {
     if (!u.alive) continue;
+    if (u.id === movingId) continue; // П6.8: його малює анімаційний шар у проміжній позиції
     const visible = vis.has(u.pos.x + ',' + u.pos.y);
     if (u.side === 'alien' && !visible) continue;
     drawUnitSprite(ctx, {
@@ -591,6 +624,13 @@ function renderBattle(): void {
       selected: u.id === selectedId,
       overwatch: u.overwatch,
     });
+  }
+
+  // П6.8 (ADR-0029): анімаційний шар поверх статичного стану. Рух прибульця
+  // поза туманом не малюємо (movingId null — статика показує його у фінальній
+  // клітинці лише якщо вона видима, як і без анімації).
+  if (activeAnim !== null && (activeAnim.kind !== 'move' || movingId !== null)) {
+    drawAnimFrame(ctx, activeAnim, anim.now, BCELL, 8);
   }
 
   // стан кнопок керування
@@ -620,6 +660,7 @@ function renderAll(): void {
 }
 
 function closeBattle(): void {
+  anim.cancel(); // П6.8: бій закрито — чергу анімацій скидаємо
   mission = null;
   battleResult = null;
   selectedId = null;
@@ -633,6 +674,7 @@ function closeBattle(): void {
 
 function launchMission(ufoId: string): void {
   if (mission) return;
+  anim.cancel(); // П6.8: новий бій — без залишків черги попереднього
   try {
     mission = createMission(party.geo, ufoId, { squad: missionSquad(party.roster) });
   } catch (e) {
@@ -716,7 +758,9 @@ function battleCanvasClick(ev: MouseEvent): void {
     const mode = fireMode;
     fireMode = null;
     try {
+      const prevLen = st.log.length;
       resolveAttack(st, sel.id, u.id, mode);
+      enqueueBattleAnims(prevLen); // П6.8: трасер/спалах/смерть — з подій логу
       if (!checkOutcome()) {
         binfo(sel.name + ' вистрілив (' + MODE_LABEL[mode] + '). AP ' + sel.ap + '/' + sel.maxAp + '.');
         renderAll();
@@ -761,7 +805,9 @@ function battleCanvasClick(ev: MouseEvent): void {
       renderBattle();
       return;
     }
+    const prevLen = st.log.length;
     moveUnit(st, sel.id, path);
+    enqueueBattleAnims(prevLen); // П6.8: хід по шляху (кроки логу об'єднуються)
     hoverPath = null;
     if (!checkOutcome()) {
       binfo(sel.name + ': рух. AP ' + sel.ap + '/' + sel.maxAp + '.');
@@ -825,7 +871,9 @@ function armOverwatch(): void {
     return;
   }
   try {
+    const prevLen = mission.state.log.length;
     setOverwatch(mission.state, sel.id);
+    enqueueBattleAnims(prevLen); // П6.8: спалах заступи
     binfo(sel.name + ' у заступі (реакційний вогонь у хід прибульців). AP ' + sel.ap + '/' + sel.maxAp + '.');
   } catch (e) {
     binfo('✗ ' + (e as Error).message);
@@ -839,8 +887,10 @@ function endPlayerTurn(): void {
   fireMode = null;
   tapCell = null;
   try {
+    const prevLen = mission.state.log.length;
     endTurn(mission.state); // передати хід прибульцям (aliensTurn очікує їхній хід)
     const actions = aliensTurn(mission.state); // синхронно, одним кліком (5.1.4)
+    enqueueBattleAnims(prevLen); // П6.8: відтворення ходу прибульців поверх фінального стану
     if (!checkOutcome()) {
       binfo('Хід прибульців відпрацьовано (' + actions + ' дій). Ваш хід — хід ' + mission.state.turn + '.');
       renderAll();
@@ -853,6 +903,8 @@ function endPlayerTurn(): void {
 
 function demoBattle(): void {
   if (!mission || battleResult !== null) return;
+  // П6.8: демо-бій прокручує ядро до результату одним викликом — сотні подій;
+  // анімації не відтворюємо (відображення фінального стану, як і до П6.8).
   try {
     const res = autoBattle(mission.state, 240);
     if (res.outcome !== 'триває') finishBattle(res.outcome);
