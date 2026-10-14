@@ -67,7 +67,7 @@ import {
   type Vec2,
 } from './core/combat';
 import { computeVisibleCells, findPath, pathApCost } from './core/map';
-import { aliensTurn, autoBattle } from './bot';
+import { aliensTurn, DemoSteps } from './bot';
 // П6.7 (ADR-0029): векторні спрайти — чисті функції малювання шару відображення.
 // П6.8 (ADR-0029): анімаційний рушій — черга + rAF лише під час активних анімацій.
 import {
@@ -133,6 +133,15 @@ let hoverAp = 0;
 let tapCell: Vec2 | null = null; // ADR-0027 (П6.4): клітинка першого тапу — повторний тап у неї робить хід
 let aimCell: Vec2 | null = null; // П6.14: клітинка цілі під наведенням/першим тапом у зведеному режимі
 
+// П6.16: покрокове відтворення демо-бою — дії ботів по одній (DemoSteps —
+// та сама послідовність, що й autoBattle), кожна відтворюється анімацією
+// (animsFromEvents → AnimEngine), між діями — коротка пауза на таймері.
+// Під час паузи черга анімацій порожня → 0 перерисовок (idle, ADR-0029).
+const DEMO_PAUSE_MS = 160;
+let demoSteps: DemoSteps | null = null; // не null — триває покрокове демо
+let demoTimer: ReturnType<typeof setTimeout> | null = null;
+let demoWaitIdle = false; // черга анімацій дії відтворюється — пауза після onIdle
+
 // П6.8 (ADR-0029): анімаційний рушій — черга анімацій, rAF-цикл живе лише
 // поки черга непорожня (idle → 0 перерисовок; батарея iPad). Кожен кадр —
 // renderBattle з clearRect на весь buffer (урок П6.6). rAF може бути
@@ -143,6 +152,13 @@ const anim = new AnimEngine({
   schedule: (cb) => requestAnimationFrame(cb),
   cancel: (h) => cancelAnimationFrame(h as number),
   draw: () => renderBattle(),
+  onIdle: () => {
+    // П6.16: анімації дії демо відтворені — коротка пауза і наступна дія
+    if (demoWaitIdle) {
+      demoWaitIdle = false;
+      demoPause();
+    }
+  },
 });
 // П6.9 (ADR-0029): пульс радара геосцени — той самий рушій (черга + rAF лише
 // під час активних анімацій, idle → 0 перерисовок), окремий інстанс зі своєю
@@ -756,6 +772,7 @@ function renderAll(): void {
 }
 
 function closeBattle(): void {
+  demoStop(); // П6.16: демо могло тривати — таймер і стан драйвера скидаємо
   anim.cancel(); // П6.8: бій закрито — чергу анімацій скидаємо
   mission = null;
   battleResult = null;
@@ -823,6 +840,7 @@ function cellFromEvent(ev: MouseEvent): Vec2 {
 
 function battleCanvasClick(ev: MouseEvent): void {
   if (!playerTurnActive() || !mission) return;
+  if (demoSteps !== null) return; // П6.16: триває демо — бойовище не клікається
   const st = mission.state;
   const cell = cellFromEvent(ev);
   const u = st.units.find((x) => x.alive && x.pos.x === cell.x && x.pos.y === cell.y);
@@ -998,6 +1016,7 @@ function battleCanvasLeave(): void {
 
 function armFire(mode: ShotMode): void {
   if (!playerTurnActive() || !mission) return;
+  if (demoSteps !== null) return; // П6.16: триває демо — керування заблоковано
   const sel = selectedUnit();
   if (!sel) {
     binfo('Спершу клікніть свого солдата.');
@@ -1020,6 +1039,7 @@ function armFire(mode: ShotMode): void {
 
 function armOverwatch(): void {
   if (!playerTurnActive() || !mission) return;
+  if (demoSteps !== null) return; // П6.16: триває демо — керування заблоковано
   const sel = selectedUnit();
   if (!sel) {
     binfo('Спершу клікніть свого солдата.');
@@ -1043,6 +1063,7 @@ function armOverwatch(): void {
 
 function endPlayerTurn(): void {
   if (!playerTurnActive() || !mission) return;
+  if (demoSteps !== null) return; // П6.16: триває демо — хід ведуть боти
   hoverPath = null;
   fireMode = null;
   tapCell = null;
@@ -1062,21 +1083,59 @@ function endPlayerTurn(): void {
   }
 }
 
-function demoBattle(): void {
-  if (!mission || battleResult !== null) return;
-  // П6.8: демо-бій прокручує ядро до результату одним викликом — сотні подій;
-  // анімації не відтворюємо (відображення фінального стану, як і до П6.8).
-  try {
-    const res = autoBattle(mission.state, 240);
-    if (res.outcome !== 'триває') finishBattle(res.outcome);
+// П6.16: наступна дія демо — DemoSteps виконує одну дію ботів, анімації її
+// подій ставляться в чергу; коли відтворяться (onIdle) або анімацій нема
+// (endTurn) — коротка пауза і далі. renderBattle після кожної дії тримає
+// стрічку/кнопки/журнал бою в актуальному стані.
+function demoNext(): void {
+  if (!mission || !demoSteps) return;
+  const prevLen = mission.state.log.length;
+  const r = demoSteps.step(mission.state);
+  renderBattle();
+  if (r.over) {
+    const outcome = missionOutcome(mission.state);
+    demoStop();
+    // фінальний банер — без змін (П6.16): finishBattle той самий, що в звичайному бою
+    if (outcome === 'перемога' || outcome === 'поразка') finishBattle(outcome);
     else {
       binfo('Демо: бій не завершився за ліміт півходів.');
       renderAll();
     }
-  } catch (e) {
-    binfo('✗ Помилка демо: ' + (e as Error).message);
-    renderAll();
+    return;
   }
+  // Патерн enqueueBattleAnims, але тут власний гейт hasRaf: без rAF (тести)
+  // анімації не ставляться — демо крокує лише паузами таймера.
+  const anims = hasRaf ? animsFromEvents(mission.state.log.slice(prevLen), mission.state.units) : [];
+  if (anims.length > 0) {
+    demoWaitIdle = true; // пауза — після відтворення черги (onIdle)
+    anim.push(...anims);
+  } else {
+    demoPause(); // turn-події не анімуються — пауза одразу
+  }
+}
+
+function demoPause(): void {
+  demoTimer = setTimeout(demoNext, DEMO_PAUSE_MS);
+}
+
+// П6.16: зупинка демо — таймер і прапорці скидаємо (чергу анімацій скидає
+// anim.cancel() викликаючого — closeBattle/launchMission, як і раніше).
+function demoStop(): void {
+  demoSteps = null;
+  demoWaitIdle = false;
+  if (demoTimer !== null) {
+    clearTimeout(demoTimer);
+    demoTimer = null;
+  }
+}
+
+function demoBattle(): void {
+  if (!mission || battleResult !== null || demoSteps !== null) return;
+  // П6.16: замість миттєвого autoBattle — покрокове відтворення: дії по одній,
+  // лог байт-у-байт ідентичний (DemoSteps), дивитись приємніше.
+  demoSteps = new DemoSteps(240);
+  binfo('Демо: покрокове відтворення бою…');
+  demoNext();
 }
 
 function finishBattle(outcome: 'перемога' | 'поразка'): void {

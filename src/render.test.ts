@@ -558,7 +558,7 @@ describe('черга анімацій: rAF лише під час активни
   // Фейковий планувальник: кадри виконує тест («пропускаємо час»), рахує
   // заплановані кадри, перерисовки та скасування.
   function fakeDeps() {
-    const st = { schedules: 0, draws: 0, canceled: 0, frames: [] as Array<(now: number) => void> };
+    const st = { schedules: 0, draws: 0, canceled: 0, idles: 0, frames: [] as Array<(now: number) => void> };
     const run = (now: number): void => {
       const batch = st.frames.splice(0);
       for (const cb of batch) cb(now);
@@ -574,6 +574,9 @@ describe('черга анімацій: rAF лише під час активни
       },
       draw: (): void => {
         st.draws++;
+      },
+      onIdle: (): void => {
+        st.idles++; // П6.16: черга спорожніла після відтворення
       },
     };
     return { st, run, deps };
@@ -633,6 +636,26 @@ describe('черга анімацій: rAF лише під час активни
     expect(st.draws).toBe(0);
     eng.cancel(); // повторний cancel — безпомилковий (handle null)
     expect(st.canceled).toBe(1);
+  });
+
+  it('П6.16: onIdle — раз на випорожнення черги; без push не викликається', () => {
+    const { st, run, deps } = fakeDeps();
+    const eng = new AnimEngine(deps);
+    run(0);
+    expect(st.idles).toBe(0); // без анімацій (idle з початку) — без виклику
+    eng.push(makeOwFlashAnim(unit('s1', 'player', 0, 0))); // dur 300
+    run(0);
+    run(150);
+    expect(st.idles).toBe(0); // черга ще відтворюється
+    run(300); // черга спорожніла
+    expect(st.idles).toBe(1);
+    run(1000); // далі idle — без нових кадрів і викликів
+    expect(st.idles).toBe(1);
+    expect(st.schedules).toBe(3); // після idle рушій не планує кадрів
+    eng.push(makeDeathAnim(unit('a1', 'alien', 1, 1))); // dur 350 — нова серія
+    run(1000);
+    run(1350);
+    expect(st.idles).toBe(2); // друга серія — ще один виклик
   });
 });
 

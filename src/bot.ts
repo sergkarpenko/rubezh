@@ -79,3 +79,69 @@ export function autoBattle(state: GameState, maxHalfTurns = 240): { outcome: Ret
   }
   return { outcome: missionOutcome(state), halfTurns };
 }
+
+// П6.16: покроковий драйвер демо-бою — ті самі дії ядра, що й autoBattle,
+// але по одній за виклик; паузи і анімації між діями вставляє викликаюч
+// (main.ts). Послідовність викликів ядра ідентична autoBattle (розгортка
+// циклів botTurn/aliensTurn) — лог бою байт-у-байт той самий (детермінізм,
+// ADR-0003). Ядро не змінюється — це UI-шар демо-бота (ADR-0002).
+export interface DemoStepResult {
+  acted: boolean; // true — виконано рівно одну дію ботів
+  over: boolean; // true — авто-бій завершено (результат або ліміт півходів)
+}
+
+export class DemoSteps {
+  // Юніти півходу гравця фіксуються ОДИН раз на початку півходу — як у botTurn
+  // (filter в botTurn обчислюється до циклу; живість перевіряється щоразу).
+  private snapshot: Unit[] = [];
+  private idx = 0; // позиція в snapshot поточного півходу
+  private guard = 0; // спроби поточного юніта/півходу (ліміт 60, як у botTurn/aliensTurn)
+  private halfTurns = 0;
+  private inTurn = false;
+  private over = false;
+
+  constructor(private readonly maxHalfTurns = 240) {}
+
+  get halfTurnsDone(): number {
+    return this.halfTurns;
+  }
+
+  // Одна дія авто-бою. Викликати до over === true; після over — без дій.
+  step(state: GameState): DemoStepResult {
+    if (this.over) return { acted: false, over: true };
+    if (!this.inTurn) {
+      // autoBattle перевіряє результат ПЕРЕД кожним півходом — так само тут:
+      // середині півходу вихід не даємо (розгортка циклу, байт-у-байт).
+      if (missionOutcome(state) !== 'триває' || this.halfTurns >= this.maxHalfTurns) {
+        this.over = true;
+        return { acted: false, over: true };
+      }
+      this.inTurn = true;
+      this.idx = 0;
+      this.guard = 0;
+      this.snapshot = state.activeSide === 'player' ? state.units.filter((x) => x.side === 'player' && x.alive) : [];
+    }
+    if (state.activeSide === 'player') {
+      while (this.idx < this.snapshot.length) {
+        const u = this.snapshot[this.idx];
+        // Той самий порядок умов, що в while botTurn: живий → є AP → ліміт → дія
+        if (u.alive && u.ap > 0 && this.guard++ < 60 && soldierStep(state, u)) {
+          return { acted: true, over: false };
+        }
+        this.idx++;
+        this.guard = 0;
+      }
+    } else {
+      if (this.guard++ < 60 && aiStep(state, SQUAD_SPAWN)) {
+        return { acted: true, over: false };
+      }
+    }
+    endTurn(state); // півхід вичерпано — дзеркало кінцівки botTurn/aliensTurn
+    this.halfTurns++;
+    this.inTurn = false;
+    this.snapshot = [];
+    this.idx = 0;
+    this.guard = 0;
+    return { acted: false, over: false };
+  }
+}
