@@ -8,6 +8,8 @@
 // живими. Малювання далі валідується візуально (превью).
 // П6.2 (ADR-0027): тести каркаса — топбар (чипи балансу/боєготових),
 // фокусна зона (гео/бій), журнал з фільтрами-вкладками.
+// П6.3 (ADR-0027): бойова фокусна зона — контекст-стрічка бою, керування
+// під бойовищем, приглушена колонка стану в бою, збереження лише на геосцені.
 
 import { beforeAll, describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
@@ -122,8 +124,8 @@ describe('UI-флоу превью: геосцена → місія → бій �
     (document.querySelector('button.mission') as HTMLButtonElement).click();
     expect($('battle-panel').classList.contains('hidden')).toBe(false);
     expect($('geo-panel').classList.contains('hidden')).toBe(true); // П6.2: фокусна зона — бій (ADR-0027)
-    expect($('bturn').textContent).toContain('хід 1');
-    expect($('bturn').textContent).toContain('загін');
+    expect($('bctx-turn').textContent).toContain('хід 1'); // П6.3: чий хід — у контекст-стрічці
+    expect($('bctx-turn').textContent).toContain('загін');
     expect(btn('btn-tick').disabled).toBe(true);
     expect($('binfo').textContent).toContain('Ваш хід');
     expect($('log').textContent).toContain('Місія: загін висаджено');
@@ -145,7 +147,7 @@ describe('UI-флоу превью: геосцена → місія → бій �
   it('кінець ходу: ШІ відпрацьовує синхронно, хід 2 гравцю', () => {
     btn('btn-end').click();
     expect($('bresult').textContent).toBe(''); // загін 3×10 HP виживає перший хід ШІ (сід 42)
-    expect($('bturn').textContent).toContain('хід 2');
+    expect($('bctx-turn').textContent).toContain('хід 2'); // П6.3: стрічка відобразила хід 2
     expect($('binfo').textContent).toContain('Хід прибульців відпрацьовано');
   });
 
@@ -360,5 +362,63 @@ describe('панель збереження: 3 слоти, лише на гео�
     expect(btn('btn-load-2').disabled).toBe(true);
     expect(btn('btn-del-2').disabled).toBe(true);
     expect(localStorage.getItem('rubezh.save.2')).toBeNull();
+  });
+});
+
+describe('бойова фокусна зона (П6.3, ADR-0027)', () => {
+  it('розмітка: керування під бойовищем, бойовище — квадрат (ширина колонки, кап 720px)', () => {
+    const html = readFileSync(process.cwd() + '/index.html', 'utf-8');
+    const panel = html.match(/<section class="panel hidden" id="battle-panel">[\s\S]*?<\/section>/)![0];
+    expect(panel.indexOf('id="battle"')).toBeLessThan(panel.indexOf('id="bcontrols"')); // панель керування — під бойовищем
+    expect(panel.indexOf('id="bctx"')).toBeLessThan(panel.indexOf('id="battle"')); // контекст-стрічка — над бойовищем
+    const css = html.match(/#battle \{[^}]*\}/)![0];
+    expect(css).toContain('width: 100%'); // на ширину фокусної колонки
+    expect(css).toContain('max-width: 720px'); // кап ~720px (ADR-0027)
+    expect(css).toContain('aspect-ratio: 1'); // квадрат
+    const cv = $('battle') as HTMLCanvasElement;
+    expect(cv.width).toBe(520); // buffer 520×520: на десктопі бойовище не менше поточних 520px
+  });
+
+  it('контекст-стрічка: тип місії, заморожений час, чий хід; колонка стану dimmed; збереження вимкнене', () => {
+    ($('seed') as HTMLInputElement).value = '42';
+    btn('btn-new').click();
+    let found = false;
+    for (let i = 0; i < 1500 && !found; i++) {
+      btn('btn-tick').click();
+      found = document.querySelector('button.mission') !== null;
+    }
+    expect(found).toBe(true);
+    (document.querySelector('button.mission') as HTMLButtonElement).click();
+    expect($('battle-panel').classList.contains('hidden')).toBe(false);
+    // сід 42: перша місія — «розвідник» на 22-му тіку (детерміновано)
+    expect($('bctx-kind').textContent).toBe('розвідник');
+    expect($('bctx-time').textContent).toBe($('clock').textContent + ' · заморожено');
+    expect($('bctx-turn').textContent).toBe('хід 1 · загін');
+    expect($('bctx-unit').textContent).toBe('не вибраний');
+    // ADR-0027: у бою колонка стану приглушена й неактивна
+    expect($('status').classList.contains('dimmed')).toBe(true);
+    // ADR-0026: збереження лише на геосцені — кнопки disabled у бою
+    expect(btn('btn-save-1').disabled).toBe(true);
+    expect(btn('btn-load-1').disabled).toBe(true);
+    expect(btn('btn-del-1').disabled).toBe(true);
+  });
+
+  it('вибір юніта: стрічка показує активний юніт HP/AP', () => {
+    const cv = $('battle') as HTMLCanvasElement;
+    cv.dispatchEvent(new MouseEvent('click', { clientX: 2 * 26 + 13, clientY: 2 * 26 + 13 }));
+    expect($('bctx-unit').textContent).toContain('HP 10/10');
+    expect($('bctx-unit').textContent).toContain('AP 10/10');
+    expect($('binfo').textContent).toContain('HP 10/10');
+  });
+
+  it('після бою: dimmed знято, збереження активне', () => {
+    btn('btn-demo').click();
+    expect($('bresult').textContent).toMatch(/ЗАЧИЩЕНО|ЗАГІН ВТРАЧЕНО/);
+    btn('btn-close').click();
+    expect($('geo-panel').classList.contains('hidden')).toBe(false);
+    expect($('status').classList.contains('dimmed')).toBe(false);
+    expect(btn('btn-save-1').disabled).toBe(false);
+    expect(btn('btn-load-1').disabled).toBe(false); // слот 1 має дані з флоу збереження вище
+    expect(btn('btn-del-1').disabled).toBe(false);
   });
 });
