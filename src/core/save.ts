@@ -191,7 +191,8 @@ function parseSave(json: string): SaveData {
     fail('Пошкоджені дані збереження: економіка');
   }
   // П7.4 (ADR-0032): поле intercept опційне (старі сейви) — але якщо є, мусить бути цілим
-  if (data.state.intercept !== undefined && (!Number.isInteger(st.intercept.rngState) || typeof st.intercept.fighter !== 'object')) {
+  const icsv = st.intercept;
+  if (icsv !== undefined && (!Number.isInteger(icsv.rngState) || typeof icsv.fighter !== 'object')) {
     fail('Пошкоджені дані збереження: перехоплення');
   }
   return data;
