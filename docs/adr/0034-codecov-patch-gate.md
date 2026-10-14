@@ -1,6 +1,6 @@
 # 0034. Гейт покриття на PR — codecov/patch як required status check
 
-- Статус: proposed
+- Статус: accepted
 - Дата: 2026-10-14
 - Supersedes: (частково доповнює ADR-0017/0025/0028)
 
