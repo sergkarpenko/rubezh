@@ -3,7 +3,8 @@
 // (node-середовище vitest; DOM-ініціалізація в main.ts стоїть за typeof document).
 
 import { describe, expect, it } from 'vitest';
-import { battleEventText, cellFromPoint, economyEventText, geoEventText, hpColor, samePath } from './main';
+import { battleEventText, cellFromPoint, economyEventText, geoEventText, hpColor, samePath, validFireTargets } from './main';
+import { createGame, makeUnit, type GameState, type Unit } from './core/combat';
 import type { GeoEvent } from './core/geo';
 import type { GameEvent } from './core/combat';
 import type { EconomyEvent } from './core/economy';
@@ -142,5 +143,45 @@ describe('economyEventText: події економіки → журнал (П4.
       cls: 'win',
     });
     expect(economyEventText({ type: 'spend', amount: 100 } as EconomyEvent)).toEqual({ text: 'Витрати: −100', cls: 'lose' });
+  });
+});
+
+describe('validFireTargets: валідні цілі зведеного режиму пострілу (П6.14)', () => {
+  // Чиста мапа 20×20 з однією стіною на лінії (5,5)→(9,5); стрілець «p» у (5,5).
+  const shooter = makeUnit({ id: 'p', side: 'player', pos: { x: 5, y: 5 } });
+  const mk = (id: string, x: number, y: number, alive = true): Unit => makeUnit({ id, side: 'alien', pos: { x, y }, alive });
+  const state = (units: Unit[]): GameState =>
+    createGame({
+      map: { width: 20, height: 20, blocked: new Set(['7,5']) },
+      units: [shooter, ...units],
+    });
+  const vis = (keys: string[]): ReadonlySet<string> => new Set(keys);
+
+  it('видимий прибульець у дальності з лінією вогню — валідна ціль', () => {
+    const diag = mk('a1', 6, 6); // дистанція 1, Брезенхем (5,5)→(6,6) стіни (7,5) не перетинає
+    const st = state([diag]);
+    expect(validFireTargets(st, shooter, vis(['6,6']))).toEqual([diag]);
+  });
+
+  it('туман: невидима ціль не підсвічується (ADR-0006)', () => {
+    const a = mk('a1', 6, 6);
+    expect(validFireTargets(state([a]), shooter, vis([]))).toEqual([]);
+  });
+
+  it('поза дальністю зброї (12) — не валідна', () => {
+    const far = mk('a1', 18, 5); // дистанція 13 > 12
+    expect(validFireTargets(state([far]), shooter, vis(['18,5']))).toEqual([]);
+  });
+
+  it('немає лінії вогню (стіна на прямій) — не валідна', () => {
+    const behind = mk('a1', 9, 5); // стіна (7,5) на прямій (5,5)→(9,5)
+    expect(validFireTargets(state([behind]), shooter, vis(['9,5']))).toEqual([]);
+  });
+
+  it('мертвий прибульець і свій юніт — не цілі', () => {
+    const dead = mk('a1', 6, 6, false);
+    const st = state([dead]);
+    expect(validFireTargets(st, shooter, vis(['6,6']))).toEqual([]);
+    expect(validFireTargets(st, shooter, vis(['5,5']))).toEqual([]); // стрілець — не ціль
   });
 });

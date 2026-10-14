@@ -20,6 +20,10 @@ import { readFileSync } from 'node:fs';
 const $ = (id: string): HTMLElement => document.getElementById(id) as HTMLElement;
 const btn = (id: string): HTMLButtonElement => $(id) as HTMLButtonElement;
 
+// П6.14: журнал операцій малювання no-op контексту (fillText/strokeRect/...) —
+// рамки валідних цілей і плашки шансу assertions робимо по ньому.
+const canvasOps: string[] = [];
+
 // jsdom у цьому середовищі не створює Storage (window.localStorage — undefined),
 // тому ставимо in-memory заміну ДО імпорту main.ts: ADR-0026 — тести на моках
 // сховища; «недоступне сховище» (приватний режим) — окрема гілка main.ts.
@@ -54,12 +58,22 @@ beforeAll(async () => {
   const html = readFileSync(process.cwd() + '/index.html', 'utf-8');
   document.body.innerHTML = html.match(/<body[^>]*>([\s\S]*)<\/body>/)![1];
 
-  // No-op контекст малювання: усі виклики — порожні, присвоєння властивостей — так.
+  // No-op контекст малювання (П6.14: з журналом операцій — рамки цілей і
+  // плашки шансу перевіряються рядком «метод(аргументи)»): усі виклики —
+  // порожні, присвоєння властивостей — так.
   const noopCtx = new Proxy(
     {},
     {
-      get: () => () => undefined,
-      set: () => true,
+      get:
+        (_t, p) =>
+        (...args: unknown[]) => {
+          canvasOps.push(String(p) + '(' + args.map((a) => String(a)).join(',') + ')');
+          return undefined;
+        },
+      set: (_t, p, v) => {
+        canvasOps.push('set:' + String(p) + '=' + String(v));
+        return true;
+      },
     }
   ) as unknown as CanvasRenderingContext2D;
   const proto = HTMLCanvasElement.prototype as unknown as {
@@ -471,11 +485,15 @@ describe('керування: гарячі клавіші і тач-патерн
     key('1', 'Digit1');
     expect(btn('btn-snap').classList.contains('armed')).toBe(true);
     expect($('binfo').textContent).toContain('швидкий');
+    // П6.14: AP 4 — прицільний (5 AP) не зводиться: відмова з причиною, режим лишається попереднім
     key('2', 'Digit2');
-    expect(btn('btn-aimed').classList.contains('armed')).toBe(true);
-    expect(btn('btn-snap').classList.contains('armed')).toBe(false); // режим перемкнувся
+    expect(btn('btn-aimed').classList.contains('armed')).toBe(false);
+    expect(btn('btn-aimed').disabled).toBe(true); // кнопка без AP приглушена
+    expect(btn('btn-aimed').title).toContain('не вистачає AP');
+    expect($('binfo').textContent).toContain('Не вистачає AP');
+    expect(btn('btn-snap').classList.contains('armed')).toBe(true); // режим не перемкнувся
     key('3', 'Digit3');
-    expect(btn('btn-auto').classList.contains('armed')).toBe(true);
+    expect(btn('btn-auto').classList.contains('armed')).toBe(true); // черга рівно 4 AP — ок
   });
 
   it('Esc скасовує режим пострілу (armed знято, підказка в binfo)', () => {
@@ -498,5 +516,89 @@ describe('керування: гарячі клавіші і тач-патерн
     key('1', 'Digit1', seed); // і режим пострілу не зводиться
     expect(btn('btn-snap').classList.contains('armed')).toBe(false);
     seed.blur();
+  });
+});
+
+describe('П6.14: UX прицілювання — обведення цілей, шанс біля клітинки, кнопки без AP', () => {
+  const tap = (x: number, y: number): void => {
+    $('battle').dispatchEvent(new MouseEvent('click', { clientX: x * 26 + 13, clientY: y * 26 + 13 }));
+  };
+  const hover = (x: number, y: number): void => {
+    $('battle').dispatchEvent(new MouseEvent('mousemove', { clientX: x * 26 + 13, clientY: y * 26 + 13 }));
+  };
+  const keydown = (k: string, code: string): void => {
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: k, code: code, bubbles: true }));
+  };
+  // Рамка валідної цілі: strokeRect(gx*26+2, gy*26+2, 22, 22) — spawn-зони малюються 21×21
+  const frame = (x: number, y: number): string => 'strokeRect(' + (x * 26 + 2) + ',' + (y * 26 + 2) + ',22,22)';
+
+  it('підготовка: нова партія (сід 42) → місія → солдат (3,2) крокує на (4,2) — 1 AP', () => {
+    ($('seed') as HTMLInputElement).value = '42';
+    btn('btn-new').click();
+    let found = false;
+    for (let i = 0; i < 1500 && !found; i++) {
+      btn('btn-tick').click();
+      found = document.querySelector('button.mission') !== null;
+    }
+    expect(found).toBe(true);
+    (document.querySelector('button.mission') as HTMLButtonElement).click();
+    tap(3, 2); // вибір солдата у зоні висадки
+    tap(4, 2); // перший тап — прев'ю шляху (1 AP)
+    tap(4, 2); // повторний тап — хід
+    expect($('bctx-unit').textContent).toContain('AP 9/10');
+    // до зведення режиму цілі не обведені
+    expect(canvasOps.includes(frame(16, 2))).toBe(false);
+  });
+
+  it('зведений режим: валідна ціль (16,2) обведена; невидима (17,2) — ні (туман)', () => {
+    btn('btn-snap').click();
+    expect(btn('btn-snap').classList.contains('armed')).toBe(true);
+    expect(canvasOps.includes(frame(16, 2))).toBe(true); // валідна ціль підсвічена
+    expect(canvasOps.includes(frame(17, 2))).toBe(false); // поза зором/дальністю — не підсвічена
+  });
+
+  it('наведення на ціль: шанс попадання біля клітинки (плашка на канві)', () => {
+    hover(16, 2);
+    const chance = $('binfo').textContent.match(/~(\d+)%/);
+    expect(chance).not.toBe(null);
+    // елемент журналу — уся операція з координатами, тому префіксний пошук
+    expect(canvasOps.some((o) => o.startsWith('fillText(~' + chance![1] + '%,'))).toBe(true);
+  });
+
+  it('тап без режиму — підказка; тап-тап пострілу: перший тап — шанс (AP не змінюється), другий — постріл', () => {
+    keydown('Escape', 'Escape'); // зняти режим
+    tap(16, 2); // прибульець без зведеного режиму
+    expect($('binfo').textContent).toContain('Виберіть режим пострілу');
+    btn('btn-snap').click(); // зведено
+    tap(16, 2); // перший тап по цілі — прев'ю шансу
+    expect($('binfo').textContent).toContain('повторний тап у цю саму ціль');
+    expect($('binfo').textContent).toContain('~');
+    expect($('bctx-unit').textContent).toContain('AP 9/10'); // пострілу ще не було
+    // фідбек не ламає тап-тап: тап в ІНШУ клітинку — прев'ю руху, режим знято
+    tap(5, 2);
+    expect($('binfo').textContent).toContain('Шлях: 1 AP');
+    expect(btn('btn-snap').classList.contains('armed')).toBe(false);
+    btn('btn-snap').click();
+    tap(16, 2); // знову перший тап — прев'ю (ходу/пострілу ще немає)
+    expect($('bctx-unit').textContent).toContain('AP 9/10');
+    tap(16, 2); // повторний тап у ту саму ціль — постріл
+    expect($('binfo').textContent).toContain('вистрілив');
+    expect($('bctx-unit').textContent).toContain('AP 6/10');
+  });
+
+  it('кнопки без достатку AP — приглушені з причиною «не вистачає AP» (постріл → AP 3)', () => {
+    btn('btn-snap').click();
+    tap(16, 2);
+    tap(16, 2); // другий постріл: AP 6 − 3 = 3
+    expect($('bctx-unit').textContent).toContain('AP 3/10');
+    expect(btn('btn-aimed').disabled).toBe(true); // 5 AP > 3
+    expect(btn('btn-aimed').title).toContain('не вистачає AP (потрібно 5)');
+    expect(btn('btn-auto').disabled).toBe(true); // 4 AP > 3
+    expect(btn('btn-ow').disabled).toBe(false); // заступа 3 AP — ок
+    expect(btn('btn-snap').disabled).toBe(false); // 3 AP — ок
+    // гаряча клавіша дає ту саму відмову з причиною
+    keydown('2', 'Digit2');
+    expect($('binfo').textContent).toContain('Не вистачає AP');
+    expect(btn('btn-aimed').classList.contains('armed')).toBe(false);
   });
 });

@@ -478,6 +478,57 @@ export function drawNightTerrain(ctx: CanvasRenderingContext2D, w: number, h: nu
   for (let j = 1; j < rows; j++) ctx.fillRect(0, j * cell - 1, w, 1);
 }
 
+// --- П6.14: UX прицілювання — обведення валідних цілей і шанс попадання ---
+
+// Обведення цілі — колір трасерів прибульців П6.13 (неон), плашка шансу — спалах.
+export const TARGET_FRAME_COLOR = 'rgba(255,154,82,0.9)';
+export const CHANCE_LABEL_BG = 'rgba(10,13,18,0.85)';
+export const CHANCE_LABEL_TEXT = '#ffe38a';
+
+export interface TargetFrame {
+  gx: number; // клітинка цілі
+  gy: number;
+  cell: number;
+}
+
+// Обведення клітинки валідної цілі у зведеному режимі пострілу: пунктирна рамка
+// строго в межах клітинки (урок П6.6 — не бруднити проміжки), dash скидається
+// save/restore (стан кадру не витікає у подальше малювання).
+export function drawTargetFrame(ctx: CanvasRenderingContext2D, f: TargetFrame): void {
+  ctx.save();
+  ctx.setLineDash([4, 3]);
+  ctx.strokeStyle = TARGET_FRAME_COLOR;
+  ctx.lineWidth = 2;
+  ctx.strokeRect(f.gx * f.cell + 2, f.gy * f.cell + 2, f.cell - 4, f.cell - 4);
+  ctx.restore();
+}
+
+export interface ChanceLabel {
+  gx: number; // клітинка цілі
+  gy: number;
+  cell: number;
+  cw: number; // ширина buffer'а канви (px) — clamp правого краю
+  text: string; // наприклад '~62%'
+}
+
+// Шанс попадання біля клітинки цілі: темна плашка з неоновим текстом над
+// клітинкою (біля верхнього краю канви — під нею). Ширина — оцінка 6px на
+// символ моноширинного шрифту 10px (без measureText — мок-контекст jsdom його
+// не реалізує), за правий край канви не виходить.
+export function drawChanceLabel(ctx: CanvasRenderingContext2D, l: ChanceLabel): void {
+  const w = l.text.length * 6 + 4;
+  const h = 13;
+  let x = l.gx * l.cell + 1;
+  if (x + w > l.cw) x = l.cw - w - 1;
+  const y = l.gy * l.cell >= h + 1 ? l.gy * l.cell - (h + 1) : (l.gy + 1) * l.cell + 1;
+  ctx.fillStyle = CHANCE_LABEL_BG;
+  ctx.fillRect(x, y, w, h);
+  ctx.fillStyle = CHANCE_LABEL_TEXT;
+  ctx.font = '10px monospace';
+  ctx.textBaseline = 'top';
+  ctx.fillText(l.text, x + 2, y + 2);
+}
+
 // --- П6.8 (ADR-0029): анімаційний рушій — черга + rAF лише під час активних анімацій ---
 
 // Тривалості фаз (мс): стримка анімація, без поспіху (дизайн-сесія 6b).
