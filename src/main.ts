@@ -28,6 +28,10 @@
 // колонка стану (сканери, фінанси, ростер, збереження), журнал з фільтрами-
 // вкладками (геосцена/економіка/бій). Дублювання балансу чипом і карткою —
 // свідомо прийнято (ADR-0027).
+// Фаза 6a (П6.3, ADR-0027): бойова фокусна зона — контекст-стрічка (тип
+// місії, заморожений час, чий хід, активний юніт HP/AP), панель керування
+// під бойовищем, колонка стану в бою приглушена й неактивна (клас dimmed);
+// збереження лише на геосцені (ADR-0026).
 
 import {
   RADAR_RANGE,
@@ -531,7 +535,16 @@ function visibleCells(): Set<string> {
 function renderBattle(): void {
   if (!mission) return;
   drainBattleLog();
-  el('bturn').textContent = '· хід ' + mission.state.turn + ' · ' + (mission.state.activeSide === 'player' ? 'загін' : 'прибульці');
+  // ADR-0027 (П6.3): контекст-стрічка бою — тип місії, заморожений час,
+  // чий хід, активний юніт HP/AP. Час геосцени стоїть (ADR-0026: місія
+  // не переривається) — показуємо його як «заморожено».
+  el('bctx-kind').textContent = mission.briefing.kind;
+  el('bctx-time').textContent = geoClock(party.geo) + ' · заморожено';
+  el('bctx-turn').textContent = 'хід ' + mission.state.turn + ' · ' + (mission.state.activeSide === 'player' ? 'загін' : 'прибульці');
+  const selCtx = selectedUnit();
+  el('bctx-unit').textContent = selCtx
+    ? selCtx.name + ': HP ' + selCtx.hp + '/' + selCtx.maxHp + ' · AP ' + selCtx.ap + '/' + selCtx.maxAp
+    : 'не вибраний';
   const cv = el<HTMLCanvasElement>('battle');
   const ctx = cv.getContext('2d');
   if (!ctx) return;
@@ -626,6 +639,9 @@ function renderAll(): void {
   // ADR-0027: фокусна зона — геосцена або бій (не «два екрани»)
   el('geo-panel').classList.toggle('hidden', mission !== null);
   el('battle-panel').classList.toggle('hidden', mission === null);
+  // ADR-0027 (П6.3): у бою колонка стану приглушена й неактивна —
+  // джерело стану тоді топбар і контекст-стрічка бою
+  el('status').classList.toggle('dimmed', mission !== null);
   renderGeo();
   renderUfos();
   renderFinances();

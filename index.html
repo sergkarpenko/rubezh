@@ -154,6 +154,27 @@
         width: 100%;
         height: auto;
       }
+      /* ADR-0027 (П6.3): бойовище — квадрат на ширину фокусної колонки, кап 720px;
+         на десктопі (двоколонковий каркас від 900px) це не менше 520px */
+      #battle {
+        width: 100%;
+        max-width: 720px;
+        aspect-ratio: 1;
+        height: auto;
+      }
+      /* ADR-0027 (П6.3): контекст-стрічка бою — тип місії, заморожений час, чий хід, активний юніт */
+      #bctx {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin: 0 0 10px;
+      }
+      /* ADR-0027 (П6.3): у бою колонка стану приглушена й неактивна
+         (збереження лише на геосцені — ADR-0026) */
+      #status.dimmed {
+        opacity: 0.45;
+        pointer-events: none;
+      }
       .clock {
         font-size: 14px;
         font-weight: 600;
@@ -276,10 +297,19 @@
           <canvas id="geo" width="576" height="288"></canvas>
         </section>
         <section class="panel hidden" id="battle-panel">
-          <h2>Тактичний бій <span id="bturn" style="color: #7d8794"></span></h2>
+          <h2>Тактичний бій</h2>
+          <!-- ADR-0027 (П6.3): контекст-стрічка бою -->
+          <div id="bctx">
+            <span class="chip">Місія: <b id="bctx-kind">—</b></span>
+            <span class="chip">Час: <b id="bctx-time">—</b></span>
+            <span class="chip">Хід: <b id="bctx-turn">—</b></span>
+            <span class="chip">Юніт: <b id="bctx-unit">—</b></span>
+          </div>
           <div id="bresult"></div>
-          <div id="binfo" style="margin: 8px 0; min-height: 18px">—</div>
-          <div style="display: flex; gap: 8px; margin: 0 0 10px; flex-wrap: wrap">
+          <canvas id="battle" width="520" height="520"></canvas>
+          <div id="binfo" style="margin: 8px 0 10px; min-height: 18px">—</div>
+          <!-- ADR-0027 (П6.3): панель керування — під бойовищем -->
+          <div id="bcontrols" style="display: flex; gap: 8px; flex-wrap: wrap">
             <button id="btn-snap" title="3 AP · ×0.8 · 1 куля">Швидкий</button>
             <button id="btn-aimed" title="5 AP · ×1.15 · 1 куля">Прицільний</button>
             <button id="btn-auto" title="4 AP · ×0.5 · 3 кулі">Черга</button>
@@ -287,7 +317,6 @@
             <button id="btn-end">Кінець ходу</button>
             <button id="btn-demo" title="Бій дограють боти (демо ітерації P)">Демо-бій</button>
           </div>
-          <canvas id="battle" width="520" height="520"></canvas>
         </section>
       </div>
       <section class="panel" id="journal">
