@@ -44,7 +44,7 @@ describe('ШІ прибульців (жадібний)', () => {
     expect(aiStep(g)).toBe(false); // дій більше немає
   });
 
-  it('цілі не видно → заступа, без пострілів (не «читерить»)', () => {
+  it('цілі не видно → дозор, без пострілів (не «читерить»)', () => {
     const g = createGame({
       map: map(),
       rng: alwaysHit,
@@ -59,10 +59,10 @@ describe('ШІ прибульців (жадібний)', () => {
     expect(g.units[1].overwatch).toBe(true);
     expect(g.units[1].ap).toBe(7);
     expect(g.log.filter((e) => e.type === 'shot')).toHaveLength(0);
-    expect(aiStep(g)).toBe(false); // у заступі, повторно не діє
+    expect(aiStep(g)).toBe(false); // у дозорі, повторно не діє
   });
 
-  it('стіна між → заступа, без пострілів і руху', () => {
+  it('стіна між → дозор, без пострілів і руху', () => {
     const g = createGame({
       map: map(['5,2', '5,3', '5,4', '5,5']),
       rng: alwaysHit,
@@ -100,7 +100,7 @@ describe('ШІ прибульців (жадібний)', () => {
     expect(aiStep(g)).toBe(false);
   });
 
-  it('смерть прибульця від заступи під час його руху не ламає aiStep', () => {
+  it('смерть прибульця від дозору під час його руху не ламає aiStep', () => {
     const g = createGame({
       map: map(),
       rng: alwaysHit,
@@ -154,7 +154,7 @@ describe('ШІ прибульців (жадібний)', () => {
     expect(play(11)).toBe(play(11));
   });
 
-  it('5.1.5 patrol: цілей не видно → рух до зони висадки + заступа (резерв 3 AP)', () => {
+  it('5.1.5 patrol: цілей не видно → рух до зони висадки + дозор (резерв 3 AP)', () => {
     const g = createGame({
       map: map(),
       rng: alwaysHit,
@@ -165,7 +165,7 @@ describe('ШІ прибульців (жадібний)', () => {
       ],
     });
     const steps = playAlienTurn(g, 100, [{ x: 2, y: 2 }]);
-    expect(steps).toBe(2); // рух бюджетом 7, потім заступа
+    expect(steps).toBe(2); // рух бюджетом 7, потім дозор
     expect(g.log.filter((e) => e.type === 'move')).toHaveLength(7);
     expect(g.units[1].pos).toEqual({ x: 10, y: 2 }); // 17 → 10, до сусіда зони
     expect(g.units[1].overwatch).toBe(true);
@@ -192,7 +192,7 @@ describe('ШІ прибульців (жадібний)', () => {
     expect(steps).toBe(2);
   });
 
-  it('5.1.5 patrol: AP 3 — руху немає (бюджет 0), лише заступа', () => {
+  it('5.1.5 patrol: AP 3 — руху немає (бюджет 0), лише дозор', () => {
     const g = createGame({
       map: map(),
       rng: alwaysHit,

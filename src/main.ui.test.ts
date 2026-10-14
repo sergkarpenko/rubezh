@@ -155,9 +155,9 @@ describe('UI-флоу превью: геосцена → місія → бій �
     expect($('binfo').textContent).toContain('AP 10/10');
   });
 
-  it('заступа: кнопка резервація AP, підказка в binfo', () => {
+  it('дозор: кнопка резервація AP, підказка в binfo', () => {
     btn('btn-ow').click();
-    expect($('binfo').textContent).toContain('заступі');
+    expect($('binfo').textContent).toContain('дозорі');
     expect($('binfo').textContent).toContain('AP 7/10');
   });
 
@@ -594,7 +594,7 @@ describe('П6.14: UX прицілювання — обведення цілей,
     expect(btn('btn-aimed').disabled).toBe(true); // 5 AP > 3
     expect(btn('btn-aimed').title).toContain('не вистачає AP (потрібно 5)');
     expect(btn('btn-auto').disabled).toBe(true); // 4 AP > 3
-    expect(btn('btn-ow').disabled).toBe(false); // заступа 3 AP — ок
+    expect(btn('btn-ow').disabled).toBe(false); // дозор 3 AP — ок
     expect(btn('btn-snap').disabled).toBe(false); // 3 AP — ок
     // гаряча клавіша дає ту саму відмову з причиною
     keydown('2', 'Digit2');

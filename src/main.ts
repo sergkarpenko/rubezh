@@ -9,7 +9,7 @@
 // geo (час, НЛО, радар) + mission (бій) + squad (ростер, перма-смерть).
 // Ітерація 5.3: тактичний бій — ІНТЕРАКТИВНИЙ (замість авто-ботів ітерації P):
 // вибір солдата, клік-рух по шляху (A* + pathApCost), постріл у вибраному режимі,
-// заступа, кінець ходу → синхронний хід прибульців (патерн 5.1.4, без таймерів).
+// дозор, кінець ходу → синхронний хід прибульців (патерн 5.1.4, без таймерів).
 // Авто-боти (src/bot.ts) лишились як кнопка «Демо-бій».
 //
 // Фаза 2 (П7): чисті шматки «візуальної логіки» (cellFromPoint, samePath,
@@ -610,7 +610,7 @@ function renderBattle(): void {
   const ctx = cv.getContext('2d');
   if (!ctx) return;
   // П6.6: повна очистка кадру — клітинки заливаються з проміжком у 1px,
-  // і без clearRect ці проміжки накопичують залишки (маркери заступи тощо).
+  // і без clearRect ці проміжки накопичують залишки (маркери дозору тощо).
   // Патерн renderGeo: кадр еквівалентний малюванню з нуля.
   ctx.clearRect(0, 0, cv.width, cv.height);
   const st = mission.state;
@@ -675,8 +675,8 @@ function renderBattle(): void {
   for (const t of targets) drawTargetFrame(ctx, { gx: t.pos.x, gy: t.pos.y, cell: BCELL });
 
   // П6.7 (ADR-0029): векторні спрайти юнітів замість геометричних кружків —
-  // силует, зброя, HP, рамка вибору і маркер заступи малює render.ts
-  // (маркер заступи — строго в межах клітинки, П6.6).
+  // силует, зброя, HP, рамка вибору і маркер дозору малює render.ts
+  // (маркер дозору — строго в межах клітинки, П6.6).
   for (const u of st.units) {
     if (!u.alive) continue;
     if (u.id === movingId) continue; // П6.8: його малює анімаційний шар у проміжній позиції
@@ -1027,14 +1027,14 @@ function armOverwatch(): void {
   }
   // П6.14: та сама перевірка AP, що й у кнопки (підказка причини в binfo)
   if (sel.ap < OVERWATCH_AP_COST) {
-    binfo('Не вистачає AP: заступа коштує ' + OVERWATCH_AP_COST + ', є ' + sel.ap + '.');
+    binfo('Не вистачає AP: дозор коштує ' + OVERWATCH_AP_COST + ', є ' + sel.ap + '.');
     return;
   }
   try {
     const prevLen = mission.state.log.length;
     setOverwatch(mission.state, sel.id);
-    enqueueBattleAnims(prevLen); // П6.8: спалах заступи
-    binfo(sel.name + ' у заступі (реакційний вогонь у хід прибульців). AP ' + sel.ap + '/' + sel.maxAp + '.');
+    enqueueBattleAnims(prevLen); // П6.8: спалах дозору
+    binfo(sel.name + ' у дозорі (реакційний вогонь у хід прибульців). AP ' + sel.ap + '/' + sel.maxAp + '.');
   } catch (e) {
     binfo('✗ ' + (e as Error).message);
   }
@@ -1168,7 +1168,7 @@ function cancelSelection(): void {
 }
 
 // ADR-0027 (П6.4): гарячі клавіші керування боєм — 1/2/3 (режими пострілу),
-// O (заступа), E (кінець ходу), Esc (скасувати). Ключ — за ev.code
+// O (дозор), E (кінець ходу), Esc (скасувати). Ключ — за ev.code
 // (фізична клавіша, незалежно від розкладки), цифри — ще й за ev.key.
 // Поля вводу (сід) клавіші не перехоплюють — подія з них ігнорується.
 function isTypingTarget(t: EventTarget | null): boolean {
