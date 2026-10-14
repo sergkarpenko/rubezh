@@ -13,12 +13,34 @@
 // П6.4 (ADR-0027): керування — гарячі клавіші 1/2/3/O/E/Esc (поля вводу
 // ігнорують) і тач-патерн «тап — прев'ю — повторний тап у ту саму
 // клітинку — хід» (мишка — той самий патерн, click).
+// П6.16: демо-бій — покрокове відтворення; фейк-таймери прокручують паузи
+// між діями ботів, поки бій не дійде до результату (банер у #bresult).
 
-import { beforeAll, describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 
 const $ = (id: string): HTMLElement => document.getElementById(id) as HTMLElement;
 const btn = (id: string): HTMLButtonElement => $(id) as HTMLButtonElement;
+
+// П6.16: демо-бій — покрокове відтворення (пауза 160 мс між діями, таймер).
+// Фейк-таймери прокручують паузи, поки бій не дійде до результату (btn-demo
+// disabled у renderBattle після finishBattle). Крок 200 мс > паузи — 1–2
+// дії за ітерацію; ліміт ітерацій — страховка від зависання.
+const DEMO_STEP_MS = 200;
+async function runDemoSteps(): Promise<void> {
+  for (let i = 0; i < 6000 && !btn('btn-demo').disabled; i++) {
+    await vi.advanceTimersByTimeAsync(DEMO_STEP_MS);
+  }
+}
+async function runDemo(): Promise<void> {
+  vi.useFakeTimers();
+  try {
+    btn('btn-demo').click();
+    await runDemoSteps();
+  } finally {
+    vi.useRealTimers();
+  }
+}
 
 // П6.14: журнал операцій малювання no-op контексту (fillText/strokeRect/...) —
 // рамки валідних цілей і плашки шансу assertions робимо по ньому.
@@ -53,6 +75,14 @@ Object.defineProperty(globalThis, 'localStorage', { value: memoryStorage, config
 Object.defineProperty(window, 'localStorage', { value: memoryStorage, configurable: true });
 
 beforeAll(async () => {
+  // П6.16: jsdom надає requestAnimationFrame — у цьому середовищі він
+  // недетермінований, тому стабимо його як відсутній ДО імпорту main.ts:
+  // main.ts при імпорті зафіксує hasRaf = false (той самий патерн П6.8 —
+  // «без rAF анімації не ставляться у чергу»), і покрокове демо крокує
+  // лише таймерами пауз (фейк-таймери у runDemo). rAF-гілку рушія
+  // (onIdle → пауза) покриває render.test.ts на фейковому планувальнику.
+  vi.stubGlobal('requestAnimationFrame', undefined);
+  vi.stubGlobal('cancelAnimationFrame', undefined);
   // Реальна розмітка: body з index.html (script через innerHTML не виконується).
   // import.meta.url у vitest не file-схема — шлях від process.cwd().
   const html = readFileSync(process.cwd() + '/index.html', 'utf-8');
@@ -168,8 +198,16 @@ describe('UI-флоу превью: геосцена → місія → бій �
     expect($('binfo').textContent).toContain('Хід прибульців відпрацьовано');
   });
 
-  it('демо-бій доводить бій до результату (перемога або поразка)', () => {
-    btn('btn-demo').click();
+  it('демо-бій: покрокове відтворення доводить бій до результату (П6.16)', async () => {
+    vi.useFakeTimers();
+    try {
+      btn('btn-demo').click();
+      await vi.advanceTimersByTimeAsync(600); // кілька дій ботів (пауза 160 мс)
+      expect($('bresult').textContent).toBe(''); // кроки тривають — не миттєвий прогін
+      await runDemoSteps();
+    } finally {
+      vi.useRealTimers();
+    }
     expect($('bresult').textContent).toMatch(/ЗАЧИЩЕНО|ЗАГІН ВТРАЧЕНО/);
     expect(btn('btn-demo').disabled).toBe(true); // бій завершено — демо більше не тискається
     expect($('log').textContent).toMatch(/Місію зачищено|Загін втрачено/);
@@ -217,8 +255,8 @@ describe('критичний флоу економіки: найм → місі�
     expect(btn('btn-tick').disabled).toBe(true);
   });
 
-  it('поранення: демо-бій — перемога, поранений у лікарні, премія за місію', () => {
-    btn('btn-demo').click();
+  it('поранення: демо-бій — перемога, поранений у лікарні, премія за місію', async () => {
+    await runDemo();
     expect($('bresult').textContent).toContain('ЗАЧИЩЕНО');
     expect($('bresult').textContent).toContain('поранених: 1');
     expect($('log').textContent).toContain('Іван поранений — лікарня: 8 тик(и)');
@@ -337,13 +375,13 @@ describe('панель збереження: 3 слоти, лише на гео�
     expect(document.querySelector('button.mission')).not.toBeNull(); // вікно місії відновлено
   });
 
-  it('під час бою панель збереження вимкнена (ADR-0026: місія не переривається)', () => {
+  it('під час бою панель збереження вимкнена (ADR-0026: місія не переривається)', async () => {
     (document.querySelector('button.mission') as HTMLButtonElement).click();
     expect($('battle-panel').classList.contains('hidden')).toBe(false);
     expect(btn('btn-save-1').disabled).toBe(true);
     expect(btn('btn-load-1').disabled).toBe(true);
     expect(btn('btn-del-1').disabled).toBe(true);
-    btn('btn-demo').click(); // завершити бій (детерміновано: сід 42)
+    await runDemo(); // завершити бій (детерміновано: сід 42)
     btn('btn-close').click();
     expect(btn('btn-save-1').disabled).toBe(false);
     expect(btn('btn-load-1').disabled).toBe(false);
@@ -428,8 +466,8 @@ describe('бойова фокусна зона (П6.3, ADR-0027)', () => {
     expect($('binfo').textContent).toContain('HP 10/10');
   });
 
-  it('після бою: dimmed знято, збереження активне', () => {
-    btn('btn-demo').click();
+  it('після бою: dimmed знято, збереження активне', async () => {
+    await runDemo();
     expect($('bresult').textContent).toMatch(/ЗАЧИЩЕНО|ЗАГІН ВТРАЧЕНО/);
     btn('btn-close').click();
     expect($('geo-panel').classList.contains('hidden')).toBe(false);

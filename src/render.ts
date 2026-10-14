@@ -774,6 +774,7 @@ export interface AnimEngineDeps {
   schedule: (cb: (now: number) => void) => unknown;
   cancel: (handle: unknown) => void;
   draw: () => void; // повний кадр: clearRect + статика + анімаційний шар (урок П6.6)
+  onIdle?: () => void; // П6.16: черга спорожніла після відтворення — рушій пішов у idle
 }
 export class AnimEngine {
   private queue: Anim[] = [];
@@ -814,6 +815,7 @@ export class AnimEngine {
     this.deps.draw();
     if (this.queue.length === 0) {
       this.handle = null; // idle: наступних кадрів не плануємо
+      this.deps.onIdle?.(); // П6.16: серія анімацій відтворена (без push не викликається)
       return;
     }
     this.handle = this.deps.schedule(this.frame);
