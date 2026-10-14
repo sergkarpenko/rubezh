@@ -1,4 +1,4 @@
-# CI-гейт на PR (ADR-0025): тести + поріг покриття + збірка + docs — без деплою.
+# CI-гейт на PR (ADR-0025/0035): тести + поріг покриття + звіт на Codecov (гейт codecov/patch, ADR-0034) + збірка + docs — без деплою.
 # Працює при кожному PR у main; чек «test» — required status check
 # для захисту гілки main (той самий рубіж, що й preview на push).
 name: ci
@@ -24,9 +24,16 @@ jobs:
           node-version: 22
       - run: npm install
       - run: npm test
-      # Покриття ядра + поріг 80% (ADR-0017) — дублювати завантаження на Codecov
-      # не треба: те робить preview.yml на push у main
+      # Покриття ядра + поріг 80% (ADR-0017); звіт — dist/coverage
       - run: npm run test:coverage
+      # ADR-0035: звіт на Codecov у PR — джерело даних для гейта codecov/patch (ADR-0034,
+      # target 95% з codecov.yml); без цього кроку чек висить «Waiting» і блокує мердж.
+      # Той самий крок і токен, що й у preview.yml (П3.1); Codecov дедуплікує за SHA.
+      - name: Codecov
+        uses: codecov/codecov-action@v7
+        with:
+          files: dist/coverage/coverage-final.json
+          token: ${{ secrets.CODECOV_TOKEN }}
       - run: npm run build
       # TypeDoc-довідка (ADR-0019) — перевірка генерації на PR
       - run: npm run docs
