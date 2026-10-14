@@ -39,7 +39,7 @@ export const UFO_KINDS: Record<UfoKind, KindProfile> = {
   збирач: { moveEveryTicks: 2, landingTicks: 16 }, // повільний, широке вікно (8 год)
 };
 
-export type UfoStatus = 'летить' | 'приземлився';
+export type UfoStatus = 'летить' | 'приземлився' | 'збитий';
 
 export interface Ufo {
   id: string;
@@ -60,7 +60,28 @@ export type GeoEvent =
   | { type: 'day'; day: number; minute: number }
   // Ітерація 5.0 (записує модуль mission.ts):
   | { type: 'mission_won'; ufoId: string; minute: number }
-  | { type: 'mission_lost'; ufoId: string; minute: number };
+  | { type: 'mission_lost'; ufoId: string; minute: number }
+  // П7.3 (ADR-0032): події перехоплення — в журналі геосцени (туман: події лише
+  // про виявлені НЛО, бо запуск перехоплення можливий лише на виявлений).
+  // Записує модуль intercept.ts; geoTick про винищувача не знає (ADR-0002/0032).
+  | { type: 'intercept_start'; ufoId: string; pos: Vec2; minute: number }
+  | { type: 'intercept_move'; from: Vec2; to: Vec2; minute: number }
+  | { type: 'intercept_engage'; ufoId: string; pos: Vec2; minute: number }
+  | {
+      type: 'intercept_round';
+      round: number;
+      choice: 'далека' | 'середня' | 'впритул' | 'відступ';
+      fighterHit: boolean;
+      fighterDamage: number;
+      ufoHit: boolean;
+      ufoDamage: number;
+      minute: number;
+    }
+  | { type: 'intercept_break_off'; ufoId: string; minute: number }
+  | { type: 'intercept_aborted'; ufoId: string; reason: 'ufo_lost' | 'ufo_landed' | 'fighter_damaged'; pos: Vec2; minute: number }
+  | { type: 'ufo_shot_down'; ufoId: string; pos: Vec2; minute: number }
+  | { type: 'fighter_returned'; pos: Vec2; minute: number }
+  | { type: 'fighter_repair_done'; minute: number };
 
 export interface GeoState {
   minute: number; // хвилини від старту; 0 = 00:00 дня 1
@@ -177,13 +198,16 @@ export function geoTick(state: GeoState): void {
         ufo.status = 'приземлився';
         state.log.push({ type: 'ufo_landed', ufoId: ufo.id, pos: { ...ufo.pos }, minute: state.minute });
       }
-    } else {
+    } else if (ufo.status === 'приземлився') {
       ufo.landedTicksLeft -= 1;
       if (ufo.landedTicksLeft <= 0) {
         state.ufos = state.ufos.filter((u) => u !== ufo);
         state.log.push({ type: 'ufo_left', ufoId: ufo.id, minute: state.minute });
       }
     }
+    // «збитий» (П7.3, ADR-0032): сидить на місці падіння як кандидат на тактичну
+    // місію (missionTargets), не рухається і не зникає сам — лише після місії
+    // (completeMission 'перемога' прибирає його з геосцени).
   }
 
   // Фаза 3: виявлення радаром бази (виявлений НЛО лишається на звіті — трекінг).
@@ -208,6 +232,7 @@ export function detectedUfos(state: GeoState): Ufo[] {
 }
 
 // Приземлені виявлені НЛО — кандидати на тактичну місію (зв'язок шарів — ітерація 5).
+// П7.3 (ADR-0032): збиті перехопленням НЛО — теж кандидати (місія на місці падіння).
 export function missionTargets(state: GeoState): Ufo[] {
-  return state.ufos.filter((u) => u.detected && u.status === 'приземлився');
+  return state.ufos.filter((u) => u.detected && (u.status === 'приземлився' || u.status === 'збитий'));
 }

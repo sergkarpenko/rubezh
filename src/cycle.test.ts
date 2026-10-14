@@ -23,6 +23,7 @@ import {
 } from './core/squad';
 import { createEconomy, spend } from './core/economy';
 import { autoBattle } from './bot';
+import { createIntercept, interceptRound, interceptTick, startIntercept } from './core/intercept';
 
 // Геопартія, де перший НЛО вже приземлився в зоні радара (кандидат на місію).
 // Спавн кожен тік (spawnChance: 1) — ціль не довго чекати; сід фіксований → детермінізм.
@@ -256,5 +257,67 @@ describe('інтеграція: економіка і лікарня (П4.4, ADR
     for (let i = 0; i < 18; i++) hospitalTick(roster);
     expect(Object.keys(roster.hospital)).toEqual([]);
     expect(readySoldiers(roster)).toHaveLength(4);
+  });
+});
+
+// П7.3 (ADR-0032): наскрізний цикл «перехоплення → збиття → місія на місці падіння».
+// Події перехоплення пишуться в geo.log (туман: лише про виявлені — запуск можливий
+// лише на виявлений НЛО); збитий НЛО сидить на місці падіння зі статусом «збитий»
+// і стає тактичною місією через missionTargets — правила mission.ts без змін.
+describe('інтеграція П7.3: перехоплення → збиття → місія на падінні', () => {
+  it('наскрізний цикл: погоня → бій → збитий → missionTargets → тактична місія → перемога', () => {
+    const geo = createGeoGame({ seed: 42, spawnChance: 1 });
+    const ic = createIntercept(7);
+    // дочекатися виявленого НЛО у повітрі (spawnChance: 1 — ціль не довго чекати)
+    let target: Ufo | undefined;
+    for (let t = 0; t < 48 * 20 && !target; t++) {
+      geoTick(geo);
+      target = geo.ufos.find((u) => u.detected && u.status === 'летить');
+    }
+    expect(target).toBeDefined();
+    const ufoId = target!.id;
+    // перехоплення: погоня на тіках геосцени, бій, раунди до результату
+    startIntercept(ic, geo, ufoId);
+    let guard = 0;
+    while (guard++ < 500) {
+      if (ic.fighter.status === 'погоня') {
+        geoTick(geo);
+        interceptTick(ic, geo);
+      } else if (ic.fighter.status === 'бій') {
+        interceptRound(ic, geo, 'впритул');
+      } else {
+        break;
+      }
+    }
+    // винищувач міг піти в ремонт (пошкодження) — тоді збиття не сталося; для
+    // наскрізного сценарію гарантуємо збиття: боєготовий б'є поки не зіб'є
+    if (ic.fighter.status !== 'на базі' || !geo.ufos.some((u) => u.id === ufoId && u.status === 'збитий')) {
+      throw new Error('сценарій не привів до збиття — перевірити константи/сід');
+    }
+    const shotDown = geo.ufos.find((u) => u.id === ufoId)!;
+    expect(shotDown.status).toBe('збитий');
+    expect(shotDown.landedTicksLeft).toBe(0);
+    // збитий НЕ зникає сам тіками геосцени — чекає тактичної місії
+    const minuteAtCrash = geo.minute;
+    for (let t = 0; t < 100; t++) geoTick(geo);
+    expect(geo.ufos.find((u) => u.id === ufoId)?.status).toBe('збитий');
+    // події перехоплення — у geo.log (туман: НЛО був виявлений)
+    expect(geo.log.some((e) => e.type === 'intercept_start' && e.ufoId === ufoId)).toBe(true);
+    expect(geo.log.some((e) => e.type === 'ufo_shot_down' && e.ufoId === ufoId)).toBe(true);
+    // місія на місці падіння — через missionTargets, правила mission.ts без змін
+    const missionTarget = missionTargets(geo).find((u) => u.id === ufoId);
+    expect(missionTarget).toBeDefined();
+    expect(missionTarget!.pos).toEqual(shotDown.pos);
+    const roster = createRoster();
+    const mission = createMission(geo, ufoId, { squad: strongSquad(roster) });
+    const res = autoBattle(mission.state, 240);
+    const outcome = finalOutcome(res.outcome);
+    expect(outcome).toBe('перемога');
+    applyMissionResult(roster, mission.state);
+    completeMission(geo, ufoId, outcome);
+    // після перемоги у місії на падінні — НЛО зник з геосцени
+    expect(geo.ufos.find((u) => u.id === ufoId)).toBeUndefined();
+    expect(geo.log.at(-1)).toMatchObject({ type: 'mission_won', ufoId, minute: geo.minute });
+    expect(geo.minute).toBeGreaterThan(minuteAtCrash);
   });
 });

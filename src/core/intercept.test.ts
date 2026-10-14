@@ -304,7 +304,10 @@ describe('intercept: детермінізм', () => {
     expect(a.hp).toEqual(b.hp);
   });
 
-  it('geo.rng не витягається: траєкторія геосцени з перехопленням і без — байт-у-байт', () => {
+  it('geo.rng не витягається: власна траєкторія геосцени (спавни/рухи/виявлення) з перехопленням і без — байт-у-байт', () => {
+    // П7.3: події перехоплення тепер законно пишуться в geo.log (ADR-0032),
+    // а збитий НЛО змінює статус — тому інваріант звужено до власних подій геосцени:
+    // спавни, рухи, посадки, виявлення, дні мають бути байт-у-байт ідентичними.
     const run = (withIntercept: boolean) => {
       const geo = createGeoGame({ seed: 42, spawnChance: 0.5 });
       const ic = createIntercept(7);
@@ -319,7 +322,8 @@ describe('intercept: детермінізм', () => {
           if (ic.fighter.status === 'бій') interceptRound(ic, geo, 'середня');
         }
       }
-      return JSON.stringify({ minute: geo.minute, ufos: geo.ufos, log: geo.log });
+      const geoEvents = geo.log.filter((e) => e.type.startsWith('ufo_') || e.type === 'day');
+      return JSON.stringify({ minute: geo.minute, geoEvents });
     };
     expect(run(true)).toEqual(run(false));
   });
