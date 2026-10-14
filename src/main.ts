@@ -64,6 +64,8 @@ import {
 } from './core/combat';
 import { computeVisibleCells, findPath, pathApCost } from './core/map';
 import { aliensTurn, autoBattle } from './bot';
+// П6.7 (ADR-0029): векторні спрайти — чисті функції малювання шару відображення.
+import { drawBaseSprite, drawUfoSprite, drawUnitSprite } from './render';
 // П5.3 (ADR-0026): партія і слоти збереження — із чистого ядра save.ts.
 import { SAVE_SLOTS, createParty, eraseSlot, loadFromSlot, saveToSlot, slotMeta, type Party, type SlotStore } from './core/save';
 
@@ -260,34 +262,18 @@ function renderGeo(): void {
   ctx.strokeRect((b.x - RADAR_RANGE) * GCELL, (b.y - RADAR_RANGE) * GCELL, (2 * RADAR_RANGE + 1) * GCELL, (2 * RADAR_RANGE + 1) * GCELL);
   ctx.setLineDash([]);
 
-  ctx.fillStyle = '#4f8cff';
-  ctx.fillRect(b.x * GCELL + 6, b.y * GCELL + 6, GCELL - 12, GCELL - 12);
-  ctx.fillStyle = '#9fc3ff';
-  ctx.font = '10px system-ui';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText('БАЗА', b.x * GCELL + GCELL / 2, b.y * GCELL + GCELL / 2);
+  // П6.7 (ADR-0029): статичні спрайти геосцени — база і позначки НЛО (туман:
+  // detectedUfos повертає лише виявлені — невиявлені в малювання не потрапляють).
+  drawBaseSprite(ctx, { cx: b.x * GCELL + GCELL / 2, cy: b.y * GCELL + GCELL / 2, size: GCELL });
 
   for (const u of detectedUfos(party.geo)) {
-    const cx = u.pos.x * GCELL + GCELL / 2,
-      cy = u.pos.y * GCELL + GCELL / 2,
-      r = 11;
-    if (u.status === 'приземлився') {
-      ctx.fillStyle = '#e8c545';
-      ctx.fillRect(cx - r / 2, cy - r / 2, r, r);
-    } else if (u.kind === 'розвідник') {
-      ctx.strokeStyle = '#e0a24a';
-      ctx.beginPath();
-      ctx.moveTo(cx, cy - r / 2);
-      ctx.lineTo(cx + r / 2, cy);
-      ctx.lineTo(cx, cy + r / 2);
-      ctx.lineTo(cx - r / 2, cy);
-      ctx.closePath();
-      ctx.stroke();
-    } else {
-      ctx.strokeStyle = '#e0a24a';
-      ctx.strokeRect(cx - r / 2, cy - r / 2, r, r);
-    }
+    drawUfoSprite(ctx, {
+      cx: u.pos.x * GCELL + GCELL / 2,
+      cy: u.pos.y * GCELL + GCELL / 2,
+      r: 11,
+      landed: u.status === 'приземлився',
+      kind: u.kind,
+    });
   }
 
   el('clock').textContent = geoClock(party.geo);
@@ -589,49 +575,22 @@ function renderBattle(): void {
     }
   }
 
-  ctx.font = '9px system-ui';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
+  // П6.7 (ADR-0029): векторні спрайти юнітів замість геометричних кружків —
+  // силует, зброя, HP, рамка вибору і маркер заступи малює render.ts
+  // (маркер заступи — строго в межах клітинки, П6.6).
   for (const u of st.units) {
     if (!u.alive) continue;
     const visible = vis.has(u.pos.x + ',' + u.pos.y);
     if (u.side === 'alien' && !visible) continue;
-    const cx = u.pos.x * BCELL + BCELL / 2,
-      cy = u.pos.y * BCELL + BCELL / 2,
-      r = 8;
-    if (u.side === 'player') {
-      ctx.fillStyle = '#6ea8ff';
-      ctx.beginPath();
-      ctx.arc(cx, cy, r, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = '#0b0e15';
-      ctx.fillText(String(u.hp), cx, cy);
-      if (u.id === selectedId) {
-        // рамка вибору
-        ctx.strokeStyle = '#d7e4f7';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.arc(cx, cy, r + 2, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.lineWidth = 1;
-      }
-    } else {
-      ctx.fillStyle = '#ff6b6b';
-      ctx.beginPath();
-      ctx.moveTo(cx, cy - r);
-      ctx.lineTo(cx + r, cy + r);
-      ctx.lineTo(cx - r, cy + r);
-      ctx.closePath();
-      ctx.fill();
-      ctx.fillStyle = '#0b0e15';
-      ctx.fillText(String(u.hp), cx, cy + r / 3);
-    }
-    if (u.overwatch) {
-      // маркер заступи — П6.6: тримаємо строго в межах клітинки юніта
-      // (BCELL=26, центр ±13), щоб не бруднити 1px-проміжки між клітинками
-      ctx.fillStyle = '#d8b25a';
-      ctx.fillRect(cx - 2, u.side === 'player' ? cy - r - 4 : cy + r, 4, 4);
-    }
+    drawUnitSprite(ctx, {
+      side: u.side,
+      cx: u.pos.x * BCELL + BCELL / 2,
+      cy: u.pos.y * BCELL + BCELL / 2,
+      r: 8,
+      hp: u.hp,
+      selected: u.id === selectedId,
+      overwatch: u.overwatch,
+    });
   }
 
   // стан кнопок керування
