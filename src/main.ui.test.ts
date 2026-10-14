@@ -6,6 +6,8 @@
 // рендерить 2D, а main.ts при null-контексті рано виходить з renderGeo/
 // renderBattle і не оновлює DOM поруч із канвою; заглушка тримає кнопки/тексти
 // живими. Малювання далі валідується візуально (превью).
+// П6.2 (ADR-0027): тести каркаса — топбар (чипи балансу/боєготових),
+// фокусна зона (гео/бій), журнал з фільтрами-вкладками.
 
 import { beforeAll, describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
@@ -86,7 +88,10 @@ describe('UI-флоу превью: геосцена → місія → бій �
     expect($('clock').textContent).toBe('Д1 00:00');
     expect($('roster').textContent).toContain('6 солдатів (6 боєготових)');
     expect($('money').textContent).toBe('300');
+    expect($('ready').textContent).toBe('6/6'); // П6.2: чип боєготових у топбарі
+    expect($('money-card').textContent).toBe('300'); // П6.2: дублювання балансу чипом і карткою (ADR-0027)
     expect($('battle-panel').classList.contains('hidden')).toBe(true);
+    expect($('geo-panel').classList.contains('hidden')).toBe(false);
     expect(btn('btn-tick').disabled).toBe(false);
   });
 
@@ -113,9 +118,10 @@ describe('UI-флоу превью: геосцена → місія → бій �
     expect(found).toBe(true); // сід 42: виявлений НЛО приземлюється в межах ліміту
   });
 
-  it('запуск місії: панель бою відкрита, хід 1 загону, час геосцени заблоковано', () => {
+  it('запуск місії: панель бою відкрита, геосцена прихована, час геосцени заблоковано', () => {
     (document.querySelector('button.mission') as HTMLButtonElement).click();
     expect($('battle-panel').classList.contains('hidden')).toBe(false);
+    expect($('geo-panel').classList.contains('hidden')).toBe(true); // П6.2: фокусна зона — бій (ADR-0027)
     expect($('bturn').textContent).toContain('хід 1');
     expect($('bturn').textContent).toContain('загін');
     expect(btn('btn-tick').disabled).toBe(true);
@@ -153,6 +159,7 @@ describe('UI-флоу превью: геосцена → місія → бій �
   it('закриття бою повертає на геосцену і розблоковує час', () => {
     btn('btn-close').click();
     expect($('battle-panel').classList.contains('hidden')).toBe(true);
+    expect($('geo-panel').classList.contains('hidden')).toBe(false); // П6.2: фокусна зона — геосцена
     expect(btn('btn-tick').disabled).toBe(false);
     expect($('bresult').textContent).toBe('');
   });
@@ -223,6 +230,36 @@ describe('критичний флоу економіки: найм → місі�
     expect($('clock').textContent).toBe('Д2 00:00');
     expect($('money').textContent).toBe('450');
     expect($('log').textContent).toContain('Дотація за добу 1: +100');
+  });
+});
+
+describe('журнал з фільтрами-вкладками (П6.2, ADR-0027)', () => {
+  // Стан продовжує флоу економіки: Д2 00:00, баланс 450, 6 солдатів.
+
+  it('вкладка ховає невідповідні записи, активна підсвічена, «Усе» повертає все', () => {
+    const geoLi = document.querySelector('#log li[data-cat="geo"]') as HTMLElement;
+    expect(geoLi.style.display).toBe(''); // фільтр «Усе» — усе видимо
+    btn('log-tab-econ').click();
+    expect((document.querySelector('#log-tabs button.active') as HTMLElement).id).toBe('log-tab-econ');
+    expect(geoLi.style.display).toBe('none');
+    const econLi = document.querySelector('#log li[data-cat="econ"]') as HTMLElement;
+    expect(econLi.style.display).toBe('');
+    btn('log-tab-all').click();
+    expect(geoLi.style.display).toBe('');
+  });
+
+  it('новий запис під активним фільтром видимий, під іншим — приховується', () => {
+    btn('log-tab-econ').click();
+    btn('btn-hire').click(); // 450 → 350 (два записи: «Найм» + «Витрати»)
+    const hireLi = Array.from(document.querySelectorAll('#log li[data-cat="econ"]')).find((li) =>
+      li.textContent!.includes('Найм')
+    ) as HTMLElement;
+    expect(hireLi.style.display).toBe('');
+    btn('log-tab-battle').click();
+    expect(hireLi.style.display).toBe('none');
+    btn('log-tab-all').click();
+    expect(hireLi.style.display).toBe('');
+    expect($('money').textContent).toBe('350');
   });
 });
 
