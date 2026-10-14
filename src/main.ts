@@ -74,6 +74,7 @@ import {
   drawBaseSprite,
   drawUfoSprite,
   drawUnitSprite,
+  initPixelSprites,
   makeGeoPulseAnim,
   moveAnimPos,
 } from './render';
@@ -82,6 +83,16 @@ import { SAVE_SLOTS, createParty, eraseSlot, loadFromSlot, saveToSlot, slotMeta,
 
 const GCELL = 36; // px на клітинку світу (16×8 → 576×288)
 const BCELL = 26; // px на клітинку бойовища (20×20 → 520×520)
+
+// П6.12 (ADR-0031): піксель-арт спрайти — фабрика offscreen-канвасів для
+// render.ts. Реєструється ДО першого рендера (нижче newParty(42) малює
+// геосцену — TDZ/порядок оголошень, урок у docs/workflow.md).
+initPixelSprites((w: number, h: number) => {
+  const c = document.createElement('canvas');
+  c.width = w;
+  c.height = h;
+  return c;
+});
 
 const MODE_LABEL: Record<ShotMode, string> = { snap: 'швидкий', aimed: 'прицільний', auto: 'черга' };
 
@@ -315,7 +326,6 @@ function renderGeo(): void {
     drawUfoSprite(ctx, {
       cx: u.pos.x * GCELL + GCELL / 2,
       cy: u.pos.y * GCELL + GCELL / 2,
-      r: 11,
       landed: u.status === 'приземлився',
       kind: u.kind,
     });
