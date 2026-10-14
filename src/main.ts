@@ -553,6 +553,10 @@ function renderBattle(): void {
   const cv = el<HTMLCanvasElement>('battle');
   const ctx = cv.getContext('2d');
   if (!ctx) return;
+  // П6.6: повна очистка кадру — клітинки заливаються з проміжком у 1px,
+  // і без clearRect ці проміжки накопичують залишки (маркери заступи тощо).
+  // Патерн renderGeo: кадр еквівалентний малюванню з нуля.
+  ctx.clearRect(0, 0, cv.width, cv.height);
   const st = mission.state;
 
   const vis = visibleCells();
@@ -623,9 +627,10 @@ function renderBattle(): void {
       ctx.fillText(String(u.hp), cx, cy + r / 3);
     }
     if (u.overwatch) {
-      // маркер заступи
+      // маркер заступи — П6.6: тримаємо строго в межах клітинки юніта
+      // (BCELL=26, центр ±13), щоб не бруднити 1px-проміжки між клітинками
       ctx.fillStyle = '#d8b25a';
-      ctx.fillRect(cx - 2, u.side === 'player' ? cy - r - 6 : cy + r + 2, 4, 4);
+      ctx.fillRect(cx - 2, u.side === 'player' ? cy - r - 4 : cy + r, 4, 4);
     }
   }
 
