@@ -242,7 +242,7 @@ git push origin iter-X.Y
 | ADR-0025 | Захист гілки main — force-push/deletion + required status checks | superseded (ADR-0028) | 2026-10-13 |
 | ADR-0026 | Збереження партії (save/load) | accepted | 2026-10-13 |
 | ADR-0027 | Компоновка і керування превью (підфаза 6a) | accepted | 2026-10-14 |
-| ADR-0028 | Доставка змін — тематична гілка + PR, мерж власником (Supersedes: ADR-0025) | proposed (мерж PR = «схвалюю») | 2026-10-14 |
+| ADR-0028 | Доставка змін — тематична гілка + PR, мерж власником (Supersedes: ADR-0025) | accepted | 2026-10-14 |
 
 **Нове рішення?** Створіть новий ADR з порядковим номером.
 
