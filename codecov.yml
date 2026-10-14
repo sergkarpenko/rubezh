@@ -1,0 +1,13 @@
+# ADR-0034: гейт покриття на PR — codecov/patch target 95% як required check.
+# patch — покриття нових рядків дифа PR; проект (whole-repo) лишаємо Codecov-авто.
+coverage:
+  status:
+    project:
+      default: false
+    patch:
+      default:
+        target: 95%
+        threshold: 0%
+        only_pull_requests: true
+comment:
+  layout: 'reach, diff, flags, files'
