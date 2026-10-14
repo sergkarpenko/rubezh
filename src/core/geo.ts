@@ -81,6 +81,7 @@ export type GeoEvent =
   | { type: 'intercept_aborted'; ufoId: string; reason: 'ufo_lost' | 'ufo_landed' | 'fighter_damaged'; pos: Vec2; minute: number }
   | { type: 'ufo_shot_down'; ufoId: string; pos: Vec2; minute: number }
   | { type: 'fighter_returned'; pos: Vec2; minute: number }
+  | { type: 'fighter_repair_start'; minute: number } // П7.4: ремонт оплачемо
   | { type: 'fighter_repair_done'; minute: number };
 
 export interface GeoState {

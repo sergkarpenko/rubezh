@@ -15,6 +15,7 @@ import { mulberry32, type StatefulRng, type Unit, type Vec2 } from './combat';
 import { createGeoGame, type GeoEvent, type GeoState, type Ufo } from './geo';
 import { createRoster, type Roster } from './squad';
 import { createEconomy, type EconomyEvent, type EconomyState } from './economy';
+import { createIntercept, interceptRngState, type Fighter, type InterceptEvent, type InterceptState } from './intercept';
 
 export const SAVE_VERSION = 1;
 export const SAVE_SLOTS = 3; // ADR-0026: три слоти, ключі rubezh.save.1..3 у main.ts
@@ -27,10 +28,17 @@ export interface Party {
   geo: GeoState;
   roster: Roster;
   econ: EconomyState;
+  intercept: InterceptState; // П7.4 (ADR-0032): стан винищувача — у Party
 }
 
 export function createParty(seed: number): Party {
-  return { seed, geo: createGeoGame({ seed }), roster: createRoster(), econ: createEconomy() };
+  return {
+    seed,
+    geo: createGeoGame({ seed }),
+    roster: createRoster(),
+    econ: createEconomy(),
+    intercept: createIntercept(seed),
+  };
 }
 
 // Серіалізований стан: усе, що описує подальшу траєкторію. rng.state — позиція
@@ -57,6 +65,16 @@ interface EconSave {
   lastAllowanceDay: number;
   log: EconomyEvent[];
 }
+// П7.4 (ADR-0032): стан перехоплення в сейві; відсутнє поле (старі сейви) =
+// «боєготовий на базі» — версія формату не зростає.
+interface InterceptSave {
+  rngState: number;
+  fighter: Fighter;
+  ufoHp: Record<string, number>;
+  activeUfoId: string | null;
+  round: number;
+  log: InterceptEvent[];
+}
 
 export interface SaveData {
   version: number;
@@ -66,6 +84,7 @@ export interface SaveData {
     geo: GeoSave;
     roster: RosterSave;
     econ: EconSave;
+    intercept?: InterceptSave;
   };
 }
 
@@ -104,6 +123,14 @@ export function serializeParty(party: Party, savedAt: string = ''): string {
         money: party.econ.money,
         lastAllowanceDay: party.econ.lastAllowanceDay,
         log: party.econ.log.slice(),
+      },
+      intercept: {
+        rngState: interceptRngState(party.intercept),
+        fighter: { ...party.intercept.fighter, pos: { ...party.intercept.fighter.pos } },
+        ufoHp: { ...party.intercept.ufoHp },
+        activeUfoId: party.intercept.activeUfoId,
+        round: party.intercept.round,
+        log: party.intercept.log.slice(),
       },
     },
   };
@@ -163,6 +190,11 @@ function parseSave(json: string): SaveData {
   if (!Number.isInteger(st.econ?.money) || !Number.isInteger(st.econ?.lastAllowanceDay) || !Array.isArray(st.econ?.log)) {
     fail('Пошкоджені дані збереження: економіка');
   }
+  // П7.4 (ADR-0032): поле intercept опційне (старі сейви) — але якщо є, мусить бути цілим
+  const icsv = st.intercept;
+  if (icsv !== undefined && (!Number.isInteger(icsv.rngState) || typeof icsv.fighter !== 'object')) {
+    fail('Пошкоджені дані збереження: перехоплення');
+  }
   return data;
 }
 
@@ -182,6 +214,17 @@ export function deserializeParty(json: string): Party {
   geo.spawnChance = g.spawnChance;
   geo.maxUfos = g.maxUfos;
   geo.nextId = g.nextId;
+  // П7.4 (ADR-0032): відсутнє поле intercept (старі сейви) = боєготовий на базі;
+  // rng відновлюється з позиції потоку mulberry32 — бій продовжується байт-у-байт.
+  const sv = data.state.intercept;
+  const ic = sv !== undefined ? createIntercept({ rng: mulberry32(sv.rngState) }) : createIntercept(data.seed);
+  if (sv !== undefined) {
+    ic.fighter = { ...sv.fighter, pos: { ...sv.fighter.pos } };
+    ic.ufoHp = { ...sv.ufoHp };
+    ic.activeUfoId = sv.activeUfoId;
+    ic.round = sv.round;
+    ic.log = sv.log.slice();
+  }
   return {
     seed: data.seed,
     geo,
@@ -195,6 +238,7 @@ export function deserializeParty(json: string): Party {
       lastAllowanceDay: data.state.econ.lastAllowanceDay,
       log: data.state.econ.log.slice(),
     },
+    intercept: ic,
   };
 }
 
