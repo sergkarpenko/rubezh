@@ -143,12 +143,42 @@ function drawPixelSprite(ctx: CanvasRenderingContext2D, def: PixelSprite, cx: nu
   ctx.drawImage(s.img, Math.round(cx - w / 2), Math.round(cy - h / 2), w, h);
 }
 
-// Маркер заступи — П6.6: строго в межах клітинки юніта (ті самі зсуви, що й у
-// виправленні; П6.12: малюється ПОВЕРХ спрайта — силует тепер займає майже
-// всю клітинку, під ним маркер було б не видно).
+// Маркер заступи (доробка П6.12 за валідацією власника): піксельна «блискавка»
+// золотом — «заряджений / готовий до реакційного вогню»; читається краще за
+// суцільний квадрат. Ті самі зони клітинки, що й раніше (гравець — згори,
+// прибульці — знизу), строго в межах клітинки (урок П6.6): 8×8 у клітинці 26.
+const OW_BOLT: PixelSprite = {
+  rows: ['.AA.', 'AA..', 'AAAA', '..AA'],
+  palette: { A: OW_MARKER },
+};
+
 function drawOverwatchMarker(ctx: CanvasRenderingContext2D, u: UnitSprite): void {
-  ctx.fillStyle = OW_MARKER;
-  ctx.fillRect(u.cx - 2, u.side === 'player' ? u.cy - u.r - 4 : u.cy + u.r, 4, 4);
+  drawPixelSprite(ctx, OW_BOLT, u.cx, u.side === 'player' ? u.cy - u.r - 1 : u.cy + u.r, SPRITE_SCALE);
+}
+
+// Рамка вибору (доробка П6.12 за валідацією власника): кутові дужки по кутах
+// спрайта — не перекривають силует (кільце навколо центру лягало на пікселі);
+// кути матриць спрайтів прозорі — дужки лягають на чисте місце.
+function drawSelectionBrackets(ctx: CanvasRenderingContext2D, cx: number, cy: number): void {
+  const s = 12; // половина спрайта (24px у клітинці 26)
+  const arm = 4; // довжина плеча дужки
+  ctx.strokeStyle = SELECT_RING;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(cx - s, cy - s + arm);
+  ctx.lineTo(cx - s, cy - s);
+  ctx.lineTo(cx - s + arm, cy - s);
+  ctx.moveTo(cx + s - arm, cy - s);
+  ctx.lineTo(cx + s, cy - s);
+  ctx.lineTo(cx + s, cy - s + arm);
+  ctx.moveTo(cx + s, cy + s - arm);
+  ctx.lineTo(cx + s, cy + s);
+  ctx.lineTo(cx + s - arm, cy + s);
+  ctx.moveTo(cx - s + arm, cy + s);
+  ctx.lineTo(cx - s, cy + s);
+  ctx.lineTo(cx - s, cy + s - arm);
+  ctx.stroke();
+  ctx.lineWidth = 1;
 }
 
 function drawHpText(ctx: CanvasRenderingContext2D, text: string, x: number, y: number): void {
@@ -211,14 +241,7 @@ export function drawSoldierSprite(ctx: CanvasRenderingContext2D, u: UnitSprite):
   drawPixelSprite(ctx, (u.frame ?? 0) === 1 ? SOLDIER_STEP : SOLDIER_STAND, u.cx, u.cy, SPRITE_SCALE);
   if (u.overwatch) drawOverwatchMarker(ctx, u);
   drawHpText(ctx, String(u.hp), u.cx, u.cy);
-  if (u.selected) {
-    ctx.strokeStyle = SELECT_RING;
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.arc(u.cx, u.cy, u.r + 2, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.lineWidth = 1;
-  }
+  if (u.selected) drawSelectionBrackets(ctx, u.cx, u.cy);
 }
 
 // ADR-0031 (П6.12): прибульчик з «Імпульсним різаком» — енергетична «вилка»
@@ -274,14 +297,7 @@ export function drawAlienSprite(ctx: CanvasRenderingContext2D, u: UnitSprite): v
   drawPixelSprite(ctx, (u.frame ?? 0) === 1 ? ALIEN_STEP : ALIEN_STAND, u.cx, u.cy, SPRITE_SCALE);
   if (u.overwatch) drawOverwatchMarker(ctx, u);
   drawHpText(ctx, String(u.hp), u.cx, u.cy);
-  if (u.selected) {
-    ctx.strokeStyle = SELECT_RING;
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.arc(u.cx, u.cy, u.r + 2, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.lineWidth = 1;
-  }
+  if (u.selected) drawSelectionBrackets(ctx, u.cx, u.cy);
 }
 
 // Диспетчер за стороною — єдина точка виклику з renderBattle.
@@ -290,42 +306,38 @@ export function drawUnitSprite(ctx: CanvasRenderingContext2D, u: UnitSprite): vo
   else drawAlienSprite(ctx, u);
 }
 
-// ADR-0031 (П6.12): база геосцени — фортеця з темних стін: радар-тарілка
-// зверху, внутрішній блок з освітленими вікнами, ворота світла знизу.
-// Напис «БАЗА» лишається векторним текстом поверх (читабельність, ADR-0007).
+// ADR-0031 (П6.12, доробка за валідацією власника): база геосцени —
+// «Радарний пост»: велика світла тарілка на темній щоглі, світла хатина
+// з темними воротами. Один великий знак замість дрібних деталей (попередня
+// 16×16 «фортеця» на 32px читалась як темний блок). Напис «БАЗА» — ПІД
+// спрайтом, світлим на темному тлі (раніше текст поверх іконки мав
+// майже нульовий контраст). 12×12 @ 2× = 24px у клітинці GCELL 36.
 const BASE_SPRITE: PixelSprite = {
   rows: [
-    '.......OO.......',
-    '......OOOO......',
-    '.......DD.......',
-    '................',
-    'DDDDDDDDDDDDDDDD',
-    'DBBBBBBBBBBBBBBD',
-    'DBBBBBBBBBBBBBBD',
-    'DBBBBDDDDDBBBBBD',
-    'DBBBDOOOODBBBBBD',
-    'DBBBBDDDDDBBBBBD',
-    'DBBBBBBBBBBBBBBD',
-    'DBBBBBBBBBBBBBBD',
-    'DBBBBBBBBBBBBBBD',
-    'DDDDDDDOODDDDDDD',
-    'DDDDDDDDDDDDDDDD',
-    '................',
+    '...OOOOOO...',
+    '....OOOO....',
+    '.....OO.....',
+    '.....DD.....',
+    '.....DD.....',
+    '..BBBBBBBB..',
+    '.OOOOOOOOOO.',
+    '.OOOODDOOOO.',
+    '.OOOODDOOOO.',
+    '.OOOODDOOOO.',
+    '.OOOOOOOOOO.',
+    '............',
   ],
-  palette: { B: BASE_FILL, O: BASE_OUTLINE, D: BASE_WALL },
+  palette: { O: BASE_OUTLINE, D: BASE_WALL, B: BASE_FILL },
 };
 
-const BASE_SPRITE_W = 16; // сторона матриці бази (px растру)
-
 export function drawBaseSprite(ctx: CanvasRenderingContext2D, b: BaseSprite): void {
-  // ціле кратне масштаб під клітинку геосцени (GCELL 36 → 2× → 32px), не менше 1
-  const scale = Math.max(1, Math.floor(b.size / BASE_SPRITE_W));
-  drawPixelSprite(ctx, BASE_SPRITE, b.cx, b.cy, scale);
-  ctx.font = '10px system-ui';
+  // спрайт — трохи вище центру клітинки, під ним напис (обидва в межах клітинки)
+  drawPixelSprite(ctx, BASE_SPRITE, b.cx, b.cy - 4, SPRITE_SCALE);
+  ctx.font = '9px system-ui';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillStyle = BASE_OUTLINE;
-  ctx.fillText('БАЗА', b.cx, b.cy);
+  ctx.fillText('БАЗА', b.cx, b.cy + 13);
 }
 
 // Позначка НЛО геосцени (туман: лише виявлені потрапляють у виклик — фільтр у main.ts).
