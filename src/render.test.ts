@@ -281,28 +281,38 @@ describe('читабельність стану (ADR-0007)', () => {
     expect(a.calls.some((c) => c.m === 'fillText' && c.args[0] === '4')).toBe(true);
   });
 
-  it('рамка вибору — коло радіусом r+2 лише коли selected', () => {
+  it('рамка вибору — кутові дужки по кутах спрайта лише коли selected (доробка П6.12)', () => {
     const sel = mockCtx();
     drawSoldierSprite(sel.ctx, soldier({ selected: true }));
-    expect(sel.calls.some((c) => c.m === 'arc' && (c.args as number[])[2] === R + 2)).toBe(true);
+    const moves = sel.calls.filter((c) => c.m === 'moveTo');
+    const lines = sel.calls.filter((c) => c.m === 'lineTo');
+    expect(moves.length).toBe(4); // по одній дужці на кут
+    expect(lines.length).toBe(8); // два плечі на кут
+    // кути — на межах спрайта (±12 від центру), в межах клітинки (урок П6.6)
+    expect(moves.some((c) => (c.args as number[])[0] === CX - 12 && (c.args as number[])[1] === CY - 12 + 4)).toBe(true);
 
     const notSel = mockCtx();
     drawSoldierSprite(notSel.ctx, soldier());
-    expect(notSel.calls.some((c) => c.m === 'arc' && (c.args as number[])[2] === R + 2)).toBe(false);
+    expect(notSel.calls.some((c) => c.m === 'moveTo' || c.m === 'lineTo')).toBe(false);
   });
 
-  it('маркер заступи — 4×4 у межах клітинки: солдат над силуетом, прибульчик під (П6.6)', () => {
+  it('маркер заступи — піксельна «блискавка» 8×8 золотом: солдат згори, прибульчик знизу (доробка П6.12)', () => {
+    const rf = rasterFactory();
+    initPixelSprites(rf.make);
     const s = mockCtx();
     drawSoldierSprite(s.ctx, soldier({ overwatch: true }));
-    const ow = s.calls.find((c) => c.m === 'fillRect' && (c.args as number[])[3] === 4 && (c.args as number[])[2] === 4);
-    expect(ow).toBeDefined();
-    expect((ow!.args as number[])[1]).toBe(CY - R - 4);
+    const owS = s.calls.find((c) => c.m === 'drawImage' && (c.args as number[])[3] === 8);
+    expect(owS).toBeDefined();
+    expect((owS!.args as number[])[1]).toBe(CX - 4); // центр по x
+    expect((owS!.args as number[])[2]).toBe(CY - R - 5); // згори, в межах клітинки
+    const bolt = rf.canvases[1]; // перша матриця після силуета — блискавка
+    expect(bolt.pixels.every((p) => p.color === '#d8b25a')).toBe(true); // золото заступи
 
     const a = mockCtx();
     drawAlienSprite(a.ctx, alien({ overwatch: true }));
-    const owA = a.calls.find((c) => c.m === 'fillRect' && (c.args as number[])[3] === 4 && (c.args as number[])[2] === 4);
+    const owA = a.calls.find((c) => c.m === 'drawImage' && (c.args as number[])[3] === 8);
     expect(owA).toBeDefined();
-    expect((owA!.args as number[])[1]).toBe(CY + R);
+    expect((owA!.args as number[])[2]).toBe(CY + R - 4); // знизу
   });
 });
 
@@ -325,15 +335,19 @@ describe('детермінованість малювання (ADR-0003 — бе
 });
 
 describe('спрайти геосцени (піксель-арт П6.12)', () => {
-  it('база: drawImage 16×16 у масштабі 2× (32px у клітинці 36) + напис «БАЗА» у центрі', () => {
+  it('база «Радарний пост» (доробка П6.12): 12×12 @2× = 24px вище центру, напис «БАЗА» під спрайтом', () => {
     const { ctx, calls } = mockCtx();
     drawBaseSprite(ctx, { cx: 18, cy: 18, size: 36 });
     const d = calls.find((c) => c.m === 'drawImage');
     expect(d).toBeDefined();
-    expect((d!.args as number[])[1]).toBe(18 - 16); // Math.round(cx - 32/2)
-    expect((d!.args as number[])[3]).toBe(32);
-    expect((d!.args as number[])[4]).toBe(32);
-    expect(calls.some((c) => c.m === 'fillText' && c.args[0] === 'БАЗА')).toBe(true);
+    expect((d!.args as number[])[1]).toBe(18 - 12); // Math.round(cx - 24/2)
+    expect((d!.args as number[])[2]).toBe(18 - 4 - 12); // спрайт зміщено вгору
+    expect((d!.args as number[])[3]).toBe(24);
+    expect((d!.args as number[])[4]).toBe(24);
+    const label = calls.find((c) => c.m === 'fillText' && c.args[0] === 'БАЗА');
+    expect(label).toBeDefined();
+    expect((label!.args as number[])[1]).toBe(18);
+    expect((label!.args as number[])[2]).toBe(18 + 13); // напис під спрайтом
   });
 
   it('НЛО: три види — три різні матриці; приземлений залитий, «розвідник» — порожній ромб', () => {
