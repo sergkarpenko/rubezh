@@ -72,11 +72,14 @@ import {
   animT,
   drawAnimFrame,
   drawBaseSprite,
+  drawNightTerrain,
   drawUfoSprite,
   drawUnitSprite,
   initPixelSprites,
   makeGeoPulseAnim,
   moveAnimPos,
+  shakeOffset,
+  type TerrainCell,
 } from './render';
 // П5.3 (ADR-0026): партія і слоти збереження — із чистого ядра save.ts.
 import { SAVE_SLOTS, createParty, eraseSlot, loadFromSlot, saveToSlot, slotMeta, type Party, type SlotStore } from './core/save';
@@ -618,15 +621,25 @@ function renderBattle(): void {
     if (activeAnim.side === 'player' || vis.has(cellK)) movingId = activeAnim.unitId;
   }
 
-  for (let y = 0; y < st.map.height; y++) {
-    for (let x = 0; x < st.map.width; x++) {
-      const k2 = x + ',' + y;
-      const blocked = st.map.blocked.has(k2);
-      const visible = vis.has(k2);
-      ctx.fillStyle = blocked ? (visible ? '#3d4657' : '#232936') : visible ? '#151b28' : '#0b0e15';
-      ctx.fillRect(x * BCELL, y * BCELL, BCELL - 1, BCELL - 1);
-    }
-  }
+  // П6.13: нічна палітра. Легка тряска канвасу при влучанні — зсув усього кадру
+  // на фазі спалаху трасера (через AnimEngine — лише в кадрах анімації); фон
+  // канви збігається з CSS-тлом, оголений край непомітний. Туман: зсув
+  // однаковий для всіх клітинок — сенс туману незмінний (ADR-0006).
+  const shake = shakeOffset(activeAnim, anim.now);
+  ctx.save();
+  ctx.translate(shake.dx, shake.dy);
+  drawNightTerrain(
+    ctx,
+    cv.width,
+    cv.height,
+    Array.from({ length: st.map.height }, (_, y) =>
+      Array.from({ length: st.map.width }, (_, x): TerrainCell => {
+        const k2 = x + ',' + y;
+        return { x, y, blocked: st.map.blocked.has(k2), visible: vis.has(k2) };
+      })
+    ).flat(),
+    BCELL
+  );
 
   ctx.setLineDash([3, 3]);
   ctx.strokeStyle = 'rgba(110,168,255,0.5)';
@@ -672,6 +685,7 @@ function renderBattle(): void {
   if (activeAnim !== null && (activeAnim.kind !== 'move' || movingId !== null)) {
     drawAnimFrame(ctx, activeAnim, anim.now, BCELL, 8);
   }
+  ctx.restore(); // П6.13: кінець зсуву тряски — кадр повертається у межі buffer'а
 
   // стан кнопок керування
   const busy = !playerTurnActive();

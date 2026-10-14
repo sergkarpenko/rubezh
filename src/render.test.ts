@@ -9,6 +9,9 @@
 // П6.7/П6.8 (ADR-0029): тести анімаційного рушія — кадри (трасер/спалах/смерть/
 // заступа/хід), черга з ін'єктованим планувальником (idle → 0 перерисовок) і
 // чистий перетворювач подій логу (лог байт-у-байт незмінний — критерій П6.8).
+// П6.13: нічна палітра — терен (двотоновий, хеш-варіація, без RNG), тонка
+// сітка в проміжках, м'який край туману (сенс туману незмінний) і тряска
+// канвасу при влучанні (лише фаза спалаху трасера, обмежена амплітуда).
 
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
@@ -16,15 +19,19 @@ import {
   DEATH_MS,
   IMPACT_MS,
   MOVE_MS_PER_CELL,
+  NIGHT_BG,
   OW_FLASH_MS,
   RADAR_PULSE_MS,
+  SHAKE_PX,
   SPRITE_SCALE,
   TRACER_MS,
   animT,
   animsFromEvents,
+  cellHash,
   drawAlienSprite,
   drawAnimFrame,
   drawBaseSprite,
+  drawNightTerrain,
   drawSoldierSprite,
   drawUfoSprite,
   initPixelSprites,
@@ -34,8 +41,10 @@ import {
   makeOwFlashAnim,
   makeTracerAnim,
   moveAnimPos,
+  shakeOffset,
   type Anim,
   type MakeOffscreen,
+  type TerrainCell,
   type UnitSprite,
 } from './render';
 import { makeUnit, type GameEvent, type Unit } from './core/combat';
@@ -760,5 +769,208 @@ describe('П6.9: пульс радара геосцени (критерії: т�
     drawAnimFrame(s2.ctx, mk(), 1150, 36, 0);
     expect(s1.calls).toEqual(s2.calls);
     expect(s1.sets).toEqual(s2.sets);
+  });
+});
+
+// --- П6.13: нічна палітра бойовища — терен, сітка, м'який край туману ---
+
+// Сімейства відтінків терену (двотоновий терен × видимо/туман) — стабільні
+// константи палітри render.ts; варіація в межах сімейства — за хешем клітинки.
+const OPEN = ['#151b28', '#171e2c', '#131926', '#161d2b'];
+const BLOCKED = ['#3d4657', '#414b5d', '#38414f', '#3f4a5c'];
+const OPEN_FOG = ['#0b0e15', '#0c0f17', '#0a0d13', '#0d1018'];
+const BLOCKED_FOG = ['#232936', '#252b39', '#202633', '#242a38'];
+const FOG_EDGE = 'rgba(21,27,40,0.45)';
+const GRID_COLOR = 'rgba(110,168,255,0.07)';
+
+// Мок контексту з ЄДИНИМ журналом операцій (присвоєння властивостей і виклики
+// методів у порядку виконання) — колір кожної заливки визначається точно.
+type Op = { set: string; v: unknown } | { m: string; args: unknown[] };
+function seqCtx(): { ctx: CanvasRenderingContext2D; ops: Op[] } {
+  const ops: Op[] = [];
+  const rec =
+    (m: string) =>
+    (...args: unknown[]): void => {
+      ops.push({ m, args });
+    };
+  const ctx = new Proxy(
+    {},
+    {
+      get: (_t, p) => (typeof p === 'string' ? rec(p) : undefined),
+      set: (_t, p, v) => {
+        ops.push({ set: String(p), v });
+        return true;
+      },
+    }
+  );
+  return { ctx: ctx as unknown as CanvasRenderingContext2D, ops };
+}
+
+// Кольори заливок клітинки (cx, cy) у порядку малювання (терен, потім край туману).
+// Розмір rect строго (cell−1)×(cell−1) — фон (0,0,w,h) і лінії сітки 1px не рахуються.
+function cellFills(ops: Op[], cx: number, cy: number, cell: number): string[] {
+  const colors: string[] = [];
+  let cur = '';
+  for (const op of ops) {
+    if ('set' in op && op.set === 'fillStyle') cur = op.v as string;
+    if (
+      'm' in op &&
+      op.m === 'fillRect' &&
+      op.args[0] === cx * cell &&
+      op.args[1] === cy * cell &&
+      op.args[2] === cell - 1 &&
+      op.args[3] === cell - 1
+    ) {
+      colors.push(cur);
+    }
+  }
+  return colors;
+}
+
+// Сітка клітинок терену: open — видима відкрита, fog — туман, wall — завалення.
+function grid(w: number, h: number, kind: 'open' | 'fog' | 'wall' = 'open'): TerrainCell[] {
+  const cells: TerrainCell[] = [];
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      cells.push({ x, y, blocked: kind === 'wall', visible: kind !== 'fog' });
+    }
+  }
+  return cells;
+}
+
+describe('П6.13: нічна палітра — терен і фон', () => {
+  it('перший кадр — фон NIGHT_BG на весь buffer (тряска оголяє край того самого кольору)', () => {
+    const s = seqCtx();
+    drawNightTerrain(s.ctx, 520, 520, [], 26);
+    expect(s.ops[0]).toEqual({ set: 'fillStyle', v: NIGHT_BG });
+    expect(s.ops[1]).toEqual({ m: 'fillRect', args: [0, 0, 520, 520] });
+  });
+
+  it('клітинки малюються зі стороною cell−1 (проміжок — під сітку, урок П6.6)', () => {
+    const s = seqCtx();
+    drawNightTerrain(s.ctx, 52, 52, grid(2, 2), 26);
+    expect(s.ops.some((o) => 'm' in o && o.m === 'fillRect' && o.args.join(',') === [0, 0, 25, 25].join(','))).toBe(true);
+  });
+
+  it('двотоновий терен: сімейства кольорів відкритий/завалений × видимо/туман', () => {
+    const mk = (cells: TerrainCell[]): Op[] => {
+      const s = seqCtx();
+      drawNightTerrain(s.ctx, 520, 520, cells, 26);
+      return s.ops;
+    };
+    expect(cellFills(mk(grid(20, 20, 'open')), 5, 5, 26)[0]).toBe(OPEN[cellHash(5, 5) % 4]);
+    expect(cellFills(mk(grid(20, 20, 'wall')), 5, 5, 26)[0]).toBe(BLOCKED[cellHash(5, 5) % 4]);
+    expect(cellFills(mk(grid(20, 20, 'fog')), 5, 5, 26)[0]).toBe(OPEN_FOG[cellHash(5, 5) % 4]);
+    const wallFog = grid(20, 20, 'fog').map((c) => ({ ...c, blocked: true }));
+    expect(cellFills(mk(wallFog), 5, 5, 26)[0]).toBe(BLOCKED_FOG[cellHash(5, 5) % 4]);
+    // тони різні: завалення світліше відкритого, туман темніше видимого
+    expect(BLOCKED[0]).not.toBe(OPEN[0]);
+    expect(OPEN_FOG[0]).not.toBe(OPEN[0]);
+  });
+
+  it('варіація клітинок — детермінований хеш (без RNG): більше одного відтінку на сітці 20×20', () => {
+    const s = seqCtx();
+    drawNightTerrain(s.ctx, 520, 520, grid(20, 20, 'open'), 26);
+    const shades = new Set<string>();
+    for (const o of s.ops) {
+      if ('set' in o && o.set === 'fillStyle' && OPEN.includes(o.v as string)) shades.add(o.v as string);
+    }
+    expect(shades.size).toBeGreaterThanOrEqual(2);
+    // cellHash: стабільний і розрізнює координати
+    expect(cellHash(5, 5)).toBe(cellHash(5, 5));
+    expect(cellHash(5, 5)).not.toBe(cellHash(6, 5));
+  });
+
+  it('детермінізм (ADR-0003): той самий терен → той самий потік операцій', () => {
+    const cells = grid(4, 4, 'open').concat(grid(4, 4, 'fog'));
+    const a = seqCtx();
+    drawNightTerrain(a.ctx, 104, 208, cells, 26);
+    const b = seqCtx();
+    drawNightTerrain(b.ctx, 104, 208, cells, 26);
+    expect(a.ops).toEqual(b.ops);
+  });
+});
+
+describe('П6.13: м’які краї туману і тонка сітка (критерій: туман не відкривається)', () => {
+  it('клітинка туману з видимим сусідом (4 напрямки) — друге перекриття FOG_EDGE; діагональний сусід — без', () => {
+    const cells = grid(3, 3, 'fog');
+    cells[4] = { x: 1, y: 1, blocked: false, visible: true }; // центр видимый
+    const s = seqCtx();
+    drawNightTerrain(s.ctx, 78, 78, cells, 26);
+    // сусід по прямій: терен + перекриття
+    expect(cellFills(s.ops, 0, 1, 26)).toEqual([OPEN_FOG[cellHash(0, 1) % 4], FOG_EDGE]);
+    expect(cellFills(s.ops, 1, 0, 26)).toEqual([OPEN_FOG[cellHash(1, 0) % 4], FOG_EDGE]);
+    // кут (0,0) — лише діагональний сусід: перекриття нема, вміст не підсвічений
+    expect(cellFills(s.ops, 0, 0, 26)).toEqual([OPEN_FOG[cellHash(0, 0) % 4]]);
+    // видима клітинка — лише терен
+    expect(cellFills(s.ops, 1, 1, 26)).toEqual([OPEN[cellHash(1, 1) % 4]]);
+  });
+
+  it('тонка напівпрозора сітка: 1px у проміжках між клітинками, GRID_COLOR', () => {
+    const s = seqCtx();
+    drawNightTerrain(s.ctx, 52, 52, grid(2, 2), 26);
+    const lines = s.ops.filter((o) => 'm' in o && o.m === 'fillRect' && (o.args[2] === 1 || o.args[3] === 1));
+    // 2×2: один стовпець і один рядок проміжків
+    expect(lines.length).toBe(2);
+    expect(lines.some((o) => 'm' in o && o.m === 'fillRect' && o.args.join(',') === [25, 0, 1, 52].join(','))).toBe(true);
+    expect(lines.some((o) => 'm' in o && o.m === 'fillRect' && o.args.join(',') === [0, 25, 52, 1].join(','))).toBe(true);
+    expect(s.ops.some((o) => 'set' in o && o.set === 'fillStyle' && o.v === GRID_COLOR)).toBe(true);
+  });
+});
+
+describe('П6.13: тряска канвасу при влучанні (через AnimEngine, без RNG)', () => {
+  it('без анімації, промах, фаза польоту і після завершення — нульовий зсув', () => {
+    expect(shakeOffset(null, 100)).toEqual({ dx: 0, dy: 0 });
+    const miss = makeTracerAnim('player', { x: 1, y: 1 }, { x: 3, y: 1 }, false);
+    miss.start = 0;
+    expect(shakeOffset(miss, 50)).toEqual({ dx: 0, dy: 0 });
+    const hit = makeTracerAnim('player', { x: 1, y: 1 }, { x: 3, y: 1 }, true);
+    expect(shakeOffset(hit, 100)).toEqual({ dx: 0, dy: 0 }); // start === null
+    hit.start = 0;
+    expect(shakeOffset(hit, TRACER_MS / 2)).toEqual({ dx: 0, dy: 0 }); // куля ще летить
+    expect(shakeOffset(hit, TRACER_MS + IMPACT_MS + 10)).toEqual({ dx: 0, dy: 0 }); // спалах завершено
+  });
+
+  it('фаза спалаху: зсув у межах SHAKE_PX, гасне до кінця спалаху, детермінований', () => {
+    const hit = makeTracerAnim('alien', { x: 5, y: 5 }, { x: 3, y: 5 }, true);
+    hit.start = 0;
+    const at = (frac: number) => shakeOffset(hit, TRACER_MS + IMPACT_MS * frac);
+    const first = at(0.125); // амплітуда максимальна: sin(π/2) = 1
+    expect(Math.abs(first.dx) + Math.abs(first.dy)).toBeGreaterThan(0);
+    for (let k = 1; k <= 40; k++) {
+      const o = at(k / 40);
+      expect(Math.abs(o.dx)).toBeLessThanOrEqual(SHAKE_PX);
+      expect(Math.abs(o.dy)).toBeLessThanOrEqual(SHAKE_PX);
+    }
+    expect(at(0.99)).toEqual({ dx: 0, dy: 0 }); // амплітуда спала до нуля
+    expect(at(0.125)).toEqual(first); // той самий вхід → той самий зсув
+  });
+});
+
+describe('П6.13: яскравіші неонові трасери/спалахи', () => {
+  it('трасер гравця: неоновий блакитний зі свіченням (shadowBlur встановлено і скинуто)', () => {
+    const a = makeTracerAnim('player', { x: 1, y: 1 }, { x: 3, y: 1 }, false);
+    a.start = 0;
+    const s = animCtx();
+    drawAnimFrame(s.ctx, a, TRACER_MS / 2, 26, 8);
+    expect(s.sets.some((x) => x.p === 'strokeStyle' && x.v === '#6fd3ff')).toBe(true);
+    const glows = s.sets.filter((x) => x.p === 'shadowBlur').map((x) => x.v);
+    expect(glows[0]).toBe(6);
+    expect(glows[glows.length - 1]).toBe(0); // свічення обов'язково скидається
+  });
+
+  it('трасер прибульця: розпечений оранж; спалах влучання — яскравий, зі свіченням', () => {
+    const a = makeTracerAnim('alien', { x: 5, y: 5 }, { x: 3, y: 5 }, true);
+    a.start = 0;
+    const fly = animCtx();
+    drawAnimFrame(fly.ctx, a, TRACER_MS / 2, 26, 8);
+    expect(fly.sets.some((x) => x.p === 'strokeStyle' && x.v === '#ff9a52')).toBe(true);
+    const boom = animCtx();
+    drawAnimFrame(boom.ctx, a, TRACER_MS + IMPACT_MS / 2, 26, 8);
+    expect(boom.sets.some((x) => x.p === 'strokeStyle' && x.v === '#ffe38a')).toBe(true);
+    expect(boom.sets.some((x) => x.p === 'shadowColor' && x.v === '#ffe38a')).toBe(true);
+    const glows = boom.sets.filter((x) => x.p === 'shadowBlur').map((x) => x.v);
+    expect(glows[0]).toBe(8);
+    expect(glows[glows.length - 1]).toBe(0);
   });
 });
