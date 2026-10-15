@@ -3,11 +3,10 @@
 // (node-середовище vitest; DOM-ініціалізація в main.ts стоїть за typeof document).
 
 import { describe, expect, it } from 'vitest';
-import { battleEventText, cellFromPoint, economyEventText, geoEventText, hpColor, samePath, validFireTargets } from './main';
+// пR.2 (ADR-0037): тести перетворювачів подій (geoEventText/battleEventText/
+// economyEventText) перенесено до src/ui/journal.test.ts разом із кодом.
+import { cellFromPoint, hpColor, samePath, validFireTargets } from './main';
 import { createGame, makeUnit, type GameState, type Unit } from './core/combat';
-import type { GeoEvent } from './core/geo';
-import type { GameEvent } from './core/combat';
-import type { EconomyEvent } from './core/economy';
 
 describe('cellFromPoint: клік (CSS-пікселі) → клітинка бойовища', () => {
   // канва 520×520 buffer (20×20 клітинок по 26px — BCELL), розташована на сторінці
@@ -79,70 +78,6 @@ describe('hpColor: колір HP у ростері', () => {
   it('рівно половина і нижче — червоний (строга межа > maxHp/2)', () => {
     expect(hpColor(5, 10)).toBe('#ff9c9c');
     expect(hpColor(1, 10)).toBe('#ff9c9c');
-  });
-});
-
-describe('geoEventText: фільтр туману стратегічного журналу (4.2)', () => {
-  const known = new Set(['u1']);
-
-  const ev = (e: Partial<GeoEvent> & { type: GeoEvent['type'] }): GeoEvent => e as GeoEvent;
-
-  it('доба і виявлення — видно завжди', () => {
-    expect(geoEventText(ev({ type: 'day', day: 2, minute: 0 }), known)).toEqual({ text: '— Доба 2 —', cls: '' });
-    expect(geoEventText(ev({ type: 'ufo_detected', ufoId: 'u2', pos: { x: 1, y: 1 }, minute: 5 }), known)).toEqual({
-      text: 'Виявлено НЛО: u2',
-      cls: '',
-    });
-  });
-
-  it('приземлення/відліт видно лише для раніше виявлених НЛО', () => {
-    expect(geoEventText(ev({ type: 'ufo_landed', ufoId: 'u1', pos: { x: 2, y: 2 }, minute: 9 }), known)?.text).toContain('приземлився');
-    expect(geoEventText(ev({ type: 'ufo_landed', ufoId: 'uX', pos: { x: 2, y: 2 }, minute: 9 }), known)).toBe(null);
-    expect(geoEventText(ev({ type: 'ufo_left', ufoId: 'u1', minute: 30 }), known)?.text).toContain('відлетів');
-    expect(geoEventText(ev({ type: 'ufo_left', ufoId: 'uX', minute: 30 }), known)).toBe(null);
-  });
-
-  it('спавн і рух НЛО приховано туманом; результати місій з класами win/lose', () => {
-    expect(geoEventText(ev({ type: 'ufo_spawned', ufoId: 'u3', kind: 'розвідник', pos: { x: 0, y: 0 }, minute: 1 }), known)).toBe(null);
-    expect(geoEventText(ev({ type: 'ufo_move', ufoId: 'u1', from: { x: 0, y: 0 }, to: { x: 1, y: 0 }, minute: 2 }), known)).toBe(null);
-    expect(geoEventText(ev({ type: 'mission_won', ufoId: 'u1', minute: 60 }), known)).toEqual({ text: 'Місію зачищено ✓', cls: 'win' });
-    expect(geoEventText(ev({ type: 'mission_lost', ufoId: 'u1', minute: 60 }), known)).toEqual({ text: 'Загін втрачено ✗', cls: 'lose' });
-  });
-});
-
-describe('battleEventText: події бою → журнал', () => {
-  const name = (id: string): string => (id === 's1' ? 'Гарт' : 'Морок');
-  const ev = (e: Partial<GameEvent> & { type: GameEvent['type'] }): GameEvent => e as GameEvent;
-
-  it('постріл: влучання з пошкодженням / промах', () => {
-    expect(battleEventText(ev({ type: 'shot', shooterId: 's1', targetId: 'a1', mode: 'aimed', hit: true, damage: 4 }), name)).toEqual({
-      text: 'Гарт → Морок (прицільний): −4',
-      cls: '',
-    });
-    expect(
-      battleEventText(ev({ type: 'shot', shooterId: 's1', targetId: 'a1', mode: 'auto', hit: false, damage: 0 }), name)?.text
-    ).toContain('промах');
-  });
-
-  it('смерть — клас lose; рух/хід/дозор — не для журналу', () => {
-    expect(battleEventText(ev({ type: 'death', unitId: 'a1', killerId: 's1' }), name)).toEqual({ text: '✝ Морок загинув', cls: 'lose' });
-    expect(battleEventText(ev({ type: 'move', unitId: 's1', from: { x: 0, y: 0 }, to: { x: 1, y: 0 } }), name)).toBe(null);
-    expect(battleEventText(ev({ type: 'turn', turn: 2, side: 'alien' }), name)).toBe(null);
-    expect(battleEventText(ev({ type: 'overwatch', unitId: 's1', armed: true }), name)).toBe(null);
-  });
-});
-
-describe('economyEventText: події економіки → журнал (П4.5, ADR-0021)', () => {
-  it('дотація, премія і витрати — рядки з класами кольорів журналу', () => {
-    expect(economyEventText({ type: 'allowance', day: 3, amount: 100 } as EconomyEvent)).toEqual({
-      text: 'Дотація за добу 3: +100',
-      cls: '',
-    });
-    expect(economyEventText({ type: 'mission_bonus', kind: 'розвідник', amount: 150 } as EconomyEvent)).toEqual({
-      text: 'Премія за місію (розвідник): +150',
-      cls: 'win',
-    });
-    expect(economyEventText({ type: 'spend', amount: 100 } as EconomyEvent)).toEqual({ text: 'Витрати: −100', cls: 'lose' });
   });
 });
 
