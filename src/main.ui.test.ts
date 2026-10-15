@@ -273,8 +273,8 @@ describe('критичний флоу економіки: найм → місі�
     expect($('bresult').textContent).toContain('ЗАЧИЩЕНО');
     expect($('bresult').textContent).toContain('поранених: 1');
     expect($('log').textContent).toContain('Іван поранений — лікарня: 8 тик(и)');
-    expect($('log').textContent).toContain('Премія за місію (розвідник): +150');
-    expect($('money').textContent).toBe('350'); // 300 − 100 найм + 150 премія
+    expect($('log').textContent).toContain('Премія за місію (розвідник): +110');
+    expect($('money').textContent).toBe('310'); // 300 − 100 найм + 110 премія (П8.6)
   });
 
   it('поранений не боєготовий: статус у ростері, місія недоступна поки вікно триває', () => {
@@ -291,20 +291,20 @@ describe('критичний флоу економіки: найм → місі�
     expect($('roster').textContent).not.toContain('лікарня');
     expect($('roster').textContent).toContain('HP 10/10');
     expect($('roster').textContent).toContain('6 солдатів (6 боєготових)');
-    expect($('money').textContent).toBe('350'); // доти не було — доба не завершена
+    expect($('money').textContent).toBe('310'); // доти не було — доба не завершена
     expect($('clock').textContent).toBe('Д1 15:00'); // 22 + 8 тіків по 30 хв
   });
 
-  it('дотація: завершення доби 1 — +100 у журналі і балансі', () => {
+  it('дотація: завершення доби 1 — +75 у журналі і балансі', () => {
     for (let i = 0; i < 18; i++) btn('btn-tick').click(); // 30 тіків усього
     expect($('clock').textContent).toBe('Д2 00:00');
-    expect($('money').textContent).toBe('450');
-    expect($('log').textContent).toContain('Дотація за добу 1: +100');
+    expect($('money').textContent).toBe('385');
+    expect($('log').textContent).toContain('Дотація за добу 1: +75');
   });
 });
 
 describe('журнал з фільтрами-вкладками (П6.2, ADR-0027)', () => {
-  // Стан продовжує флоу економіки: Д2 00:00, баланс 450, 6 солдатів.
+  // Стан продовжує флоу економіки: Д2 00:00, баланс 385, 6 солдатів.
 
   it('вкладка ховає невідповідні записи, активна підсвічена, «Усе» повертає все', () => {
     const geoLi = document.querySelector('#log li[data-cat="geo"]') as HTMLElement;
@@ -320,7 +320,7 @@ describe('журнал з фільтрами-вкладками (П6.2, ADR-0027
 
   it('новий запис під активним фільтром видимий, під іншим — приховується', () => {
     btn('log-tab-econ').click();
-    btn('btn-hire').click(); // 450 → 350 (два записи: «Найм» + «Витрати»)
+    btn('btn-hire').click(); // 385 → 285 (два записи: «Найм» + «Витрати»)
     const hireLi = Array.from(document.querySelectorAll('#log li[data-cat="econ"]')).find((li) =>
       li.textContent!.includes('Найм')
     ) as HTMLElement;
@@ -329,7 +329,7 @@ describe('журнал з фільтрами-вкладками (П6.2, ADR-0027
     expect(hireLi.style.display).toBe('none');
     btn('log-tab-all').click();
     expect(hireLi.style.display).toBe('');
-    expect($('money').textContent).toBe('350');
+    expect($('money').textContent).toBe('285');
   });
 });
 
@@ -379,9 +379,9 @@ describe('панель збереження: 3 слоти, лише на гео�
   });
 
   it('розбіжність і відкат: тики після сейву → завантаження повертає стан точки збереження', () => {
-    btn('btn-day').click(); // доба вперед: дотація +100
+    btn('btn-day').click(); // доба вперед: дотація +75 (П8.6)
     expect($('clock').textContent).toBe('Д2 11:00');
-    expect($('money').textContent).toBe('400');
+    expect($('money').textContent).toBe('375');
     btn('btn-load-1').click();
     expect($('clock').textContent).toBe('Д1 11:00');
     expect($('money').textContent).toBe('300');
@@ -403,14 +403,14 @@ describe('панель збереження: 3 слоти, лише на гео�
   it('лікарня у сейві: поранений відновлюється після завантаження', () => {
     // демо-бій цієї партії: перемога, s2 загинув, Іван поранений 6/10 (сід 42)
     expect($('roster').textContent).toContain('лікарня: 8 тик(и)');
-    expect($('money').textContent).toBe('450'); // 300 + премія 150
+    expect($('money').textContent).toBe('410'); // 300 + премія 110 (П8.6)
     btn('btn-save-3').click();
     for (let i = 0; i < 8; i++) btn('btn-tick').click(); // одужання
     expect($('roster').textContent).not.toContain('лікарня');
     btn('btn-load-3').click();
     expect($('roster').textContent).toContain('лікарня: 8 тик(и)');
     expect($('roster').textContent).toContain('HP 6/10');
-    expect($('money').textContent).toBe('450');
+    expect($('money').textContent).toBe('410');
   });
 
   it('пошкоджений слот: мітадані «пошкоджений слот», завантаження — помилка без зміни стану', () => {

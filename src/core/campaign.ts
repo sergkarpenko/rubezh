@@ -16,11 +16,13 @@ import type { EconomyState } from './economy';
 
 export const VICTORY_DAY = 30; // перемога фіксується на межі 30-ї доби (ADR-0033)
 
-// Вагові коефіцієнти рахунку — константи (ADR-0033); числа фіксуються П8.6 після симуляцій.
+// Вагові коефіцієнти рахунку — константи (ADR-0033); зафіксовано П8.6 за симуляціями
+// (120 сідів × 2 пресети, docs/reports/p8.6-tuning.md): ветерани ×2 (ростер — головний
+// актив кампанії, ADR-0021), гроші ×0.5 — рахунок про людей і перемоги, а не про купу грошей.
 export const SCORE_PER_UFO_SHOT_DOWN = 100;
 export const SCORE_PER_MISSION_WON = 150;
-export const SCORE_PER_VETERAN_ALIVE = 25;
-export const SCORE_PER_MONEY = 0.5;
+export const SCORE_PER_VETERAN_ALIVE = 50;
+export const SCORE_PER_MONEY = 0.25;
 
 export type DifficultyPreset = 'легкий' | 'норма'; // множники — П8.4; третій рівень — поза MVP
 export const DEFAULT_PRESET: DifficultyPreset = 'норма'; // ADR-0033: дефолт «норма»

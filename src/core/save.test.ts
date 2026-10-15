@@ -279,9 +279,9 @@ describe('save: пресети партії (П8.4a)', () => {
     expect(JSON.stringify(a.geo.log)).toBe(JSON.stringify(b.geo.log));
     expect(a.geo.minute).toBe(b.geo.minute);
     expect(a.econ.money).toBe(b.econ.money);
-    // легкий: 360 + 2×120 дотації; норма: 300 + 2×100 — економіка розходиться
-    expect(a.econ.money).toBe(600);
-    expect(c.econ.money).toBe(500);
+    // легкий: 360 + 2×90 дотації (П8.6: 75 × 1.2); норма: 300 + 2×75 — економіка розходиться
+    expect(a.econ.money).toBe(540);
+    expect(c.econ.money).toBe(450);
     expect(a.geo.spawnChance).not.toBe(c.geo.spawnChance); // партії різні
   });
 });
