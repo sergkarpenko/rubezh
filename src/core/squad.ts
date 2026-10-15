@@ -23,6 +23,7 @@
 
 import type { GameState, Unit } from './combat';
 import { HIRE_PRICE, spend, type EconomyState } from './economy';
+import { type DifficultyPreset, DEFAULT_PRESET, DIFFICULTY_MULTIPLIERS } from './campaign';
 import { makeSoldier, SQUAD_SPAWN } from './mission';
 
 export const STARTING_ROSTER_SIZE = 6; // два повні загони + запас
@@ -46,19 +47,24 @@ export interface MissionAftermath {
 // Солдат ростеру за порядковим індексом (0-based): ім'я з циклічного пулу,
 // id — порядковий номер. Спільне для старту партії і найму: лічильник hired
 // робить id/імена унікальними без RNG (детермінізм, ADR-0021).
-function rosterSoldier(index: number): Unit {
+function rosterSoldier(index: number, preset: DifficultyPreset = DEFAULT_PRESET): Unit {
   const base = SOLDIER_NAMES[index % SOLDIER_NAMES.length];
   const name = index < SOLDIER_NAMES.length ? base : base + ' ' + (Math.floor(index / SOLDIER_NAMES.length) + 1);
-  return makeSoldier('s' + (index + 1), name);
+  const soldier = makeSoldier('s' + (index + 1), name);
+  const multipliers = DIFFICULTY_MULTIPLIERS[preset];
+  // Apply HP bonus multiplier
+  soldier.maxHp = Math.round(soldier.maxHp * multipliers.hpBonusMultiplier);
+  soldier.hp = soldier.maxHp;
+  return soldier;
 }
 
 // Стартовий ростер організації: size солдатів із фіксованого списку імен.
-export function createRoster(size: number = STARTING_ROSTER_SIZE): Roster {
+export function createRoster(size: number = STARTING_ROSTER_SIZE, preset: DifficultyPreset = DEFAULT_PRESET): Roster {
   if (!Number.isInteger(size) || size < 1) {
     throw new Error('Розмір ростеру має бути цілим числом від 1');
   }
   const soldiers: Unit[] = [];
-  for (let i = 0; i < size; i++) soldiers.push(rosterSoldier(i));
+  for (let i = 0; i < size; i++) soldiers.push(rosterSoldier(i, preset));
   return { soldiers, hired: size, hospital: {} };
 }
 
@@ -66,9 +72,9 @@ export function createRoster(size: number = STARTING_ROSTER_SIZE): Roster {
 // (недостатньо грошей → помилка, ростер не змінюється) і додає солдата
 // в КІНЕЦЬ ростеру — ветерани залишаються першими у missionSquad.
 // Без RNG: id та ім'я — наступні за лічильником hired.
-export function hireSoldier(econ: EconomyState, roster: Roster): Unit {
+export function hireSoldier(econ: EconomyState, roster: Roster, preset: DifficultyPreset = DEFAULT_PRESET): Unit {
   spend(econ, HIRE_PRICE);
-  const soldier = rosterSoldier(roster.hired);
+  const soldier = rosterSoldier(roster.hired, preset);
   roster.hired += 1;
   roster.soldiers.push(soldier);
   return soldier;
