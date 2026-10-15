@@ -17,7 +17,10 @@
 // між діями ботів, поки бій не дійде до результату (банер у #bresult).
 
 import { beforeAll, describe, expect, it, vi } from 'vitest';
-import { readFileSync } from 'node:fs';
+// index.html — через ?raw-імпорт (vitest/vite): без node:fs і process.cwd(), тож
+// @types/node не потрібен (ADR-0012 — нових залежностей немає; tsconfig.json не чіпаємо).
+/// <reference types="vite/client" />
+import htmlRaw from '../index.html?raw';
 
 const $ = (id: string): HTMLElement => document.getElementById(id) as HTMLElement;
 const btn = (id: string): HTMLButtonElement => $(id) as HTMLButtonElement;
@@ -84,9 +87,7 @@ beforeAll(async () => {
   vi.stubGlobal('requestAnimationFrame', undefined);
   vi.stubGlobal('cancelAnimationFrame', undefined);
   // Реальна розмітка: body з index.html (script через innerHTML не виконується).
-  // import.meta.url у vitest не file-схема — шлях від process.cwd().
-  const html = readFileSync(process.cwd() + '/index.html', 'utf-8');
-  document.body.innerHTML = html.match(/<body[^>]*>([\s\S]*)<\/body>/)![1];
+  document.body.innerHTML = htmlRaw.match(/<body[^>]*>([\s\S]*)<\/body>/)![1];
 
   // No-op контекст малювання (П6.14: з журналом операцій — рамки цілей і
   // плашки шансу перевіряються рядком «метод(аргументи)»): усі виклики —
@@ -422,11 +423,10 @@ describe('панель збереження: 3 слоти, лише на гео�
 
 describe('бойова фокусна зона (П6.3, ADR-0027)', () => {
   it('розмітка: керування під бойовищем, бойовище — квадрат (ширина колонки, кап 720px)', () => {
-    const html = readFileSync(process.cwd() + '/index.html', 'utf-8');
-    const panel = html.match(/<section class="panel hidden" id="battle-panel">[\s\S]*?<\/section>/)![0];
+    const panel = htmlRaw.match(/<section class="panel hidden" id="battle-panel">[\s\S]*?<\/section>/)![0];
     expect(panel.indexOf('id="battle"')).toBeLessThan(panel.indexOf('id="bcontrols"')); // панель керування — під бойовищем
     expect(panel.indexOf('id="bctx"')).toBeLessThan(panel.indexOf('id="battle"')); // контекст-стрічка — над бойовищем
-    const css = html.match(/#battle \{[^}]*\}/)![0];
+    const css = htmlRaw.match(/#battle \{[^}]*\}/)![0];
     expect(css).toContain('width: 100%'); // на ширину фокусної колонки
     expect(css).toContain('max-width: 720px'); // кап ~720px (ADR-0027)
     expect(css).toContain('aspect-ratio: 1'); // квадрат
