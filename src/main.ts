@@ -45,6 +45,7 @@ import {
   advanceTime,
   detectedUfos,
   geoClock,
+  geoDay,
   missionTargets,
   type GeoEvent,
 } from './core/geo';
@@ -104,6 +105,7 @@ import {
 } from './render';
 // П5.3 (ADR-0026): партія і слоти збереження — із чистого ядра save.ts.
 import { SAVE_SLOTS, createParty, eraseSlot, loadFromSlot, saveToSlot, slotMeta, type Party, type SlotStore } from './core/save';
+import { campaignTick } from './core/campaign';
 
 const GCELL = 36; // px на клітинку світу (16×8 → 576×288)
 const BCELL = 26; // px на клітинку бойовища (20×20 → 520×520)
@@ -375,6 +377,9 @@ function partyTick(): void {
     gameOver = true;
     journal('✗ Банкрутство: немає боєготових солдатів і грошей на найм — партію програно.', 'lose', 'econ');
   }
+
+  // П8.3: перевірка кампанії на межі 30-ї доби
+  campaignTick({ geo: party.geo, roster: party.roster, econ: party.econ }, party.campaign);
 }
 
 function renderGeo(): void {
@@ -732,7 +737,8 @@ function renderSavePanel(): void {
   }
 }
 
-// ADR-0026: збереження можливе лише на геосцені (місія не переривається).
+// ADR-0026:
+// П8.3: кнопка "Грати знов" для перезапуску кампанії
 function saveSlot(slot: number): void {
   // П7.5 (ADR-0026): під час погоні/бою збереження вимкнене (патерн П6.3 — бій не переривається)
   if (mission !== null || gameOver || party.intercept.fighter.status === 'погоня' || party.intercept.fighter.status === 'бій') return;
@@ -938,6 +944,16 @@ function renderBattle(): void {
   ow.title = owNoAp ? owHint + ' — не вистачає AP (потрібно ' + OVERWATCH_AP_COST + ')' : owHint;
 }
 
+// П8.3: відображення екрану перемоги кампанії
+function renderCampaignVictory(): void {
+  const victoryPanel = el('campaign-victory');
+  const isVictory = party.campaign.status === 'перемога';
+  victoryPanel.classList.toggle('hidden', !isVictory);
+  if (isVictory && party.campaign.score) {
+    el('campaign-score').textContent = String(party.campaign.score.total);
+  }
+}
+
 function renderAll(): void {
   // ADR-0027: фокусна зона — геосцена або бій (не «два екрани»)
   el('geo-panel').classList.toggle('hidden', mission !== null);
@@ -945,12 +961,18 @@ function renderAll(): void {
   // ADR-0027 (П6.3): у бою колонка стану приглушена й неактивна —
   // джерело стану тоді топбар і контекст-стрічка бою
   el('status').classList.toggle('dimmed', mission !== null);
+  // П8.3: відображення статусу кампанії
+  el('campaign-status').textContent = 'кампанія: ' + party.campaign.status;
+  el('campaign-progress').textContent = 'Д' + geoDay(party.geo) + '/30';
+  el('campaign-progress').classList.toggle('hidden', mission !== null);
   renderGeo();
   renderUfos();
   renderFighter();
   renderFinances();
   renderRoster();
   renderSavePanel();
+  // П8.3: відображення екрану перемоги кампанії
+  renderCampaignVictory();
   if (mission) renderBattle();
 }
 
@@ -1443,6 +1465,8 @@ if (typeof document !== 'undefined') {
     }
   };
   el('btn-new').onclick = restart;
+  // П8.3: кнопка "Грати знов" для перезапуску кампанії
+  el('btn-play-again').onclick = () => restart();
   // П4.5 (ADR-0021): найм солдата — списання грошей, новобранець у кінець ростеру
   el('btn-hire').onclick = () => {
     try {

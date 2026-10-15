@@ -229,6 +229,44 @@
         background: #341418;
         color: #ff9c9c;
       }
+      /* П8.3: Кампанія перемоги — екран з центром */
+      #campaign-victory {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(13, 16, 23, 0.95);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        z-index: 100;
+      }
+      #campaign-victory .panel {
+        max-width: 400px;
+        text-align: center;
+      }
+      #campaign-victory h2 {
+        color: #7fe2a0;
+        font-size: 24px;
+        margin: 0 0 16px;
+      }
+      #campaign-victory .score {
+        font-size: 32px;
+        font-weight: 600;
+        color: #d7e4f7;
+        margin: 16px 0;
+      }
+      #campaign-victory .btn-play-again {
+        background: #12301c;
+        border-color: #7fe2a0;
+        color: #7fe2a0;
+        padding: 12px 24px;
+        font-size: 16px;
+        margin-top: 16px;
+      }
+
       /* ADR-0027: єдиний журнал подій з фільтрами-вкладками */
       #log-tabs {
         display: flex;
@@ -287,6 +325,8 @@
       </div>
       <div class="chips">
         <span class="chip clock" id="clock">—</span>
+        <span class="chip" id="campaign-status">Кампанія: —</span>
+        <span class="chip" id="campaign-progress" title="День кампанії">Д0/30</span>
         <input id="seed" type="number" value="42" title="Сід партії" />
         <span class="chip">Баланс: <b id="money">—</b></span>
         <span class="chip">Боєготові: <b id="ready">—</b></span>
@@ -373,5 +413,10 @@
       </aside>
     </main>
     <script type="module" src="/src/main.ts"></script>
+    <section class="panel hidden" id="campaign-victory">
+      <h2>Перемога в кампанії!</h2>
+      <div class="score" id="campaign-score">—</div>
+      <button id="btn-play-again" class="btn-play-again">Грати знов</button>
+    </section>
   </body>
 </html>
