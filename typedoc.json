@@ -1,6 +1,6 @@
 {
   "tsconfig": "tsconfig.typedoc.json",
-  "entryPoints": ["src/core", "src/main.ts", "src/bot.ts"],
+  "entryPoints": ["src/core", "src/main.ts"],
   "entryPointStrategy": "expand",
   "exclude": ["**/*.test.ts"],
   "out": "dist/api",

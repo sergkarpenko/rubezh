@@ -15,7 +15,7 @@ const { stepMock, animsMock, outcomeMock } = vi.hoisted(() => ({
 
 // Стаби: DemoSteps — клас з одним step, перетворювач анімацій і вихід місії —
 // функції під контролем тесту (типові імпорти demo.ts не потребують real-модулів).
-vi.mock('../bot', () => ({
+vi.mock('../core/ai-bot', () => ({
   DemoSteps: class {
     step(...args: unknown[]) {
       return stepMock(...args);

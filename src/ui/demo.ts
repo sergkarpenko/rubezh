@@ -5,7 +5,7 @@
 // Під час паузи черга анімацій порожня → 0 перерисовок (idle, ADR-0029).
 // Стан і лог бою від анімації не залежать — критерій «байт-у-байт».
 
-import { DemoSteps } from '../bot';
+import { DemoSteps } from '../core/ai-bot';
 import { type Anim, animsFromEvents } from '../core/render-core';
 import { missionOutcome, type Mission } from '../core/mission';
 

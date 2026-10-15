@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { advanceTime, createGeoGame, type GeoState } from './core/geo';
-import { aliensTurn, autoBattle, botTurn, DemoSteps } from './bot';
+import { aliensTurn, autoBattle, botTurn, DemoSteps } from './core/ai-bot';
 import { createMission, missionOutcome, type Mission } from './core/mission';
 import { createRoster, missionSquad } from './core/squad';
 
@@ -134,7 +134,7 @@ import {
   interceptBotStep,
   simulateInterceptCampaign,
   type InterceptPolicy,
-} from './bot';
+} from './core/intercept-bot';
 
 describe('П7.6: бот-гравець перехоплення — одиничні рішення', () => {
   it('aggressive: запуск на будь-який виявлений НЛО, дистанція впритул', () => {
