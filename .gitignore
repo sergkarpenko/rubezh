@@ -1,8 +1,6 @@
 node_modules/
 dist/
+coverage/
 *.log
 .DS_Store
 .husky/_/
-
-# Прототипи React (архів, не змінювати)
-/src/ui/

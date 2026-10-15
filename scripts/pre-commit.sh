@@ -18,8 +18,10 @@ echo ""
 echo "--- Перевірка правил AGENTS.md ---"
 if [ -f "AGENTS.md" ]; then
     # Перевіряємо, чи змінюються заборонені файли
-    # (package.json — правило 1b за ADR-0012; .github/workflows/ — правило 1c за ADR-0018)
-    if git diff --cached --name-only | grep -qE '(src/ui/|tsconfig\.json|vite\.config\.ts)'; then
+    # (package.json — правило 1b за ADR-0012; .github/workflows/ — правило 1c за ADR-0018;
+    #  src/ui/ виключено з захисту власником 2026-10-15: застаріле правило прототипів
+    #  React — архів у docs/prototypes, за ADR-0037 у src/ui/* живуть модулі UI)
+    if git diff --cached --name-only | grep -qE '(tsconfig\.json|vite\.config\.ts)'; then
         echo "[FAIL] ЗМІНЕНО ЗАБОРОНЕНИЙ ФАЙЛ! Див. AGENTS.md"
         git diff --cached --name-only | grep -E '(src/ui/|\.github/workflows/|tsconfig\.json|vite\.config\.ts)'
         echo ""
