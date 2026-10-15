@@ -81,8 +81,10 @@ import {
 } from './core/combat';
 import { computeVisibleCells, findPath, pathApCost } from './core/map';
 import { aliensTurn } from './bot';
-// пR.2 (ADR-0037): покроковий драйвер демо-бою — у модулі шару UI.
+// пR.2 (ADR-0037): модулі шару UI — демо-драйвер, DOM-хелпер, панель збереження.
 import { DemoDriver } from './ui/demo';
+import { el } from './ui/dom';
+import { createSavePanel } from './ui/save-panel';
 // П6.7 (ADR-0029): векторні спрайти — чисті функції малювання шару відображення.
 // П6.8 (ADR-0029): анімаційний рушій — черга + rAF лише під час активних анімацій.
 import {
@@ -106,7 +108,7 @@ import {
   type TerrainCell,
 } from './render';
 // П5.3 (ADR-0026): партія і слоти збереження — із чистого ядра save.ts.
-import { SAVE_SLOTS, createParty, eraseSlot, loadFromSlot, saveToSlot, slotMeta, type Party, type SlotStore } from './core/save';
+import { createParty, type Party } from './core/save';
 import { campaignTick } from './core/campaign';
 
 const GCELL = 36; // px на клітинку світу (16×8 → 576×288)
@@ -123,12 +125,6 @@ initPixelSprites((w: number, h: number) => {
 });
 
 const MODE_LABEL: Record<ShotMode, string> = { snap: 'швидкий', aimed: 'прицільний', auto: 'черга' };
-
-function el<T extends HTMLElement>(id: string): T {
-  const e = document.getElementById(id);
-  if (!e) throw new Error('Немає елемента #' + id);
-  return e as T;
-}
 
 // Порядок оголошень важливий (TDZ — див. docs/workflow.md): усі змінні стану,
 // які newParty() чи обробники пишуть, оголошуються ДО першого виклику newParty().
@@ -170,6 +166,20 @@ const demo = new DemoDriver({
   finishBattle,
   pushAnims: (anims) => anim.push(...anims),
   hasRaf,
+});
+
+// пR.2 (ADR-0037): панель збереження (П5.3, ADR-0026) — модуль src/ui/save-panel.ts;
+// тут лише зв'язування зі станом застосунку (party/mission/gameOver) і журналом.
+const savePanel = createSavePanel({
+  getParty: () => party,
+  adoptLoaded: (p) => {
+    party = adoptParty(p);
+  },
+  inBattle: () => mission !== null,
+  interceptBusy: () => party.intercept.fighter.status === 'погоня' || party.intercept.fighter.status === 'бій',
+  isGameOver: () => gameOver,
+  journal,
+  renderAll,
 });
 
 const anim = new AnimEngine({
@@ -649,130 +659,7 @@ function renderRoster(): void {
   }
 }
 
-// --- П5.3: панель збереження (ADR-0026) ---
-
-// ADR-0026: сховище — localStorage, ключі rubezh.save.1..3. Ядро бачить лише
-// абстракцію SlotStore (save.ts); тут — конкретний браузерний адаптер.
-const store: SlotStore = {
-  read: (slot) => {
-    try {
-      return localStorage.getItem('rubezh.save.' + slot);
-    } catch {
-      return null;
-    }
-  },
-  write: (slot, data) => localStorage.setItem('rubezh.save.' + slot, data),
-  remove: (slot) => localStorage.removeItem('rubezh.save.' + slot),
-};
-
-// Недоступний localStorage (приватний режим тощо) — повідомлення в UI (ADR-0026).
-let storageOk = true;
-function detectStorage(): void {
-  try {
-    localStorage.setItem('rubezh.probe', '1');
-    localStorage.removeItem('rubezh.probe');
-    storageOk = true;
-  } catch {
-    storageOk = false;
-  }
-}
-
-function renderSavePanel(): void {
-  const box = el('save-panel');
-  box.innerHTML = '';
-  if (!storageOk) {
-    box.innerHTML = '<div class="meta">Сховище недоступне (приватний режим?) — збереження вимкнено.</div>';
-    return;
-  }
-  // П7.5 (ADR-0026): збереження вимкнене і в повітряному бою — погоня/бій не переривається
-  const busy = mission !== null || party.intercept.fighter.status === 'погоня' || party.intercept.fighter.status === 'бій';
-  for (let slot = 1; slot <= SAVE_SLOTS; slot++) {
-    const row = document.createElement('div');
-    row.className = 'save-row';
-    const meta = document.createElement('span');
-    meta.id = 'slot-' + slot;
-    meta.className = 'meta';
-    const json = store.read(slot);
-    const empty = json === null;
-    if (json === null) meta.textContent = '—';
-    else {
-      try {
-        const m = slotMeta(json);
-        const mnt = m.minute % 1440;
-        meta.textContent =
-          'Д' +
-          m.day +
-          ' ' +
-          String(Math.floor(mnt / 60)).padStart(2, '0') +
-          ':' +
-          String(mnt % 60).padStart(2, '0') +
-          ' · сід ' +
-          m.seed +
-          ' · ' +
-          m.money +
-          ' · ' +
-          m.aliveSoldiers +
-          ' солд · ' +
-          m.savedAt.slice(0, 16).replace('T', ' ');
-      } catch {
-        meta.textContent = 'пошкоджений слот';
-      }
-    }
-    const bSave = document.createElement('button');
-    bSave.id = 'btn-save-' + slot;
-    bSave.textContent = 'Зберегти';
-    bSave.disabled = busy || gameOver;
-    bSave.onclick = () => saveSlot(slot);
-    const bLoad = document.createElement('button');
-    bLoad.id = 'btn-load-' + slot;
-    bLoad.textContent = 'Завантажити';
-    bLoad.disabled = busy || empty;
-    bLoad.onclick = () => loadSlot(slot);
-    const bDel = document.createElement('button');
-    bDel.id = 'btn-del-' + slot;
-    bDel.textContent = 'Видалити';
-    bDel.disabled = busy || empty;
-    bDel.onclick = () => deleteSlot(slot);
-    row.append(meta, bSave, bLoad, bDel);
-    box.appendChild(row);
-  }
-}
-
-// ADR-0026:
-// П8.3: кнопка "Грати знов" для перезапуску кампанії
-function saveSlot(slot: number): void {
-  // П7.5 (ADR-0026): під час погоні/бою збереження вимкнене (патерн П6.3 — бій не переривається)
-  if (mission !== null || gameOver || party.intercept.fighter.status === 'погоня' || party.intercept.fighter.status === 'бій') return;
-  try {
-    saveToSlot(store, slot, party, new Date().toISOString());
-    journal('Збережено: слот ' + slot + '.');
-  } catch (e) {
-    journal('✗ Збереження не вдалось: ' + (e as Error).message, 'lose');
-  }
-  renderSavePanel();
-}
-
-function loadSlot(slot: number): void {
-  if (mission !== null) return;
-  try {
-    party = adoptParty(loadFromSlot(store, slot));
-    journal('Завантажено: слот ' + slot + ' — ' + geoClock(party.geo) + ', баланс ' + party.econ.money + '.');
-  } catch (e) {
-    journal('✗ Завантаження не вдалось: ' + (e as Error).message, 'lose');
-  }
-  renderAll();
-}
-
-function deleteSlot(slot: number): void {
-  if (mission !== null) return;
-  try {
-    eraseSlot(store, slot);
-    journal('Слот ' + slot + ' видалено.');
-  } catch (e) {
-    journal('✗ ' + (e as Error).message, 'lose');
-  }
-  renderSavePanel();
-}
+// --- П5.3: панель збереження (ADR-0026) — модуль src/ui/save-panel.ts (пR.2) ---
 
 // --- тактичний бій (5.3) ---
 
@@ -971,7 +858,7 @@ function renderAll(): void {
   renderFighter();
   renderFinances();
   renderRoster();
-  renderSavePanel();
+  savePanel.render();
   // П8.3: відображення екрану перемоги кампанії
   renderCampaignVictory();
   if (mission) renderBattle();
@@ -1439,8 +1326,8 @@ if (typeof document !== 'undefined') {
   bc.addEventListener('mouseleave', battleCanvasLeave);
   // ADR-0027 (П6.4): гарячі клавіші — на document (бій у фокусі канви не потрібен)
   document.addEventListener('keydown', onKeyDown);
-  detectStorage();
+  savePanel.detectStorage();
   renderAll();
   journal('Партію розпочато. Рухайте час — радар шукає НЛО.');
-  if (!storageOk) journal('✗ Сховище недоступне — збереження вимкнено (приватний режим?).', 'lose');
+  if (!savePanel.isStorageOk()) journal('✗ Сховище недоступне — збереження вимкнено (приватний режим?).', 'lose');
 }
