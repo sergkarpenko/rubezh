@@ -24,7 +24,10 @@ import { createBattleUI, type BattleUIState } from './ui/battle';
 import { createInput } from './ui/input';
 // П6.7 (ADR-0029): векторні спрайти — чисті функції малювання шару відображення.
 // П6.8 (ADR-0029): анімаційний рушій — черга + rAF лише під час активних анімацій.
-import { AnimEngine, initPixelSprites, makeGeoPulseAnim, makeTracerAnim, type Anim } from './render';
+// пR.3 (ADR-0038): рушій і фабрики анімацій — чиста логіка src/core/render-core.ts;
+// фабрика offscreen-канвасів — реєструється в шарі відображення (src/render.ts).
+import { initPixelSprites } from './render';
+import { AnimEngine, makeGeoPulseAnim, makeTracerAnim, type Anim } from './core/render-core';
 // П5.3 (ADR-0026): партія і слоти збереження — із чистого ядра save.ts.
 import { createParty, type Party } from './core/save';
 import { campaignTick } from './core/campaign';

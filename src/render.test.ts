@@ -15,21 +15,9 @@
 
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
-  AnimEngine,
   CHANCE_LABEL_BG,
   CHANCE_LABEL_TEXT,
-  DEATH_MS,
-  IMPACT_MS,
-  MOVE_MS_PER_CELL,
-  NIGHT_BG,
-  OW_FLASH_MS,
-  RADAR_PULSE_MS,
-  SHAKE_PX,
   TARGET_FRAME_COLOR,
-  TRACER_MS,
-  animT,
-  animsFromEvents,
-  cellHash,
   drawAlienSprite,
   drawAnimFrame,
   drawBaseSprite,
@@ -39,6 +27,21 @@ import {
   drawTargetFrame,
   drawUfoSprite,
   initPixelSprites,
+  type MakeOffscreen,
+} from './render';
+import {
+  AnimEngine,
+  DEATH_MS,
+  IMPACT_MS,
+  MOVE_MS_PER_CELL,
+  NIGHT_BG,
+  OW_FLASH_MS,
+  RADAR_PULSE_MS,
+  SHAKE_PX,
+  TRACER_MS,
+  animT,
+  animsFromEvents,
+  cellHash,
   makeDeathAnim,
   makeGeoPulseAnim,
   makeMoveAnim,
@@ -47,9 +50,8 @@ import {
   moveAnimPos,
   shakeOffset,
   type Anim,
-  type MakeOffscreen,
   type TerrainCell,
-} from './render';
+} from './core/render-core';
 import { SPRITE_SCALE, type UnitSprite } from './core/sprites';
 import { makeUnit, type GameEvent, type Unit } from './core/combat';
 

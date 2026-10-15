@@ -18,7 +18,8 @@ import {
 import { HIRE_PRICE } from '../core/economy';
 import { readySoldiers } from '../core/squad';
 import type { Party } from '../core/save';
-import { drawAnimFrame, drawBaseSprite, drawFighterSprite, drawUfoSprite, type Anim } from '../render';
+import { drawAnimFrame, drawBaseSprite, drawFighterSprite, drawUfoSprite } from '../render';
+import type { Anim } from '../core/render-core';
 import { el } from './dom';
 import { GCELL } from './grid';
 import type { LogCat } from './journal';

@@ -23,19 +23,8 @@ import {
 import { computeVisibleCells } from '../core/map';
 import { geoClock } from '../core/geo';
 import type { Party } from '../core/save';
-import {
-  animsFromEvents,
-  animT,
-  drawAnimFrame,
-  drawChanceLabel,
-  drawNightTerrain,
-  drawTargetFrame,
-  drawUnitSprite,
-  moveAnimPos,
-  shakeOffset,
-  type Anim,
-  type TerrainCell,
-} from '../render';
+import { drawAnimFrame, drawChanceLabel, drawNightTerrain, drawTargetFrame, drawUnitSprite } from '../render';
+import { animT, animsFromEvents, moveAnimPos, shakeOffset, type Anim, type TerrainCell } from '../core/render-core';
 import { el } from './dom';
 import { BCELL } from './grid';
 import { type LogCat } from './journal';

@@ -22,7 +22,7 @@ vi.mock('../bot', () => ({
     }
   },
 }));
-vi.mock('../render', () => ({
+vi.mock('../core/render-core', () => ({
   animsFromEvents: (...args: unknown[]) => animsMock(...args),
 }));
 vi.mock('../core/mission', () => ({
@@ -30,7 +30,7 @@ vi.mock('../core/mission', () => ({
 }));
 
 import { DemoDriver, type DemoDeps } from './demo';
-import type { Anim } from '../render';
+import type { Anim } from '../core/render-core';
 
 // Мінімальна «місія»: драйвер лише передає state у стаби і читає log/units.
 function fakeMission(): Mission {
