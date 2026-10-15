@@ -175,6 +175,13 @@ describe('черга анімацій: rAF лише під час активни
 });
 
 describe('перетворювач подій логу → анімації (критерій: лог байт-у-байт незмінний)', () => {
+  it('смерть без пострілу після неї (остання подія) — лише анімація смерті; смерть невідомого юніта — без анімації', () => {
+    const a1 = unit('a1', 'alien', 5, 2);
+    const anims = animsFromEvents([{ type: 'death', unitId: 'a1', killerId: 's1' }], [a1]);
+    expect(anims.map((x) => x.kind)).toEqual(['death']);
+    expect(anims[0].kind === 'death' && anims[0].at).toEqual({ x: 5, y: 2 });
+    expect(animsFromEvents([{ type: 'death', unitId: 'ghost', killerId: 's1' }], [a1])).toEqual([]);
+  });
   it("кроки руху об'єднуються в один хід; смерть-перед-пострілом → трасер потім смерть", () => {
     const s1 = unit('s1', 'player', 2, 2);
     const a1 = unit('a1', 'alien', 5, 2);
