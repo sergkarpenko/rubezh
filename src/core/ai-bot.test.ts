@@ -4,6 +4,7 @@
 // Покроковий драйвер: лог DemoSteps байт-у-байт ідентичний миттєвому autoBattle.
 
 import { describe, expect, it } from 'vitest';
+import { createGame, makeUnit, mulberry32, type GameState } from './combat';
 import { advanceTime, createGeoGame, type GeoState } from './geo';
 import { aliensTurn, autoBattle, botTurn, DemoSteps } from './ai-bot';
 import { createMission, missionOutcome, type Mission } from './mission';
@@ -120,5 +121,36 @@ describe('П6.16: покроковий драйвер демо (DemoSteps)', () 
     const len = m.state.log.length;
     expect(drv.step(m.state)).toEqual({ acted: false, over: true });
     expect(m.state.log.length).toBe(len); // стан не рухається
+  });
+});
+
+// пR.3 (гейт codecov/patch): глухі кути soldierStep — солдат у «замкненій кишені»:
+// 4 сусідні клітинки заблоковані → рух неможливий, але діагональний LOS з (2,2)
+// до (5,5) вільний ((3,3), (4,4) не заблоковані). Обидва без-дієві виходи:
+// без видимих цілей нема шляху до зони НЛО; із видимою ціллю — AP замало на
+// постріл (мін. snap = 3 AP при ap = 2) і шляху до цілі нема.
+describe('bot: глухий кут — солдат без ходу', () => {
+  function pocket(): GameState {
+    return createGame({
+      map: { width: 20, height: 20, blocked: new Set(['1,2', '2,1', '2,3', '3,2']) },
+      rng: mulberry32(42),
+      startingSide: 'player',
+      units: [makeUnit({ id: 's1', side: 'player', pos: { x: 2, y: 2 }, ap: 2, maxAp: 2 })],
+    });
+  }
+
+  it('без видимих цілей і без шляху до зони НЛО — 0 дій, хід передано', () => {
+    const g = pocket();
+    expect(botTurn(g)).toBe(0);
+    expect(g.activeSide).toBe('alien');
+    expect(g.log.filter((e) => e.type === 'move')).toHaveLength(0);
+  });
+
+  it('ціль видима, AP замало на постріл, шляху нема — 0 дій, без пострілів', () => {
+    const g = pocket();
+    g.units.push(makeUnit({ id: 'a1', side: 'alien', pos: { x: 5, y: 5 } }));
+    expect(botTurn(g)).toBe(0);
+    expect(g.log.filter((e) => e.type === 'shot' || e.type === 'move')).toHaveLength(0);
+    expect(g.activeSide).toBe('alien');
   });
 });
