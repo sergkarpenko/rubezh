@@ -165,6 +165,13 @@ describe('campaign — сумісність сейвів (ADR-0026/0033)', () =>
     });
   });
 
+  it('пошкоджені дані кампанії в сейві — відмова без часткового стану', () => {
+    const party = createParty(14);
+    const json = JSON.parse(serializeParty(party));
+    json.state.campaign = { status: 'перемога', preset: '?', score: null, victoryDay: null };
+    expect(() => deserializeParty(JSON.stringify(json))).toThrow('Пошкоджені дані збереження: кампанія');
+  });
+
   it('кампанія не викликає geo.rng: save → load → тіки — та сама траєкторія', () => {
     const party = createParty(13);
     const restored = deserializeParty(serializeParty(party));
