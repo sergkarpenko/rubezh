@@ -6,7 +6,7 @@
 // Стан і лог бою від анімації не залежать — критерій «байт-у-байт».
 
 import { DemoSteps } from '../bot';
-import { type Anim, animsFromEvents } from '../render';
+import { type Anim, animsFromEvents } from '../core/render-core';
 import { missionOutcome, type Mission } from '../core/mission';
 
 // Залежності драйвера від шару застосунку (main.ts): читання стану і зворотні
