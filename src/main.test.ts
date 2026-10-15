@@ -6,8 +6,7 @@ import { describe, expect, it } from 'vitest';
 // пR.2 (ADR-0037): тести перетворювачів подій (geoEventText/battleEventText/
 // economyEventText) перенесено до src/ui/journal.test.ts; тести hpColor —
 // до src/ui/panels.test.ts (разом із кодом, без ослаблення тверджень).
-import { cellFromPoint, samePath, validFireTargets } from './main';
-import { createGame, makeUnit, type GameState, type Unit } from './core/combat';
+import { cellFromPoint, samePath } from './main';
 
 describe('cellFromPoint: клік (CSS-пікселі) → клітинка бойовища', () => {
   // канва 520×520 buffer (20×20 клітинок по 26px — BCELL), розташована на сторінці
@@ -70,44 +69,6 @@ describe('samePath: дедуплікація превʼю шляху під ку
   });
 });
 
-// пR.2 (ADR-0037): describe('hpColor') перенесено до src/ui/panels.test.ts.
-
-describe('validFireTargets: валідні цілі зведеного режиму пострілу (П6.14)', () => {
-  // Чиста мапа 20×20 з однією стіною на лінії (5,5)→(9,5); стрілець «p» у (5,5).
-  const shooter = makeUnit({ id: 'p', side: 'player', pos: { x: 5, y: 5 } });
-  const mk = (id: string, x: number, y: number, alive = true): Unit => makeUnit({ id, side: 'alien', pos: { x, y }, alive });
-  const state = (units: Unit[]): GameState =>
-    createGame({
-      map: { width: 20, height: 20, blocked: new Set(['7,5']) },
-      units: [shooter, ...units],
-    });
-  const vis = (keys: string[]): ReadonlySet<string> => new Set(keys);
-
-  it('видимий прибульець у дальності з лінією вогню — валідна ціль', () => {
-    const diag = mk('a1', 6, 6); // дистанція 1, Брезенхем (5,5)→(6,6) стіни (7,5) не перетинає
-    const st = state([diag]);
-    expect(validFireTargets(st, shooter, vis(['6,6']))).toEqual([diag]);
-  });
-
-  it('туман: невидима ціль не підсвічується (ADR-0006)', () => {
-    const a = mk('a1', 6, 6);
-    expect(validFireTargets(state([a]), shooter, vis([]))).toEqual([]);
-  });
-
-  it('поза дальністю зброї (12) — не валідна', () => {
-    const far = mk('a1', 18, 5); // дистанція 13 > 12
-    expect(validFireTargets(state([far]), shooter, vis(['18,5']))).toEqual([]);
-  });
-
-  it('немає лінії вогню (стіна на прямій) — не валідна', () => {
-    const behind = mk('a1', 9, 5); // стіна (7,5) на прямій (5,5)→(9,5)
-    expect(validFireTargets(state([behind]), shooter, vis(['9,5']))).toEqual([]);
-  });
-
-  it('мертвий прибульець і свій юніт — не цілі', () => {
-    const dead = mk('a1', 6, 6, false);
-    const st = state([dead]);
-    expect(validFireTargets(st, shooter, vis(['6,6']))).toEqual([]);
-    expect(validFireTargets(st, shooter, vis(['5,5']))).toEqual([]); // стрілець — не ціль
-  });
-});
+// пR.2 (ADR-0037): describe('hpColor') перенесено до src/ui/panels.test.ts;
+// describe('validFireTargets') — до src/ui/battle.test.ts (разом із кодом,
+// без ослаблення тверджень).
