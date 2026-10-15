@@ -25,9 +25,10 @@ import {
 } from './save';
 
 // Один «партійний» тік: геосцена + економіка + лікарня (як partyTick у main.ts).
+// П8.4a: дотація — з пресетом партії (campaign.preset), як у шарі застосунку.
 function partyTick(p: Party): void {
   advanceTime(p.geo, 1);
-  economyTick(p.econ, p.geo);
+  economyTick(p.econ, p.geo, p.campaign.preset);
   hospitalTick(p.roster);
 }
 
@@ -236,5 +237,51 @@ describe('save: слоти (абстракція сховища)', () => {
 
   it('мітадані з пошкодженого JSON — throw українською', () => {
     expect(() => slotMeta('[]')).toThrow();
+  });
+});
+
+// П8.4a (борг П8.4): пресет у партії — передається в geo/roster/econ/campaign;
+// критерії: (1) сід + пресет + дії = детермінований лог; (2) тести обох пресетів.
+describe('save: пресети партії (П8.4a)', () => {
+  it('createParty(seed, "легкий") — множники у geo/roster/econ + пресет у campaign', () => {
+    const p = createParty(42, 'легкий');
+    expect(p.campaign.preset).toBe('легкий');
+    // частота НЛО 0.7: spawnChance 0.03×0.7, maxUfos Math.round(3×0.7)
+    expect(p.geo.spawnChance).toBeCloseTo(0.03 * 0.7, 12);
+    expect(p.geo.maxUfos).toBe(2);
+    // HP солдатів 1.2: стартовий ростер 10 → 12
+    expect(p.roster.soldiers.length).toBe(6);
+    expect(p.roster.soldiers.every((s) => s.maxHp === 12)).toBe(true);
+    // економіка 1.2: стартовий баланс 300 → 360
+    expect(p.econ.money).toBe(360);
+  });
+
+  it('createParty без пресета — дефолт «норма» (сумісність старих викликів)', () => {
+    const p = createParty(42);
+    expect(p.campaign.preset).toBe('норма');
+    expect(p.geo.spawnChance).toBeCloseTo(0.03, 12);
+    expect(p.geo.maxUfos).toBe(3);
+    expect(p.roster.soldiers.every((s) => s.maxHp === 10)).toBe(true);
+    expect(p.econ.money).toBe(300);
+  });
+
+  it('сід + пресет + дії = детермінований лог; дотація йде з множником пресета', () => {
+    const a = createParty(7, 'легкий');
+    const b = createParty(7, 'легкий');
+    const c = createParty(7); // «норма»
+    for (let i = 0; i < 96; i++) {
+      // 96 тіків = 2 добі: дотація за кожну завершену добу
+      partyTick(a);
+      partyTick(b);
+      partyTick(c);
+    }
+    // критерій 1: однакові сід + пресет + дії — ідентичні журнал і гроші
+    expect(JSON.stringify(a.geo.log)).toBe(JSON.stringify(b.geo.log));
+    expect(a.geo.minute).toBe(b.geo.minute);
+    expect(a.econ.money).toBe(b.econ.money);
+    // легкий: 360 + 2×120 дотації; норма: 300 + 2×100 — економіка розходиться
+    expect(a.econ.money).toBe(600);
+    expect(c.econ.money).toBe(500);
+    expect(a.geo.spawnChance).not.toBe(c.geo.spawnChance); // партії різні
   });
 });

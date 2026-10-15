@@ -251,7 +251,7 @@ export function createPanels(deps: PanelsDeps): Panels {
         b.disabled = deps.inBattle();
         b.onclick = () => {
           try {
-            interceptRound(party.intercept, party.geo, c as InterceptChoice, party.econ);
+            interceptRound(party.intercept, party.geo, c as InterceptChoice, party.econ, party.campaign.preset);
           } catch (e) {
             deps.journal('✗ ' + (e as Error).message, 'lose');
           }

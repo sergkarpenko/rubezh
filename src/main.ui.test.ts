@@ -156,7 +156,19 @@ describe('UI-флоу превью: геосцена → місія → бій �
     ($('seed') as HTMLInputElement).value = '42';
     btn('btn-new').click();
     expect($('clock').textContent).toBe('Д1 00:00');
-    expect($('log').textContent).toContain('Нова партія (сід 42)');
+    expect($('log').textContent).toContain('Нова партія (сід 42, складність «норма»)');
+  });
+
+  it('П8.4a: вибір «легкий» — нова партія з множниками легкого рівня', () => {
+    ($('preset') as HTMLSelectElement).value = 'легкий';
+    btn('btn-new').click();
+    // журнал фіксує пресет; стартові кошти 300 × 1.2 = 360 (П8.4, ADR-0033)
+    expect($('log').textContent).toContain('складність «легкий»');
+    expect($('money').textContent).toBe('360');
+    // повертаємо «норму»: наступні тести очікують дефолтний баланс і HP 10
+    ($('preset') as HTMLSelectElement).value = 'норма';
+    btn('btn-new').click();
+    expect($('money').textContent).toBe('300');
   });
 
   it('радар: тіки до виявленого приземленого НЛО → кнопка місії (детерміновано)', () => {

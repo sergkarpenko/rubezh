@@ -336,7 +336,7 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
       deps.journal('✚ ' + s.name + ' поранений — лікарня: ' + party.roster.hospital[s.id] + ' тик(и)', '', 'battle');
     if (outcome === 'перемога') {
       // П4.5 (ADR-0021): премія за перемогу за тип НЛО; надходження — у журнал
-      creditMissionBonus(party.econ, mission.briefing.kind);
+      creditMissionBonus(party.econ, mission.briefing.kind, party.campaign.preset);
       const woundedNote = aftermath.wounded.length > 0 ? ' · поранених: ' + aftermath.wounded.length : '';
       el('bresult').innerHTML =
         '<div class="banner win">ЗАЧИЩЕНО ✓ — загін повернувся на базу (' +
