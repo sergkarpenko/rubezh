@@ -1,6 +1,6 @@
 # ADR-0038: Розділення core/UI для render.ts та bot.ts
 
-**Статус:** Proposed  
+**Статус:** accepted  
 **Дата:** 2026-10-15  
 **Автор:** Vibe Code  
 **Заміняє:** -  
