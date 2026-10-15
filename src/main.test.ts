@@ -4,8 +4,9 @@
 
 import { describe, expect, it } from 'vitest';
 // пR.2 (ADR-0037): тести перетворювачів подій (geoEventText/battleEventText/
-// economyEventText) перенесено до src/ui/journal.test.ts разом із кодом.
-import { cellFromPoint, hpColor, samePath, validFireTargets } from './main';
+// economyEventText) перенесено до src/ui/journal.test.ts; тести hpColor —
+// до src/ui/panels.test.ts (разом із кодом, без ослаблення тверджень).
+import { cellFromPoint, samePath, validFireTargets } from './main';
 import { createGame, makeUnit, type GameState, type Unit } from './core/combat';
 
 describe('cellFromPoint: клік (CSS-пікселі) → клітинка бойовища', () => {
@@ -69,17 +70,7 @@ describe('samePath: дедуплікація превʼю шляху під ку
   });
 });
 
-describe('hpColor: колір HP у ростері', () => {
-  it('повне HP — зелений, понад половину — жовтий', () => {
-    expect(hpColor(10, 10)).toBe('#7fbf7f');
-    expect(hpColor(9, 10)).toBe('#d8b25a');
-  });
-
-  it('рівно половина і нижче — червоний (строга межа > maxHp/2)', () => {
-    expect(hpColor(5, 10)).toBe('#ff9c9c');
-    expect(hpColor(1, 10)).toBe('#ff9c9c');
-  });
-});
+// пR.2 (ADR-0037): describe('hpColor') перенесено до src/ui/panels.test.ts.
 
 describe('validFireTargets: валідні цілі зведеного режиму пострілу (П6.14)', () => {
   // Чиста мапа 20×20 з однією стіною на лінії (5,5)→(9,5); стрілець «p» у (5,5).
