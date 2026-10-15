@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+/// <reference types="vite/client" />
 // src/main.ui.test.ts
 // П7 (переробка, ADR-0013): DOM-тести UI-шару main.ts через jsdom.
 // Розмітку беремо з реального index.html (без дублювання — дрейф розмітки
@@ -19,7 +20,6 @@
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 // index.html — через ?raw-імпорт (vitest/vite): без node:fs і process.cwd(), тож
 // @types/node не потрібен (ADR-0012 — нових залежностей немає; tsconfig.json не чіпаємо).
-/// <reference types="vite/client" />
 import htmlRaw from '../index.html?raw';
 
 const $ = (id: string): HTMLElement => document.getElementById(id) as HTMLElement;
