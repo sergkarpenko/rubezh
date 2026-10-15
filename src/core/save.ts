@@ -16,6 +16,7 @@ import { createGeoGame, type GeoEvent, type GeoState, type Ufo } from './geo';
 import { createRoster, type Roster } from './squad';
 import { createEconomy, type EconomyEvent, type EconomyState } from './economy';
 import { createIntercept, interceptRngState, type Fighter, type InterceptEvent, type InterceptState } from './intercept';
+import { createCampaign, DEFAULT_PRESET, type CampaignState, type DifficultyPreset } from './campaign';
 
 export const SAVE_VERSION = 1;
 export const SAVE_SLOTS = 3; // ADR-0026: три слоти, ключі rubezh.save.1..3 у main.ts
@@ -29,6 +30,7 @@ export interface Party {
   roster: Roster;
   econ: EconomyState;
   intercept: InterceptState; // П7.4 (ADR-0032): стан винищувача — у Party
+  campaign: CampaignState; // П8.2 (ADR-0033): стан кампанії — у Party
 }
 
 export function createParty(seed: number): Party {
@@ -38,6 +40,7 @@ export function createParty(seed: number): Party {
     roster: createRoster(),
     econ: createEconomy(),
     intercept: createIntercept(seed),
+    campaign: createCampaign(),
   };
 }
 
@@ -76,6 +79,15 @@ interface InterceptSave {
   log: InterceptEvent[];
 }
 
+// П8.2 (ADR-0033): стан кампанії в сейві; відсутні поля (старі сейви) = «триває»
+// і пресет «норма» (версія формату не зростає).
+interface CampaignSave {
+  status: 'триває' | 'перемога';
+  preset: DifficultyPreset;
+  score: CampaignState['score'];
+  victoryDay: number | null;
+}
+
 export interface SaveData {
   version: number;
   seed: number;
@@ -85,6 +97,7 @@ export interface SaveData {
     roster: RosterSave;
     econ: EconSave;
     intercept?: InterceptSave;
+    campaign?: CampaignSave;
   };
 }
 
@@ -131,6 +144,12 @@ export function serializeParty(party: Party, savedAt: string = ''): string {
         activeUfoId: party.intercept.activeUfoId,
         round: party.intercept.round,
         log: party.intercept.log.slice(),
+      },
+      campaign: {
+        status: party.campaign.status,
+        preset: party.campaign.preset,
+        score: party.campaign.score ? { ...party.campaign.score } : null,
+        victoryDay: party.campaign.victoryDay,
       },
     },
   };
@@ -195,6 +214,14 @@ function parseSave(json: string): SaveData {
   if (icsv !== undefined && (!Number.isInteger(icsv.rngState) || typeof icsv.fighter !== 'object')) {
     fail('Пошкоджені дані збереження: перехоплення');
   }
+  // П8.2 (ADR-0033): поле campaign опційне (старі сейви) — але якщо є, має бути коректним.
+  const ccsv = st.campaign;
+  if (
+    ccsv !== undefined &&
+    ((ccsv.status !== 'триває' && ccsv.status !== 'перемога') || (ccsv.preset !== 'легкий' && ccsv.preset !== 'норма'))
+  ) {
+    fail('Пошкоджені дані збереження: кампанія');
+  }
   return data;
 }
 
@@ -225,6 +252,9 @@ export function deserializeParty(json: string): Party {
     ic.round = sv.round;
     ic.log = sv.log.slice();
   }
+  // П8.2 (ADR-0033): відсутні поля (старі сейви) = «триває» + пресет «норма» (DEFAULT_PRESET).
+  const ccsv = data.state.campaign;
+  const cc = ccsv ?? { status: 'триває' as const, preset: DEFAULT_PRESET, score: null, victoryDay: null };
   return {
     seed: data.seed,
     geo,
@@ -239,6 +269,13 @@ export function deserializeParty(json: string): Party {
       log: data.state.econ.log.slice(),
     },
     intercept: ic,
+    // П8.2 (ADR-0033): відсутнє поле campaign (старі сейви) = «триває» і пресет «норма».
+    campaign: {
+      status: cc.status,
+      preset: cc.preset,
+      score: cc.score ? { ...cc.score } : null,
+      victoryDay: cc.victoryDay,
+    },
   };
 }
 
