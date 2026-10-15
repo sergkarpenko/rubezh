@@ -193,9 +193,9 @@ describe('intercept: раундовий бій', () => {
     const moneyBefore = econ.money;
     interceptRound(a.ic, a.geo, 'впритул', econ, 'легкий');
     expect(a.ic.log.some((e) => e.type === 'ufo_shot_down')).toBe(true);
-    // економіка 1.2: Math.round(75 × 1.2) = 90
-    expect(econ.money).toBe(moneyBefore + 90);
-    expect(econ.log.some((e) => e.type === 'shot_down_bonus' && e.amount === 90)).toBe(true);
+    // П8.6: економіка 1.2: Math.round(125 × 1.2) = 150
+    expect(econ.money).toBe(moneyBefore + 150);
+    expect(econ.log.some((e) => e.type === 'shot_down_bonus' && e.amount === 150)).toBe(true);
   });
 
   it('відступ: розрив контакту, винищувач на базі, НЛО живий', () => {

@@ -43,7 +43,7 @@ describe('economyTick — добова дотація (ADR-0021)', () => {
     expect(econ.log).toEqual([]);
   });
 
-  it('межа дня: 48-й тік завершує добу 1 → +100 з подією allowance', () => {
+  it('межа дня: 48-й тік завершує добу 1 → +75 з подією allowance', () => {
     const econ = createEconomy();
     const geo = geoNoUfo();
     advanceTime(geo, 48); // 00:00 дня 2
@@ -91,7 +91,7 @@ describe('economyTick — добова дотація (ADR-0021)', () => {
 });
 
 describe('creditMissionBonus — премія за місію (ADR-0021)', () => {
-  it('премія за тип НЛО: розвідник 150, збирач 250', () => {
+  it('премія за тип НЛО: розвідник 110, збирач 170 (П8.6)', () => {
     const econ = createEconomy();
     creditMissionBonus(econ, 'розвідник');
     expect(econ.money).toBe(START_MONEY + MISSION_BONUS['розвідник']);
@@ -106,7 +106,7 @@ describe('creditMissionBonus — премія за місію (ADR-0021)', () =>
   it('премія не залежить від стану геосцени (лише тип НЛО)', () => {
     const econ = createEconomy();
     creditMissionBonus(econ, 'збирач');
-    expect(econ.money).toBe(START_MONEY + 250);
+    expect(econ.money).toBe(START_MONEY + MISSION_BONUS['збирач']);
   });
 });
 
@@ -170,6 +170,6 @@ describe('інваріанти ізоляції (ADR-0002/0003)', () => {
       return econ;
     };
     expect(run()).toEqual(run());
-    expect(run().money).toBe(START_MONEY + 2 * DAILY_ALLOWANCE + 250 - HIRE_PRICE);
+    expect(run().money).toBe(START_MONEY + 2 * DAILY_ALLOWANCE + MISSION_BONUS['збирач'] - HIRE_PRICE);
   });
 });

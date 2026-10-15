@@ -63,7 +63,9 @@ describe('П8.5: оркестратор — повна партія (фіксо�
     expect(r.ticks).toBe(30 * TICKS_PER_DAY);
     expect(r.moneyByDay).toHaveLength(30);
     expect(r.readyByDay).toHaveLength(30);
-    expect(r.score).toEqual({ ufosShotDown: 0, missionsWon: 22, veteransAlive: 4, moneyLeft: 4500, total: 5650 });
+    // П8.6: числа нової лінії тунінгу (probe-перед-тестами, урок П8.5): премії/дотація
+    // нижчі → залишок 2510; ваги рахунку (ветерани 50, гроші 0.25) → тотал 4128.
+    expect(r.score).toEqual({ ufosShotDown: 0, missionsWon: 22, veteransAlive: 4, moneyLeft: 2510, total: 4128 });
     expect(r.missionsLaunched).toBe(27);
     expect(r.missionsWon).toBe(22);
     expect(r.missionsLost).toBe(5);
@@ -73,13 +75,16 @@ describe('П8.5: оркестратор — повна партія (фіксо�
     expect(r.hireSpent).toBe(30 * HIRE_PRICE);
   });
 
-  it('банкрутство (ADR-0021): сід 45 «норма» — боєготових немає і грошей немає', () => {
-    const r = simulateParty(45, 'норма');
+  // П8.6: банкротний сід нової лінії — сід 45 зі старої лінії тепер переможний
+  // (probe-перед-тестами, урок П8.5); сід 35 банкротує на Д11 — серія невдач
+  // у середені гри (медіана банкротств «норми» Д9.5, docs/reports/p8.6-tuning.md).
+  it('банкрутство (ADR-0021): сід 35 «норма» — боєготових немає і грошей немає', () => {
+    const r = simulateParty(35, 'норма');
     expect(r.outcome).toBe('банкрутство');
-    expect(r.endDay).toBe(3);
-    expect(r.ticks).toBe(96);
-    expect(r.soldiersLost).toBe(12);
-    expect(r.moneyByDay.length).toBeLessThan(30); // обірвана крива — доба 3 незавершена
+    expect(r.endDay).toBe(11);
+    expect(r.ticks).toBe(498);
+    expect(r.soldiersLost).toBe(27);
+    expect(r.moneyByDay.length).toBeLessThan(30); // обірвана крива — доба 11 незавершена
   });
 
   it('смоук: 4 доби × 2 сіди × 2 пресети — без винятків, криви заповнені', () => {
