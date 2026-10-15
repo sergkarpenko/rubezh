@@ -288,6 +288,11 @@ git pull origin main
 | ADR-0034 | Гейт Codecov на PR — codecov/patch 95% як required check | accepted | 2026-10-14 |
 | ADR-0035 | Звіт Codecov на PR — гейт codecov/patch стає неблокуючим (доповнює ADR-0025/0034) | proposed | 2026-10-14 |
 | ADR-0036 | Обмеження розміру Pull Request — жорстке обмеження до 500 рядків зміни | proposed | 2026-10-15 |
+| ADR-0037 | Модульна архітектура UI | proposed | 2026-10-15 |
+| ADR-0038 | Розділення core/UI для render.ts та bot.ts | proposed | 2026-10-15 |
+| ADR-0039 | Вимога двох схпалень для merge | proposed | 2026-10-15 |
+| ADR-0040 | GitHub Action для валідації розміру PR | proposed | 2026-10-15 |
+| ADR-0041 | Уточнення AI-native SDLC процесу | proposed | 2026-10-15 |
 | ADR-0042 | Уточнення ролей AI-агентів у розробці | proposed | 2026-10-15 |
 | ADR-0043 | Схема нумерації задач (пX.Y) | proposed | 2026-10-15 |
 | ADR-0044 | Процес рефакторингу | proposed | 2026-10-15 |

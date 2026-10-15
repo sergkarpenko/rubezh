@@ -2,6 +2,38 @@
 
 Конвенції розробки для власника і ШІ-агентів (Vibe Work / Vibe Code). Джерело правди коду, рішень, статусу і плану — цей репозиторій (ADR-0023); тема знань «Рубіж» у Vibe Work — дзеркало, яке синхронізує окрема Work-сесія (агент Vibe Code доступу до знань не має). Сесії розробки — з 2026-10-13 у Vibe Code (VS Code, локальний клон).
 
+## AI-Native SDLC Process (2026-10-15)
+
+This project uses an AI-native Software Development Lifecycle (SDLC) with two specialized agents:
+
+- **Vibe Work**: Responsible for planning, design, and creating EARS-plans (ADR-0042)
+- **Vibe Code**: Responsible for implementation, testing, and delivery (ADR-0042)
+
+### Task Numbering (ADR-0043)
+All work is organized in phases using the `пX.Y` format:
+- `п`: Prefix indicating "phase"
+- `X`: Phase number (e.g., 8 for current phase)
+- `Y`: Step number within the phase
+
+Example: `п8.5` = Phase 8, Step 5 (Refactoring)
+
+### Process Flow (ADR-0041)
+1. Vibe Work receives prompt `пX.Y`
+2. Vibe Work creates EARS-plan in `docs/plans/`
+3. Vibe Work creates ADR if needed in `docs/adr/`
+4. Vibe Code pulls changes, reads plan, implements
+5. Vibe Code creates PR per ADR-0028
+6. PR is reviewed and merged into main
+
+### Refactoring Process (ADR-0044)
+Refactoring is conducted in stages:
+- **Local**: Single module improvements
+- **Modular**: Multi-module reorganization
+- **Global**: Architecture-wide changes
+
+See `docs/plans/p8.5-refactoring.md` for details.
+
+
 ## Принципи
 
 1. Одна сесія ≈ один вузький крок: одна ітерація або її частина (свідоме рішення власника — не розганяти довгий контекст).
