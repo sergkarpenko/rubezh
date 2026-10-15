@@ -42,6 +42,7 @@ export interface PanelsDeps {
   drainEcon(): void; // нові події економіки → журнал
   activeGeoAnim(): Anim | null; // активна анімація геосцени (пульс радара, П6.9)
   geoAnimNow(): number; // час активної анімації геосцени
+  victoryDismissed(): boolean; // П8.3a: гравець закрив екран перемоги і продовжує гру (endless)
 }
 
 export interface Panels {
@@ -333,7 +334,9 @@ export function createPanels(deps: PanelsDeps): Panels {
     // П8.3: відображення екрану перемоги кампанії
     const victoryPanel = el('campaign-victory');
     const isVictory = party.campaign.status === 'перемога';
-    victoryPanel.classList.toggle('hidden', !isVictory);
+    // П8.3a: endless (рішення власника 2026-10-15) — «Грати далі» ховає екран,
+    // але статус «перемога» і зафіксований рахунок лишаються (EARS Фази 8)
+    victoryPanel.classList.toggle('hidden', !isVictory || deps.victoryDismissed());
     if (isVictory && party.campaign.score) {
       el('campaign-score').textContent = String(party.campaign.score.total);
     }

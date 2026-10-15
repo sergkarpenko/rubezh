@@ -63,6 +63,7 @@ const journalUI = createJournal({
 const journal = journalUI.add; // виклики journal(text, cls, cat) у шарі застосунку без змін
 
 let gameOver = false; // банкрутство (ADR-0021): боєготових немає і грошей на найм немає
+let victoryDismissed = false; // П8.3a: endless — гравець закрив екран перемоги і продовжує гру
 let party: Party = newParty(42);
 // пR.2 (ADR-0037): стан бою — явний об'єкт замість модульних let (мітигація
 // плану рефакторингу); ним спільно користуються модуль бою (src/ui/battle.ts)
@@ -158,6 +159,7 @@ const panels = createPanels({
   drainEcon: () => journalUI.drainEcon(),
   activeGeoAnim: () => geoAnim.active(),
   geoAnimNow: () => geoAnim.now,
+  victoryDismissed: () => victoryDismissed,
 });
 
 const anim = new AnimEngine({
@@ -183,6 +185,7 @@ const geoAnim = new AnimEngine({
 function adoptParty(p: Party): Party {
   journalUI.adopt(p);
   gameOver = isBankrupt(p.econ, p.roster);
+  victoryDismissed = false; // П8.3a: нова/завантажена партія — екран перемоги показується знову
   return p;
 }
 
@@ -289,6 +292,14 @@ if (typeof document !== 'undefined') {
   el('btn-new').onclick = restart;
   // П8.3: кнопка "Грати знов" для перезапуску кампанії
   el('btn-play-again').onclick = () => restart();
+  // П8.3a (рішення власника 2026-10-15): endless — «Грати далі» ховає екран
+  // перемоги і продовжує партію; зафіксований рахунок не змінюється (campaignTick
+  // після «перемога» — no-op), ядро без змін понад П8.2
+  el('btn-continue').onclick = () => {
+    victoryDismissed = true;
+    renderAll();
+    journal('Перемогу зафіксовано (рахунок ' + party.campaign.score?.total + '). Партію продовжено.', 'win');
+  };
   // П4.5 (ADR-0021): найм солдата — списання грошей, новобранець у кінець ростеру
   el('btn-hire').onclick = () => {
     try {

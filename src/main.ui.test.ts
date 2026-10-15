@@ -773,3 +773,41 @@ describe('П7.5: повітряний бій — контекст-стрічка
     expect(btn('btn-save-1').disabled).toBe(false);
   });
 });
+
+describe('П8.3a: перемога кампанії — 30 діб → екран → «Грати далі» (endless), рахунок зафіксований', () => {
+  it('підготовка: нова партія — екрана перемоги нема, кампанія «триває»', () => {
+    ($('seed') as HTMLInputElement).value = '42';
+    btn('btn-new').click();
+    expect($('clock').textContent).toBe('Д1 00:00');
+    expect($('campaign-status').textContent).toBe('кампанія: триває');
+    expect($('campaign-progress').textContent).toBe('Д1/30');
+    expect($('campaign-victory').classList.contains('hidden')).toBe(true);
+  });
+
+  it('30 діб: настала доба 31 — екран перемоги з підсумковим рахунком', () => {
+    for (let i = 0; i < 30; i++) btn('btn-day').click();
+    expect($('clock').textContent).toBe('Д31 00:00');
+    expect($('campaign-status').textContent).toBe('кампанія: перемога');
+    expect($('campaign-victory').classList.contains('hidden')).toBe(false);
+    expect($('campaign-score').textContent).toMatch(/^\d+$/); // рахунок зафіксовано на межі 30-ї доби (П8.2)
+  });
+
+  it('«Грати далі» (endless): екран зникає, час іде далі, рахунок не змінюється', () => {
+    const score = $('campaign-score').textContent;
+    btn('btn-continue').click();
+    expect($('campaign-victory').classList.contains('hidden')).toBe(true);
+    expect($('log').textContent).toContain('Партію продовжено');
+    // партія жива після перемоги: тік часу працює, статус і рахунок зафіксовані (EARS Фази 8)
+    btn('btn-day').click();
+    expect($('clock').textContent).toBe('Д32 00:00');
+    expect($('campaign-status').textContent).toBe('кампанія: перемога');
+    expect($('campaign-score').textContent).toBe(score);
+  });
+
+  it('«Грати знов»: рестарт — нова кампанія «триває», екран приховано', () => {
+    btn('btn-play-again').click();
+    expect($('clock').textContent).toBe('Д1 00:00');
+    expect($('campaign-status').textContent).toBe('кампанія: триває');
+    expect($('campaign-victory').classList.contains('hidden')).toBe(true);
+  });
+});
