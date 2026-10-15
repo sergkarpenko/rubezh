@@ -70,6 +70,7 @@ function makeFixture(over: Partial<PanelsDeps> = {}): Fixture {
     drainEcon: vi.fn(),
     activeGeoAnim: () => null,
     geoAnimNow: () => 0,
+    victoryDismissed: () => false,
     ...over,
   };
   return { party, deps, panels: createPanels(deps) };
@@ -308,6 +309,17 @@ describe('renderCampaign: чипи кампанії і екран перемог
     f.party.campaign.score = { total: 1234 };
     f.panels.renderCampaign();
     expect(document.getElementById('campaign-victory')!.classList.contains('hidden')).toBe(false);
+    expect(document.getElementById('campaign-score')!.textContent).toBe('1234');
+  });
+
+  // П8.3a: endless (рішення власника 2026-10-15) — «Грати далі» ховає екран
+  it('перемога + «Грати далі» (endless) — екран приховано, рахунок лишився', () => {
+    const f = makeFixture({ victoryDismissed: () => true });
+    f.party.campaign.status = 'перемога';
+    f.party.campaign.score = { total: 1234 };
+    f.panels.renderCampaign();
+    expect(document.getElementById('campaign-status')!.textContent).toBe('кампанія: перемога');
+    expect(document.getElementById('campaign-victory')!.classList.contains('hidden')).toBe(true);
     expect(document.getElementById('campaign-score')!.textContent).toBe('1234');
   });
 });
