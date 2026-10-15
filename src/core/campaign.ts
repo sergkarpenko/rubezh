@@ -25,6 +25,20 @@ export const SCORE_PER_MONEY = 0.5;
 export type DifficultyPreset = 'легкий' | 'норма'; // множники — П8.4; третій рівень — поза MVP
 export const DEFAULT_PRESET: DifficultyPreset = 'норма'; // ADR-0033: дефолт «норма»
 
+// P8.4: множники для пресетів
+export const DIFFICULTY_MULTIPLIERS = {
+  легкий: {
+    ufoSpawnMultiplier: 0.7,
+    hpBonusMultiplier: 1.2,
+    economyMultiplier: 1.2,
+  },
+  норма: {
+    ufoSpawnMultiplier: 1.0,
+    hpBonusMultiplier: 1.0,
+    economyMultiplier: 1.0,
+  },
+} as const;
+
 export type CampaignStatus = 'триває' | 'перемога';
 
 export interface CampaignScore {

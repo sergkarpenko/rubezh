@@ -19,6 +19,7 @@
 // місії (mission_won / mission_lost записує mission.ts).
 
 import { mulberry32, type RNG, type Vec2 } from './combat';
+import { type DifficultyPreset, DEFAULT_PRESET, DIFFICULTY_MULTIPLIERS } from './campaign';
 
 export const TICK_MINUTES = 30; // 1 тік = 30 хвилин; доба = 48 тіків
 export const WORLD_W = 16;
@@ -104,6 +105,7 @@ export interface GeoOptions {
   base?: Vec2;
   spawnChance?: number;
   maxUfos?: number;
+  preset?: DifficultyPreset;
 }
 
 export function createGeoGame(opts: GeoOptions = {}): GeoState {
@@ -111,14 +113,16 @@ export function createGeoGame(opts: GeoOptions = {}): GeoState {
   if (base.x < 0 || base.y < 0 || base.x >= WORLD_W || base.y >= WORLD_H) {
     throw new Error('База за межами мапи світу');
   }
+  const preset = opts.preset ?? DEFAULT_PRESET;
+  const multipliers = DIFFICULTY_MULTIPLIERS[preset];
   return {
     minute: 0,
     rng: opts.rng ?? mulberry32(opts.seed ?? 42),
     base: { ...base },
     ufos: [],
     log: [],
-    spawnChance: opts.spawnChance ?? DEFAULT_SPAWN_CHANCE,
-    maxUfos: opts.maxUfos ?? DEFAULT_MAX_UFOS,
+    spawnChance: (opts.spawnChance ?? DEFAULT_SPAWN_CHANCE) * multipliers.ufoSpawnMultiplier,
+    maxUfos: Math.round((opts.maxUfos ?? DEFAULT_MAX_UFOS) * multipliers.ufoSpawnMultiplier),
     nextId: 1,
   };
 }

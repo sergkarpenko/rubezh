@@ -15,6 +15,7 @@
 // премія — за тип НЛО лише за перемогу; списання — лише при достатку.
 
 import { geoDay, type GeoState, type UfoKind } from './geo';
+import { type DifficultyPreset, DEFAULT_PRESET, DIFFICULTY_MULTIPLIERS } from './campaign';
 
 export const START_MONEY = 300; // стартовий баланс партії (ADR-0021)
 export const DAILY_ALLOWANCE = 100; // дотація за завершену добу геосцени
@@ -46,35 +47,46 @@ export interface EconomyState {
   log: EconomyEvent[]; // надходження/витрати для панелі фінансів (П4.5)
 }
 
-export function createEconomy(): EconomyState {
-  return { money: START_MONEY, lastAllowanceDay: 0, log: [] };
+export function createEconomy(preset: DifficultyPreset = DEFAULT_PRESET): EconomyState {
+  const multipliers = DIFFICULTY_MULTIPLIERS[preset];
+  return {
+    money: Math.round(START_MONEY * multipliers.economyMultiplier),
+    lastAllowanceDay: 0,
+    log: [],
+  };
 }
 
 // Тік економіки разом із геосценою: нарахувати дотацію за кожну добу,
 // що завершилась з моменту останнього нарахування. День N завершено,
 // коли geoDay(geo) > N (доба = 48 тіків). Повторний виклик без нових
 // завершених діб — no-op (захист від подвійного нарахування).
-export function economyTick(state: EconomyState, geo: GeoState): void {
+export function economyTick(state: EconomyState, geo: GeoState, preset: DifficultyPreset = DEFAULT_PRESET): void {
   const completedDays = geoDay(geo) - 1;
+  const multipliers = DIFFICULTY_MULTIPLIERS[preset];
+  const effectiveAllowance = Math.round(DAILY_ALLOWANCE * multipliers.economyMultiplier);
   while (state.lastAllowanceDay < completedDays) {
     state.lastAllowanceDay += 1;
-    state.money += DAILY_ALLOWANCE;
-    state.log.push({ type: 'allowance', day: state.lastAllowanceDay, amount: DAILY_ALLOWANCE });
+    state.money += effectiveAllowance;
+    state.log.push({ type: 'allowance', day: state.lastAllowanceDay, amount: effectiveAllowance });
   }
 }
 
 // Премія за перемогу в місії за тип НЛО (поразка премії не дає — ADR-0021).
 // Викликає шар застосунку один раз після mission_won; тип — із briefing.kind.
-export function creditMissionBonus(state: EconomyState, kind: UfoKind): void {
-  const amount = MISSION_BONUS[kind];
+export function creditMissionBonus(state: EconomyState, kind: UfoKind, preset: DifficultyPreset = DEFAULT_PRESET): void {
+  const baseAmount = MISSION_BONUS[kind];
+  const multipliers = DIFFICULTY_MULTIPLIERS[preset];
+  const amount = Math.round(baseAmount * multipliers.economyMultiplier);
   state.money += amount;
   state.log.push({ type: 'mission_bonus', kind, amount });
 }
 
 // П7.6 (ADR-0032): премія за збиття НЛО у повітрі перехопленням — відрізняється від премії
 // за тактичну місію (окрема стаття доходу, константи SHOT_DOWN_BONUS вище).
-export function creditShotDownBonus(state: EconomyState, kind: UfoKind): void {
-  const amount = SHOT_DOWN_BONUS[kind];
+export function creditShotDownBonus(state: EconomyState, kind: UfoKind, preset: DifficultyPreset = DEFAULT_PRESET): void {
+  const baseAmount = SHOT_DOWN_BONUS[kind];
+  const multipliers = DIFFICULTY_MULTIPLIERS[preset];
+  const amount = Math.round(baseAmount * multipliers.economyMultiplier);
   state.money += amount;
   state.log.push({ type: 'shot_down_bonus', kind, amount });
 }
