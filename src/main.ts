@@ -37,21 +37,10 @@
 // і тач-патерн руху «тап — прев'ю шляху, повторний тап у ту саму
 // клітинку — хід»; той самий патерн для мишки (click). Ядро без змін.
 
-import {
-  RADAR_RANGE,
-  TICK_MINUTES,
-  WORLD_W,
-  WORLD_H,
-  advanceTime,
-  detectedUfos,
-  geoClock,
-  geoDay,
-  missionTargets,
-  type GeoEvent,
-} from './core/geo';
+import { RADAR_RANGE, TICK_MINUTES, WORLD_W, WORLD_H, advanceTime, detectedUfos, geoClock, geoDay, missionTargets } from './core/geo';
 import { ALIEN_SPAWN, SQUAD_SPAWN, completeMission, createMission, missionOutcome, type Mission } from './core/mission';
 import { applyMissionResult, hireSoldier, hospitalTick, isBankrupt, missionSquad, readySoldiers } from './core/squad';
-import { creditMissionBonus, economyTick, HIRE_PRICE, type EconomyEvent } from './core/economy';
+import { creditMissionBonus, economyTick, HIRE_PRICE } from './core/economy';
 import {
   FIGHTER_MAX_HP,
   FIGHTER_REPAIR_COST,
@@ -73,7 +62,6 @@ import {
   moveUnit,
   resolveAttack,
   setOverwatch,
-  type GameEvent,
   type GameState,
   type ShotMode,
   type Unit,
@@ -81,10 +69,11 @@ import {
 } from './core/combat';
 import { computeVisibleCells, findPath, pathApCost } from './core/map';
 import { aliensTurn } from './bot';
-// пR.2 (ADR-0037): модулі шару UI — демо-драйвер, DOM-хелпер, панель збереження.
+// пR.2 (ADR-0037): модулі шару UI — демо-драйвер, DOM-хелпер, панель збереження, журнал подій.
 import { DemoDriver } from './ui/demo';
 import { el } from './ui/dom';
 import { createSavePanel } from './ui/save-panel';
+import { createJournal, MODE_LABEL, type LogFilter } from './ui/journal';
 // П6.7 (ADR-0029): векторні спрайти — чисті функції малювання шару відображення.
 // П6.8 (ADR-0029): анімаційний рушій — черга + rAF лише під час активних анімацій.
 import {
@@ -124,19 +113,24 @@ initPixelSprites((w: number, h: number) => {
   return c;
 });
 
-const MODE_LABEL: Record<ShotMode, string> = { snap: 'швидкий', aimed: 'прицільний', auto: 'черга' };
-
 // Порядок оголошень важливий (TDZ — див. docs/workflow.md): усі змінні стану,
 // які newParty() чи обробники пишуть, оголошуються ДО першого виклику newParty().
-// ADR-0027: категорії записів єдиного журналу (фільтри-вкладки).
-type LogCat = 'geo' | 'econ' | 'battle';
-type LogFilter = 'all' | LogCat;
-let logFilter: LogFilter = 'all';
+// пR.2 (ADR-0037): журнал подій (категорії і фільтри-вкладки — ADR-0027,
+// EventText-перетворювачі, seen-трекінг подій) — модуль src/ui/journal.ts;
+// тут — лише зв'язування зі станом застосунку (party/mission) і анімаціями
+// перехоплення (П7.5). Створюється ДО newParty(42): adoptParty звідти
+// використовує journal.adopt (урок TDZ — див. docs/workflow.md).
+const journalUI = createJournal({
+  geoLog: () => party.geo.log,
+  econLog: () => party.econ.log,
+  battleLog: () => (mission ? mission.state.log : null),
+  unitName,
+  onGeoEvent: (e) => {
+    if (hasRaf) geoAnim.push(...interceptAnims(e as InterceptEvent));
+  },
+});
+const journal = journalUI.add; // виклики journal(text, cls, cat) у шарі застосунку без змін
 
-let seenGeoLog = 0;
-const knownDetected = new Set<string>();
-let seenBattleLog = 0;
-let seenEconLog = 0;
 let gameOver = false; // банкрутство (ADR-0021): боєготових немає і грошей на найм немає
 let party: Party = newParty(42);
 let mission: Mission | null = null;
@@ -205,14 +199,12 @@ function enqueueBattleAnims(prevLen: number): void {
   anim.push(...animsFromEvents(mission.state.log.slice(prevLen), mission.state.units));
 }
 
-// Прийняти партію у UI-шар: історію журналу не відтворюємо (лише нові події
-// після точки входу), трекінг НЛО перебудовуємо з логу (ADR-0006), банкрутство
-// перераховуємо (ADR-0021). Спільно для нової і завантаженої партії.
+// Прийняти партію у UI-шар: seen-трекінг журналу — у модулі journal (історію
+// не відтворюємо — лише нові події після точки входу, трекінг НЛО з логу —
+// ADR-0006), банкрутство перераховуємо тут (ADR-0021). Спільно для нової
+// і завантаженої партії.
 function adoptParty(p: Party): Party {
-  seenGeoLog = p.geo.log.length;
-  knownDetected.clear();
-  for (const e of p.geo.log) if (e.type === 'ufo_detected') knownDetected.add(e.ufoId);
-  seenEconLog = p.econ.log.length;
+  journalUI.adopt(p);
   gameOver = isBankrupt(p.econ, p.roster);
   return p;
 }
@@ -221,115 +213,12 @@ function newParty(seed: number): Party {
   return adoptParty(createParty(seed));
 }
 
-function journal(text: string, cls = '', cat: LogCat = 'geo'): void {
-  const li = document.createElement('li');
-  li.textContent = text;
-  if (cls) li.className = cls;
-  li.dataset.cat = cat; // ADR-0027: категорія для фільтрів-вкладок журналу
-  if (logFilter !== 'all' && cat !== logFilter) li.style.display = 'none';
-  const log = el('log');
-  log.prepend(li);
-  while (log.childElementCount > 80) log.removeChild(log.lastChild!);
-}
-
-// ADR-0027: перемикання фільтра журналу — активна вкладка підсвічується,
-// невідповідні записи ховаються (наявні і нові — одним правилом).
-function setLogFilter(f: LogFilter): void {
-  logFilter = f;
-  for (const b of document.querySelectorAll<HTMLButtonElement>('#log-tabs button')) {
-    b.classList.toggle('active', b.dataset.filter === f);
-  }
-  for (const li of document.querySelectorAll<HTMLLIElement>('#log li')) {
-    li.style.display = f === 'all' || li.dataset.cat === f ? '' : 'none';
-  }
-}
-
 function unitName(id: string): string {
   const u = mission?.state.units.find((x) => x.id === id);
   return u ? u.name : id;
 }
 
-// Бойові події (state.log) → журнал: постріли і смерті (туман не порушуємо:
-// події пишуться лише про реальні дії, а читач — гравець, який їх бачив).
-// П7: чистий перетворювач події → рядок журналу; null — не для гравця.
-export function battleEventText(e: GameEvent, name: (id: string) => string): { text: string; cls: string } | null {
-  if (e.type === 'shot') {
-    return {
-      text: name(e.shooterId) + ' → ' + name(e.targetId) + ' (' + MODE_LABEL[e.mode] + '): ' + (e.hit ? '−' + e.damage : 'промах'),
-      cls: '',
-    };
-  }
-  if (e.type === 'death') {
-    return { text: '✝ ' + name(e.unitId) + ' загинув', cls: 'lose' };
-  }
-  return null; // move / turn / overwatch — не для журналу бою
-}
-
-function drainBattleLog(): void {
-  if (!mission) return;
-  const log = mission.state.log;
-  for (; seenBattleLog < log.length; seenBattleLog++) {
-    const msg = battleEventText(log[seenBattleLog], unitName);
-    if (msg) journal(msg.text, msg.cls, 'battle');
-  }
-}
-
-// Geo-події → журнал (туман стратегічного шару: лише виявлені НЛО, як у 4.2).
-// П7: чистий фільтр туману; knownDetected веде викликаючий (ufo_detected
-// додається до набору ДО перевірки ufo_landed/ufo_left у тому ж batch).
-export function geoEventText(e: GeoEvent, knownDetected: ReadonlySet<string>): { text: string; cls: string } | null {
-  switch (e.type) {
-    case 'day':
-      return { text: '— Доба ' + e.day + ' —', cls: '' };
-    case 'ufo_detected':
-      return { text: 'Виявлено НЛО: ' + e.ufoId, cls: '' };
-    case 'ufo_landed':
-      return knownDetected.has(e.ufoId) ? { text: 'НЛО ' + e.ufoId + ' приземлився — відкрито вікно місії', cls: '' } : null;
-    case 'ufo_left':
-      return knownDetected.has(e.ufoId) ? { text: 'НЛО ' + e.ufoId + ' відлетів і зник', cls: '' } : null;
-    case 'mission_won':
-      return { text: 'Місію зачищено ✓', cls: 'win' };
-    case 'mission_lost':
-      return { text: 'Загін втрачено ✗', cls: 'lose' };
-    case 'intercept_start':
-      return { text: '✦ Перехоплення: винищувач піднявся на НЛО ' + e.ufoId, cls: '' };
-    case 'intercept_engage':
-      return { text: '✦ Винищувач зблизився з НЛО ' + e.ufoId + ' — повітряний бій', cls: '' };
-    case 'intercept_break_off':
-      return { text: '✦ Розрив контакту — винищувач повернувся на базу', cls: '' };
-    case 'intercept_aborted':
-      return {
-        text:
-          e.reason === 'fighter_damaged'
-            ? '✦ Винищувач пошкоджений — вимушене переривання бою'
-            : '✦ НЛО ' + e.ufoId + ' зник з трекінгу — перехоплення перервано',
-        cls: e.reason === 'fighter_damaged' ? 'lose' : '',
-      };
-    case 'ufo_shot_down':
-      return { text: '✦ НЛО ' + e.ufoId + ' збитий! На місці падіння — місія', cls: 'win' };
-    case 'fighter_returned':
-      return { text: '✦ Винищувач повернувся на базу', cls: '' };
-    case 'fighter_repair_start':
-      return { text: '✦ Ремонт винищувача оплачено (−' + FIGHTER_REPAIR_COST + ')', cls: 'lose' };
-    case 'fighter_repair_done':
-      return { text: '✦ Ремонт винищувача завершено — знову боєготовий', cls: 'win' };
-    default:
-      return null; // ufo_spawned / ufo_move — приховано туманом
-  }
-}
-
-function drainGeoLog(): void {
-  const log = party.geo.log;
-  for (; seenGeoLog < log.length; seenGeoLog++) {
-    const e = log[seenGeoLog];
-    if (e.type === 'ufo_detected') knownDetected.add(e.ufoId);
-    const msg = geoEventText(e, knownDetected);
-    if (msg) journal(msg.text, msg.cls);
-    // П7.5 (ADR-0032): події перехоплення — джерело анімацій трасерів повітряного бою
-    // (сутово відображення: дії ядра вже застосовані; лог лише читається).
-    if (hasRaf) geoAnim.push(...interceptAnims(e as InterceptEvent));
-  }
-}
+// Geo-події → журнал: перетворювач і seen-трекінг — у src/ui/journal.ts (пR.2).
 
 // П7.5 (ADR-0032): подія перехоплення → анімації геосцени. Трасер винищувача — холодний
 // блакит (колір гравця), трасер НЛО — розпечений оранж (колір прибульців); куля летить
@@ -346,28 +235,7 @@ function interceptAnims(e: InterceptEvent): Anim[] {
   return anims;
 }
 
-// П4.5: чистий перетворювач події економіки → рядок журналу (для юніт-тестів).
-export function economyEventText(e: EconomyEvent): { text: string; cls: string } {
-  switch (e.type) {
-    case 'allowance':
-      return { text: 'Дотація за добу ' + e.day + ': +' + e.amount, cls: '' };
-    case 'mission_bonus':
-      return { text: 'Премія за місію (' + e.kind + '): +' + e.amount, cls: 'win' };
-    // П7.6: премія за збиття НЛО у повітрі перехопленням (SHOT_DOWN_BONUS, ADR-0032).
-    case 'shot_down_bonus':
-      return { text: 'Збиття у повітрі (' + e.kind + '): +' + e.amount, cls: 'win' };
-    case 'spend':
-      return { text: 'Витрати: −' + e.amount, cls: 'lose' };
-  }
-}
-
-function drainEconLog(): void {
-  const log = party.econ.log;
-  for (; seenEconLog < log.length; seenEconLog++) {
-    const msg = economyEventText(log[seenEconLog]);
-    journal(msg.text, msg.cls, 'econ');
-  }
-}
+// Події економіки → журнал: перетворювач і seen-трекінг — у src/ui/journal.ts (пR.2).
 
 // П4.5 (ADR-0021): один тік часу партії — геосцена + дотація + лікарня +
 // перевірка банкрутства. Викликати лише поза бою (час геосцени заморожено).
@@ -394,7 +262,7 @@ function partyTick(): void {
 }
 
 function renderGeo(): void {
-  drainGeoLog();
+  journalUI.drainGeo();
   const cv = el<HTMLCanvasElement>('geo');
   const ctx = cv.getContext('2d');
   if (!ctx) return;
@@ -513,7 +381,7 @@ export function hpColor(hp: number, maxHp: number): string {
 
 // П4.5 (ADR-0021): панель фінансів — баланс, кнопка найму, надходження в журнал.
 function renderFinances(): void {
-  drainEconLog();
+  journalUI.drainEcon();
   // ADR-0027: баланс у двох місцях — чип топбару і картка «Фінанси» (дублювання свідоме)
   const moneyText = gameOver ? 'БАНКРУТ' : String(party.econ.money);
   el('money').textContent = moneyText;
@@ -687,7 +555,7 @@ function visibleCells(): Set<string> {
 
 function renderBattle(): void {
   if (!mission) return;
-  drainBattleLog();
+  journalUI.drainBattle();
   // ADR-0027 (П6.3): контекст-стрічка бою — тип місії, заморожений час,
   // чий хід, активний юніт HP/AP. Час геосцени стоїть (ADR-0026: місія
   // не переривається) — показуємо його як «заморожено».
@@ -874,7 +742,7 @@ function closeBattle(): void {
   hoverPath = null;
   tapCell = null;
   aimCell = null; // П6.14
-  seenBattleLog = 0;
+  journalUI.resetBattle();
   el('bresult').innerHTML = '';
   renderAll();
 }
@@ -895,7 +763,7 @@ function launchMission(ufoId: string): void {
   hoverPath = null;
   tapCell = null;
   aimCell = null; // П6.14
-  seenBattleLog = 0;
+  journalUI.resetBattle();
   journal('▶ Місія: загін висаджено біля НЛО ' + ufoId, '', 'battle');
   binfo('Ваш хід: клікніть свого солдата (синє коло), потім клітинку — прев’ю шляху; повторний клік у ту саму клітинку — хід.');
   renderAll();
@@ -1318,7 +1186,7 @@ if (typeof document !== 'undefined') {
   el('btn-demo').onclick = () => demo.battle();
   // ADR-0027: фільтри-вкладки єдиного журналу
   for (const b of document.querySelectorAll<HTMLButtonElement>('#log-tabs button')) {
-    b.onclick = () => setLogFilter(b.dataset.filter as LogFilter);
+    b.onclick = () => journalUI.setFilter(b.dataset.filter as LogFilter);
   }
   const bc = el<HTMLCanvasElement>('battle');
   bc.addEventListener('click', battleCanvasClick);
