@@ -33,14 +33,18 @@ export interface Party {
   campaign: CampaignState; // П8.2 (ADR-0033): стан кампанії — у Party
 }
 
-export function createParty(seed: number): Party {
+// П8.4a (борг П8.4): пресет партії передається в усі фабрики ядра — geo
+// (частота НЛО), roster (HP солдатів), econ (стартові кошти), campaign (ім'я
+// пресету в стані, сейв фіксує — П8.2). Дефолт «норма» — старі виклики без
+// змін; runtime-множники дотацій/премій шар застосунку бере з campaign.preset.
+export function createParty(seed: number, preset: DifficultyPreset = DEFAULT_PRESET): Party {
   return {
     seed,
-    geo: createGeoGame({ seed }),
-    roster: createRoster(),
-    econ: createEconomy(),
+    geo: createGeoGame({ seed, preset }),
+    roster: createRoster(undefined, preset),
+    econ: createEconomy(preset),
     intercept: createIntercept(seed),
-    campaign: createCampaign(),
+    campaign: createCampaign(preset),
   };
 }
 

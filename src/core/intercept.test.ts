@@ -186,6 +186,18 @@ describe('intercept: раундовий бій', () => {
     expect(() => interceptRound(b.ic, b.geo, 'впритул')).not.toThrow();
   });
 
+  it('П8.4a: збиття з пресетом «легкий» — премія ×1.2 (борг П8.4)', () => {
+    const econ = createEconomy('легкий');
+    const a = engaged();
+    a.ic.ufoHp['u1'] = 1; // розвідник
+    const moneyBefore = econ.money;
+    interceptRound(a.ic, a.geo, 'впритул', econ, 'легкий');
+    expect(a.ic.log.some((e) => e.type === 'ufo_shot_down')).toBe(true);
+    // економіка 1.2: Math.round(75 × 1.2) = 90
+    expect(econ.money).toBe(moneyBefore + 90);
+    expect(econ.log.some((e) => e.type === 'shot_down_bonus' && e.amount === 90)).toBe(true);
+  });
+
   it('відступ: розрив контакту, винищувач на базі, НЛО живий', () => {
     const { ic, geo } = engaged();
     interceptRound(ic, geo, 'відступ');

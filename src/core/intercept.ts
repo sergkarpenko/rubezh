@@ -19,6 +19,7 @@
 import { mulberry32, type RNG, type StatefulRng, type Vec2 } from './combat';
 import { creditShotDownBonus, spend, type EconomyState } from './economy';
 import { WORLD_W, chebyshevWrap, type GeoEvent, type GeoState } from './geo';
+import { DEFAULT_PRESET, type DifficultyPreset } from './campaign';
 
 export const FIGHTER_MAX_HP = 4; // MVP: один винищувач, без озброєння/досліджень
 export const FIGHTER_STEPS_PER_TICK = 2; // до 2 клітин за тік — швидший за будь-який НЛО (1 кл./тік)
@@ -191,7 +192,15 @@ export function interceptTick(state: InterceptState, geo: GeoState): void {
 
 // Раунд бою — рішення гравця (дистанція або відступ); тіки геосцени не споживає.
 // Відступ: розрив контакту, винищувач повертається на базу (НЛО продовжує цикл).
-export function interceptRound(state: InterceptState, geo: GeoState, choice: InterceptChoice, econ?: EconomyState): void {
+// П8.4a: пресет (борг П8.4) — лише для множника премії за збиття (campaign.ts);
+// дефолт «норма» — старі виклики без змін.
+export function interceptRound(
+  state: InterceptState,
+  geo: GeoState,
+  choice: InterceptChoice,
+  econ?: EconomyState,
+  preset: DifficultyPreset = DEFAULT_PRESET
+): void {
   const f = state.fighter;
   if (f.status !== 'бій') {
     throw new Error('Активний бій відсутній: раунд неможливий');
@@ -240,7 +249,7 @@ export function interceptRound(state: InterceptState, geo: GeoState, choice: Int
     markShotDown(geo, ufo.id);
     returnToBase(state, geo);
     // П7.6: премія за збиття у повітрі — одразу після бою (економічна крива П7.6, ADR-0021).
-    if (econ) creditShotDownBonus(econ, ufo.kind);
+    if (econ) creditShotDownBonus(econ, ufo.kind, preset);
     return;
   }
   if (f.hp === 0) {

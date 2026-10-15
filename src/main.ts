@@ -30,7 +30,7 @@ import { initPixelSprites } from './render';
 import { AnimEngine, makeGeoPulseAnim, makeTracerAnim, type Anim } from './core/render-core';
 // П5.3 (ADR-0026): партія і слоти збереження — із чистого ядра save.ts.
 import { createParty, type Party } from './core/save';
-import { campaignTick } from './core/campaign';
+import { campaignTick, type DifficultyPreset } from './core/campaign';
 
 // пR.2 (ADR-0037): масштаб сітки (GCELL/BCELL) — спільний модуль src/ui/grid.ts.
 
@@ -189,8 +189,8 @@ function adoptParty(p: Party): Party {
   return p;
 }
 
-function newParty(seed: number): Party {
-  return adoptParty(createParty(seed));
+function newParty(seed: number, preset: DifficultyPreset = 'норма'): Party {
+  return adoptParty(createParty(seed, preset));
 }
 
 function unitName(id: string): string {
@@ -221,7 +221,7 @@ function interceptAnims(e: InterceptEvent): Anim[] {
 // перевірка банкрутства. Викликати лише поза бою (час геосцени заморожено).
 function partyTick(): void {
   advanceTime(party.geo, 1);
-  economyTick(party.econ, party.geo);
+  economyTick(party.econ, party.geo, party.campaign.preset);
   hospitalTick(party.roster);
   // П7.4 (ADR-0032): погоня й ремонт живуть тіками геосцени разом з партією
   interceptTick(party.intercept, party.geo);
@@ -269,9 +269,11 @@ function restart(): void {
   battle.close();
   geoAnim.cancel(); // П6.9: нова партія — пульс старої бази не відтворюємо
   const seed = Number(el<HTMLInputElement>('seed').value) || 42;
-  party = newParty(seed);
+  // П8.4a: пресет складності з селектора топбара; невідоме значення — «норма»
+  const preset = el<HTMLSelectElement>('preset').value as DifficultyPreset;
+  party = newParty(seed, preset === 'легкий' ? 'легкий' : 'норма');
   renderAll();
-  journal('Нова партія (сід ' + seed + '). Рухайте час — радар шукає НЛО.');
+  journal('Нова партія (сід ' + seed + ', складність «' + party.campaign.preset + '»). Рухайте час — радар шукає НЛО.');
 }
 
 // пR.2 (ADR-0037): у node-середовищі (vitest) DOM відсутній — ініціалізацію
@@ -303,7 +305,7 @@ if (typeof document !== 'undefined') {
   // П4.5 (ADR-0021): найм солдата — списання грошей, новобранець у кінець ростеру
   el('btn-hire').onclick = () => {
     try {
-      const s = hireSoldier(party.econ, party.roster);
+      const s = hireSoldier(party.econ, party.roster, party.campaign.preset);
       journal('+ Найм: ' + s.name + ' у ростері', '', 'econ');
       renderAll();
     } catch (e) {
