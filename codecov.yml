@@ -1,5 +1,7 @@
-# ADR-0034: гейт покриття на PR — codecov/patch target 95% як required check.
+# ADR-0034/0053: гейт покриття на PR — codecov/patch target 95% як required check.
 # patch — покриття нових рядків дифа PR; проект (whole-repo) лишаємо Codecov-авто.
+# Перед зміною валідувати: curl --data-binary @codecov.yml https://codecov.io/validate
+# (невалідний конфіг Codecov мовчки відкидає цілком — patch падає в авто-ціль; Т.1, ADR-0053).
 coverage:
   status:
     project:
@@ -8,6 +10,6 @@ coverage:
       default:
         target: 95%
         threshold: 0%
-        only_pull_requests: true
+        only_pulls: true
 comment:
   layout: 'reach, diff, flags, files'
