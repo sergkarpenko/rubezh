@@ -34,7 +34,8 @@ FILES_TO_CHECK=(
   "src/core/mission.ts"
   "src/core/squad.ts"
   "src/main.ts"
-  "src/bot.ts"
+  "src/core/ai-bot.ts"
+  "src/core/intercept-bot.ts"
   "index.html"
 )
 

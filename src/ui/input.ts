@@ -19,7 +19,7 @@ import {
   type Vec2,
 } from '../core/combat';
 import { findPath, pathApCost } from '../core/map';
-import { aliensTurn } from '../bot';
+import { aliensTurn } from '../core/ai-bot';
 import { el } from './dom';
 import { BCELL } from './grid';
 import { MODE_LABEL } from './journal';

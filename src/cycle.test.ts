@@ -22,7 +22,7 @@ import {
   type Roster,
 } from './core/squad';
 import { createEconomy, spend } from './core/economy';
-import { autoBattle } from './bot';
+import { autoBattle } from './core/ai-bot';
 import { createIntercept, interceptRound, interceptTick, startIntercept } from './core/intercept';
 
 // Геопартія, де перший НЛО вже приземлився в зоні радара (кандидат на місію).
