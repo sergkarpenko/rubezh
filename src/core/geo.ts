@@ -82,7 +82,10 @@ export type GeoEvent =
   | { type: 'ufo_shot_down'; ufoId: string; pos: Vec2; minute: number }
   | { type: 'fighter_returned'; pos: Vec2; minute: number }
   | { type: 'fighter_repair_start'; minute: number } // П7.4: ремонт оплачемо
-  | { type: 'fighter_repair_done'; minute: number };
+  | { type: 'fighter_repair_done'; minute: number }
+  // П8.2 (ADR-0033): подію перемоги кампанії записує campaign.ts на межі 30-ї доби;
+  // geoTick про кампанію не знає (ADR-0002), а журнал — спільний для шарів.
+  | { type: 'campaign_victory'; day: number; score: number; minute: number };
 
 export interface GeoState {
   minute: number; // хвилини від старту; 0 = 00:00 дня 1
