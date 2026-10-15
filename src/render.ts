@@ -1,8 +1,9 @@
 // src/render.ts — шар відображення (ADR-0010/0029/0031, П6.7/П6.8/П6.12/П6.13):
 // піксель-арт спрайти Canvas 2D + анімаційний рушій превью + нічна палітра
 // бойовища (терен з хеш-варіацією, тонка сітка, м'який край туману, тряска).
-// Спрайти (солдат з «АР-14 Гарт», прибульчик з «Імпульсним різаком», база, НЛО) —
-// матриці пікселів у коді (ADR-0031): розгортаються ліниво в offscreen-канвас
+// пR.3 (ADR-0038): матриці пікселів, палітри й типи вхідних даних спрайтів —
+// чисті дані в src/core/sprites.ts; тут — лише розгортання в offscreen-канвас
+// і Canvas-виклики. Спрайти розгортаються ліниво в offscreen-канвас
 // низької роздільності з кешем і малюються drawImage з nearest-neighbor
 // (imageSmoothingEnabled = false) у ціле кратному масштабі — крайові пікселі
 // без розмиття. Кадри ходьби — окремі матриці, чергуються у анімації руху.
@@ -13,34 +14,30 @@
 // байт-у-байт незмінний, RNG не викликається, туман (видимість) вирішує викликаюч.
 
 import type { GameEvent, Side, Unit, Vec2 } from './core/combat';
-import type { UfoKind } from './core/geo';
+import {
+  ALIEN_STAND,
+  ALIEN_STEP,
+  BASE_OUTLINE,
+  BASE_SPRITE,
+  FIGHTER_SPRITE,
+  OW_BOLT,
+  SOLDIER_STAND,
+  SOLDIER_STEP,
+  SPRITE_SCALE,
+  UFO_HARVESTER_SPRITE,
+  UFO_LANDED_SPRITE,
+  UFO_SCOUT_SPRITE,
+  type BaseSprite,
+  type FighterSprite,
+  type PixelSprite,
+  type UnitSprite,
+  type UfoSprite,
+} from './core/sprites';
 
-// Палітра — спадок мінімалізму (ADR-0007): ті самі акценти, що й у кружків.
-const PLAYER_BODY = '#6ea8ff';
-const PLAYER_OUTLINE = '#31548c';
-const PLAYER_GEAR = '#3d5c94';
-const PLAYER_HELMET = '#d7e4f7';
-const PLAYER_WEAPON = '#e8eef7';
-const ALIEN_BODY = '#ff6b6b';
-const ALIEN_OUTLINE = '#8f2f2f';
-const ALIEN_EYES = '#5a1f1f';
-const ALIEN_LIMBS = '#c95454';
-const ALIEN_WEAPON = '#ffd27a';
 const HP_TEXT = '#0b0e15';
-const OW_MARKER = '#d8b25a';
-const OW_OUTLINE = '#0b0e15'; // П6.12b: темний кант знака дозору — контраст на будь-якому тлі
 const SELECT_RING = '#d7e4f7';
-const BASE_FILL = '#4f8cff';
-const BASE_OUTLINE = '#9fc3ff';
-// П6.9 (ADR-0029): м'якші позначки НЛО — приглушені кольори (менш кислотні,
-// ніж #e8c545/#e0a24a) і прозорість 0.85 з обов'язковим відновленням alpha.
-const UFO_LANDED_FILL = '#cbb05a';
-const UFO_LANDED_EDGE = '#e6d59a';
-const UFO_AIR = '#c79250';
 const UFO_SOFT_ALPHA = 0.85;
-const UFO_LEG = '#a8862f'; // П6.12 (ADR-0031): опори приземленого НЛО
 const RADAR_PULSE = '#4f8cff'; // колір пульсу радара — сімейство кольору бази
-const BASE_WALL = '#234083'; // П6.12 (ADR-0031): темні стіни бази геосцени
 
 // --- П6.13: нічна палітра бойовища (темно-графітовий терен, тонка сітка) ---
 // Фон канви — той самий колір, що й CSS-тло елемента (index.html): при трясці
@@ -64,42 +61,7 @@ export const GRID_COLOR = 'rgba(110,168,255,0.07)';
 // перекриття однакове для порожньої і заваленої клітинки.
 const FOG_EDGE = 'rgba(21,27,40,0.45)';
 
-// Дані для малювання юніта бойовища: cx/cy — центр клітинки в пікселях buffer'а,
-// r — радіус маркерів (рамка вибору, дозор; у превью 8 при клітинці 26).
-// hp — читабельність стану (ADR-0007). frame — кадр ходьби (0 «стій», 1 «крок»):
-// передається лише анімацією руху (П6.12), у статиці малюється кадр «стій».
-export interface UnitSprite {
-  side: Side;
-  cx: number;
-  cy: number;
-  r: number;
-  hp: number;
-  selected: boolean;
-  overwatch: boolean;
-  frame?: number;
-}
-
-export interface BaseSprite {
-  cx: number;
-  cy: number;
-  size: number; // сторона клітинки геосцени (GCELL)
-}
-
-export interface UfoSprite {
-  cx: number;
-  cy: number;
-  landed: boolean;
-  kind: UfoKind;
-}
-
-// --- П6.12 (ADR-0031): піксель-арт — матриці пікселів + offscreen-канваси ---
-
-// Матриця спрайта: рядки рівної довжини, символ → колір палітри,
-// '.' (та будь-який символ поза палітрою) — прозорий піксель.
-interface PixelSprite {
-  rows: readonly string[];
-  palette: Readonly<Record<string, string>>;
-}
+// --- П6.12 (ADR-0031): піксель-арт — offscreen-канваси ---
 
 // Offscreen-канвас, структурно сумісний із HTMLCanvasElement. Фабрика
 // ін'єктується (браузер: document.createElement; тести: мок) — render.ts
@@ -152,11 +114,6 @@ function rasterSprite(def: PixelSprite): { img: CanvasImageSource; w: number; h:
   return built;
 }
 
-// Ціле кратне масштаб у клітинці (ADR-0031): 12×12 → 24px у клітинці BCELL 26
-// (запас 1px з боків — маркери й рамка вибору в межах клітинки, урок П6.6),
-// на 520 і 720px пікселі лишаються рівними квадратами.
-export const SPRITE_SCALE = 2;
-
 // Малювання розгорнутого спрайта: nearest-neighbor (без розмиття крайових
 // пікселів — ADR-0031), позиція — цілі пікселі (Math.round).
 function drawPixelSprite(ctx: CanvasRenderingContext2D, def: PixelSprite, cx: number, cy: number, scale: number): void {
@@ -166,17 +123,6 @@ function drawPixelSprite(ctx: CanvasRenderingContext2D, def: PixelSprite, cx: nu
   ctx.imageSmoothingEnabled = false;
   ctx.drawImage(s.img, Math.round(cx - w / 2), Math.round(cy - h / 2), w, h);
 }
-
-// Маркер дозору (доробка П6.12b за повторною валідацією власника):
-// піксельна «блискавка» з ТЕМНИМ КАНТОМ у кутку клітинки — гравець верхній
-// лівий, прибульці нижній правий. Урок: золотий знак на пікселях спрайта
-// (світлий шолом / червона мантія) без канту губився; кути матриць спрайтів
-// прозорі, тло клітинки темне — золото з кантом видно на будь-якому тлі,
-// силует не перекривається, HP-число в центрі не зачіпається. 5×5 @2× = 10×10.
-const OW_BOLT: PixelSprite = {
-  rows: ['.KKK.', 'KKAK.', 'KAAKK', 'KKAAK', '.KKKK'],
-  palette: { A: OW_MARKER, K: OW_OUTLINE },
-};
 
 function drawOverwatchMarker(ctx: CanvasRenderingContext2D, u: UnitSprite): void {
   const off = u.side === 'player' ? -8 : 7; // кути клітинки: згори-ліворуч / знизу-праворуч
@@ -216,109 +162,12 @@ function drawHpText(ctx: CanvasRenderingContext2D, text: string, x: number, y: n
   ctx.fillText(text, x, y);
 }
 
-// ADR-0031 (П6.12): солдат зі штурмовою гвинтівкою «АР-14 Гарт» — шолом з
-// темним визором, броня, рюкзак зліва, ствол вправо (дуло — крайній правий
-// піксель матриці, за межами тіла), магазин темний під стволом.
-const SOLDIER_PALETTE: Readonly<Record<string, string>> = {
-  H: PLAYER_HELMET,
-  O: PLAYER_OUTLINE,
-  B: PLAYER_BODY,
-  G: PLAYER_GEAR,
-  W: PLAYER_WEAPON,
-};
-
-const SOLDIER_STAND: PixelSprite = {
-  rows: [
-    '....HHHH....',
-    '...HHHHHH...',
-    '...HHHHHH...',
-    '...HOOOOH...',
-    '..BBBBBBBB..',
-    '.GBBBBBBBB..',
-    '.GGBBBBBBWW.',
-    '.GGBBBBBWWWW',
-    '..BBBBBBOO..',
-    '..GG..GG....',
-    '..OO..OO....',
-    '............',
-  ],
-  palette: SOLDIER_PALETTE,
-};
-
-// Кадр ходьби: ноги розставлені (крок) — решта силуету та сама (ADR-0031).
-const SOLDIER_STEP: PixelSprite = {
-  rows: [
-    '....HHHH....',
-    '...HHHHHH...',
-    '...HHHHHH...',
-    '...HOOOOH...',
-    '..BBBBBBBB..',
-    '.GBBBBBBBB..',
-    '.GGBBBBBBWW.',
-    '.GGBBBBBWWWW',
-    '..BBBBBBOO..',
-    '..GG...GG...',
-    '.OO.....OO..',
-    '............',
-  ],
-  palette: SOLDIER_PALETTE,
-};
-
 export function drawSoldierSprite(ctx: CanvasRenderingContext2D, u: UnitSprite): void {
   drawPixelSprite(ctx, (u.frame ?? 0) === 1 ? SOLDIER_STEP : SOLDIER_STAND, u.cx, u.cy, SPRITE_SCALE);
   if (u.overwatch) drawOverwatchMarker(ctx, u);
   drawHpText(ctx, String(u.hp), u.cx, u.cy);
   if (u.selected) drawSelectionBrackets(ctx, u.cx, u.cy);
 }
-
-// ADR-0031 (П6.12): прибульчик з «Імпульсним різаком» — енергетична «вилка»
-// з двома піками над головою, мантія з темними очима, щупальця знизу.
-// Силует і зброя свідомо відмінні від солдата (критерій П6.12: зброя
-// відрізляється — колір, форма і розташування пікселів).
-const ALIEN_PALETTE: Readonly<Record<string, string>> = {
-  A: ALIEN_BODY,
-  E: ALIEN_EYES,
-  L: ALIEN_LIMBS,
-  Y: ALIEN_WEAPON,
-  R: ALIEN_OUTLINE,
-};
-
-const ALIEN_STAND: PixelSprite = {
-  rows: [
-    '....Y..Y....',
-    '....Y..Y....',
-    '.....YY.....',
-    '....AAAA....',
-    '...AAAAAA...',
-    '...AEAAEA...',
-    '..RAAAAAAR..',
-    '..RAAAAAAR..',
-    '..RAAAAAAR..',
-    '...RAAAAR...',
-    '...L.LL.L...',
-    '...L.LL.L...',
-  ],
-  palette: ALIEN_PALETTE,
-};
-
-// Кадр ходьби: щупальця зсунуті (колищо) — решта силуету та сама (ADR-0031).
-const ALIEN_STEP: PixelSprite = {
-  rows: [
-    '....Y..Y....',
-    '....Y..Y....',
-    '.....YY.....',
-    '....AAAA....',
-    '...AAAAAA...',
-    '...AEAAEA...',
-    '..RAAAAAAR..',
-    '..RAAAAAAR..',
-    '..RAAAAAAR..',
-    '...RAAAAR...',
-    '..L.LL.L....',
-    '..L.LL.L....',
-  ],
-  palette: ALIEN_PALETTE,
-};
 
 export function drawAlienSprite(ctx: CanvasRenderingContext2D, u: UnitSprite): void {
   drawPixelSprite(ctx, (u.frame ?? 0) === 1 ? ALIEN_STEP : ALIEN_STAND, u.cx, u.cy, SPRITE_SCALE);
@@ -333,30 +182,6 @@ export function drawUnitSprite(ctx: CanvasRenderingContext2D, u: UnitSprite): vo
   else drawAlienSprite(ctx, u);
 }
 
-// ADR-0031 (П6.12, доробка за валідацією власника): база геосцени —
-// «Радарний пост»: велика світла тарілка на темній щоглі, світла хатина
-// з темними воротами. Один великий знак замість дрібних деталей (попередня
-// 16×16 «фортеця» на 32px читалась як темний блок). Напис «БАЗА» — ПІД
-// спрайтом, світлим на темному тлі (раніше текст поверх іконки мав
-// майже нульовий контраст). 12×12 @ 2× = 24px у клітинці GCELL 36.
-const BASE_SPRITE: PixelSprite = {
-  rows: [
-    '...OOOOOO...',
-    '....OOOO....',
-    '.....OO.....',
-    '.....DD.....',
-    '.....DD.....',
-    '..BBBBBBBB..',
-    '.OOOOOOOOOO.',
-    '.OOOODDOOOO.',
-    '.OOOODDOOOO.',
-    '.OOOODDOOOO.',
-    '.OOOOOOOOOO.',
-    '............',
-  ],
-  palette: { O: BASE_OUTLINE, D: BASE_WALL, B: BASE_FILL },
-};
-
 export function drawBaseSprite(ctx: CanvasRenderingContext2D, b: BaseSprite): void {
   // спрайт — трохи вище центру клітинки, під ним напис (обидва в межах клітинки)
   drawPixelSprite(ctx, BASE_SPRITE, b.cx, b.cy - 4, SPRITE_SCALE);
@@ -365,81 +190,6 @@ export function drawBaseSprite(ctx: CanvasRenderingContext2D, b: BaseSprite): vo
   ctx.textBaseline = 'middle';
   ctx.fillStyle = BASE_OUTLINE;
   ctx.fillText('БАЗА', b.cx, b.cy + 13);
-}
-
-// Позначка НЛО геосцени (туман: лише виявлені потрапляють у виклик — фільтр у main.ts).
-// П6.9 (ADR-0029): м'якість (alpha 0.85 з відновленням) лишається.
-// П6.12 (ADR-0031): форми — піксельні: приземлений — тарілка з куполом і
-// опорами, «розвідник» — порожній ромб, «збирач» — контур кола з ядром-відсіком.
-const UFO_LANDED_SPRITE: PixelSprite = {
-  rows: [
-    '...SSSS...',
-    '..SSSSSS..',
-    '..SSSSSS..',
-    '.HHHHHHHH.',
-    'HHHHHHHHHH',
-    'HHHHHHHHHH',
-    '.HHHHHHHH.',
-    '..HHHHHH..',
-    '..G....G..',
-    '..G....G..',
-  ],
-  palette: { H: UFO_LANDED_FILL, S: UFO_LANDED_EDGE, G: UFO_LEG },
-};
-
-const UFO_SCOUT_SPRITE: PixelSprite = {
-  rows: [
-    '....AA....',
-    '...A..A...',
-    '..A....A..',
-    '.A......A.',
-    'A........A',
-    'A........A',
-    '.A......A.',
-    '..A....A..',
-    '...A..A...',
-    '....AA....',
-  ],
-  palette: { A: UFO_AIR },
-};
-
-const UFO_HARVESTER_SPRITE: PixelSprite = {
-  rows: [
-    '..AAAAAA..',
-    '.A......A.',
-    'A........A',
-    'A........A',
-    'A...AA...A',
-    'A...AA...A',
-    'A........A',
-    'A........A',
-    '.A......A.',
-    '..AAAAAA..',
-  ],
-  palette: { A: UFO_AIR },
-};
-
-// П7.5 (ADR-0031/0032): піксель-арт винищувача на геосцені — дельта-крило гравця, холодний
-// блакит з темним кантом (контраст на будь-якому тлі — урок П6.12b), 10×10 @2× = 20px у клітинці GCELL 36.
-const FIGHTER_SPRITE: PixelSprite = {
-  rows: [
-    '....FF....',
-    '....FF....',
-    '...FFFF...',
-    '.FFFFFFFF.',
-    'F.KKFFKK.F',
-    'F..FFFF..F',
-    '....FF....',
-    '...F..F...',
-    '...F..F...',
-    '...F..F...',
-  ],
-  palette: { F: '#6fd3ff', K: '#0b0e15' },
-};
-
-export interface FighterSprite {
-  cx: number;
-  cy: number;
 }
 
 export function drawFighterSprite(ctx: CanvasRenderingContext2D, f: FighterSprite): void {

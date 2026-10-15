@@ -25,7 +25,6 @@ import {
   OW_FLASH_MS,
   RADAR_PULSE_MS,
   SHAKE_PX,
-  SPRITE_SCALE,
   TARGET_FRAME_COLOR,
   TRACER_MS,
   animT,
@@ -50,8 +49,8 @@ import {
   type Anim,
   type MakeOffscreen,
   type TerrainCell,
-  type UnitSprite,
 } from './render';
+import { SPRITE_SCALE, type UnitSprite } from './core/sprites';
 import { makeUnit, type GameEvent, type Unit } from './core/combat';
 
 // Клітиночка превью: BCELL = 26, центр (13, 13), радіус силуету 8 (як у renderBattle).
