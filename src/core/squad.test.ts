@@ -83,7 +83,7 @@ describe('squad: підбір загону', () => {
 });
 
 describe('squad: результат місії', () => {
-  it('перемога: виживший з hp < maxHp іде в лікарню (не лікується миттєво), kills збережено', () => {
+  it('перемога: уцілілий з hp < maxHp іде в лікарню (не лікується миттєво), kills збережено', () => {
     const r = createRoster();
     const g = mkGeo('uW');
     const m = createMission(g, 'uW', { squad: missionSquad(r) });

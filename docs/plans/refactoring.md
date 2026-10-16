@@ -81,7 +81,7 @@ EARS-критерії:
 - Якщо тести перенесено, то сумарне покриття не знизилось (ADR-0017; codecov/patch ≥ 95%, ADR-0034).
 - Якщо прогнано демо-бій, то анімації і кадри байт-у-байт незмінні.
 
-**Виконання (2026-10-15, пR.3 завершено — серія PR #82–#84):** `src/core/sprites.ts` (281 р., матриці/палітри/типи) + `src/core/render-core.ts` (313 р., AnimEngine/анімації/терен) — два модулі замість одного (лиміт ≤500/файл, ADR-0036); `src/render.ts` 911 → 387 (лише Canvas); `src/core/ai-bot.ts` + `src/core/intercept-bot.ts`, `src/bot.ts` видалено (UI-інтеграція з пR.2 уже в src/ui). Тести — разом із кодом в одному PR (правило власника 2026-10-15; замінює патерн пR.2 для лінії пR): `core/render-core.test.ts` (13), `core/ai-bot.test.ts` (9), `core/intercept-bot.test.ts` (11); 398/398, нові модулі — 100% рядків (гейт codecov/patch фактично авто-ціль, див. урок у workflow.md). Деталі — рядок пR.3 у docs/workflow.md.
+**Виконання (2026-10-15, пR.3 завершено — серія PR #82–#84):** `src/core/sprites.ts` (281 р., матриці/палітри/типи) + `src/core/render-core.ts` (313 р., AnimEngine/анімації/терен) — два модулі замість одного (ліміт ≤500/файл, ADR-0036); `src/render.ts` 911 → 387 (лише Canvas); `src/core/ai-bot.ts` + `src/core/intercept-bot.ts`, `src/bot.ts` видалено (UI-інтеграція з пR.2 уже в src/ui). Тести — разом із кодом в одному PR (правило власника 2026-10-15; замінює патерн пR.2 для лінії пR): `core/render-core.test.ts` (13), `core/ai-bot.test.ts` (9), `core/intercept-bot.test.ts` (11); 398/398, нові модулі — 100% рядків (гейт codecov/patch фактично авто-ціль, див. урок у workflow.md). Деталі — рядок пR.3 у docs/workflow.md.
 
 ## Закриття лінії
 

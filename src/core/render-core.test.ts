@@ -71,7 +71,7 @@ describe('анімаційний рушій: прогрес і позиція (�
 
 describe('черга анімацій: rAF лише під час активних анімацій (ADR-0029)', () => {
   // Фейковий планувальник: кадри виконує тест («пропускаємо час»), рахує
-  // заплановані кадри, перерисовки та скасування.
+  // заплановані кадри, перемальовки та скасування.
   function fakeDeps() {
     const st = { schedules: 0, draws: 0, canceled: 0, idles: 0, frames: [] as Array<(now: number) => void> };
     const run = (now: number): void => {
@@ -133,7 +133,7 @@ describe('черга анімацій: rAF лише під час активни
     run(650); // кадр 4: b завершена → черга порожня
     expect(eng.busy).toBe(false);
     expect(eng.active()).toBeNull();
-    expect(st.draws).toBe(4); // останній кадр — фінальна перерисовка (статика)
+    expect(st.draws).toBe(4); // останній кадр — фінальна перемальовка (статика)
 
     run(1000); // після idle: жодного нового кадру
     expect(st.schedules).toBe(4);
@@ -209,7 +209,7 @@ describe('перетворювач подій логу → анімації (к�
     expect(JSON.stringify([s1, a1])).toBe(unitsBefore);
   });
 
-  it('реакційний вогень перериває рух: постріл між кроками розбиває хід на два', () => {
+  it('реакційний вогонь перериває рух: постріл між кроками розбиває хід на два', () => {
     const s1 = unit('s1', 'player', 2, 2);
     const a1 = unit('a1', 'alien', 5, 2);
     const events: GameEvent[] = [

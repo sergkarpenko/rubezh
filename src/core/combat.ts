@@ -8,7 +8,7 @@
 // Чиста логіка: жодних залежностей від DOM/Canvas.
 // Уся недетермінованість ізольована в ін'єктованому RNG (детерміновані тести і реплеї).
 // Дизайн шансів за мотивами X-COM: влучність = вроджена точність солдата × модифікатор типу пострілу.
-// Ітерація 2: заступа (overwatch) з реакційним вогнем під час ходу ворога.
+// Ітерація 2: дозор (overwatch) з реакційним вогнем під час ходу ворога.
 
 export type RNG = () => number; // [0, 1)
 
@@ -44,7 +44,7 @@ export interface Unit {
   weapon: Weapon;
   alive: boolean;
   kills: number;
-  overwatch: boolean; // заступа: реакційний вогонь під час ходу ворога
+  overwatch: boolean; // дозор: реакційний вогонь під час ходу ворога
 }
 
 export type GameEvent =
@@ -71,7 +71,7 @@ export interface GameState {
 export const MOVE_AP_PER_CELL = 1;
 export const HIT_CHANCE_FLOOR = 0.02;
 export const HIT_CHANCE_CAP = 0.95;
-export const OVERWATCH_AP_COST = 3; // вартість заступи
+export const OVERWATCH_AP_COST = 3; // вартість дозору
 export const OVERWATCH_ACC_PENALTY = 0.7; // штраф точності реакційного пострілу
 
 export const RIFLE: Weapon = {
@@ -87,7 +87,7 @@ export const RIFLE: Weapon = {
 
 // Зброя прибульців (ітерація 3.6, баланс підібрано масовими симуляціями:
 // dmg 2-5 проти 3-6 у гравця + нижча стартова точність прибульців .50/.45/.40 → ~70% перемог гравця,
-// в середньому 1.5 вижившого з 3 — втрати залишаються відчутними).
+// в середньому 1.5 уцілілого з 3 — втрати залишаються відчутними).
 export const ALIEN_CUTTER: Weapon = {
   name: 'Імпульсний різак',
   damage: [2, 5],
@@ -232,7 +232,7 @@ export function endTurn(state: GameState): void {
   const next: Side = state.activeSide === 'player' ? 'alien' : 'player';
   if (next === 'player') state.turn += 1;
   state.activeSide = next;
-  // на початку свого ходу заступа скидається (AP зарезервовані минулого разу)
+  // на початку свого ходу дозор скидається (AP зарезервовані минулого разу)
   for (const u of state.units)
     if (u.side === next && u.alive) {
       u.ap = u.maxAp;
@@ -264,7 +264,7 @@ function assertStep(state: GameState, u: Unit, step: Vec2): void {
 }
 
 // Рух по готовому шляху (A* — у map.ts, ітерація 2). Кроки строго по 4 напрямках.
-// Кожен крок може спровокувати реакційний вогонь заступи ворога; смерть перериває рух.
+// Кожен крок може спровокувати реакційний вогонь дозору ворога; смерть перериває рух.
 export function moveUnit(state: GameState, unitId: string, path: Vec2[]): void {
   const u = getUnit(state, unitId);
   requireActive(state, u);
@@ -279,7 +279,7 @@ export function moveUnit(state: GameState, unitId: string, path: Vec2[]): void {
   }
 }
 
-// Один постріл (спільний для атаки й реакційного вогню заступи, Фаза 2/П5):
+// Один постріл (спільний для атаки й реакційного вогню дозору, Фаза 2/П5):
 // кидок влучності, пошкодження, смерть цілі; події — у state.log.
 // ADR-0003: порядок викликів RNG фіксований — кидок влучності, потім лише
 // при влучанні кидок пошкодження.
@@ -302,7 +302,7 @@ function fireOnce(state: GameState, shooter: Unit, target: Unit, mode: ShotMode,
   return { hit, damage };
 }
 
-// Один реакційний постріл заступою: режим snap без витрати AP (AP зарезервовані),
+// Один реакційний постріл дозору: режим snap без витрати AP (AP зарезервовані),
 // зі штрафом точності OVERWATCH_ACC_PENALTY.
 function fireReaction(state: GameState, shooter: Unit, target: Unit): void {
   const profile = shooter.weapon.modes.snap;
@@ -310,13 +310,13 @@ function fireReaction(state: GameState, shooter: Unit, target: Unit): void {
   fireOnce(state, shooter, target, 'snap', chance);
 }
 
-// Реакційний вогонь по юніту, що рухається: один постріл з кожної заступи.
+// Реакційний вогонь по юніту, що рухається: один постріл з кожного дозору.
 function triggerOverwatch(state: GameState, mover: Unit): void {
   for (const w of state.units) {
     if (!w.alive || !w.overwatch || w.side === mover.side) continue;
     if (distance(w.pos, mover.pos) > w.weapon.range) continue;
     if (!hasLineOfSight(state, w.pos, mover.pos)) continue;
-    w.overwatch = false; // заступа «розряджається» одним пострілом
+    w.overwatch = false; // дозор «розряджається» одним пострілом
     fireReaction(state, w, mover);
     if (!mover.alive) return;
   }

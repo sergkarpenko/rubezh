@@ -290,7 +290,7 @@ describe('intercept: ремонт', () => {
 });
 
 // П7.4 (ADR-0021/0032): ремонт — гроші + тіки геосцени (патерн лікарні);
-// правило банкрутства не змінюється — неспроможність перехоплення не прогараш.
+// правило банкрутства не змінюється — неспроможність перехоплення не провал.
 describe('intercept: ремонт — економіка (П7.4)', () => {
   function damagedFighter(): { ic: InterceptState; geo: GeoState } {
     const ic = createIntercept(3);
@@ -320,7 +320,7 @@ describe('intercept: ремонт — економіка (П7.4)', () => {
   it('без грошей — винищувач чекає пошкоджений на базі; ремонт можна оплатити пізніше', () => {
     const { ic, geo } = damagedFighter();
     const econ = createEconomy();
-    econ.money = 0; // немає грошей — авточин не спрацює
+    econ.money = 0; // немає грошей — автоматичний ремонт не спрацює
     let guard = 0;
     while (ic.fighter.status !== 'на базі' && guard++ < 2000) {
       interceptRound(ic, geo, 'впритул', econ);
@@ -368,7 +368,7 @@ describe('intercept: ремонт — економіка (П7.4)', () => {
 });
 
 describe('intercept: допоміжні функції', () => {
-  it('shotDownUfos повертає id збитих; порожній без збиттів', () => {
+  it('shotDownUfos повертає id збитих; порожній без збитих', () => {
     const ic = createIntercept();
     expect(shotDownUfos(ic)).toEqual([]);
     ic.log.push({ type: 'ufo_shot_down', ufoId: 'u9', pos: { x: 1, y: 1 }, minute: 0 });

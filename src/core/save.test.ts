@@ -132,10 +132,10 @@ describe('save: зіпсовані дані (критерій П5.2)', () => {
     expect(() => deserializeParty('')).toThrow('Пошкоджені дані збереження');
   });
 
-  it('не обʼєкт (число, масив, null) — throw українською', () => {
-    expect(() => deserializeParty('42')).toThrow('очікувався обʼєкт');
-    expect(() => deserializeParty('[1,2]')).toThrow('очікувався обʼєкт');
-    expect(() => deserializeParty('null')).toThrow('очікувався обʼєкт');
+  it('не об’кт (число, масив, null) — throw українською', () => {
+    expect(() => deserializeParty('42')).toThrow('очікувався об’кт');
+    expect(() => deserializeParty('[1,2]')).toThrow('очікувався об’кт');
+    expect(() => deserializeParty('null')).toThrow('очікувався об’кт');
   });
 
   it('невідома/майбутня версія — throw українською', () => {
@@ -220,7 +220,7 @@ describe('save: слоти (абстракція сховища)', () => {
     expect(() => slotIsEmpty(store, 99)).toThrow('Номер слоту');
   });
 
-  it('мітадані слоту — похідні від стану (ADR-0026)', () => {
+  it('метадані слоту — похідні від стану (ADR-0026)', () => {
     const store = memoryStore();
     const p = createParty(42);
     for (let i = 0; i < 96; i++) partyTick(p); // 48 тіків = доба
@@ -235,7 +235,7 @@ describe('save: слоти (абстракція сховища)', () => {
     expect(meta.aliveSoldiers).toBe(p.roster.soldiers.length);
   });
 
-  it('мітадані з пошкодженого JSON — throw українською', () => {
+  it('метадані з пошкодженого JSON — throw українською', () => {
     expect(() => slotMeta('[]')).toThrow();
   });
 });

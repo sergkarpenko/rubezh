@@ -39,7 +39,7 @@ export function cellFromPoint(
   };
 }
 
-// П7: той самий шлях під курсором? (без перерисовки на кожен піксель)
+// П7: той самий шлях під курсором? (без перемальовки на кожен піксель)
 export function samePath(a: Vec2[] | null, b: Vec2[] | null): boolean {
   if (a === null || b === null) return false;
   return a.length === b.length && a.every((p, i) => p.x === b[i].x && p.y === b[i].y);
@@ -232,7 +232,7 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
       return;
     }
     const path = findPath(ui.mission.state, sel.pos, cell);
-    if (samePath(path, ui.hoverPath)) return; // без перерисовки на кожен піксель
+    if (samePath(path, ui.hoverPath)) return; // без перемальовки на кожен піксель
     ui.hoverPath = path;
     ui.hoverAp = path ? pathApCost(path) : 0;
     if (path) {
