@@ -7,6 +7,7 @@ import {
   campaignTick,
   createCampaign,
   DEFAULT_PRESET,
+  DIFFICULTY_MULTIPLIERS,
   SCORE_PER_MONEY,
   SCORE_PER_MISSION_WON,
   SCORE_PER_UFO_SHOT_DOWN,
@@ -39,6 +40,16 @@ describe('campaign — початковий стан (ADR-0033)', () => {
 
   it('пресет передається явним параметром (П8.4 — вибір при новій партії)', () => {
     expect(createCampaign('легкий').preset).toBe('легкий');
+  });
+
+  it('П10.3: пресет «складний» — тиск вищий за «норму», спавн не чіпаємо (probe П8.6)', () => {
+    expect(createCampaign('складний').preset).toBe('складний');
+    const m = DIFFICULTY_MULTIPLIERS['складний'];
+    // тиск — HP солдатів і економіка (менше грошей); числа початкові, тунінг — П10.4
+    expect(m.hpBonusMultiplier).toBeLessThan(DIFFICULTY_MULTIPLIERS['норма'].hpBonusMultiplier);
+    expect(m.economyMultiplier).toBeLessThan(DIFFICULTY_MULTIPLIERS['норма'].economyMultiplier);
+    // спавн — не ручка тиску (probe П8.6: більше НЛО → більше премій → легше)
+    expect(m.ufoSpawnMultiplier).toBe(DIFFICULTY_MULTIPLIERS['норма'].ufoSpawnMultiplier);
   });
 });
 

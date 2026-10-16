@@ -272,9 +272,11 @@ function restart(): void {
   battle.close();
   geoAnim.cancel(); // П6.9: нова партія — пульс старої бази не відтворюємо
   const seed = Number(el<HTMLInputElement>('seed').value) || 42;
-  // П8.4a: пресет складності з селектора топбара; невідоме значення — «норма»
-  const preset = el<HTMLSelectElement>('preset').value as DifficultyPreset;
-  party = newParty(seed, preset === 'легкий' ? 'легкий' : 'норма');
+  // П8.4a: пресет складності з селектора топбара; невідоме значення — «норма».
+  // П10.3: третій пресет «складний».
+  const raw = el<HTMLSelectElement>('preset').value;
+  const preset: DifficultyPreset = raw === 'легкий' || raw === 'складний' ? raw : 'норма';
+  party = newParty(seed, preset);
   renderAll();
   journal('Нова партія (сід ' + seed + ', складність «' + party.campaign.preset + '»). Рухайте час — радар шукає НЛО.');
 }

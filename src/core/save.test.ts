@@ -286,6 +286,49 @@ describe('save: пресети партії (П8.4a)', () => {
     expect(c.econ.money).toBe(450);
     expect(a.geo.spawnChance).not.toBe(c.geo.spawnChance); // партії різні
   });
+
+  // П10.3: третій пресет «складний» — каркас + початкові числа за probe П8.6
+  // (спавн — не ручка тиску); тунінг чисел — П10.4 симуляціями.
+  it('П10.3: createParty(seed, "складний") — geo як у «нормі», HP ×0.8, кошти ×0.8', () => {
+    const p = createParty(42, 'складний');
+    expect(p.campaign.preset).toBe('складний');
+    // спавн — не ручка тиску (probe П8.6): частота НЛО як у «нормі»
+    expect(p.geo.spawnChance).toBeCloseTo(0.03, 12);
+    expect(p.geo.maxUfos).toBe(3);
+    // HP солдатів 0.8: стартовий ростер 10 → 8
+    expect(p.roster.soldiers.every((s) => s.maxHp === 8)).toBe(true);
+    // економіка 0.8: стартовий баланс 300 → 240
+    expect(p.econ.money).toBe(240);
+  });
+
+  it('П10.3: сейв зберігає пресет «складний»; сейв до Фази 10 — без змін (ADR-0026)', () => {
+    const p = createParty(42, 'складний');
+    const restored = deserializeParty(serializeParty(p));
+    expect(restored.campaign.preset).toBe('складний');
+    // прецедент П9.2: старий сейв без поля campaign — пресет «норма», версія формату не зросла
+    const json = JSON.parse(serializeParty(createParty(12)));
+    delete json.state.campaign; // сейв до П8.2 (прецедент сейв-сумісності Фази 10)
+    const old = deserializeParty(JSON.stringify(json));
+    expect(old.campaign.preset).toBe('норма');
+  });
+
+  it('П10.3: три пресети — різні траєкторії; «складний» не тягне geo.rng', () => {
+    const a = createParty(7, 'легкий');
+    const b = createParty(7); // «норма»
+    const c = createParty(7, 'складний');
+    for (let i = 0; i < 96; i++) {
+      partyTick(a);
+      partyTick(b);
+      partyTick(c);
+    }
+    // економіка розходиться за всіма трьома: 540 / 450 / 360 (дотація з множником)
+    expect(a.econ.money).toBe(540);
+    expect(b.econ.money).toBe(450);
+    expect(c.econ.money).toBe(360); // 240 + 2×60 (75 × 0.8)
+    // критерій П10.3.2: geo.rng не викликається — конфіг спавну «складного»
+    // як у «норми», тож траєкторія геоцени байт-у-байт та сама (тиск — не спавн)
+    expect(JSON.stringify(c.geo.log)).toBe(JSON.stringify(b.geo.log));
+  });
 });
 
 describe('save: прапорці підказок (П9.2, ADR-0026)', () => {
