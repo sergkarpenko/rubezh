@@ -32,6 +32,7 @@ function makeDeps(over: Partial<JournalDeps> = {}): JournalDeps {
     battleLog: () => null,
     unitName: (id) => id,
     onGeoEvent: vi.fn(),
+    party: () => createParty(42),
     ...over,
   };
 }
@@ -276,5 +277,107 @@ describe('Journal: adopt/resetBattle', () => {
     j.resetBattle();
     j.drainBattle();
     expect(document.querySelectorAll('#log li')).toHaveLength(2); // той самий лог знову
+  });
+});
+
+describe('Journal: підказки по ходу (П9.2, один раз за партію)', () => {
+  // Виявлений НЛО у стані «летить» у geo-стані партії (туман: detected = true).
+  function flyingUfo(p: ReturnType<typeof createParty>, id: string): void {
+    p.geo.ufos.push({
+      id,
+      kind: 'розвідник',
+      pos: { x: 1, y: 1 },
+      target: { x: 2, y: 2 },
+      detected: true,
+      status: 'летить',
+      landedTicksLeft: 0,
+    });
+  }
+
+  it('«Можна перехопити»: виявлений НЛО у повітрі + боєготовий винищувач — підказка один раз', () => {
+    const p = createParty(42);
+    flyingUfo(p, 'u1');
+    const j = createJournal(makeDeps({ party: () => p, geoLog: () => p.geo.log }));
+    j.drainGeo();
+    const hints = [...document.querySelectorAll('#log li')].filter((li) => li.textContent?.startsWith('Підказка'));
+    expect(hints).toHaveLength(1);
+    expect(hints[0].textContent).toContain('Перехопити');
+    j.drainGeo(); // другий дрен — підказка не дублюється (прапорець у Party)
+    expect([...document.querySelectorAll('#log li')].filter((li) => li.textContent?.startsWith('Підказка'))).toHaveLength(1);
+    expect(p.hints.intercept).toBe(true);
+  });
+
+  it('«Можна перехопити» не показується, поки винищувач не боєготовий', () => {
+    const p = createParty(42);
+    p.intercept.fighter.hp = 2; // пошкоджений — перехоплення недоступне
+    flyingUfo(p, 'u1');
+    const j = createJournal(makeDeps({ party: () => p, geoLog: () => p.geo.log }));
+    j.drainGeo();
+    expect([...document.querySelectorAll('#log li')].filter((li) => li.textContent?.startsWith('Підказка'))).toHaveLength(0);
+    expect(p.hints.intercept).toBe(false);
+  });
+
+  it('«Доступна місія»: приземлений виявлений НЛО — підказка один раз', () => {
+    const p = createParty(42);
+    p.geo.ufos.push({
+      id: 'u2',
+      kind: 'збирач',
+      pos: { x: 3, y: 3 },
+      target: { x: 3, y: 3 },
+      detected: true,
+      status: 'приземлився',
+      landedTicksLeft: 8,
+    });
+    const j = createJournal(makeDeps({ party: () => p, geoLog: () => p.geo.log }));
+    j.drainGeo();
+    const hints = [...document.querySelectorAll('#log li')].filter((li) => li.textContent?.startsWith('Підказка'));
+    expect(hints).toHaveLength(1);
+    expect(hints[0].textContent).toContain('Запустити місію');
+    j.drainGeo();
+    expect([...document.querySelectorAll('#log li')].filter((li) => li.textContent?.startsWith('Підказка'))).toHaveLength(1);
+  });
+
+  it('невиявлений НЛО — підказок немає (туман стратегічного шару)', () => {
+    const p = createParty(42);
+    p.geo.ufos.push({
+      id: 'u3',
+      kind: 'розвідник',
+      pos: { x: 1, y: 1 },
+      target: { x: 2, y: 2 },
+      detected: false,
+      status: 'летить',
+      landedTicksLeft: 0,
+    });
+    const j = createJournal(makeDeps({ party: () => p, geoLog: () => p.geo.log }));
+    j.drainGeo();
+    expect(document.querySelectorAll('#log li')).toHaveLength(0);
+  });
+
+  it('«Ремонт завершено»: подія fighter_repair_done — підказка один раз за партію', () => {
+    const p = createParty(42);
+    const geoLog: GeoEvent[] = [
+      evGeo({ type: 'ufo_detected', ufoId: 'u1', pos: { x: 1, y: 1 }, minute: 5 }),
+      evGeo({ type: 'fighter_repair_done', minute: 60 }),
+    ];
+    // виявленого НЛО немає — лише подія ремонту веде до підказки про ремонт
+    const j = createJournal(makeDeps({ party: () => p, geoLog: () => geoLog }));
+    j.drainGeo();
+    const hints = [...document.querySelectorAll('#log li')].filter((li) => li.textContent?.startsWith('Підказка'));
+    expect(hints).toHaveLength(1);
+    expect(hints[0].textContent).toContain('ремонтований');
+    expect(p.hints.repair).toBe(true);
+    geoLog.push(evGeo({ type: 'fighter_repair_done', minute: 120 })); // другий ремонт
+    j.drainGeo();
+    expect([...document.querySelectorAll('#log li')].filter((li) => li.textContent?.startsWith('Підказка'))).toHaveLength(1);
+  });
+
+  it('adopt: прапорці підказок ідуть із партією — завантажена партія підказку не дублює', () => {
+    const p = createParty(42);
+    flyingUfo(p, 'u1');
+    p.hints.intercept = true; // у сейві підказку вже показано
+    const j = createJournal(makeDeps({ party: () => p, geoLog: () => p.geo.log }));
+    j.adopt(p);
+    j.drainGeo();
+    expect([...document.querySelectorAll('#log li')].filter((li) => li.textContent?.startsWith('Підказка'))).toHaveLength(0);
   });
 });

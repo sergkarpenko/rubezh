@@ -21,6 +21,30 @@ import { createCampaign, DEFAULT_PRESET, type CampaignState, type DifficultyPres
 export const SAVE_VERSION = 1;
 export const SAVE_SLOTS = 3; // ADR-0026: три слоти, ключі rubezh.save.1..3 у main.ts
 
+// П9.2 (Фаза 9): прапорці показаних підказок журналу — «один раз за партію».
+// true = підказку вже показано; false = ще не показано. Сейв-сумісність (ADR-0026,
+// прецедент П7.4): старий сейв без поля hints = усі прапорці false — підказки
+// ще не показано (рішення власника зафіксовано в сесії П9.2, 2026-10-16).
+export interface HintFlags {
+  intercept: boolean; // «Можна перехопити»
+  mission: boolean; // «Доступна місія»
+  repair: boolean; // «Ремонт завершено»
+}
+
+export type HintKey = keyof HintFlags;
+
+export function defaultHints(): HintFlags {
+  return { intercept: false, mission: false, repair: false };
+}
+
+// Атомарне «бронювання» підказки: true — лише перший виклик (підказку щойно
+// показано і прапорець стоїтиме в сейві); далі — false. Чистий стан, без RNG.
+export function claimHint(hints: HintFlags, key: HintKey): boolean {
+  if (hints[key]) return false;
+  hints[key] = true;
+  return true;
+}
+
 // Партія — єдиний стан збереження: GeoState + Roster + EconomyState + сід.
 // Сід окремо: GeoState не зберігає походження свого rng, а він потрібен
 // у форматі сейва (ADR-0026) і для подальших планів на авто-продовження.
@@ -31,6 +55,7 @@ export interface Party {
   econ: EconomyState;
   intercept: InterceptState; // П7.4 (ADR-0032): стан винищувача — у Party
   campaign: CampaignState; // П8.2 (ADR-0033): стан кампанії — у Party
+  hints: HintFlags; // П9.2: прапорці підказок — у Party (один раз за партію)
 }
 
 // П8.4a (борг П8.4): пресет партії передається в усі фабрики ядра — geo
@@ -45,6 +70,7 @@ export function createParty(seed: number, preset: DifficultyPreset = DEFAULT_PRE
     econ: createEconomy(preset),
     intercept: createIntercept(seed),
     campaign: createCampaign(preset),
+    hints: defaultHints(),
   };
 }
 
@@ -92,6 +118,13 @@ interface CampaignSave {
   victoryDay: number | null;
 }
 
+// П9.2: прапорці підказок у сейві; відсутнє поле (старі сейви) = усі false.
+interface HintsSave {
+  intercept: boolean;
+  mission: boolean;
+  repair: boolean;
+}
+
 export interface SaveData {
   version: number;
   seed: number;
@@ -102,6 +135,7 @@ export interface SaveData {
     econ: EconSave;
     intercept?: InterceptSave;
     campaign?: CampaignSave;
+    hints?: HintsSave;
   };
 }
 
@@ -155,6 +189,7 @@ export function serializeParty(party: Party, savedAt: string = ''): string {
         score: party.campaign.score ? { ...party.campaign.score } : null,
         victoryDay: party.campaign.victoryDay,
       },
+      hints: { ...party.hints },
     },
   };
   return JSON.stringify(data);
@@ -226,6 +261,10 @@ function parseSave(json: string): SaveData {
   ) {
     fail('Пошкоджені дані збереження: кампанія');
   }
+  // П9.2: поле hints опційне (старі сейви) — але якщо є, має бути об'єктом.
+  if (data.state.hints !== undefined && (typeof data.state.hints !== 'object' || data.state.hints === null)) {
+    fail('Пошкоджені дані збереження: підказки');
+  }
   return data;
 }
 
@@ -280,6 +319,8 @@ export function deserializeParty(json: string): Party {
       score: cc.score ? { ...cc.score } : null,
       victoryDay: cc.victoryDay,
     },
+    // П9.2: відсутнє поле hints (старі сейви) = усі підказки ще не показано.
+    hints: { ...defaultHints(), ...(data.state.hints ?? {}) },
   };
 }
 
