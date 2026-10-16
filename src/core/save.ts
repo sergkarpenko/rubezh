@@ -209,7 +209,7 @@ function parseSave(json: string): SaveData {
     fail('Пошкоджені дані збереження: некоректний JSON');
   }
   if (data === null || typeof data !== 'object' || Array.isArray(data)) {
-    fail('Пошкоджені дані збереження: очікувався об’кт');
+    fail('Пошкоджені дані збереження: очікувався об’єкт');
   }
   if (data.version !== SAVE_VERSION) {
     fail('Невідома версія збереження: ' + String(data.version) + ' (очікується ' + SAVE_VERSION + ')');

@@ -134,10 +134,10 @@ describe('save: зіпсовані дані (критерій П5.2)', () => {
     expect(() => deserializeParty('')).toThrow('Пошкоджені дані збереження');
   });
 
-  it('не об’кт (число, масив, null) — throw українською', () => {
-    expect(() => deserializeParty('42')).toThrow('очікувався об’кт');
-    expect(() => deserializeParty('[1,2]')).toThrow('очікувався об’кт');
-    expect(() => deserializeParty('null')).toThrow('очікувався об’кт');
+  it('не об’єкт (число, масив, null) — throw українською', () => {
+    expect(() => deserializeParty('42')).toThrow('очікувався об’єкт');
+    expect(() => deserializeParty('[1,2]')).toThrow('очікувався об’єкт');
+    expect(() => deserializeParty('null')).toThrow('очікувався об’єкт');
   });
 
   it('невідома/майбутня версія — throw українською', () => {
