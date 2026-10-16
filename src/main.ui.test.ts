@@ -188,8 +188,8 @@ describe('UI-флоу прев’ю: геосцена → місія → бій 
     ($('preset') as HTMLSelectElement).value = 'складний';
     btn('btn-new').click();
     expect($('log').textContent).toContain('складність «складний»');
-    // економіка ×0.8: стартові кошти 300 → 240 (початкові числа, тунінг — П10.4)
-    expect($('money').textContent).toBe('240');
+    // економіка ×0.9 (П10.4): стартові кошти 300 → 270
+    expect($('money').textContent).toBe('270');
     // повертаємо «норму»: наступні тести очікують дефолтний баланс
     ($('preset') as HTMLSelectElement).value = 'норма';
     btn('btn-new').click();

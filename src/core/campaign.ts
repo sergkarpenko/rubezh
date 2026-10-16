@@ -30,7 +30,11 @@ export const DEFAULT_PRESET: DifficultyPreset = 'норма'; // ADR-0033: де�
 // P8.4: множники для пресетів. П10.3: «складний» — початкові числа за probe П8.6
 // (спавн — не ручка тиску: більше НЛО → більше місій → більше премій → легше,
 // docs/reports/p8.6-tuning.md), тож ufoSpawnMultiplier = 1.0; тиск — HP солдатів
-// і економіка (менше грошей). Тунінг чисел — П10.4 симуляціями, затверджує власник.
+// і економіка (менше грошей). П10.4: числа затверджено власником 2026-10-17 за
+// симуляціями 120 сідів (docs/reports/p10.4-tuning.md): HP ×0.9 (ефективно 9 HP,
+// ручка дискретна через Math.round) + економіка ×0.9 → 58.3% перемог бот-гравця
+// проти 90% у «норми» (32.5% на початкових числах — надто жорстко). Спавн знову
+// не міняли: probe на «складному» дав обернений знак (spawn 1.2 → 19.2% перемог).
 export const DIFFICULTY_MULTIPLIERS = {
   легкий: {
     ufoSpawnMultiplier: 0.7,
@@ -44,8 +48,8 @@ export const DIFFICULTY_MULTIPLIERS = {
   },
   складний: {
     ufoSpawnMultiplier: 1.0,
-    hpBonusMultiplier: 0.8,
-    economyMultiplier: 0.8,
+    hpBonusMultiplier: 0.9,
+    economyMultiplier: 0.9,
   },
 } as const;
 

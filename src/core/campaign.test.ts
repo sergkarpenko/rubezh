@@ -42,10 +42,11 @@ describe('campaign — початковий стан (ADR-0033)', () => {
     expect(createCampaign('легкий').preset).toBe('легкий');
   });
 
-  it('П10.3: пресет «складний» — тиск вищий за «норму», спавн не чіпаємо (probe П8.6)', () => {
+  it('П10.3/П10.4: пресет «складний» — тиск вищий за «норму», спавн не чіпаємо (probe П8.6)', () => {
     expect(createCampaign('складний').preset).toBe('складний');
     const m = DIFFICULTY_MULTIPLIERS['складний'];
-    // тиск — HP солдатів і економіка (менше грошей); числа початкові, тунінг — П10.4
+    // тиск — HP солдатів і економіка (менше грошей); числа затверджено П10.4
+    // (×0.9/×0.9 за 120 сідів, docs/reports/p10.4-tuning.md)
     expect(m.hpBonusMultiplier).toBeLessThan(DIFFICULTY_MULTIPLIERS['норма'].hpBonusMultiplier);
     expect(m.economyMultiplier).toBeLessThan(DIFFICULTY_MULTIPLIERS['норма'].economyMultiplier);
     // спавн — не ручка тиску (probe П8.6: більше НЛО → більше премій → легше)
