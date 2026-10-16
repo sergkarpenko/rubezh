@@ -85,7 +85,7 @@ echo ""
 echo "[OK] Pre-commit hook завершено успішно!"
 echo ""
 echo "Перед пушем не забудьте:"
-echo "  - Перевірити превью: https://sergkarpenko.github.io/rubezh/"
+echo "  - Перевірити прев'ю: https://sergkarpenko.github.io/rubezh/"
 echo "  - Додати тег ітерації (iter-X.Y) після валідації людиною"
 
 exit 0

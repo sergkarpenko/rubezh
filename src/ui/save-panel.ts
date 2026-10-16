@@ -93,7 +93,7 @@ export function createSavePanel(deps: SavePanelDeps): SavePanel {
             m.money +
             ' · ' +
             m.aliveSoldiers +
-            ' солд · ' +
+            ' солд. · ' +
             m.savedAt.slice(0, 16).replace('T', ' ');
         } catch {
           meta.textContent = 'пошкоджений слот';

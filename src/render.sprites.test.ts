@@ -32,7 +32,7 @@ import {
 import { NIGHT_BG, cellHash, type TerrainCell } from './core/render-core';
 import { SPRITE_SCALE, type UnitSprite } from './core/sprites';
 
-// Клітиночка превью: BCELL = 26, центр (13, 13), радіус силуету 8 (як у renderBattle).
+// Клітиночка прев'ю: BCELL = 26, центр (13, 13), радіус силуету 8 (як у renderBattle).
 const CX = 13;
 const CY = 13;
 const R = 8;
@@ -386,7 +386,7 @@ function animCtx(): { ctx: CanvasRenderingContext2D; calls: Call[]; sets: { p: s
   return { ctx: ctx as unknown as CanvasRenderingContext2D, calls, sets };
 }
 
-// --- П6.9 (ADR-0029): мінімальний арт геосцени — м’які позначки НЛО, пульс радара ---
+// --- П6.9 (ADR-0029): мінімальний арт геосцени — м'які позначки НЛО, пульс радара ---
 
 describe('П6.9: м’які позначки НЛО геосцени', () => {
   it('м’якість: alpha 0.85 на час малювання і відновлення до 1 (усі три види)', () => {
@@ -533,7 +533,7 @@ describe('П6.13: нічна палітра — терен і фон', () => {
 describe('П6.13: м’які краї туману і тонка сітка (критерій: туман не відкривається)', () => {
   it('клітинка туману з видимим сусідом (4 напрямки) — друге перекриття FOG_EDGE; діагональний сусід — без', () => {
     const cells = grid(3, 3, 'fog');
-    cells[4] = { x: 1, y: 1, blocked: false, visible: true }; // центр видимый
+    cells[4] = { x: 1, y: 1, blocked: false, visible: true }; // центр видимий
     const s = seqCtx();
     drawNightTerrain(s.ctx, 78, 78, cells, 26);
     // сусід по прямій: терен + перекриття

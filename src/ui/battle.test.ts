@@ -116,7 +116,7 @@ describe('validFireTargets: валідні цілі зведеного режи�
     });
   const vis = (keys: string[]): ReadonlySet<string> => new Set(keys);
 
-  it('видимий прибульець у дальності з лінією вогню — валідна ціль', () => {
+  it('видимий прибулець у дальності з лінією вогню — валідна ціль', () => {
     const diag = mk('a1', 6, 6); // дистанція 1, Брезенхем (5,5)→(6,6) стіни (7,5) не перетинає
     const st = state([diag]);
     expect(validFireTargets(st, shooter, vis(['6,6']))).toEqual([diag]);
@@ -137,7 +137,7 @@ describe('validFireTargets: валідні цілі зведеного режи�
     expect(validFireTargets(state([behind]), shooter, vis(['9,5']))).toEqual([]);
   });
 
-  it('мертвий прибульець і свій юніт — не цілі', () => {
+  it('мертвий прибулець і свій юніт — не цілі', () => {
     const dead = mk('a1', 6, 6, false);
     const st = state([dead]);
     expect(validFireTargets(st, shooter, vis(['6,6']))).toEqual([]);

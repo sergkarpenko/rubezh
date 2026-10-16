@@ -51,7 +51,7 @@ export const BALANCED_POLICY: InterceptPolicy = {
   },
 };
 
-// Обережна політика: лише розвідники (дешевша ціль, нижчий ризик), дистанція серединня.
+// Обережна політика: лише розвідники (дешевша ціль, нижчий ризик), дистанція середня.
 export const CAUTIOUS_POLICY: InterceptPolicy = {
   name: 'cautious',
   shouldLaunch: (kind) => kind === 'розвідник',

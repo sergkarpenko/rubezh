@@ -150,14 +150,14 @@ describe('cellFromPoint: клік (CSS-пікселі) → клітинка бо
     expect(cellFromPoint(2 * (5 * 26 + 12), 2 * (1 * 26 + 12), scaled, canvas)).toEqual({ x: 5, y: 1 });
   });
 
-  it('клік поза канвою зліва — відʼємна клітинка (межі перевіряє обробник)', () => {
+  it('клік поза канвою зліва — від’ємна клітинка (межі перевіряє обробник)', () => {
     const c = cellFromPoint(10 - 5, 20 + 3, rect, canvas);
     expect(c.x).toBeLessThan(0);
   });
 });
 
-describe('samePath: дедуплікація превʼю шляху під курсором', () => {
-  it('null проти null — не той самий (тригер перерисовки)', () => {
+describe('samePath: дедуплікація прев’ю шляху під курсором', () => {
+  it('null проти null — не той самий (тригер перемальовки)', () => {
     expect(samePath(null, null)).toBe(false);
   });
 
@@ -194,7 +194,7 @@ describe('samePath: дедуплікація превʼю шляху під ку
 });
 
 describe('sameCell: порівняння nullable-клітинок (П6.14)', () => {
-  it('null і null — той самий (без перерисовки)', () => {
+  it('null і null — той самий (без перемальовки)', () => {
     expect(sameCell(null, null)).toBe(true);
   });
 

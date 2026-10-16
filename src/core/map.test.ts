@@ -7,7 +7,7 @@ import { computeVisibleCells, findPath, makeTestMap, pathApCost, visibleEnemies 
 import { createGame, makeUnit, moveUnit, type GameMap, type GameState, type RNG, type Vec2 } from './combat';
 
 const alwaysHit: RNG = () => 0;
-const FAR: Vec2 = { x: 8, y: 10 }; // прибілець поза зонами тестів пошуку шляху
+const FAR: Vec2 = { x: 8, y: 10 }; // прибулець поза зонами тестів пошуку шляху
 
 const map = (blocked: string[] = []): GameMap => ({
   width: 20,

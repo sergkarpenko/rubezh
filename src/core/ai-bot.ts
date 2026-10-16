@@ -69,7 +69,7 @@ export function aliensTurn(state: GameState): number {
   return actions;
 }
 
-// Авто-бій до перемоги/поразки (для демо-превью). Повертає результат і кількість півходів.
+// Авто-бій до перемоги/поразки (для демо-прев'ю). Повертає результат і кількість півходів.
 export function autoBattle(state: GameState, maxHalfTurns = 240): { outcome: ReturnType<typeof missionOutcome>; halfTurns: number } {
   let halfTurns = 0;
   while (missionOutcome(state) === 'триває' && halfTurns < maxHalfTurns) {

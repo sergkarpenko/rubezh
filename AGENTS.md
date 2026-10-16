@@ -278,10 +278,10 @@ git pull origin main
 | ADR-0018 | Зміна workflow-файлів — лише з ADR у точці коміту                                                                                                                                                 | accepted              | 2026-10-13 |
 | ADR-0019 | Публікація TypeDoc-довідки на Pages — /api/ поруч із демо                                                                                                                                         | accepted              | 2026-10-13 |
 | ADR-0020 | Автоматичне оновлення залежностей — Dependabot, merge = авторизація власника                                                                                                                      | accepted              | 2026-10-13 |
-| ADR-0021 | Економіка: гроші, найм, логіка, баланс, полірівка (Supersedes: ADR-0008)                                                                                                                          | accepted              | 2026-10-13 |
+| ADR-0021 | Економіка: гроші, найм, логіка, баланс, поліровка (Supersedes: ADR-0008)                                                                                                                          | accepted              | 2026-10-13 |
 | ADR-0022 | Patrol-режим 6i місії                                                                                                                                                                             | accepted              | 2026-10-13 |
 | ADR-0023 | Вимоги до плану фази: EARS-критерії в плані, ADR — єдине джерело для коду (ADR-0023); тему фази — мета + 1–3 критерії приймання; фаза = 1–3 етапи; закрити фазу = ЗАВЕРШЕНО + тег phaseN-complete | accepted              | 2026-10-13 |
-| ADR-0024 | Dependabot-бмпі GitHub Actions — виняток із ADR-0018                                                                                                                                              | accepted              | 2026-10-13 |
+| ADR-0024 | Dependabot-бампи GitHub Actions — виняток із ADR-0018                                                                                                                                              | accepted              | 2026-10-13 |
 | ADR-0025 | Захист гілки main — force-push/deletion + required status checks                                                                                                                                  | superseded (ADR-0028) | 2026-10-13 |
 | ADR-0026 | Збереження/завантаження                                                                                                                                                                           | accepted              | 2026-10-13 |
 | ADR-0027 | Компонування коду прев'ю (підфаза 6a)                                                                                                                                                             | accepted              | 2026-10-14 |
@@ -289,8 +289,8 @@ git pull origin main
 | ADR-0029 | Підфаза 6b «Арт» — векторні спрайти й анімація (стиль «піксель»)                                                                                                                                  | accepted              | 2026-10-14 |
 | ADR-0030 | Перехідний процес: ретроспектива фази 6a до 6b                                                                                                                                                    | accepted              | 2026-10-14 |
 | ADR-0031 | Піксель-арт спрайтів кодом Canvas (частково Supersedes: ADR-0029)                                                                                                                                 | accepted              | 2026-10-14 |
-| ADR-0032 | Перехоплення НЛО в повітрі — винищування, рагундування повітряних біїв                                                                                                                            | accepted              | 2026-10-14 |
-| ADR-0033 | Мета кампанії: перемога на 30-ти турах, рахунок, пересетти складність                                                                                                                             | accepted              | 2026-10-14 |
+| ADR-0032 | Перехоплення НЛО в повітрі — винищувач, раундовий повітряний бій                                                                                                                            | accepted              | 2026-10-14 |
+| ADR-0033 | Мета кампанії: перемога на 30-ти турах, рахунок, пресети складності                                                                                                                             | accepted              | 2026-10-14 |
 | ADR-0034 | Гейт Codecov на PR — codecov/patch 95% як required check                                                                                                                                          | accepted              | 2026-10-14 |
 | ADR-0035 | Звіт Codecov на PR — гейт codecov/patch стає неблокуючим (доповнює ADR-0025/0034)                                                                                                                 | proposed              | 2026-10-14 |
 | ADR-0036 | Обмеження розміру Pull Request — жорстке обмеження до 500 рядків зміни                                                                                                                            | accepted              | 2026-10-15 |
@@ -323,13 +323,13 @@ git pull origin main
 - [README.md](README.md) — огляд проекту
 - [docs/workflow.md](docs/workflow.md) — робочий процес (AI-native SDLC)
 - [docs/prototypes/README.md](docs/prototypes/README.md) — прототипи React
-- [GitHub Pages Preview](https://sergkarpenko.github.io/rubezh/) — онлайн-демo
+- [GitHub Pages Preview](https://sergkarpenko.github.io/rubezh/) — онлайн-демо
 
 ---
 
 ## Уроки (Lesson Learned)
 
-Єдине місце уроків — розділ «Уроки» у [docs/workflow.md](docs/workflow.md) (ADR-0023: офніс у workflow.md; дублювання у двох файлах заборонено). Агенти читають уроки з workflow.md під час планування.
+Єдине місце уроків — розділ «Уроки» у [docs/workflow.md](docs/workflow.md) (ADR-0023: офіс у workflow.md; дублювання у двох файлах заборонено). Агенти читають уроки з workflow.md під час планування.
 
 ---
 

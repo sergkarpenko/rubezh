@@ -143,7 +143,7 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
     const cv = el<HTMLCanvasElement>('battle');
     const ctx = cv.getContext('2d');
     if (!ctx) return;
-    // П6.6: повна очистка кадру — клітинки заливаються з проміжком у 1px,
+    // П6.6: повне очищення кадру — клітинки заливаються з проміжком у 1px,
     // і без clearRect ці проміжки накопичують залишки (маркери дозору тощо).
     // Патерн renderGeo: кадр еквівалентний малюванню з нуля.
     ctx.clearRect(0, 0, cv.width, cv.height);
@@ -341,7 +341,7 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
       el('bresult').innerHTML =
         '<div class="banner win">ЗАЧИЩЕНО ✓ — загін повернувся на базу (' +
         aftermath.survivors.length +
-        ' виживших' +
+        ' уцілілих' +
         woundedNote +
         ')</div>' +
         '<button id="btn-close">← Повернутись на геосцену</button>';

@@ -257,7 +257,7 @@ export function interceptRound(
     returnToBase(state, geo);
     // П7.4: ремонт платний; за наявності грошей стартує автоматично (досвід X-COM),
     // без грошей — винищувач чекає пошкоджений, ремонт можна оплатити пізніше.
-    // Неспроможність перехоплення — не прогараш (ADR-0021).
+    // Неспроможність перехоплення — не провал (ADR-0021).
     if (econ && econ.money >= FIGHTER_REPAIR_COST) {
       startRepair(state, geo, econ);
     }
