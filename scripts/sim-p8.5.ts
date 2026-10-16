@@ -1,18 +1,29 @@
-// scripts/sim-p8.5.ts — масові симуляції П8.5: 120 сідів × 2 пресети.
+// scripts/sim-p8.5.ts — масові симуляції П8.5/П10.4: 120 сідів × 3 пресети.
 // Не входить у CI/юніт-тести (важкі симуляції — поза CI): запуск локально,
-//   npx vite-node scripts/sim-p8.5.ts            — повний прогін 120 сідів
-//   npx vite-node scripts/sim-p8.5.ts --seeds 5 — короткий прогін
-// vite-node уже в дереві залежностей vitest — нових залежностей немає (ADR-0012
-// не зачіпається). Детермінізм (ADR-0003): фіксовані сіди 1..N, жодного
-// впливу оточення; результати байт-у-байт відтворювані.
-// Вивід: markdown-таблиці (агрегати по пресетах) у stdout — для звіту
-// docs/reports/p8.5-simulations.md; CSV кривих — у dist/p8.5-curves.csv.
+//   npx vite-node scripts/sim-p8.5.ts                          — 120 сідів × 3 пресети
+//   npx vite-node scripts/sim-p8.5.ts --seeds 5               — короткий прогін
+//   npx vite-node scripts/sim-p8.5.ts --presets складний       — лише один пресет
+// П10.4: третій пресет «складний» + прапорець --presets (probe-прогони кандидатів
+// у копії репозиторія до зміни коду — патерн П8.6). vite-node уже в дереві
+// залежностей vitest — нових залежностей немає (ADR-0012 не зачіпається).
+// Детермінізм (ADR-0003): фіксовані сіди 1..N, жодного впливу оточення;
+// результати байт-у-байт відтворювані.
+// Вивід: markdown-таблиці (агрегати по пресетах) у stdout — для звітів
+// docs/reports/p8.5-simulations.md та p10.4-tuning.md; CSV — у dist/p8.5-parties.csv.
 
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { simulateParty, type PartySimResult } from '../src/core/party-bot';
 import type { DifficultyPreset } from '../src/core/campaign';
 
-const PRESETS: DifficultyPreset[] = ['легкий', 'норма'];
+const ALL_PRESETS: DifficultyPreset[] = ['легкий', 'норма', 'складний'];
+
+function parsePresets(): DifficultyPreset[] {
+  const i = process.argv.indexOf('--presets');
+  if (i === -1 || !process.argv[i + 1]) return ALL_PRESETS;
+  const asked = process.argv[i + 1].split(',').map((s) => s.trim());
+  const found = ALL_PRESETS.filter((p) => asked.includes(p));
+  return found.length ? found : ALL_PRESETS;
+}
 
 function parseSeedCount(): number {
   const i = process.argv.indexOf('--seeds');
@@ -41,6 +52,7 @@ function readyCurveMean(results: PartySimResult[], day: number): number {
 }
 
 const seedCount = parseSeedCount();
+const PRESETS = parsePresets();
 const seeds = Array.from({ length: seedCount }, (_, i) => i + 1);
 const byPreset = new Map<DifficultyPreset, PartySimResult[]>();
 const started = Date.now();
@@ -95,20 +107,20 @@ for (const preset of PRESETS) {
 
 // Крива балансу: середні гроші наприкінці доби (Д1–Д30) по пресетах.
 console.log(`## Крива балансу: середні гроші наприкінці доби\n`);
-console.log(`| Доба | Легкий | Норма |`);
-console.log(`| --- | --- | --- |`);
+console.log(`| Доба | ${PRESETS.join(' | ')} |`);
+console.log(`| --- |${PRESETS.map(() => ' --- |').join('')}`);
 const maxDay = Math.max(...PRESETS.flatMap((p) => byPreset.get(p)!.map((r) => r.moneyByDay.length)));
 for (let day = 1; day <= Math.min(maxDay, 30); day++) {
-  console.log(`| Д${day} | ${curveMean(byPreset.get('легкий')!, day)} | ${curveMean(byPreset.get('норма')!, day)} |`);
+  console.log(`| Д${day} |${PRESETS.map((p) => ` ${curveMean(byPreset.get(p)!, day)} |`).join('')}`);
 }
 console.log('');
 
 // Крива ростера: середні боєготові наприкінці доби.
 console.log(`## Крива ростера: середні боєготові наприкінці доби\n`);
-console.log(`| Доба | Легкий | Норма |`);
-console.log(`| --- | --- | --- |`);
+console.log(`| Доба | ${PRESETS.join(' | ')} |`);
+console.log(`| --- |${PRESETS.map(() => ' --- |').join('')}`);
 for (let day = 1; day <= Math.min(maxDay, 30); day++) {
-  console.log(`| Д${day} | ${readyCurveMean(byPreset.get('легкий')!, day)} | ${readyCurveMean(byPreset.get('норма')!, day)} |`);
+  console.log(`| Д${day} |${PRESETS.map((p) => ` ${readyCurveMean(byPreset.get(p)!, day)} |`).join('')}`);
 }
 console.log('');
 
