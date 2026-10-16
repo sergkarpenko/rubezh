@@ -15,6 +15,8 @@ import { interceptTick, repairTick, type InterceptEvent } from './core/intercept
 import { DemoDriver } from './ui/demo';
 import { el } from './ui/dom';
 import { createSavePanel } from './ui/save-panel';
+// П9.1 (Фаза 9): екран «Як грати» — модуль src/ui/help.ts (перший візит + кнопка «?»).
+import { createHelp } from './ui/help';
 import { createJournal, type LogFilter } from './ui/journal';
 // пR.2 (ADR-0037): панелі стану і топбара — модуль src/ui/panels.ts; масштаб сітки — src/ui/grid.ts.
 import { createPanels } from './ui/panels';
@@ -329,6 +331,14 @@ if (typeof document !== 'undefined') {
   // ADR-0027 (П6.4): гарячі клавіші — на document (бій у фокусі канви не потрібен)
   document.addEventListener('keydown', input.onKeyDown);
   savePanel.detectStorage();
+  // П9.1 (EARS Фази 9): перший візит (усі слоти порожні або сховище недоступне)
+  // — показ «Як грати»; кнопка «?» у топбарі відкриває його будь-коли.
+  const help = createHelp({
+    storageOk: () => savePanel.isStorageOk(),
+    slotsEmpty: () => savePanel.slotsEmpty(),
+  });
+  el('btn-help').onclick = help.open;
+  help.maybeShowOnFirstVisit();
   renderAll();
   journal('Партію розпочато. Рухайте час — радар шукає НЛО.');
   if (!savePanel.isStorageOk()) journal('✗ Сховище недоступне — збереження вимкнено (приватний режим?).', 'lose');

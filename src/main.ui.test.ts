@@ -145,6 +145,19 @@ describe('UI-флоу превью: геосцена → місія → бій �
     expect(btn('btn-tick').disabled).toBe(false);
   });
 
+  // П9.1 (EARS Фази 9): перший візит — усі слоти порожні на імпорті main.ts
+  // (MemoryStorage порожній) → екран показано сам; «?» відкриває/закриває.
+  it('П9.1: перший візит (порожні слоти) — «Як грати» показано; «?» відкриває/закриває', () => {
+    expect($('help-screen').classList.contains('hidden')).toBe(false);
+    expect($('help-screen').textContent).toContain('Як грати');
+    btn('btn-help-close').click();
+    expect($('help-screen').classList.contains('hidden')).toBe(true);
+    btn('btn-help').click(); // кнопка «?» у топбарі — будь-коли
+    expect($('help-screen').classList.contains('hidden')).toBe(false);
+    btn('btn-help-close').click();
+    expect($('help-screen').classList.contains('hidden')).toBe(true);
+  });
+
   it('btn-tick: +30 хв; btn-day: +1 доба', () => {
     btn('btn-tick').click();
     expect($('clock').textContent).toBe('Д1 00:30');

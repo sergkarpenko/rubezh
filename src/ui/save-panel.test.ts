@@ -159,3 +159,16 @@ describe('el (src/ui/dom.ts)', () => {
     expect(() => el('нема-такого')).toThrow('Немає елемента #нема-такого');
   });
 });
+
+// П9.1 (EARS Фази 9): перший візит — усі 3 слоти порожні (сигнал для екрана «Як грати»).
+describe('slotsEmpty (П9.1: перший візит)', () => {
+  it('чисті слоти — true; після збереження — false; після видалення — знову true', () => {
+    const panel = createSavePanel(makeDeps());
+    panel.detectStorage();
+    expect(panel.slotsEmpty()).toBe(true);
+    panel.save(1);
+    expect(panel.slotsEmpty()).toBe(false); // сейв у слоті 1 — не перший візит
+    panel.del(1);
+    expect(panel.slotsEmpty()).toBe(true);
+  });
+});
