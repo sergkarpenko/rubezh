@@ -6,10 +6,11 @@
 // застосунку (party/mission) модуль знає лише через Deps-інтерфейс.
 
 import type { GeoEvent } from '../core/geo';
-import { FIGHTER_REPAIR_COST } from '../core/intercept';
+import { missionTargets } from '../core/geo';
+import { FIGHTER_MAX_HP, FIGHTER_REPAIR_COST } from '../core/intercept';
 import type { EconomyEvent } from '../core/economy';
 import type { GameEvent, ShotMode } from '../core/combat';
-import type { Party } from '../core/save';
+import { claimHint, type Party } from '../core/save';
 import { el } from './dom';
 
 // Підписи режимів пострілу (спільні для журналу і панелі керування боєм).
@@ -26,6 +27,7 @@ export interface JournalDeps {
   battleLog(): readonly GameEvent[] | null; // події бою; null — бою нема
   unitName(id: string): string; // назва юніта бою для тексту пострілів
   onGeoEvent(e: GeoEvent): void; // П7.5 (ADR-0032): анімації перехоплення з geo-подій
+  party(): Party; // П9.2: прапорці підказок живуть у Party (сейв-сумісні, ADR-0026)
 }
 
 export interface Journal {
@@ -73,14 +75,40 @@ export function createJournal(deps: JournalDeps): Journal {
   // додається до набору ДО перевірки ufo_landed/ufo_left у тому ж batch).
   function drainGeoLog(): void {
     const log = deps.geoLog();
+    const p = deps.party();
     for (; seenGeoLog < log.length; seenGeoLog++) {
       const e = log[seenGeoLog];
       if (e.type === 'ufo_detected') knownDetected.add(e.ufoId);
       const msg = geoEventText(e, knownDetected);
       if (msg) journal(msg.text, msg.cls);
+      // П9.2: «Ремонт завершено» — подія ядра; підказка один раз за партію.
+      if (e.type === 'fighter_repair_done' && claimHint(p.hints, 'repair')) {
+        journal('Підказка: винищувач відремонтований і знову боєготовий — можна перехоплювати.');
+      }
       // П7.5 (ADR-0032): події перехоплення — джерело анімацій трасерів повітряного
       // бою (сутово відображення: дії ядра вже застосовані; лог лише читається).
       deps.onGeoEvent(e);
+    }
+    maybeHints(p);
+  }
+
+  // П9.2 (Фаза 9): підказки по ходу — один раз за партію, прапорці в Party
+  // (сейв-сумісні, ADR-0026). Перевірка стану після дрену подій покриває всі
+  // шляхи, якими умова стає істинною: виявлення НЛО, завершення ремонту,
+  // завантаження сейву. Туман не порушуємо: умови лише за виявленими НЛО.
+  function maybeHints(p: Party): void {
+    const f = p.intercept.fighter;
+    // «Можна перехопити»: виявлений НЛО у повітрі + боєготовий винищувач
+    if (f.status === 'на базі' && f.hp === FIGHTER_MAX_HP && p.geo.ufos.some((u) => u.detected && u.status === 'летить')) {
+      if (claimHint(p.hints, 'intercept')) {
+        journal('Підказка: виявлений НЛО у повітрі можна перехопити — кнопка «Перехопити» у панелі «Сканери».');
+      }
+    }
+    // «Доступна місія»: приземлений/збитий виявлений НЛО — ціль місії (missionTargets)
+    if (missionTargets(p.geo).length > 0) {
+      if (claimHint(p.hints, 'mission')) {
+        journal('Підказка: НЛО на землі — можна висадити загін, кнопка «Запустити місію» у панелі «Сканери».');
+      }
     }
   }
 

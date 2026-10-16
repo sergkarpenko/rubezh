@@ -12,7 +12,9 @@ import { mulberry32, type StatefulRng } from './combat';
 import {
   SAVE_SLOTS,
   SAVE_VERSION,
+  claimHint,
   createParty,
+  defaultHints,
   deserializeParty,
   eraseSlot,
   loadFromSlot,
@@ -283,5 +285,47 @@ describe('save: пресети партії (П8.4a)', () => {
     expect(a.econ.money).toBe(540);
     expect(c.econ.money).toBe(450);
     expect(a.geo.spawnChance).not.toBe(c.geo.spawnChance); // партії різні
+  });
+});
+
+describe('save: прапорці підказок (П9.2, ADR-0026)', () => {
+  it('createParty: нова партія — усі підказки ще не показано (false)', () => {
+    const p = createParty(42);
+    expect(p.hints).toEqual({ intercept: false, mission: false, repair: false });
+  });
+
+  it('claimHint: перший виклик — true, повторні — false; ключі незалежні', () => {
+    const h = defaultHints();
+    expect(claimHint(h, 'intercept')).toBe(true);
+    expect(claimHint(h, 'intercept')).toBe(false); // один раз за партію
+    expect(claimHint(h, 'mission')).toBe(true); // інші ключі не зачіпаються
+    expect(h).toEqual({ intercept: true, mission: true, repair: false });
+  });
+
+  it('round-trip: показані підказки зберігаються і відновлюються (стабільний формат)', () => {
+    const p = createParty(42);
+    for (let i = 0; i < 30; i++) partyTick(p);
+    claimHint(p.hints, 'intercept');
+    claimHint(p.hints, 'repair');
+    const restored = deserializeParty(serializeParty(p, 'T'));
+    expect(restored.hints).toEqual({ intercept: true, mission: false, repair: true });
+    // load → save того самого стану — ідентичний рядок (прапорці в форматі)
+    expect(serializeParty(restored, 'T')).toBe(serializeParty(p, 'T'));
+  });
+
+  it('старий сейв без поля hints — усі підказки ще не показано (зворотна сумісність)', () => {
+    const p = createParty(42);
+    for (let i = 0; i < 10; i++) partyTick(p);
+    const legacy = JSON.parse(serializeParty(p, 'T')) as Record<string, unknown>;
+    delete (legacy.state as Record<string, unknown>).hints; // сейв до П9.2
+    const restored = deserializeParty(JSON.stringify(legacy));
+    expect(restored.hints).toEqual({ intercept: false, mission: false, repair: false });
+  });
+
+  it('поле hints не об’єкт — throw українською, без часткового стану', () => {
+    const p = createParty(42);
+    const broken = JSON.parse(serializeParty(p, 'T')) as Record<string, unknown>;
+    (broken.state as Record<string, unknown>).hints = 5;
+    expect(() => deserializeParty(JSON.stringify(broken))).toThrow('підказки');
   });
 });

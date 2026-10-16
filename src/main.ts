@@ -61,6 +61,7 @@ const journalUI = createJournal({
   onGeoEvent: (e) => {
     if (hasRaf) geoAnim.push(...interceptAnims(e as InterceptEvent));
   },
+  party: () => party, // П9.2: прапорці підказок журналу — у Party (сейв-сумісні)
 });
 const journal = journalUI.add; // виклики journal(text, cls, cat) у шарі застосунку без змін
 
