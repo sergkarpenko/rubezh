@@ -80,6 +80,11 @@ function helpHtml(): string {
     '<li>Гарячі клавіші: <b>1</b> — швидкий постріл · <b>2</b> — прицільний · <b>3</b> — черга · <b>O</b> — дозор · <b>E</b> — кінець ходу · <b>Esc</b> — скасувати вибір.</li>' +
     '</ul></div>' +
     '</div>' +
+    // П10.2: версія гри — константа __APP_VERSION__ зі зборки (vite define з
+    // package.json, vite.config.ts); число не дублюється у тексті (урок П9.1).
+    '<p class="help-version">Версія ' +
+    __APP_VERSION__ +
+    '</p>' +
     '<button id="btn-help-close">Грати</button>' +
     '</div>'
   );

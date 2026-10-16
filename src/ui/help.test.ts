@@ -5,6 +5,9 @@
 // при порожніх слотах, кнопка «?» відкриває/закриває) покриває main.ui.test.ts.
 import { beforeAll, describe, expect, it } from 'vitest';
 import htmlRaw from '../../index.html?raw';
+// П10.2: version з package.json — єдине джерело числа (урок П9.1); тест
+// звіряє показ екрана з ним, дублювати версію в твердженні не можна.
+import pkg from '../../package.json';
 import { createHelp, isFirstVisit, type Help } from './help';
 
 const $ = (id: string): HTMLElement => document.getElementById(id) as HTMLElement;
@@ -61,6 +64,13 @@ describe('П9.1: екран «Як грати» — контент з конст
     expect(text).toContain('O');
     expect(text).toContain('E');
     expect(text).toContain('Esc');
+  });
+  it('П10.2: показує версію гри зі зборки (vite define ← package.json)', () => {
+    freshHelp();
+    const text = $('help-screen').textContent ?? '';
+    // Значення інжектиться vite define з package.json (vite.config.ts);
+    // твердження читає той самий package.json — джерело одне, дублів немає.
+    expect(text).toContain('Версія ' + pkg.version);
   });
 });
 
