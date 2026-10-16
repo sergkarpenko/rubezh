@@ -266,6 +266,51 @@
         font-size: 16px;
         margin-top: 16px;
       }
+      /* П9.1 (Фаза 9): екран «Як грати» — оверлей; контент генерує src/ui/help.ts */
+      #help-screen {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(13, 16, 23, 0.95);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 100;
+        padding: 16px;
+        overflow: auto;
+      }
+      #help-screen .help-box {
+        max-width: 880px;
+      }
+      .help-cols {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+        gap: 8px 28px;
+      }
+      .help-cols h3 {
+        font-size: 12px;
+        margin: 0 0 6px;
+        color: #9fb0c3;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+      .help-cols ul {
+        margin: 0;
+        padding-left: 18px;
+      }
+      .help-cols li {
+        margin: 4px 0;
+      }
+      #btn-help-close {
+        width: 100%;
+        padding: 10px;
+        margin-top: 12px;
+        background: #12301c;
+        border-color: #7fe2a0;
+        color: #7fe2a0;
+      }
 
       /* ADR-0027: єдиний журнал подій з фільтрами-вкладками */
       #log-tabs {
@@ -339,6 +384,7 @@
         <button id="btn-tick">+1 тік (30 хв)</button>
         <button id="btn-day">+1 доба</button>
         <button id="btn-new">Нова партія</button>
+        <button id="btn-help" title="Як грати: легенда, мета кампанії, керування">?</button>
       </div>
     </header>
     <main id="layout">
@@ -402,7 +448,7 @@
           <h2>Фінанси</h2>
           <div style="margin-bottom: 8px">
             Баланс: <b id="money-card">—</b>
-            <span class="meta">· дотація 100/добу · премія за місію</span>
+            <span class="meta">· дотація 75/добу · премії за місію 110/170</span>
           </div>
           <button id="btn-hire">Найм солдата (100)</button>
         </section>
@@ -423,5 +469,8 @@
       <button id="btn-continue" class="btn-play-again">Грати далі</button>
       <button id="btn-play-again" class="btn-play-again">Грати знов</button>
     </section>
+    <!-- П9.1 (Фаза 9): екран «Як грати» — контент генерує src/ui/help.ts;
+         показ при першому візиті (порожні слоти) або кнопкою «?» у топбарі -->
+    <section class="hidden" id="help-screen"></section>
   </body>
 </html>

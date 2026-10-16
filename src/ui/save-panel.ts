@@ -27,6 +27,7 @@ export interface SavePanel {
   del(slot: number): void;
   detectStorage(): void;
   isStorageOk(): boolean;
+  slotsEmpty(): boolean; // П9.1: усі 3 слоти порожні — перший візит (EARS Фази 9)
 }
 
 // ADR-0026: сховище — localStorage, ключі rubezh.save.1..3. Ядро бачить лише
@@ -154,6 +155,14 @@ export function createSavePanel(deps: SavePanelDeps): SavePanel {
     renderSavePanel();
   }
 
+  // П9.1 (EARS Фази 9): перший візит — немає сейвів у жодному слоті.
+  function slotsEmpty(): boolean {
+    for (let slot = 1; slot <= SAVE_SLOTS; slot++) {
+      if (store.read(slot) !== null) return false;
+    }
+    return true;
+  }
+
   return {
     render: renderSavePanel,
     save: saveSlot,
@@ -161,5 +170,6 @@ export function createSavePanel(deps: SavePanelDeps): SavePanel {
     del: deleteSlot,
     detectStorage,
     isStorageOk: () => storageOk,
+    slotsEmpty,
   };
 }
