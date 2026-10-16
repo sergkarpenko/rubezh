@@ -184,6 +184,18 @@ describe('UI-флоу прев’ю: геосцена → місія → бій 
     expect($('money').textContent).toBe('300');
   });
 
+  it('П10.3: вибір «складний» — нова партія з множниками складного рівня', () => {
+    ($('preset') as HTMLSelectElement).value = 'складний';
+    btn('btn-new').click();
+    expect($('log').textContent).toContain('складність «складний»');
+    // економіка ×0.8: стартові кошти 300 → 240 (початкові числа, тунінг — П10.4)
+    expect($('money').textContent).toBe('240');
+    // повертаємо «норму»: наступні тести очікують дефолтний баланс
+    ($('preset') as HTMLSelectElement).value = 'норма';
+    btn('btn-new').click();
+    expect($('money').textContent).toBe('300');
+  });
+
   it('радар: тіки до виявленого приземленого НЛО → кнопка місії (детерміновано)', () => {
     let found = false;
     for (let i = 0; i < 1500 && !found; i++) {

@@ -254,10 +254,12 @@ function parseSave(json: string): SaveData {
     fail('Пошкоджені дані збереження: перехоплення');
   }
   // П8.2 (ADR-0033): поле campaign опційне (старі сейви) — але якщо є, має бути коректним.
+  // П10.3: третій пресет «складний»; старі сейви без поля — «норма» (deserialize нижче).
   const ccsv = st.campaign;
   if (
     ccsv !== undefined &&
-    ((ccsv.status !== 'триває' && ccsv.status !== 'перемога') || (ccsv.preset !== 'легкий' && ccsv.preset !== 'норма'))
+    ((ccsv.status !== 'триває' && ccsv.status !== 'перемога') ||
+      (ccsv.preset !== 'легкий' && ccsv.preset !== 'норма' && ccsv.preset !== 'складний'))
   ) {
     fail('Пошкоджені дані збереження: кампанія');
   }

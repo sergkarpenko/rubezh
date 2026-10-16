@@ -22,12 +22,28 @@ describe('П8.5: оркестратор — детермінізм (ADR-0003)', 
     expect(JSON.stringify(b)).toBe(JSON.stringify(a));
   });
 
-  it('короткий горизонт теж відтворюваний (10 діб, обидва пресети)', () => {
-    for (const preset of ['легкий', 'норма'] as const) {
+  it('короткий горизонт теж відтворюваний (10 діб, усі три пресети)', () => {
+    for (const preset of ['легкий', 'норма', 'складний'] as const) {
       const a = simulateParty(7, preset, { maxDays: 10 });
       const b = simulateParty(7, preset, { maxDays: 10 });
       expect(JSON.stringify(b)).toBe(JSON.stringify(a));
     }
+  });
+});
+
+// П10.3: третій пресет «складний» — каркас у ядрі; початкові числа за probe
+// П8.6 (спавн — не ручка тиску), тунінг — П10.4 симуляціями (патерн П8.5/П8.6).
+describe('П10.3: пресет «складний» у симуляціях', () => {
+  it('три пресети на одному сіді дають різні траєкторії; тиск «складного» вищий за «норму»', () => {
+    const легкий = simulateParty(7, 'легкий', { maxDays: 10 });
+    const норма = simulateParty(7, 'норма', { maxDays: 10 });
+    const складний = simulateParty(7, 'складний', { maxDays: 10 });
+    // економіка ×0.8 (старт + дотація): «складний» бідніший з першої доби
+    expect(складний.moneyByDay[0]).toBeLessThan(норма.moneyByDay[0]);
+    expect(норма.moneyByDay[0]).toBeLessThan(легкий.moneyByDay[0]);
+    // уся траєкторія (криві, місії, перехоплення) розходиться за трьома пресетами
+    expect(JSON.stringify(складний)).not.toBe(JSON.stringify(норма));
+    expect(JSON.stringify(норма)).not.toBe(JSON.stringify(легкий));
   });
 });
 

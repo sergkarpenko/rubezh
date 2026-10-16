@@ -7,8 +7,8 @@
 // Підсумковий рахунок — похідні метрики партії без нового стану (ADR-0033): збиті в
 // повітрі НЛО та переможні місії — з журналу геоцени, живі ветерани — з ростера,
 // залишок коштів — з економіки. Вагові коефіцієнти — константи, калібруються
-// масовими симуляціями Фази 8 (П8.5/П8.6). Пресети складності ('легкий'/'норма') —
-// П8.4; тут лише ім'я пресета в стані (дефолт «норма», ADR-0033).
+// масовими симуляціями Фази 8 (П8.5/П8.6). Пресети складності ('легкий'/'норма' —
+// П8.4, 'складний' — П10.3); тут лише ім'я пресета в стані (дефолт «норма», ADR-0033).
 
 import { geoDay, type GeoEvent, type GeoState } from './geo';
 import type { Roster } from './squad';
@@ -24,10 +24,13 @@ export const SCORE_PER_MISSION_WON = 150;
 export const SCORE_PER_VETERAN_ALIVE = 50;
 export const SCORE_PER_MONEY = 0.25;
 
-export type DifficultyPreset = 'легкий' | 'норма'; // множники — П8.4; третій рівень — поза MVP
+export type DifficultyPreset = 'легкий' | 'норма' | 'складний'; // множники — П8.4; «складний» — П10.3
 export const DEFAULT_PRESET: DifficultyPreset = 'норма'; // ADR-0033: дефолт «норма»
 
-// P8.4: множники для пресетів
+// P8.4: множники для пресетів. П10.3: «складний» — початкові числа за probe П8.6
+// (спавн — не ручка тиску: більше НЛО → більше місій → більше премій → легше,
+// docs/reports/p8.6-tuning.md), тож ufoSpawnMultiplier = 1.0; тиск — HP солдатів
+// і економіка (менше грошей). Тунінг чисел — П10.4 симуляціями, затверджує власник.
 export const DIFFICULTY_MULTIPLIERS = {
   легкий: {
     ufoSpawnMultiplier: 0.7,
@@ -38,6 +41,11 @@ export const DIFFICULTY_MULTIPLIERS = {
     ufoSpawnMultiplier: 1.0,
     hpBonusMultiplier: 1.0,
     economyMultiplier: 1.0,
+  },
+  складний: {
+    ufoSpawnMultiplier: 1.0,
+    hpBonusMultiplier: 0.8,
+    economyMultiplier: 0.8,
   },
 } as const;
 
