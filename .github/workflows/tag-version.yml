@@ -1,0 +1,34 @@
+# CI-гейт звірки реліз-тега ↔ version у package.json (ADR-0055; Фаза 10, П10.5).
+# Тригер — пуш тегів v*. Гейт лише перевіряє те, що вже затеговано: сам теги
+# не ставить (ADR-0054: тег — на merge-коміті реліз-PR після валідації
+# власника, урок П8.5) і Pages-deploy не блокує (релізний тег іде після
+# задеплоєної сторінки). Розбіжність → червоний ран з повідомленням у лог.
+name: tag-version
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      # Чекаут саме тегованого коміту (github.ref тегу), не HEAD робочої гілки
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.ref }}
+      # Порівняння vX.Y.Z ↔ version з package.json тегованого коміту.
+      # Без нових залежностей (ADR-0012): node з образу раннера замість jq.
+      - name: Звірка тегу з version
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          VERSION="$(node -p "require('./package.json').version")"
+          echo "Тег: ${TAG}; version у тегованому коміті: ${VERSION}"
+          if [ "v${VERSION}" != "${TAG}" ]; then
+            echo "::error::Розбіжність: тег ${TAG} не відповідає version ${VERSION} у package.json тегованого коміту (ADR-0055)"
+            exit 1
+          fi
+          echo "Збіг: тег ${TAG} відповідає version ${VERSION} (ADR-0055)"
