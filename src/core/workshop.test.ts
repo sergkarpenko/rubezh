@@ -242,11 +242,11 @@ describe('екіпірування ростеру (ADR-0058: броня/опти
     expect(workshop.equipped).toEqual({});
   });
 
-  it('гаркатний модуль на солдатові не носиться — throw українською', () => {
+  it('гарматний модуль на солдатові не носиться — throw українською', () => {
     const workshop = stockedWorkshop();
     const soldier = makeSoldier('s1', 'Іван');
-    expect(() => equipItem(workshop, soldier, 'гаркатний модуль')).toThrow('озброєння винищувача');
-    expect(() => unequipItem(workshop, soldier, 'гаркатний модуль')).toThrow('озброєння винищувача');
+    expect(() => equipItem(workshop, soldier, 'гарматний модуль')).toThrow('озброєння винищувача');
+    expect(() => unequipItem(workshop, soldier, 'гарматний модуль')).toThrow('озброєння винищувача');
   });
 
   it('зняття броні: предмет на склад, hp клемується новим maxHp', () => {
@@ -328,36 +328,36 @@ describe('перма-смерть предметів (критерій П11.3: �
   });
 });
 
-describe('гаркатний модуль винищувача (ADR-0058: один модуль, екіпірування на геосцені)', () => {
+describe('гарматний модуль винищувача (ADR-0058: один модуль, екіпірування на геосцені)', () => {
   it('встановлення: з складу на винищувач, подія в журналі', () => {
     const workshop = stockedWorkshop();
-    workshop.store['гаркатний модуль'] = 1;
+    workshop.store['гарматний модуль'] = 1;
     const ic = createIntercept(11);
     installGunModule(workshop, ic);
     expect(ic.fighter.gunModule).toBe(true);
-    expect(workshop.store['гаркатний модуль']).toBe(0);
+    expect(workshop.store['гарматний модуль']).toBe(0);
     expect(workshop.log.at(-1)).toEqual({ type: 'gun_module_installed' });
   });
 
   it('порожній склад — throw, винищувач без змін', () => {
     const workshop = createWorkshop();
     const ic = createIntercept(11);
-    expect(() => installGunModule(workshop, ic)).toThrow('Предмета немає на складі: гаркатний модуль');
+    expect(() => installGunModule(workshop, ic)).toThrow('Предмета немає на складі: гарматний модуль');
     expect(ic.fighter.gunModule).toBeUndefined();
   });
 
   it('подвійне встановлення — throw', () => {
     const workshop = stockedWorkshop();
-    workshop.store['гаркатний модуль'] = 1;
+    workshop.store['гарматний модуль'] = 1;
     const ic = createIntercept(11);
     installGunModule(workshop, ic);
-    workshop.store['гаркатний модуль'] = 1;
+    workshop.store['гарматний модуль'] = 1;
     expect(() => installGunModule(workshop, ic)).toThrow('уже встановлено');
   });
 
   it('винищувач у польоті — обслуговування неможливе', () => {
     const workshop = stockedWorkshop();
-    workshop.store['гаркатний модуль'] = 1;
+    workshop.store['гарматний модуль'] = 1;
     const ic = createIntercept(11);
     ic.fighter.status = 'погоня';
     expect(() => installGunModule(workshop, ic)).toThrow('лише на базі');
@@ -366,12 +366,12 @@ describe('гаркатний модуль винищувача (ADR-0058: оди
 
   it('зняття: модуль назад на склад, прапорець скинуто', () => {
     const workshop = stockedWorkshop();
-    workshop.store['гаркатний модуль'] = 1;
+    workshop.store['гарматний модуль'] = 1;
     const ic = createIntercept(11);
     installGunModule(workshop, ic);
     removeGunModule(workshop, ic);
     expect(ic.fighter.gunModule).toBe(false);
-    expect(workshop.store['гаркатний модуль']).toBe(1);
+    expect(workshop.store['гарматний модуль']).toBe(1);
     expect(workshop.log.at(-1)).toEqual({ type: 'gun_module_removed' });
   });
 

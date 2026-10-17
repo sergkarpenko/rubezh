@@ -442,7 +442,7 @@ describe('intercept: детермінізм', () => {
   });
 });
 
-describe('intercept: гаркатний модуль (П11.3, ADR-0058)', () => {
+describe('intercept: гарматний модуль (П11.3, ADR-0058)', () => {
   // Фіксований бій: HP обох високі — бої не закінчуються, порівнюємо раунди.
   function engagedFight(seed = 7): { ic: InterceptState; geo: GeoState } {
     const ic = createIntercept(seed);

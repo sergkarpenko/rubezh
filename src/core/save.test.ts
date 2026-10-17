@@ -500,15 +500,15 @@ describe('save: цех (П11.3, ADR-0026)', () => {
     expect(() => deserializeParty(JSON.stringify(broken))).toThrow('цех');
   });
 
-  it('round-trip: гаркатний модуль на винищувачі відновлюється (П11.3, ADR-0058)', () => {
+  it('round-trip: гарматний модуль на винищувачі відновлюється (П11.3, ADR-0058)', () => {
     const p = createParty(42);
-    p.workshop.store['гаркатний модуль'] = 1;
+    p.workshop.store['гарматний модуль'] = 1;
     installGunModule(p.workshop, p.intercept);
     const restored = deserializeParty(serializeParty(p, 'T'));
     expect(restored.intercept.fighter.gunModule).toBe(true);
     // модуль можна зняти після відновлення — повертається на склад
     removeGunModule(restored.workshop, restored.intercept);
-    expect(restored.workshop.store['гаркатний модуль']).toBe(1);
+    expect(restored.workshop.store['гарматний модуль']).toBe(1);
     expect(restored.intercept.fighter.gunModule).toBe(false);
   });
 });

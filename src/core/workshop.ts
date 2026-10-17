@@ -43,9 +43,9 @@ export const WORKSHOP_CATALOG: Record<ItemId, WorkshopItemDef> = {
 
 export const ITEM_IDS = Object.keys(WORKSHOP_CATALOG) as ItemId[];
 
-// Предмети, що екіпіруються на солдата ростеру (ADR-0058). Гаркатний модуль —
+// Предмети, що екіпіруються на солдата ростеру (ADR-0058). Гарматний модуль —
 // озброєння винищувача, на солдаті він не носиться (встановлення — intercept).
-export type SoldierItemId = Exclude<ItemId, 'гаркатний модуль'>;
+export type SoldierItemId = Exclude<ItemId, 'гарматний модуль'>;
 
 export const ARMOR_MAX_HP_BONUS = 2; // «Легка броня»: +2 maxHp (ADR-0058)
 export const OPTICS_ACCURACY_BONUS = 0.05; // «Оптичний приціл»: +0.05 точності (кап 0.95, ADR-0004)
@@ -55,7 +55,7 @@ export type WorkshopEvent =
   | { type: 'produced'; id: ItemId } // предмет готовий → склад
   | { type: 'equip'; soldierId: string; id: SoldierItemId } // предмет зі складу на солдата
   | { type: 'unequip'; soldierId: string; id: SoldierItemId } // предмет з солдата назад на склад
-  | { type: 'equipment_lost'; soldierId: string; items: SoldierItemId[] } // предмети загиблого зникли (перма-смерть)
+  | { type: 'equipment_lost'; soldierId: string; items: (keyof SoldierEquipment)[] } // предмети загиблого зникли (перма-смерть)
   | { type: 'gun_module_installed' } // модуль зі складу на винищувач
   | { type: 'gun_module_removed' }; // модуль з винищувача назад на склад
 
@@ -90,7 +90,7 @@ export interface WorkshopState {
 // Порожній склад: усі предмети каталогу з нульовими лічильниками (мерж у сейві
 // лишає валідні ключі майбутніх предметів).
 export function emptyStore(): Record<ItemId, number> {
-  return { аптечка: 0, 'осколкова граната': 0, 'оптичний приціл': 0, 'легка броня': 0, 'гаркатний модуль': 0 };
+  return { аптечка: 0, 'осколкова граната': 0, 'оптичний приціл': 0, 'легка броня': 0, 'гарматний модуль': 0 };
 }
 
 export function createWorkshop(): WorkshopState {
@@ -144,10 +144,10 @@ export function workshopTick(workshop: WorkshopState): void {
 // «пораненим» від екіпірування), оптика +0.05 точності з капом 0.95
 // (ADR-0004). Аптечка/граната — витратні, по одній на місію: солдат несе
 // не більше однієї кожної (ADR-0058). Порушення → throw з українським
-// текстом, стан не змінюється. Гаркатний модуль на солдатові не носиться.
+// текстом, стан не змінюється. Гарматний модуль на солдатові не носиться.
 export function equipItem(workshop: WorkshopState, soldier: Unit, id: ItemId): void {
-  if (id === 'гаркатний модуль') {
-    throw new Error('Гаркатний модуль — озброєння винищувача, на солдатові не носиться');
+  if (id === 'гарматний модуль') {
+    throw new Error('Гарматний модуль — озброєння винищувача, на солдатові не носиться');
   }
   const soldierId = SoldierItemIdOf(id);
   if (workshop.store[id] <= 0) {
@@ -175,8 +175,8 @@ export function equipItem(workshop: WorkshopState, soldier: Unit, id: ItemId): v
 // Поранений солдат при знятті броні не «оздоровлюється»: hp клемується
 // новим maxHp. Предмета на солдатові немає → throw.
 export function unequipItem(workshop: WorkshopState, soldier: Unit, id: ItemId): void {
-  if (id === 'гаркатний модуль') {
-    throw new Error('Гаркатний модуль — озброєння винищувача, на солдатові не носиться');
+  if (id === 'гарматний модуль') {
+    throw new Error('Гарматний модуль — озброєння винищувача, на солдатові не носиться');
   }
   const soldierId = SoldierItemIdOf(id);
   const eq = workshop.equipped[soldier.id];
@@ -217,7 +217,7 @@ function equipmentOf(workshop: WorkshopState, soldierId: string): SoldierEquipme
   return workshop.equipped[soldierId] ?? emptyEquipment();
 }
 
-// Гаркатний модуль на винищувач (ADR-0058): один модуль, екіпірування на
+// Гарматний модуль на винищувач (ADR-0058): один модуль, екіпірування на
 // геосцені; +2 пошкодження за раунд повітряного бою, доки встановлено
 // (застосовує interceptRound; зняття повертає модуль на склад). Модуль
 // ставиться/знімається лише на базі — винищувач у погоні, бою чи ремонті
@@ -227,12 +227,12 @@ export function installGunModule(workshop: WorkshopState, intercept: InterceptSt
     throw new Error('Модуль встановлюється лише на базі: винищувач у польоті');
   }
   if (intercept.fighter.gunModule) {
-    throw new Error('Гаркатний модуль уже встановлено');
+    throw new Error('Гарматний модуль уже встановлено');
   }
-  if (workshop.store['гаркатний модуль'] <= 0) {
-    throw new Error('Предмета немає на складі: гаркатний модуль');
+  if (workshop.store['гарматний модуль'] <= 0) {
+    throw new Error('Предмета немає на складі: гарматний модуль');
   }
-  workshop.store['гаркатний модуль'] -= 1;
+  workshop.store['гарматний модуль'] -= 1;
   intercept.fighter.gunModule = true;
   workshop.log.push({ type: 'gun_module_installed' });
 }
@@ -242,15 +242,16 @@ export function removeGunModule(workshop: WorkshopState, intercept: InterceptSta
     throw new Error('Модуль знімається лише на базі: винищувач у польоті');
   }
   if (!intercept.fighter.gunModule) {
-    throw new Error('Гаркатний модуль не встановлено');
+    throw new Error('Гарматний модуль не встановлено');
   }
   intercept.fighter.gunModule = false;
-  workshop.store['гаркатний модуль'] += 1;
+  workshop.store['гарматний модуль'] += 1;
   workshop.log.push({ type: 'gun_module_removed' });
 }
 
-// Ключ запису екіпірування за предметом каталогу.
-function SoldierItemIdOf(id: ItemId): keyof SoldierEquipment {
+// Ключ запису екіпірування за предметом каталогу (гарматний модуль відсіюється
+// guard'ом у equipItem/unequipItem — звуження типу до SoldierItemId).
+function SoldierItemIdOf(id: SoldierItemId): keyof SoldierEquipment {
   switch (id) {
     case 'легка броня':
       return 'armor';
