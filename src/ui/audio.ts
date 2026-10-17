@@ -92,8 +92,8 @@ function browserContext(): SoundContext | null {
 
 const SHOT_SOUND: Record<ShotMode, SoundName> = { snap: 'shot-snap', aimed: 'shot-aimed', auto: 'shot-auto' };
 
-// Постріл — звук режиму; влучання — додатковий «удар»; рух — тихий «крок».
-// Хід/дозор/лікування/граната — без звуку (скоуп ADR-0059).
+// Постріл — звук режиму; влучання — додатковий «удар»; рух — «тупотіння»
+// (серія кроків). Хід/дозор/лікування/граната — без звуку (скоуп ADR-0059).
 export function battleSounds(e: GameEvent): SoundName[] {
   if (e.type === 'shot') return e.hit ? [SHOT_SOUND[e.mode], 'hit'] : [SHOT_SOUND[e.mode]];
   if (e.type === 'death') return ['death'];
@@ -166,9 +166,12 @@ function playRecipe(c: SoundContext, name: SoundName, t: number): void {
     case 'click':
       note(c, t, 'square', 660, 440, 0.05, 0.04);
       break;
-    case 'move': // крок: короткий тихий низький стук (рухи часті — ненав'язливо)
-      noise(c, t, 0.06, 0.06);
-      note(c, t, 'triangle', 100, 70, 0.06, 0.04);
+    case 'move': // тупотіння: серія коротких кроків-стуків під час ходу
+      for (let i = 0; i < 4; i++) {
+        const ti = t + i * 0.14;
+        noise(c, ti, 0.05, 0.07);
+        note(c, ti, 'triangle', 95 - i * 8, 65, 0.05, 0.05 - i * 0.005);
+      }
       break;
     case 'shot-snap':
       noise(c, t, 0.12, 0.18);

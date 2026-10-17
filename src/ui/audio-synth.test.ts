@@ -122,17 +122,15 @@ describe('Синтез: рецепти за моком SoundContext', () => {
     ]);
   });
 
-  it('move: тихий низький крок — шум + triangle 100→70, 0.06с', () => {
+  it('move: тупотіння — серія з чотирьох кроків-стуків по 0.14с', () => {
     const { s, m } = sound();
     s.play('move');
-    expect(m.rec.osc).toHaveLength(1);
-    expect(m.rec.osc[0].type).toBe('triangle');
-    expect(m.rec.osc[0].freq).toEqual([
-      { v: 100, t: 0 },
-      { v: 70, t: 0.06 },
-    ]);
-    expect(m.rec.src).toHaveLength(1); // шумовий «стук»
-    expect(m.rec.gain[1][0].v).toBe(0.04); // тихо: рухи часті (шум дещо гучніший)
+    expect(m.rec.src).toHaveLength(4); // кожен крок — шумовий «стук»
+    const starts = m.rec.osc.map((o) => o.start);
+    expect(starts.slice(0, 3)).toEqual([0, 0.14, 0.28]);
+    expect(starts[3]).toBeCloseTo(0.42);
+    expect(m.rec.osc.every((o) => o.type === 'triangle')).toBe(true);
+    expect(m.rec.gain[1][0].v).toBe(0.05); // тихо: рухи часті
   });
 
   it('сигнатури режимів різні: snap — шум+квадрат, aimed — свист sawtooth, auto — коротший', () => {
