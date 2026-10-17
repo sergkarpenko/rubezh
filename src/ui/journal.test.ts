@@ -7,11 +7,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { GeoEvent } from '../core/geo';
 import type { GameEvent } from '../core/combat';
 import type { EconomyEvent } from '../core/economy';
+import type { ResearchEvent } from '../core/research';
 import { createParty } from '../core/save';
-import { battleEventText, createJournal, economyEventText, geoEventText, type JournalDeps } from './journal';
+import { battleEventText, createJournal, economyEventText, geoEventText, researchEventText, type JournalDeps } from './journal';
 
 const evGeo = (e: Partial<GeoEvent> & { type: GeoEvent['type'] }): GeoEvent => e as GeoEvent;
 const evBattle = (e: Partial<GameEvent> & { type: GameEvent['type'] }): GameEvent => e as GameEvent;
+const evResearch = (e: Partial<ResearchEvent> & { type: ResearchEvent['type'] }): ResearchEvent => e as ResearchEvent;
 
 function setupDom(): void {
   // Мінімальна розмітка журналу (index.html): вкладки фільтрів і список записів.
@@ -21,6 +23,7 @@ function setupDom(): void {
       <button data-filter="geo">Геосцена</button>
       <button data-filter="econ">Економіка</button>
       <button data-filter="battle">Бій</button>
+      <button data-filter="base">База</button>
     </div>
     <ul id="log"></ul>`;
 }
@@ -30,6 +33,7 @@ function makeDeps(over: Partial<JournalDeps> = {}): JournalDeps {
     geoLog: () => [],
     econLog: () => [],
     battleLog: () => null,
+    researchLog: () => [],
     unitName: (id) => id,
     onGeoEvent: vi.fn(),
     party: () => createParty(42),
@@ -403,5 +407,77 @@ describe('Journal: підказки по ходу (П9.2, один раз за �
     j.adopt(p);
     j.drainGeo();
     expect([...document.querySelectorAll('#log li')].filter((li) => li.textContent?.startsWith('Підказка'))).toHaveLength(0);
+  });
+});
+
+// П11.6 (ADR-0058): події науки → журнал (категорія «База», seen-трекінг).
+describe('researchEventText: перетворювач подій науки (П11.6)', () => {
+  it('найм/звільнення/точки/завершення — з прапорцем ⚑', () => {
+    expect(researchEventText(evResearch({ type: 'hire', name: 'Зінаїда' }))).toEqual({
+      text: '⚑ Вченого найнято: Зінаїда',
+      cls: 'win',
+    });
+    expect(researchEventText(evResearch({ type: 'fire', name: 'Ярослав' }))).toEqual({
+      text: '⚑ Вченого звільнено: Ярослав',
+      cls: '',
+    });
+    expect(researchEventText(evResearch({ type: 'points', day: 3, amount: 2 }))).toEqual({
+      text: '⚑ Наука: +2 точок (доба 3)',
+      cls: 'win',
+    });
+    expect(researchEventText(evResearch({ type: 'project_completed', id: 'аптечка' }))).toEqual({
+      text: '⚑ Проєкт завершено: аптечка ✓',
+      cls: 'win',
+    });
+  });
+
+  it('зарплата і невиплата — клас lose (гроші й втрати)', () => {
+    expect(researchEventText(evResearch({ type: 'salary', day: 2, amount: 40 }))).toEqual({
+      text: '⚑ Зарплата вчених (доба 2): −40',
+      cls: 'lose',
+    });
+    expect(researchEventText(evResearch({ type: 'salary_shortfall', day: 4, fired: ['Оксана', 'Левко'] }))?.text).toContain(
+      'звільнено Оксана, Левко'
+    );
+  });
+});
+
+describe('drainResearch: seen-трекінг подій науки (П11.6)', () => {
+  it('нові події → журнал категорією «base»; повторний дрен — без дублів', () => {
+    const p = createParty(42);
+    p.research.log.push(evResearch({ type: 'hire', name: 'Зінаїда' }), evResearch({ type: 'project_started', id: 'аптечка' }));
+    const j = createJournal(makeDeps({ researchLog: () => p.research.log }));
+    j.drainResearch();
+    const lis = [...document.querySelectorAll('#log li')];
+    expect(lis).toHaveLength(2);
+    expect(lis.every((li) => li.dataset.cat === 'base')).toBe(true);
+    expect(lis[0].textContent).toContain('Проєкт розпочато');
+    j.drainResearch(); // повторний дрен — нових подій нема
+    expect(document.querySelectorAll('#log li')).toHaveLength(2);
+  });
+
+  it('adopt: seen підвинуто до кінця логу науки — історію не відтворюємо', () => {
+    const p = createParty(42);
+    p.research.log.push(evResearch({ type: 'hire', name: 'Меланія' }));
+    const j = createJournal(makeDeps({ researchLog: () => p.research.log }));
+    j.adopt(p);
+    j.drainResearch();
+    expect(document.querySelectorAll('#log li')).toHaveLength(0); // старі події — не в журнал
+    p.research.log.push(evResearch({ type: 'fire', name: 'Меланія' }));
+    j.drainResearch();
+    expect(document.querySelectorAll('#log li')).toHaveLength(1);
+    expect(document.querySelector('#log li')!.textContent).toContain('звільнено');
+  });
+
+  it('фільтр «base» ховає чужі категорії (вкладка «База»)', () => {
+    const p = createParty(42);
+    p.research.log.push(evResearch({ type: 'points', day: 1, amount: 1 }));
+    const j = createJournal(makeDeps({ researchLog: () => p.research.log }));
+    j.drainResearch();
+    j.add('Дотація за добу 1: +75', '', 'econ');
+    j.setFilter('base');
+    const lis = [...document.querySelectorAll('#log li')] as HTMLLIElement[];
+    expect(lis.find((li) => li.textContent?.includes('Наука'))!.style.display).toBe('');
+    expect(lis.find((li) => li.textContent?.includes('Дотація'))!.style.display).toBe('none');
   });
 });
