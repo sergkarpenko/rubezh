@@ -94,3 +94,25 @@ jobs:
     steps:
       - id: deployment
         uses: actions/deploy-pages@v5
+      # Автосмок (ADR-0062): наявнісна перевірка HTTP 200 без нових залежностей;
+      # ретраї — свіжий деплой може запізнюватись на CDN-краї. Візуальну
+      # коректність далі перевіряє власник за URL з рана.
+      - name: Смок — сторінка гілки віддається
+        run: |
+          url="https://sergkarpenko.github.io/rubezh/preview/${{ needs.build.outputs.slug }}/"
+          for i in 1 2 3 4 5; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' "$url")
+            if [ "$code" = "200" ]; then echo "OK: сторінка гілки → 200 ($url)" && exit 0; fi
+            echo "спроба $i: HTTP $code, чекаю 10с…"
+            sleep 10
+          done
+          echo "::error::Смок не пройдено: сторінка гілки не віддається (HTTP $code) — $url"
+          exit 1
+      - name: Смок — основний деплой main живий
+        run: |
+          code=$(curl -s -o /dev/null -w '%{http_code}' https://sergkarpenko.github.io/rubezh/)
+          if [ "$code" != "200" ]; then
+            echo "::error::Смок не пройдено: корінь main не віддається (HTTP $code)"
+            exit 1
+          fi
+          echo "OK: корінь main → 200"
