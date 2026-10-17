@@ -7,6 +7,7 @@
     "dev": "vite",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage --coverage.include='src/core/**' --coverage.thresholds.80 --coverage.reporter=json --coverage.reporter=text --coverage.reportsDirectory=dist/coverage",
+    "test:smoke": "playwright test",
     "build": "vite build",
     "prepare": "husky",
     "lint": "eslint src",
@@ -25,6 +26,7 @@
     ]
   },
   "devDependencies": {
+    "@playwright/test": "^1.64.1",
     "@vitest/coverage-v8": "^5.0.3",
     "eslint": "^10.12.0",
     "eslint-config-prettier": "^10.1.8",
