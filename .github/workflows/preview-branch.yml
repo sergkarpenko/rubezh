@@ -116,3 +116,16 @@ jobs:
             exit 1
           fi
           echo "OK: корінь main → 200"
+      # Домен-смок (ADR-0063): сторінка жива як документ (заголовок, канвас,
+      # нуль помилок сторінки) — ловить «білий екран» до браузера власника.
+      # Інструментарій — з main (гілка прев'ю коду смоку не виконує), ціль —
+      # задеплоєний URL прев'ю; Playwright chromium ~1 хв, лише на dispatch.
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Домен-смок — сторінка гілки як документ (ADR-0063)
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+          SMOKE_URL="https://sergkarpenko.github.io/rubezh/preview/${{ needs.build.outputs.slug }}/" npm run test:smoke
