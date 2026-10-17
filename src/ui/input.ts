@@ -172,7 +172,8 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
         battle.binfo('Немає лінії кидка до епіцентру (рельєф).');
         return;
       }
-      if (ui.tapCell === null || ui.tapCell.x !== cell.x || ui.tapCell.y !== cell.y) {
+      if (!sameCell(ui.tapCell, cell)) {
+        // П6.14: той самий тап-тап
         ui.tapCell = cell;
         battle.binfo('Зона вибуху — епіцентр + хрест (рятує тільки броня). Повторний клік у цю клітинку — кидок (4 AP).');
         battle.renderBattle();
@@ -265,7 +266,8 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
       const ap = pathApCost(path);
       ui.hoverPath = path;
       ui.hoverAp = ap;
-      if (ui.tapCell === null || ui.tapCell.x !== cell.x || ui.tapCell.y !== cell.y) {
+      if (!sameCell(ui.tapCell, cell)) {
+        // П6.14: той самий тап-тап
         // перший тап — лише прев'ю (Esc скасовує)
         ui.tapCell = cell;
         battle.binfo(
@@ -444,9 +446,10 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
     }
   }
 
-  // П11.6 (ADR-0058): зведення аптечки — клавіша M / кнопка. Без предмета або
-  // AP — відмова з причиною (фідбек не розходиться з кнопками, патерн П6.14).
-  function armMedkit(): void {
+  // П11.6 (ADR-0058): зведення витратника — клавіша M (аптечка) / G (граната)
+  // або кнопка. Перевірки — ті самі, що й у кнопок (фідбек не розходиться,
+  // патерн П6.14): без солдата/предмета/AP — відмова з причиною.
+  function armItem(mode: 'medkit' | 'grenade'): void {
     if (!battle.playerTurnActive() || !ui.mission) return;
     if (deps.demoBusy()) return; // П6.16: триває демо — керування заблоковано
     const sel = battle.selectedUnit();
@@ -454,58 +457,42 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
       battle.binfo('Спершу клікніть свого солдата.');
       return;
     }
-    if (!ui.mission.state.items?.[sel.id]?.medkit) {
-      battle.binfo('Аптечки немає при ' + sel.name + ' (спорядьте в цеху на геосцені).');
+    const has = ui.mission.state.items?.[sel.id]?.[mode] ?? false;
+    if (!has) {
+      battle.binfo((mode === 'medkit' ? 'Аптечки' : 'Гранати') + ' немає при ' + sel.name + ' (спорядьте в цеху на геосцені).');
       return;
     }
-    if (sel.ap < HEAL_AP_COST) {
-      battle.binfo('Не вистачає AP: лікування коштує ' + HEAL_AP_COST + ', є ' + sel.ap + '.');
+    const cost = mode === 'medkit' ? HEAL_AP_COST : GRENADE_AP_COST;
+    if (sel.ap < cost) {
+      battle.binfo('Не вистачає AP: ' + (mode === 'medkit' ? 'лікування' : 'кидок') + ' коштує ' + cost + ', є ' + sel.ap + '.');
       return;
     }
     ui.fireMode = null;
-    ui.itemMode = 'medkit';
+    ui.itemMode = mode;
     ui.tapCell = null;
     ui.aimCell = null;
     battle.binfo(
-      'Аптечка: тапніть пораненого союзника поруч (≤1, соба теж) — повторний тап у ціль — лікування (+' +
-        HEAL_AMOUNT +
-        ' HP, ' +
-        HEAL_AP_COST +
-        ' AP).'
+      mode === 'medkit'
+        ? 'Аптечка: тапніть пораненого союзника поруч (≤1, соба теж) — повторний тап у ціль — лікування (+' +
+            HEAL_AMOUNT +
+            ' HP, ' +
+            HEAL_AP_COST +
+            ' AP).'
+        : 'Граната: тапніть клітинку епіцентру (≤' +
+            GRENADE_RANGE +
+            ', лінія кидка) — повторний тап у неї — кидок (' +
+            GRENADE_AP_COST +
+            ' AP).'
     );
     battle.renderBattle();
   }
 
-  // П11.6 (ADR-0058): зведення гранати — клавіша G / кнопка. Епіцентр — будь-яка
-  // клітинка в дальності ≤6 з лінією кидка; friendly fire уражає всіх у зоні.
+  function armMedkit(): void {
+    armItem('medkit');
+  }
+
   function armGrenade(): void {
-    if (!battle.playerTurnActive() || !ui.mission) return;
-    if (deps.demoBusy()) return; // П6.16: триває демо — керування заблоковано
-    const sel = battle.selectedUnit();
-    if (!sel) {
-      battle.binfo('Спершу клікніть свого солдата.');
-      return;
-    }
-    if (!ui.mission.state.items?.[sel.id]?.grenade) {
-      battle.binfo('Гранати немає при ' + sel.name + ' (спорядьте в цеху на геосцені).');
-      return;
-    }
-    if (sel.ap < GRENADE_AP_COST) {
-      battle.binfo('Не вистачає AP: кидок коштує ' + GRENADE_AP_COST + ', є ' + sel.ap + '.');
-      return;
-    }
-    ui.fireMode = null;
-    ui.itemMode = 'grenade';
-    ui.tapCell = null;
-    ui.aimCell = null;
-    battle.binfo(
-      'Граната: тапніть клітинку епіцентру (≤' +
-        GRENADE_RANGE +
-        ', лінія кидка) — повторний тап у неї — кидок (' +
-        GRENADE_AP_COST +
-        ' AP).'
-    );
-    battle.renderBattle();
+    armItem('grenade');
   }
 
   // ADR-0027 (П6.4): гарячі клавіші керування боєм — 1/2/3 (режими пострілу),

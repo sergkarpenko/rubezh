@@ -310,30 +310,23 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
 
     // П11.6 (ADR-0058): кнопки витратників — аптечка і граната. Приглушені без
     // предмета у вибраного солдата або без AP (підказка причини, патерн П6.14).
-    const med = el<HTMLButtonElement>('btn-medkit');
-    const hasMedkit = sel !== undefined && (st.items?.[sel.id]?.medkit ?? false);
-    const medNoAp = sel !== undefined && sel.ap < HEAL_AP_COST;
-    med.disabled = busy || !hasMedkit || medNoAp;
-    const medHint = med.dataset.hint || med.title;
-    med.dataset.hint = medHint;
-    med.title = !hasMedkit
-      ? medHint + ' — аптечки немає при солдатові'
-      : medNoAp
-        ? medHint + ' — не вистачає AP (потрібно ' + HEAL_AP_COST + ')'
-        : medHint;
-    med.classList.toggle('armed', ui.itemMode === 'medkit');
-    const gren = el<HTMLButtonElement>('btn-grenade');
-    const hasGrenade = sel !== undefined && (st.items?.[sel.id]?.grenade ?? false);
-    const grenNoAp = sel !== undefined && sel.ap < GRENADE_AP_COST;
-    gren.disabled = busy || !hasGrenade || grenNoAp;
-    const grenHint = gren.dataset.hint || gren.title;
-    gren.dataset.hint = grenHint;
-    gren.title = !hasGrenade
-      ? grenHint + ' — гранати немає при солдатові'
-      : grenNoAp
-        ? grenHint + ' — не вистачає AP (потрібно ' + GRENADE_AP_COST + ')'
-        : grenHint;
-    gren.classList.toggle('armed', ui.itemMode === 'grenade');
+    const itemButtons: [HTMLButtonElement, 'medkit' | 'grenade', number][] = [
+      [el<HTMLButtonElement>('btn-medkit'), 'medkit', HEAL_AP_COST],
+      [el<HTMLButtonElement>('btn-grenade'), 'grenade', GRENADE_AP_COST],
+    ];
+    for (const [b, mode, cost] of itemButtons) {
+      const hasItem = sel !== undefined && (st.items?.[sel.id]?.[mode] ?? false);
+      const noAp = sel !== undefined && sel.ap < cost;
+      b.disabled = busy || !hasItem || noAp;
+      const hint = b.dataset.hint || b.title;
+      b.dataset.hint = hint;
+      b.title = !hasItem
+        ? hint + ' — ' + (mode === 'medkit' ? 'аптечки' : 'гранати') + ' немає при солдатові'
+        : noAp
+          ? hint + ' — не вистачає AP (потрібно ' + cost + ')'
+          : hint;
+      b.classList.toggle('armed', ui.itemMode === mode);
+    }
   }
 
   function close(): void {
