@@ -14,10 +14,14 @@ import {
   mulberry32,
   resolveAttack,
   setOverwatch,
+  throwGrenade,
+  useMedkit,
   type GameEvent,
   type GameMap,
   type GameState,
   type RNG,
+  type StatefulRng,
+  type UnitItems,
 } from './combat';
 
 const alwaysHit: RNG = () => 0;
@@ -292,5 +296,183 @@ describe('детермінізм', () => {
       return JSON.stringify(g.log) + '|' + g.units.map((u) => u.hp + ':' + u.ap + ':' + u.alive).join(',');
     };
     expect(play(7)).toBe(play(7));
+  });
+});
+
+// --- П11.4 (ADR-0058): дії з витратниками ---
+
+// Гра з трьома юнітами гравця й двома прибульцями; витратники — через items.
+function itemsGame(items?: Record<string, UnitItems>, blocked: string[] = [], rng: RNG = alwaysHit): GameState {
+  return createGame({
+    map: map(blocked),
+    rng,
+    items,
+    units: [
+      makeUnit({ id: 's1', side: 'player', pos: { x: 2, y: 2 } }),
+      makeUnit({ id: 's2', side: 'player', pos: { x: 3, y: 2 }, hp: 4, maxHp: 10 }),
+      makeUnit({ id: 'a1', side: 'alien', pos: { x: 8, y: 2 }, hp: 10, maxHp: 10 }),
+      makeUnit({ id: 'a2', side: 'alien', pos: { x: 8, y: 3 }, hp: 10, maxHp: 10 }),
+    ],
+  });
+}
+
+describe('П11.4: лікування (аптечка)', () => {
+  it('союзнику поруч: +3 HP, −4 AP, аптечка списана, подія в логу', () => {
+    const g = itemsGame({ s1: { medkit: true, grenade: false } });
+    const r = useMedkit(g, 's1', 's2');
+    expect(r.healed).toBe(3);
+    expect(g.units[1].hp).toBe(7);
+    expect(g.units[0].ap).toBe(6);
+    expect(g.items?.s1.medkit).toBe(false);
+    expect(g.log).toContainEqual({ type: 'heal', unitId: 's1', targetId: 's2', healed: 3 });
+  });
+
+  it('соба з капом: +3 не вище maxHp', () => {
+    const g = itemsGame({ s2: { medkit: true, grenade: false } });
+    g.units[1].hp = 9;
+    const r = useMedkit(g, 's2', 's2');
+    expect(r.healed).toBe(1); // 9 + 3 → кап 10
+    expect(g.units[1].hp).toBe(10);
+  });
+
+  it('діагональний сусід (Чебишев ≤1) — валідна ціль', () => {
+    const g = itemsGame({ s1: { medkit: true, grenade: false } });
+    g.units[1].pos = { x: 3, y: 3 }; // діагональ від s1 (2,2) — відстань Чебишева 1
+    useMedkit(g, 's1', 's2');
+    expect(g.units[1].hp).toBe(7);
+  });
+
+  it('аптечка одна на місію: повторний виклик — throw', () => {
+    const g = itemsGame({ s1: { medkit: true, grenade: false } });
+    useMedkit(g, 's1', 's2');
+    expect(() => useMedkit(g, 's1', 's1')).toThrow('Аптечки немає');
+  });
+
+  it('помилки правил: без аптечки, AP, ворог, відстань 2, здорова ціль, мертва ціль, не свій хід', () => {
+    const g = itemsGame({ s1: { medkit: true, grenade: false } });
+    expect(() => useMedkit(g, 's2', 's2')).toThrow('Аптечки немає'); // запису items немає = предметів немає
+    g.units[0].ap = 3;
+    expect(() => useMedkit(g, 's1', 's2')).toThrow('Недостатньо очок дій');
+    g.units[0].ap = 10;
+    expect(() => useMedkit(g, 's1', 'a1')).toThrow('Лікування можливе лише по своїх');
+    g.units[1].pos = { x: 5, y: 2 };
+    expect(() => useMedkit(g, 's1', 's2')).toThrow('поза межами лікування');
+    g.units[1].pos = { x: 2, y: 2 }; // той самий квадрат — відстань 0
+    g.units[1].hp = 10;
+    expect(() => useMedkit(g, 's1', 's2')).toThrow('Ціль не поранена');
+    g.units[1].alive = false;
+    expect(() => useMedkit(g, 's1', 's2')).toThrow('Ціль уже мертва');
+    endTurn(g);
+    expect(() => useMedkit(g, 's1', 's1')).toThrow('Зараз хід не сторони player');
+  });
+
+  it('без RNG: лікування не споживає бойовий генератор (детермінізм)', () => {
+    const g = itemsGame({ s1: { medkit: true, grenade: false } }, [], mulberry32(5));
+    const s0 = (g.rng as StatefulRng).state;
+    useMedkit(g, 's1', 's2');
+    expect((g.rng as StatefulRng).state).toBe(s0);
+  });
+});
+
+describe('П11.4: кидок гранати', () => {
+  it('епіцентр + хрест: усіх у зоні уражено однаковим пошкодженням, подія в логу', () => {
+    const g = itemsGame({ s1: { medkit: false, grenade: true } });
+    const r = throwGrenade(g, 's1', { x: 8, y: 2 }); // епіцентр a1, сусід a2
+    expect(r.damage).toBeGreaterThanOrEqual(3);
+    expect(r.damage).toBeLessThanOrEqual(5);
+    expect(r.affected).toEqual(['a1', 'a2']);
+    expect(g.units[2].hp).toBe(10 - r.damage);
+    expect(g.units[3].hp).toBe(10 - r.damage);
+    expect(g.units[0].ap).toBe(6);
+    expect(g.items?.s1.grenade).toBe(false);
+    const ev = g.log.find((e) => e.type === 'grenade');
+    expect(ev).toEqual({
+      type: 'grenade',
+      unitId: 's1',
+      center: { x: 8, y: 2 },
+      hits: [
+        { unitId: 'a1', damage: r.damage },
+        { unitId: 'a2', damage: r.damage },
+      ],
+    });
+  });
+
+  it('friendly fire: союзник у зоні уражений, за нього kills не ростуть; за ворогів — ростуть', () => {
+    const g = itemsGame({ s1: { medkit: false, grenade: true } }, [], seqRng([0.999]));
+    g.units[1].pos = { x: 8, y: 2 }; // s2 накладено на епіцентр
+    g.units[1].hp = 5; // 5 − 5 = 0: гине від дружнього вибуху
+    g.units[2].hp = 4; // 4 − 5 = 0: гине ворог
+    const r = throwGrenade(g, 's1', { x: 8, y: 2 });
+    expect(r.damage).toBe(5);
+    expect(g.units[1].alive).toBe(false);
+    expect(g.units[2].alive).toBe(false);
+    expect(g.units[0].kills).toBe(1); // лише ворог
+    expect(g.log).toContainEqual({ type: 'death', unitId: 's2', killerId: 's1' });
+    expect(g.log).toContainEqual({ type: 'death', unitId: 'a1', killerId: 's1' });
+  });
+
+  it('порожня зона: кидок валідний, пошкодження немає нікому', () => {
+    const g = itemsGame({ s1: { medkit: false, grenade: true } });
+    const r = throwGrenade(g, 's1', { x: 5, y: 6 }); // сідло — нікого в зоні
+    expect(r.affected).toEqual([]);
+    expect(g.log.find((e) => e.type === 'grenade')).toEqual({
+      type: 'grenade',
+      unitId: 's1',
+      center: { x: 5, y: 6 },
+      hits: [],
+    });
+  });
+
+  it('один кидок RNG на вибух незалежно від кількості уражених', () => {
+    const g = itemsGame({ s1: { medkit: false, grenade: true } }, [], mulberry32(9));
+    throwGrenade(g, 's1', { x: 8, y: 2 }); // дві цілі в зоні
+    const one = mulberry32(9);
+    one(); // рівно один кидок
+    expect((g.rng as StatefulRng).state).toBe(one.state);
+  });
+
+  it('детермінізм: той самий сід → той самий лог і стани (критерій 3)', () => {
+    const play = (seed: number) => {
+      const g = itemsGame({ s1: { medkit: true, grenade: true } }, ['6,5'], mulberry32(seed));
+      useMedkit(g, 's1', 's2'); // 4 AP
+      throwGrenade(g, 's1', { x: 8, y: 2 }); // ще 4 AP — серія різних дій з предметами
+      endTurn(g);
+      return JSON.stringify(g.log) + '|' + g.units.map((u) => u.hp + ':' + u.ap + ':' + u.alive + ':' + u.kills).join(',');
+    };
+    expect(play(11)).toBe(play(11));
+  });
+
+  it('помилки правил: без гранати, AP, межі мапи, дальність 7, стіна на лінії кидка', () => {
+    const g = itemsGame({ s1: { medkit: false, grenade: true } });
+    expect(() => throwGrenade(g, 's2', { x: 8, y: 2 })).toThrow('Гранати немає');
+    g.units[0].ap = 3;
+    expect(() => throwGrenade(g, 's1', { x: 8, y: 2 })).toThrow('Недостатньо очок дій');
+    g.units[0].ap = 10;
+    expect(() => throwGrenade(g, 's1', { x: -1, y: 2 })).toThrow('за межами мапи');
+    expect(() => throwGrenade(g, 's1', { x: 9, y: 2 })).toThrow('поза дальністю кидка');
+    const w = itemsGame({ s1: { medkit: false, grenade: true } }, ['6,2']);
+    expect(() => throwGrenade(w, 's1', { x: 8, y: 2 })).toThrow('Немає лінії кидка');
+  });
+
+  it('епіцентр — видима кидачу клітинка: дальність 6 < радіуса огляду, LOS достатній', () => {
+    // дзеркало computeVisibleCells (map.ts): клітинка в зоні кидка з чистою
+    // лінією від кидача завжди видима йому (туман — лише рельєф, ADR-0006)
+    const g = itemsGame({ s1: { medkit: false, grenade: true } });
+    expect(() => throwGrenade(g, 's1', { x: 8, y: 2 })).not.toThrow();
+  });
+});
+
+describe('П11.4: ізоляція (критерій 1: бій без предметів байт-у-байт незмінний)', () => {
+  it('наявність невикористаних предметів не міняє бій: лог і rng.state збігаються', () => {
+    const play = (items?: Record<string, UnitItems>) => {
+      const g = itemsGame(items, ['5,4'], mulberry32(42));
+      resolveAttack(g, 's1', 'a1', 'auto');
+      moveUnit(g, 's1', [{ x: 2, y: 3 }]);
+      resolveAttack(g, 's1', 'a2', 'snap');
+      endTurn(g);
+      resolveAttack(g, 'a1', 's1', 'aimed');
+      return JSON.stringify(g.log) + '|' + (g.rng as StatefulRng).state;
+    };
+    expect(play()).toBe(play({ s1: { medkit: true, grenade: true }, s2: { medkit: true, grenade: true } }));
   });
 });
