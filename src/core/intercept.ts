@@ -25,6 +25,11 @@ export const FIGHTER_MAX_HP = 4; // MVP: один винищувач, без о�
 export const FIGHTER_STEPS_PER_TICK = 2; // до 2 клітин за тік — швидший за будь-який НЛО (1 кл./тік)
 export const FIGHTER_REPAIR_TICKS = 16; // ремонт: 16 тіків (8 год) — гроші + тіки (П7.4)
 export const FIGHTER_REPAIR_COST = 50; // MVP-значення; фіналізація — П7.6
+// П11.3 (ADR-0058): гаркатний модуль (виробництво цеху, екіпірування на
+// геосцені) — +2 пошкодлення за раунд ПОВІТРЯНОГО БОЮ, доки встановлено.
+// Додається до урону влучання (промах не«дограє» бонусом); на шанси і
+// споживання rng не впливає — бої без модуля байт-у-байт незмінні.
+export const GUN_MODULE_DAMAGE = 2;
 
 // Шанси та урон за дистанціями (ADR-0032): впритул — максимальна ефективність
 // винищувача і максимальна небезпека у відповідь; далека — безпечно, але шанси низькі.
@@ -53,6 +58,7 @@ export interface Fighter {
   status: FighterStatus;
   targetId: string | null; // НЛО погоні (стан «погоня»)
   repairTicksLeft?: number; // тики ремонту, що залишилися (стан «ремонт»)
+  gunModule?: boolean; // П11.3 (ADR-0058): встановлений гаркатний модуль (+2 урону за раунд)
 }
 
 export type InterceptChoice = InterceptRange | 'відступ';
@@ -230,7 +236,11 @@ export function interceptRound(
   const p = RANGE_PROFILES[choice];
   const fighterHit = state.rng() < p.fighterHitChance;
   const ufoHit = state.rng() < p.ufoHitChance;
-  const fighterDamage = fighterHit ? p.fighterDamage[0] + Math.floor(state.rng() * (p.fighterDamage[1] - p.fighterDamage[0] + 1)) : 0;
+  // П11.3 (ADR-0058): бонус модуля додається ПІСЛЯ кидка урону — споживання
+  // rng те саме, що й без модуля (промах — 0, як і раніше).
+  const fighterDamage = fighterHit
+    ? p.fighterDamage[0] + Math.floor(state.rng() * (p.fighterDamage[1] - p.fighterDamage[0] + 1)) + (f.gunModule ? GUN_MODULE_DAMAGE : 0)
+    : 0;
   const ufoDamage = ufoHit ? p.ufoDamage[0] + Math.floor(state.rng() * (p.ufoDamage[1] - p.ufoDamage[0] + 1)) : 0;
   state.ufoHp[ufo.id] = Math.max(0, (state.ufoHp[ufo.id] ?? 0) - fighterDamage);
   f.hp = Math.max(0, f.hp - ufoDamage);
