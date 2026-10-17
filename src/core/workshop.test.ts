@@ -232,11 +232,11 @@ describe('екіпірування ростеру (ADR-0058: броня/опти
     expect(workshop.equipped).toEqual({});
   });
 
-  it('гаркатний модуль на солдатові не носиться — throw українською', () => {
+  it('гарматний модуль на солдатові не носиться — throw українською', () => {
     const workshop = stockedWorkshop();
     const soldier = makeSoldier('s1', 'Іван');
-    expect(() => equipItem(workshop, soldier, 'гаркатний модуль')).toThrow('озброєння винищувача');
-    expect(() => unequipItem(workshop, soldier, 'гаркатний модуль')).toThrow('озброєння винищувача');
+    expect(() => equipItem(workshop, soldier, 'гарматний модуль')).toThrow('озброєння винищувача');
+    expect(() => unequipItem(workshop, soldier, 'гарматний модуль')).toThrow('озброєння винищувача');
   });
 
   it('зняття броні: предмет на склад, hp клемується новим maxHp', () => {
