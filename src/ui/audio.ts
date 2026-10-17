@@ -161,13 +161,15 @@ function noise(c: SoundContext, t0: number, dur: number, vol: number): void {
 // Рецепти звуків (ADR-0059): сигнатури режимів пострілу різні — короткий
 // (щільний шумовий спалах + квадрат), прицільний (довгий свист вниз), черга
 // (коротші нижчі кулі-імпульси; зсув кулі черги — у play, стакато-циклом).
-function playRecipe(c: SoundContext, name: SoundName, t: number): void {
+// steps — лише для «тупотіння» руху (кількість клітинок ходу; решта рецептів
+// параметр ігнорує).
+function playRecipe(c: SoundContext, name: SoundName, t: number, steps = 4): void {
   switch (name) {
     case 'click':
       note(c, t, 'square', 660, 440, 0.05, 0.04);
       break;
-    case 'move': // тупотіння: серія коротких кроків-стуків під час ходу
-      for (let i = 0; i < 4; i++) {
+    case 'move': // тупотіння: кроки-стуки під час ходу; кількість — за відстанню
+      for (let i = 0; i < steps; i++) {
         const ti = t + i * 0.14;
         noise(c, ti, 0.05, 0.07);
         note(c, ti, 'triangle', 95 - i * 8, 65, 0.05, 0.05 - i * 0.005);
@@ -259,7 +261,7 @@ export function createSound(deps: Partial<SoundDeps> = {}): Sound {
     return c;
   }
 
-  function play(name: SoundName): void {
+  function play(name: SoundName, steps = 4): void {
     if (!on) return;
     const c = context();
     if (!c) return;
@@ -273,17 +275,20 @@ export function createSound(deps: Partial<SoundDeps> = {}): Sound {
     }
     // Черга — стакато-зсув кулі; решта звуків — з поточного часу контексту.
     if (name === 'shot-auto') {
-      playRecipe(c, name, c.currentTime + autoTap * 0.09);
+      playRecipe(c, name, c.currentTime + autoTap * 0.09, steps);
       autoTap = (autoTap + 1) % 3; // три кулі черги — цикл починається знову
     } else {
-      playRecipe(c, name, c.currentTime);
+      playRecipe(c, name, c.currentTime, steps);
     }
   }
 
   return {
     play,
     battleEvent: (e) => {
-      for (const s of battleSounds(e)) play(s);
+      // Тупотіння — за відстанню ходу (Чебишев): подія move несе лише from/to,
+      // ядро не розширюємо — кількість кроків є деталлю відображення (ADR-0059).
+      const steps = e.type === 'move' ? Math.max(1, Math.max(Math.abs(e.to.x - e.from.x), Math.abs(e.to.y - e.from.y))) : 4;
+      for (const s of battleSounds(e)) play(s, steps);
     },
     geoEvent: (e) => {
       for (const s of geoSounds(e)) play(s);
