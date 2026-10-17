@@ -10,10 +10,10 @@
 
 import { describe, expect, it } from 'vitest';
 import { createParty } from './save';
-import { fireSoldier } from './squad';
+import { fireSoldier, readySoldiers } from './squad';
 import { HIRE_PRICE } from './economy';
 import { PASSIVE_POLICY } from './intercept-bot';
-import { DEFAULT_PARTY_POLICY, TICKS_PER_DAY, partyBotHireStep, simulateParty } from './party-bot';
+import { DEFAULT_PARTY_POLICY, SCIENCE_POLICY, TICKS_PER_DAY, partyBotHireStep, partyBotScienceStep, simulateParty } from './party-bot';
 
 describe('П8.5: оркестратор — детермінізм (ADR-0003)', () => {
   it('повна партія: сід + пресет + політика = байт-у-байт той самий результат', () => {
@@ -138,5 +138,139 @@ describe('П8.5: політика бот-гравця — детермінова
     const r = simulateParty(42, 'норма', { policy, maxDays: 5 });
     expect(r.hiredTotal).toBe(0);
     expect(r.hireSpent).toBe(0);
+  });
+});
+
+// П11.8 (Фаза 11, ADR-0058): політика науки у бот-гравці — найм вчених,
+// порядок проєктів, замовлення цеху, екіпірування. Критерій П11.8.2: партії
+// без науки байт-у-байт незмінні (патерн ізоляції П11.2/П11.4) — наука
+
+describe('П11.8: політика науки — ізоляція (критерій 2)', () => {
+  it('без науки — той самий результат, що й DEFAULT (усі поля науки вимкнені)', () => {
+    const zeroed = { ...DEFAULT_PARTY_POLICY, name: 'zero-science' };
+    const a = simulateParty(42, 'норма');
+    const b = simulateParty(42, 'норма', { policy: zeroed });
+    // розбіжність лише в імені політики — траєкторія байт-у-байт та сама
+    expect(JSON.stringify(b)).toBe(JSON.stringify({ ...a, policy: 'zero-science' }));
+  });
+
+  it('метрики науки нульові без науки; крива штату — нулі (партія не помічає науки)', () => {
+    const r = simulateParty(42, 'норма');
+    expect(r.scientistsHired).toBe(0);
+    expect(r.scientistsFired).toBe(0);
+    expect(r.salaryShortfallDays).toBe(0);
+    expect(r.salarySpent).toBe(0);
+    expect(r.projectSpent).toBe(0);
+    expect(r.workshopSpent).toBe(0);
+    expect(r.projectsCompleted).toBe(0);
+    expect(r.completedProjects).toEqual([]);
+    expect(r.workshopProduced).toBe(0);
+    expect(r.equippedItems).toBe(0);
+    expect(r.scientistsByDay.every((n) => n === 0)).toBe(true);
+    // золоті числа сіда 42 пинить тест вище (score 4128) — траєкторія
+    // геосцени/бою не змінена додаванням науки в оркестратор
+  });
+});
+
+describe('П11.8: політика науки — повний флоу (фіксовані сіди фіксують баланс)', () => {
+  it('SCIENCE_POLICY: сід 42 «норма» — вчені, проєкти, цех, екіпірування; байт-у-байт', () => {
+    const a = simulateParty(42, 'норма', { policy: SCIENCE_POLICY });
+    const b = simulateParty(42, 'норма', { policy: SCIENCE_POLICY });
+    expect(JSON.stringify(b)).toBe(JSON.stringify(a));
+    expect(a.outcome).toBe('перемога');
+    expect(a.scientistsHired).toBe(3);
+    expect(a.completedProjects).toEqual(['аптечка', 'розширення лабораторії']);
+    expect(a.workshopProduced).toBe(11);
+    expect(a.equippedItems).toBe(11);
+    expect(a.salarySpent).toBe(1800);
+    expect(a.projectSpent).toBe(270);
+    expect(a.workshopSpent).toBe(440);
+    expect(a.scientistsFired).toBe(0);
+    expect(a.scientistsByDay[a.scientistsByDay.length - 1]).toBe(3);
+  });
+
+  it('спіраль зарплата→звільнення (урок П11.2): бідна партія звільняє вчених з кінця штату', () => {
+    const heavy = { ...SCIENCE_POLICY, name: 'sci-heavy', scientistsUpTo: 5 };
+    const r = simulateParty(45, 'норма', { policy: heavy });
+    expect(r.salaryShortfallDays).toBe(2);
+    expect(r.scientistsFired).toBe(2);
+    // штат просідає 5 → 3 (наймані поверх звільнених) — метрики бачать спіраль
+    expect(Math.max(...r.scientistsByDay)).toBe(5);
+    expect(r.scientistsByDay[r.scientistsByDay.length - 1]).toBeLessThan(5);
+  });
+});
+
+describe('П11.8: partyBotScienceStep — детерміновані рішення за станом', () => {
+  const NO_SCIENCE_BASE = { ...SCIENCE_POLICY, projects: [], workshopOrders: [], equip: false };
+
+  it('наймає вчених до scientistsUpTo, лишаючи резерв hireReserve', () => {
+    const p = createParty(42, 'норма'); // старт 300, резерв 50: 2 найми (300−200), третій лишив би 0 < 50
+    partyBotScienceStep(p, NO_SCIENCE_BASE);
+    expect(p.research.scientists).toHaveLength(2);
+    expect(p.econ.money).toBe(100);
+  });
+
+  it('стартує перший доступний проєкт за пріоритетом — один за крок', () => {
+    const p = createParty(42, 'норма');
+    partyBotScienceStep(p, { ...NO_SCIENCE_BASE, scientistsUpTo: 0, projects: ['осколкова граната', 'аптечка'] });
+    // «осколкова граната»: передумова «аптечка» не завершена — гейт;
+    // «аптечка» стартує першою доступною (100 кошти), слот один зайнятий
+    expect(p.research.active.map((x) => x.id)).toEqual(['аптечка']);
+    expect(p.econ.money).toBe(200);
+  });
+
+  it('проєкт не стартує без слота (слоти лабораторії — гейт ADR-0058)', () => {
+    const p = createParty(42, 'норма');
+    p.research.slots = 2;
+    p.research.active.push({ id: 'оптичний приціл', invested: 0 }, { id: 'легка броня', invested: 0 });
+    partyBotScienceStep(p, { ...NO_SCIENCE_BASE, scientistsUpTo: 0, projects: ['аптечка'] });
+    expect(p.research.active).toHaveLength(2); // слоти зайняті — нижчі пріоритети не стартуються
+    expect(p.econ.money).toBe(300);
+  });
+
+  it('цех: замовлення лише завершеного проєкту, за дефіцитом, одне в черзі', () => {
+    const p = createParty(42, 'норма');
+    partyBotScienceStep(p, { ...NO_SCIENCE_BASE, scientistsUpTo: 0, workshopOrders: ['аптечка'] });
+    expect(p.workshop.queue).toHaveLength(0); // проєкт не досліджено — гейт
+    p.research.completed.push('аптечка');
+    partyBotScienceStep(p, { ...NO_SCIENCE_BASE, scientistsUpTo: 0, workshopOrders: ['аптечка'] });
+    expect(p.workshop.queue.map((o) => o.id)).toEqual(['аптечка']); // дефіцит 6 готових солдатів
+    expect(p.econ.money).toBe(260); // 40 кошти за замовлення (норма ×1.0)
+    partyBotScienceStep(p, { ...NO_SCIENCE_BASE, scientistsUpTo: 0, workshopOrders: ['аптечка'] });
+    expect(p.workshop.queue).toHaveLength(1); // одне активне замовлення — дублі не копляться
+  });
+
+  it('цех: без дефіциту замовлення немає (склад покриває потребу)', () => {
+    const p = createParty(42, 'норма');
+    p.research.completed.push('аптечка');
+    p.workshop.store['аптечка'] = 6; // усім боєготовим вистачає
+    partyBotScienceStep(p, { ...NO_SCIENCE_BASE, scientistsUpTo: 0, workshopOrders: ['аптечка'] });
+    expect(p.workshop.queue).toHaveLength(0);
+    expect(p.econ.money).toBe(300);
+  });
+
+  it('екіпірування: броня зі складу → +2 maxHp боєготовому; гарматний модуль → на винищувач', () => {
+    const p = createParty(42, 'норма');
+    p.workshop.store['легка броня'] = 1;
+    p.workshop.store['гарматний модуль'] = 1;
+    partyBotScienceStep(p, { ...NO_SCIENCE_BASE, scientistsUpTo: 0, equip: true });
+    const first = readySoldiers(p.roster)[0];
+    expect(p.workshop.equipped[first.id]?.armor).toBe(true);
+    expect(first.maxHp).toBe(12); // 10 + 2 (ADR-0058)
+    expect(p.intercept.fighter.gunModule).toBe(true);
+    expect(p.workshop.store['гарматний модуль']).toBe(0);
+    // повторний крок: предмет уже при солдатові/винищувачі — без змін і винятків
+    partyBotScienceStep(p, { ...NO_SCIENCE_BASE, scientistsUpTo: 0, equip: true });
+    expect(first.maxHp).toBe(12);
+    expect(p.intercept.fighter.gunModule).toBe(true);
+  });
+
+  it('гарматний модуль не ставиться поза базою (винищувач у польоті)', () => {
+    const p = createParty(42, 'норма');
+    p.workshop.store['гарматний модуль'] = 1;
+    p.intercept.fighter.status = 'ремонт';
+    partyBotScienceStep(p, { ...NO_SCIENCE_BASE, scientistsUpTo: 0, equip: true });
+    expect(p.intercept.fighter.gunModule).toBeFalsy(); // гейт «лише на базі» (ADR-0058; поле опційне)
+    expect(p.workshop.store['гарматний модуль']).toBe(1);
   });
 });
