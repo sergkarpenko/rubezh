@@ -122,22 +122,17 @@ describe('Синтез: рецепти за моком SoundContext', () => {
     ]);
   });
 
-  it('move: тупотіння — кількість кроків за відстанню ходу (Чебишев, min 1)', () => {
-    const { s, m } = sound();
-    s.play('move'); // прямий виклик — дефолт: 4 кроки
-    expect(m.rec.src).toHaveLength(4);
-    const starts = m.rec.osc.map((o) => o.start);
-    expect(starts.slice(0, 3)).toEqual([0, 0.14, 0.28]);
-    expect(starts[3]).toBeCloseTo(0.42);
+  it('move: подія = крок; серія одного дрену — тупотіння зі зсувом 0.14с', () => {
+    const m = mockContext();
+    const s = createSound({ makeContext: () => m.ctx, store: memStore() });
+    s.battleEvent({ type: 'move', unitId: 's1', from: { x: 2, y: 2 }, to: { x: 3, y: 2 } } as never);
+    expect(m.rec.src).toHaveLength(1); // одна подія move = одна клітинка = один крок
     expect(m.rec.gain[1][0].v).toBe(0.05); // тихо: рухи часті
-    const m2 = mockContext();
-    const s2 = createSound({ makeContext: () => m2.ctx, store: memStore() });
-    s2.battleEvent({ type: 'move', unitId: 's1', from: { x: 2, y: 2 }, to: { x: 3, y: 2 } } as never);
-    expect(m2.rec.src).toHaveLength(1); // хід на 1 клітинку — один крок
-    const m3 = mockContext();
-    const s3 = createSound({ makeContext: () => m3.ctx, store: memStore() });
-    s3.battleEvent({ type: 'move', unitId: 's1', from: { x: 2, y: 2 }, to: { x: 2, y: 6 } } as never);
-    expect(m3.rec.src).toHaveLength(4); // хід на 4 клітинки — чотири кроки
+    // хід на кілька клітинок: події одного дрену — стакато, не зливаються
+    s.battleEvent({ type: 'move', unitId: 's1', from: { x: 3, y: 2 }, to: { x: 4, y: 2 } } as never);
+    s.battleEvent({ type: 'move', unitId: 's1', from: { x: 4, y: 2 }, to: { x: 5, y: 2 } } as never);
+    const starts = m.rec.osc.map((o) => o.start);
+    expect(starts).toEqual([0, 0.14, 0.28]);
   });
 
   it('сигнатури режимів різні: snap — шум+квадрат, aimed — свист sawtooth, auto — коротший', () => {

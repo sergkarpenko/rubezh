@@ -161,19 +161,15 @@ function noise(c: SoundContext, t0: number, dur: number, vol: number): void {
 // Рецепти звуків (ADR-0059): сигнатури режимів пострілу різні — короткий
 // (щільний шумовий спалах + квадрат), прицільний (довгий свист вниз), черга
 // (коротші нижчі кулі-імпульси; зсув кулі черги — у play, стакато-циклом).
-// steps — лише для «тупотіння» руху (кількість клітинок ходу; решта рецептів
-// параметр ігнорує).
-function playRecipe(c: SoundContext, name: SoundName, t: number, steps = 4): void {
+function playRecipe(c: SoundContext, name: SoundName, t: number): void {
   switch (name) {
     case 'click':
       note(c, t, 'square', 660, 440, 0.05, 0.04);
       break;
-    case 'move': // тупотіння: кроки-стуки під час ходу; кількість — за відстанню
-      for (let i = 0; i < steps; i++) {
-        const ti = t + i * 0.14;
-        noise(c, ti, 0.05, 0.07);
-        note(c, ti, 'triangle', 95 - i * 8, 65, 0.05, 0.05 - i * 0.005);
-      }
+    case 'move': // крок: короткий стук (подія move = одна клітинка шляху; серія
+      // клітинок одного дрену звучить тупотінням — стакато-зсув у play)
+      noise(c, t, 0.05, 0.07);
+      note(c, t, 'triangle', 95, 65, 0.05, 0.05);
       break;
     case 'shot-snap':
       noise(c, t, 0.12, 0.18);
@@ -248,6 +244,11 @@ export function createSound(deps: Partial<SoundDeps> = {}): Sound {
   // зливаються в один імпульс. Кулі черги граються стакато-циклом 0/0.09/0.18с
   // («тр-р-р»). Детерміновано: зсув залежить лише від порядку викликів.
   let autoTap = 0;
+  // Тупотіння (move): подія move — одна на клітинку шляху (combat.ts), усі
+  // події ходу дренуються одним батчем з однаковим currentTime — без зсуву
+  // кроки теж зливаються в один стук. Кроки серії зсуваються по 0.14с.
+  let moveTap = 0;
+  let moveAt = -1;
 
   function context(): SoundContext | null {
     if (ctx) return ctx;
@@ -261,7 +262,7 @@ export function createSound(deps: Partial<SoundDeps> = {}): Sound {
     return c;
   }
 
-  function play(name: SoundName, steps = 4): void {
+  function play(name: SoundName): void {
     if (!on) return;
     const c = context();
     if (!c) return;
@@ -273,22 +274,28 @@ export function createSound(deps: Partial<SoundDeps> = {}): Sound {
         /* тихо */
       }
     }
-    // Черга — стакато-зсув кулі; решта звуків — з поточного часу контексту.
+    // Черга — стакато-зсув кулі; кроки одного дрену — стакато-серія «тупотіння»
+    // (подія move = одна клітинка шляху, усі події дрену мають той самий
+    // currentTime; серія замикається новим дреном — новим currentTime).
     if (name === 'shot-auto') {
-      playRecipe(c, name, c.currentTime + autoTap * 0.09, steps);
+      playRecipe(c, name, c.currentTime + autoTap * 0.09);
       autoTap = (autoTap + 1) % 3; // три кулі черги — цикл починається знову
+    } else if (name === 'move') {
+      if (moveAt !== c.currentTime) {
+        moveAt = c.currentTime;
+        moveTap = 0; // нова серія кроків — новий хід
+      }
+      playRecipe(c, name, c.currentTime + moveTap * 0.14);
+      moveTap = Math.min(moveTap + 1, 16); // кап довгих батчів (демо-бій)
     } else {
-      playRecipe(c, name, c.currentTime, steps);
+      playRecipe(c, name, c.currentTime);
     }
   }
 
   return {
     play,
     battleEvent: (e) => {
-      // Тупотіння — за відстанню ходу (Чебишев): подія move несе лише from/to,
-      // ядро не розширюємо — кількість кроків є деталлю відображення (ADR-0059).
-      const steps = e.type === 'move' ? Math.max(1, Math.max(Math.abs(e.to.x - e.from.x), Math.abs(e.to.y - e.from.y))) : 4;
-      for (const s of battleSounds(e)) play(s, steps);
+      for (const s of battleSounds(e)) play(s);
     },
     geoEvent: (e) => {
       for (const s of geoSounds(e)) play(s);
