@@ -33,6 +33,10 @@ export interface JournalDeps {
   workshopLog(): readonly WorkshopEvent[]; // П11.6: події цеху (ADR-0058)
   unitName(id: string): string; // назва юніта бою для тексту пострілів
   onGeoEvent(e: GeoEvent): void; // П7.5 (ADR-0032): анімації перехоплення з geo-подій
+  // П11.7 (ADR-0059): звуки — там, де журнал уже бачить подію (без дублювання
+  // умов); опціональні, щоб ізоляція звуку лишалась тривіальною (критерій 1).
+  onBattleSound?(e: GameEvent): void; // постріл/влучання/смерть з подій бою
+  onGeoSound?(e: GeoEvent): void; // виявлення НЛО, результат місії
   party(): Party; // П9.2: прапорці підказок живуть у Party (сейв-сумісні, ADR-0026)
 }
 
@@ -98,6 +102,8 @@ export function createJournal(deps: JournalDeps): Journal {
       // П7.5 (ADR-0032): події перехоплення — джерело анімацій трасерів повітряного
       // бою (сутово відображення: дії ядра вже застосовані; лог лише читається).
       deps.onGeoEvent(e);
+      // П11.7 (ADR-0059): звук геоподій — drain-контур (умови не дублюємо).
+      deps.onGeoSound?.(e);
     }
     maybeHints(p);
   }
@@ -128,8 +134,11 @@ export function createJournal(deps: JournalDeps): Journal {
     const log = deps.battleLog();
     if (!log) return;
     for (; seenBattleLog < log.length; seenBattleLog++) {
-      const msg = battleEventText(log[seenBattleLog], deps.unitName);
+      const e = log[seenBattleLog];
+      const msg = battleEventText(e, deps.unitName);
       if (msg) journal(msg.text, msg.cls, 'battle');
+      // П11.7 (ADR-0059): постріл/влучання/смерть → звук (drain-контур журналу).
+      deps.onBattleSound?.(e);
     }
   }
 

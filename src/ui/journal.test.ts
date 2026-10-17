@@ -286,6 +286,26 @@ describe('Journal: drain* — seen-трекінг подій', () => {
     j2.drainBattle(); // seen-трекінг: другий виклик нічого не додає
     expect(document.querySelectorAll('#log li')).toHaveLength(1);
   });
+
+  it('П11.7 (ADR-0059): drain викликає хуки звуку для кожної події один раз (seen-трекінг)', () => {
+    const onBattleSound = vi.fn();
+    const onGeoSound = vi.fn();
+    const battleLog: GameEvent[] = [
+      evBattle({ type: 'move', unitId: 's1', from: { x: 0, y: 0 }, to: { x: 1, y: 0 } }),
+      evBattle({ type: 'shot', shooterId: 's1', targetId: 'a1', mode: 'snap', hit: true, damage: 3 }),
+    ];
+    const geoLog: GeoEvent[] = [evGeo({ type: 'ufo_detected', ufoId: 'u1', pos: { x: 1, y: 1 }, minute: 5 })];
+    const j = createJournal(makeDeps({ battleLog: () => battleLog, geoLog: () => geoLog, onBattleSound, onGeoSound }));
+    j.drainBattle();
+    j.drainGeo();
+    // звук бачить усі події (move включно) — фільтрує мапінг у аудіо-модулі
+    expect(onBattleSound.mock.calls.map((c) => c[0].type)).toEqual(['move', 'shot']);
+    expect(onGeoSound).toHaveBeenCalledTimes(1);
+    j.drainBattle(); // другий дрен — без повторних звуків
+    j.drainGeo();
+    expect(onBattleSound).toHaveBeenCalledTimes(2);
+    expect(onGeoSound).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('Journal: adopt/resetBattle', () => {

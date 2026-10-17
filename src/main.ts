@@ -26,6 +26,8 @@ import { createWorkshopPanel } from './ui/workshop-panel';
 // П9.1 (Фаза 9): екран «Як грати» — модуль src/ui/help.ts (перший візит + кнопка «?»).
 import { createHelp } from './ui/help';
 import { createJournal, type LogFilter } from './ui/journal';
+// П11.7 (ADR-0059): звуковий шар — WebAudio синтезом кодом, модуль src/ui/audio.ts.
+import { createSound } from './ui/audio';
 // пR.2 (ADR-0037): панелі стану і топбара — модуль src/ui/panels.ts; масштаб сітки — src/ui/grid.ts.
 import { createPanels } from './ui/panels';
 import { GCELL } from './ui/grid';
@@ -54,6 +56,11 @@ initPixelSprites((w: number, h: number) => {
   return c;
 });
 
+// П11.7 (ADR-0059): звуковий шар — суто відображення: не чіпає стан і
+// траєкторії; події бою/геосцени подає drain-контур журналу, точкові
+// виклики — кліки UI. Створюється ДО журналу: хуки звуку йдуть у його deps.
+const sound = createSound();
+
 // Порядок оголошень важливий (TDZ — див. docs/workflow.md): усі змінні стану,
 // які newParty() чи обробники пишуть, оголошуються ДО першого виклику newParty().
 // пR.2 (ADR-0037): журнал подій (категорії і фільтри-вкладки — ADR-0027,
@@ -71,6 +78,9 @@ const journalUI = createJournal({
   onGeoEvent: (e) => {
     if (hasRaf) geoAnim.push(...interceptAnims(e as InterceptEvent));
   },
+  // П11.7 (ADR-0059): звуки подій бою і геосцени — через drain-контур журналу.
+  onBattleSound: (e) => sound.battleEvent(e),
+  onGeoSound: (e) => sound.geoEvent(e),
   party: () => party, // П9.2: прапорці підказок журналу — у Party (сейв-сумісні)
 });
 const journal = journalUI.add; // виклики journal(text, cls, cat) у шарі застосунку без змін
@@ -377,6 +387,22 @@ if (typeof document !== 'undefined') {
   bc.addEventListener('mouseleave', input.battleCanvasLeave);
   // ADR-0027 (П6.4): гарячі клавіші — на document (бій у фокусі канви не потрібен)
   document.addEventListener('keydown', input.onKeyDown);
+  // П11.7 (ADR-0059): клік UI — делегований слухач (усі кнопки застосунку);
+  // перший звук іде з жесту користувача — AudioContext розблоковується (autoplay).
+  document.addEventListener('click', (ev) => {
+    if ((ev.target as HTMLElement | null)?.closest('button')) sound.play('click');
+  });
+  // П11.7 (ADR-0059): тумблер звуку у топбарі — стан у localStorage rubezh.sound,
+  // поза сейвом (ADR-0026); підпис кнопки синхронізується з тумблером.
+  const btnSound = el<HTMLButtonElement>('btn-sound');
+  const renderSound = (): void => {
+    btnSound.textContent = sound.enabled() ? 'Звук: увімк' : 'Звук: вимк';
+  };
+  btnSound.onclick = () => {
+    sound.toggle();
+    renderSound();
+  };
+  renderSound();
   savePanel.detectStorage();
   // П9.1 (EARS Фази 9): перший візит (усі слоти порожні або сховище недоступне)
   // — показ «Як грати»; кнопка «?» у топбарі відкриває його будь-коли.
