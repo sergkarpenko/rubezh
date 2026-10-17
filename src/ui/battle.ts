@@ -9,6 +9,8 @@
 
 import { ALIEN_SPAWN, SQUAD_SPAWN, completeMission, createMission, missionOutcome, type Mission } from '../core/mission';
 import { applyMissionResult, missionSquad } from '../core/squad';
+// П11.3 (ADR-0058): предмети загиблих зникають разом з ними (перма-смерть).
+import { removeLostEquipment } from '../core/workshop';
 import { creditMissionBonus } from '../core/economy';
 import {
   OVERWATCH_AP_COST,
@@ -330,6 +332,8 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
     ui.battleResult = outcome;
     const party = deps.getParty();
     const aftermath = applyMissionResult(party.roster, mission.state);
+    // П11.3 (ADR-0058): предмети загиблих на склад не повертаються (перма-смерть).
+    removeLostEquipment(party.workshop, aftermath.lost);
     completeMission(party.geo, mission.briefing.ufoId, outcome);
     for (const s of aftermath.lost) deps.journal('✝ ' + s.name + ' загинув у бою', 'lose', 'battle');
     for (const s of aftermath.wounded)

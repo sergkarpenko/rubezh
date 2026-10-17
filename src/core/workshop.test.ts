@@ -11,7 +11,10 @@ import { advanceTime, createGeoGame, geoTick, type GeoState } from './geo';
 import type { StatefulRng } from './combat';
 import { createResearch, type ResearchState } from './research';
 import { createWorkshop, emptyStore, orderItem, WORKSHOP_CATALOG, workshopTick } from './workshop';
+import { ARMOR_MAX_HP_BONUS, OPTICS_ACCURACY_BONUS, equipItem, removeLostEquipment, unequipItem, type WorkshopState } from './workshop';
 import type { EconomyState } from './economy';
+import { makeSoldier } from './mission';
+import { createRoster, missionSquad, type Roster } from './squad';
 
 // Геосцена без НЛО, щоб тести не залежали від спавну (прецедент research.test.ts).
 function geoNoUfo(seed = 7): GeoState {
@@ -172,5 +175,145 @@ describe('ізоляція від геосцени (критерій П11.3: geo
     advanceTime(geo, 48);
     workshopTick(workshop);
     expect(workshop).toEqual(createWorkshop());
+  });
+});
+
+// Склад, поповнений напряму (тести екіпірування не про виробництво).
+function stockedWorkshop(): WorkshopState {
+  const workshop = createWorkshop();
+  workshop.store['легка броня'] = 1;
+  workshop.store['оптичний приціл'] = 1;
+  workshop.store['аптечка'] = 2;
+  workshop.store['осколкова граната'] = 1;
+  return workshop;
+}
+
+describe('екіпірування ростеру (ADR-0058: броня/оптика постійні, аптечка/граната витратні)', () => {
+  it('броня: з складу на солдата, +maxHp і +hp — солдат не стає пораненим', () => {
+    const workshop = stockedWorkshop();
+    const soldier = makeSoldier('s1', 'Іван');
+    equipItem(workshop, soldier, 'легка броня');
+    expect(workshop.store['легка броня']).toBe(0);
+    expect(soldier.maxHp).toBe(10 + ARMOR_MAX_HP_BONUS);
+    expect(soldier.hp).toBe(soldier.maxHp);
+    expect(workshop.equipped['s1']).toEqual({ armor: true, optics: false, medkit: false, grenade: false });
+    expect(workshop.log.at(-1)).toEqual({ type: 'equip', soldierId: 's1', id: 'легка броня' });
+  });
+
+  it('оптика: +0.05 точності з капом 0.95 (ADR-0004)', () => {
+    const workshop = stockedWorkshop();
+    const soldier = makeSoldier('s1', 'Іван');
+    equipItem(workshop, soldier, 'оптичний приціл');
+    expect(soldier.firingAccuracy).toBeCloseTo(0.6 + OPTICS_ACCURACY_BONUS, 10);
+    expect(workshop.store['оптичний приціл']).toBe(0);
+    // кап: снайпер на межі 0.95 вище не піднімається
+    const sniperShop = stockedWorkshop();
+    const sniper = makeSoldier('s2', 'Олена');
+    sniper.firingAccuracy = 0.95;
+    equipItem(sniperShop, sniper, 'оптичний приціл');
+    expect(sniper.firingAccuracy).toBe(0.95);
+  });
+
+  it('аптечка і граната: по одній на місію — друга не надягається', () => {
+    const workshop = stockedWorkshop();
+    const soldier = makeSoldier('s1', 'Іван');
+    equipItem(workshop, soldier, 'аптечка');
+    equipItem(workshop, soldier, 'осколкова граната');
+    expect(workshop.equipped['s1']).toEqual({ armor: false, optics: false, medkit: true, grenade: true });
+    expect(() => equipItem(workshop, soldier, 'аптечка')).toThrow('Предмет уже при солдатові: аптечка');
+    expect(workshop.store['аптечка']).toBe(1); // невдала спроба нічого не списала
+  });
+
+  it('порожній склад — throw, стан солдата не змінюється', () => {
+    const workshop = createWorkshop();
+    const soldier = makeSoldier('s1', 'Іван');
+    expect(() => equipItem(workshop, soldier, 'аптечка')).toThrow('Предмета немає на складі: аптечка');
+    expect(soldier.maxHp).toBe(10);
+    expect(workshop.equipped).toEqual({});
+  });
+
+  it('гаркатний модуль на солдатові не носиться — throw українською', () => {
+    const workshop = stockedWorkshop();
+    const soldier = makeSoldier('s1', 'Іван');
+    expect(() => equipItem(workshop, soldier, 'гаркатний модуль')).toThrow('озброєння винищувача');
+    expect(() => unequipItem(workshop, soldier, 'гаркатний модуль')).toThrow('озброєння винищувача');
+  });
+
+  it('зняття броні: предмет на склад, hp клемується новим maxHp', () => {
+    const workshop = stockedWorkshop();
+    const soldier = makeSoldier('s1', 'Іван');
+    equipItem(workshop, soldier, 'легка броня');
+    soldier.hp = 5; // поранений у броні
+    unequipItem(workshop, soldier, 'легка броня');
+    expect(soldier.maxHp).toBe(10);
+    expect(soldier.hp).toBe(5);
+    expect(workshop.store['легка броня']).toBe(1);
+    expect(workshop.equipped).toEqual({}); // порожній запис не тримали
+    expect(workshop.log.at(-1)).toEqual({ type: 'unequip', soldierId: 's1', id: 'легка броня' });
+  });
+
+  it('зняття оптики: точність повертається', () => {
+    const workshop = stockedWorkshop();
+    const soldier = makeSoldier('s1', 'Іван');
+    equipItem(workshop, soldier, 'оптичний приціл');
+    unequipItem(workshop, soldier, 'оптичний приціл');
+    expect(soldier.firingAccuracy).toBeCloseTo(0.6, 10);
+    expect(workshop.store['оптичний приціл']).toBe(1);
+  });
+
+  it('зняття одного предмету з кількох: запис екіпірування лишається', () => {
+    const workshop = stockedWorkshop();
+    const soldier = makeSoldier('s1', 'Іван');
+    equipItem(workshop, soldier, 'легка броня');
+    equipItem(workshop, soldier, 'аптечка');
+    unequipItem(workshop, soldier, 'легка броня');
+    expect(workshop.equipped['s1']).toEqual({ armor: false, optics: false, medkit: true, grenade: false });
+    expect(workshop.store['легка броня']).toBe(1);
+    expect(workshop.store['аптечка']).toBe(1); // аптечина залишилась при солдатові
+  });
+
+  it('зняття того, чого немає на солдатові — throw', () => {
+    const workshop = stockedWorkshop();
+    const soldier = makeSoldier('s1', 'Іван');
+    expect(() => unequipItem(workshop, soldier, 'аптечка')).toThrow('Предмета немає на солдатові: аптечка');
+  });
+});
+
+describe('передача ефектів у місію (критерій П11.3)', () => {
+  it('загін місії — ті самі юніти ростеру: броня і оптика з ними (ADR-0058)', () => {
+    const workshop = stockedWorkshop();
+    const roster: Roster = createRoster(3);
+    equipItem(workshop, roster.soldiers[0], 'легка броня');
+    equipItem(workshop, roster.soldiers[0], 'оптичний приціл');
+    const squad = missionSquad(roster);
+    expect(squad[0].maxHp).toBe(roster.soldiers[0].maxHp);
+    expect(squad[0].maxHp).toBe(10 + ARMOR_MAX_HP_BONUS);
+    expect(squad[0].firingAccuracy).toBeCloseTo(0.6 + OPTICS_ACCURACY_BONUS, 10);
+    // решта загону без предметів — бій без предметів байт-у-байт незмінний
+    expect(squad[1].maxHp).toBe(10);
+    expect(squad[1].firingAccuracy).toBe(0.6);
+  });
+});
+
+describe('перма-смерть предметів (критерій П11.3: загиблий — предмети зникають)', () => {
+  it('предмети загиблого не повертаються на склад, запис вилучається, подія в журналі', () => {
+    const workshop = stockedWorkshop();
+    const roster = createRoster(3);
+    equipItem(workshop, roster.soldiers[0], 'легка броня');
+    equipItem(workshop, roster.soldiers[0], 'аптечка');
+    const storeBefore = { ...workshop.store };
+    removeLostEquipment(workshop, [roster.soldiers[0]]);
+    expect(workshop.equipped).toEqual({});
+    expect(workshop.store).toEqual(storeBefore); // на склад НЕ повернулось
+    expect(workshop.log.at(-1)).toEqual({ type: 'equipment_lost', soldierId: 's1', items: ['armor', 'medkit'] });
+  });
+
+  it('загиблий без предметів — no-op без події', () => {
+    const workshop = stockedWorkshop();
+    const roster = createRoster(3);
+    const logBefore = workshop.log.length;
+    removeLostEquipment(workshop, [roster.soldiers[1]]);
+    expect(workshop.log.length).toBe(logBefore);
+    expect(workshop.equipped).toEqual({});
   });
 });

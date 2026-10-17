@@ -21,6 +21,7 @@
 import { spend, type EconomyState } from './economy';
 import { type DifficultyPreset, DEFAULT_PRESET, DIFFICULTY_MULTIPLIERS } from './campaign';
 import type { ProjectId, ResearchState } from './research';
+import { HIT_CHANCE_CAP, type Unit } from './combat';
 
 // Предмети цеху — завершені проєкти науки, крім «Розширення лабораторії».
 export type ItemId = Exclude<ProjectId, 'розширення лабораторії'>;
@@ -41,29 +42,56 @@ export const WORKSHOP_CATALOG: Record<ItemId, WorkshopItemDef> = {
 
 export const ITEM_IDS = Object.keys(WORKSHOP_CATALOG) as ItemId[];
 
+// Предмети, що екіпіруються на солдата ростеру (ADR-0058). Гаркатний модуль —
+// озброєння винищувача, на солдаті він не носиться (встановлення — intercept).
+export type SoldierItemId = Exclude<ItemId, 'гаркатний модуль'>;
+
+export const ARMOR_MAX_HP_BONUS = 2; // «Легка броня»: +2 maxHp (ADR-0058)
+export const OPTICS_ACCURACY_BONUS = 0.05; // «Оптичний приціл»: +0.05 точності (кап 0.95, ADR-0004)
+
 export type WorkshopEvent =
   | { type: 'order'; id: ItemId; ticks: number } // замовлення оплачено і поставлено в чергу
-  | { type: 'produced'; id: ItemId }; // предмет готовий → склад
+  | { type: 'produced'; id: ItemId } // предмет готовий → склад
+  | { type: 'equip'; soldierId: string; id: SoldierItemId } // предмет зі складу на солдата
+  | { type: 'unequip'; soldierId: string; id: SoldierItemId } // предмет з солдата назад на склад
+  | { type: 'equipment_lost'; soldierId: string; items: SoldierItemId[] }; // предмети загиблого зникли (перма-смерть)
 
 export interface WorkshopOrder {
   id: ItemId;
   ticksLeft: number; // тики геосцени до готовності
 }
 
+// Екіпірування солдата ростеру (ADR-0058): броня і оптика — постійні
+// покращення (по одному кожного типу), аптечка і граната — витратні
+// (по одній на місію, списуються при використанні — П11.4). Поле true =
+// предмет при солдатові. Екіпірування/зняття — лише на геосцені
+// (панель під час бою недоступна — П11.6; ядро стану бою не знає).
+export interface SoldierEquipment {
+  armor: boolean; // «легка броня»
+  optics: boolean; // «оптичний приціл»
+  medkit: boolean; // «аптечка»
+  grenade: boolean; // «осколкова граната»
+}
+
+function emptyEquipment(): SoldierEquipment {
+  return { armor: false, optics: false, medkit: false, grenade: false };
+}
+
 export interface WorkshopState {
   queue: WorkshopOrder[]; // черга виробництва: перше — активне замовлення
   store: Record<ItemId, number>; // склад: лічильники готових предметів
+  equipped: Record<string, SoldierEquipment>; // id солдата → екіпірування
   log: WorkshopEvent[]; // події цеху для журналу (П11.6)
 }
 
-// Порожній склад: усі предмети каталогу з нульовими лічильниками. Експортовано
-// для сейву (мерж із збереженим складом лишає валідні ключі майбутніх предметів).
+// Порожній склад: усі предмети каталогу з нульовими лічильниками (мерж у сейві
+// лишає валідні ключі майбутніх предметів).
 export function emptyStore(): Record<ItemId, number> {
   return { аптечка: 0, 'осколкова граната': 0, 'оптичний приціл': 0, 'легка броня': 0, 'гаркатний модуль': 0 };
 }
 
 export function createWorkshop(): WorkshopState {
-  return { queue: [], store: emptyStore(), log: [] };
+  return { queue: [], store: emptyStore(), equipped: {}, log: [] };
 }
 
 // Замовлення предмета в цех (ADR-0058): оплата коштами ОДРУЧ при
@@ -104,5 +132,98 @@ export function workshopTick(workshop: WorkshopState): void {
     workshop.queue.shift();
     workshop.store[active.id] += 1;
     workshop.log.push({ type: 'produced', id: active.id });
+  }
+}
+
+// Екіпірування солдата предметом зі складу (ADR-0058): списує лічильник
+// складу, ставить предмет на солдата. Броня/оптика — постійні покращення
+// (по одному кожного типу): броня +2 maxHp (разом з hp — солдат не стає
+// «пораненим» від екіпірування), оптика +0.05 точності з капом 0.95
+// (ADR-0004). Аптечка/граната — витратні, по одній на місію: солдат несе
+// не більше однієї кожної (ADR-0058). Порушення → throw з українським
+// текстом, стан не змінюється. Гаркатний модуль на солдатові не носиться.
+export function equipItem(workshop: WorkshopState, soldier: Unit, id: ItemId): void {
+  if (id === 'гаркатний модуль') {
+    throw new Error('Гаркатний модуль — озброєння винищувача, на солдатові не носиться');
+  }
+  const soldierId = SoldierItemIdOf(id);
+  if (workshop.store[id] <= 0) {
+    throw new Error('Предмета немає на складі: ' + id);
+  }
+  const eq = equipmentOf(workshop, soldier.id);
+  if (eq[soldierId]) {
+    throw new Error('Предмет уже при солдатові: ' + id);
+  }
+  eq[soldierId] = true;
+  workshop.store[id] -= 1;
+  if (soldierId === 'armor') {
+    soldier.maxHp += ARMOR_MAX_HP_BONUS;
+    soldier.hp += ARMOR_MAX_HP_BONUS;
+  }
+  if (soldierId === 'optics') {
+    soldier.firingAccuracy = Math.min(HIT_CHANCE_CAP, soldier.firingAccuracy + OPTICS_ACCURACY_BONUS);
+  }
+  workshop.equipped[soldier.id] = eq;
+  workshop.log.push({ type: 'equip', soldierId: soldier.id, id });
+}
+
+// Зняття предмета з солдата назад на склад (ADR-0058: екіпірування/зняття —
+// лише на геосцені): повертає лічильник складу, прибирає покращення.
+// Поранений солдат при знятті броні не «оздоровлюється»: hp клемується
+// новим maxHp. Предмета на солдатові немає → throw.
+export function unequipItem(workshop: WorkshopState, soldier: Unit, id: ItemId): void {
+  if (id === 'гаркатний модуль') {
+    throw new Error('Гаркатний модуль — озброєння винищувача, на солдатові не носиться');
+  }
+  const soldierId = SoldierItemIdOf(id);
+  const eq = workshop.equipped[soldier.id];
+  if (!eq || !eq[soldierId]) {
+    throw new Error('Предмета немає на солдатові: ' + id);
+  }
+  eq[soldierId] = false;
+  workshop.store[id] += 1;
+  if (soldierId === 'armor') {
+    soldier.maxHp -= ARMOR_MAX_HP_BONUS;
+    soldier.hp = Math.min(soldier.hp, soldier.maxHp);
+  }
+  if (soldierId === 'optics') {
+    soldier.firingAccuracy -= OPTICS_ACCURACY_BONUS;
+  }
+  // порожній запис екіпірування не тримаємо (чистий стан у сейві)
+  if (!eq.armor && !eq.optics && !eq.medkit && !eq.grenade) {
+    delete workshop.equipped[soldier.id];
+  }
+  workshop.log.push({ type: 'unequip', soldierId: soldier.id, id });
+}
+
+// Предмети загиблих зникають разом з ними (ADR-0058: перма-смерть наскрізна,
+// на склад НЕ повертаються): запис екіпірування вилучається, подія в журналі.
+// Викликає шар застосунку після applyMissionResult з aftermath.lost.
+export function removeLostEquipment(workshop: WorkshopState, lost: Unit[]): void {
+  for (const soldier of lost) {
+    const eq = workshop.equipped[soldier.id];
+    if (!eq) continue;
+    const items = (Object.keys(eq) as (keyof SoldierEquipment)[]).filter((k) => eq[k]);
+    delete workshop.equipped[soldier.id];
+    workshop.log.push({ type: 'equipment_lost', soldierId: soldier.id, items });
+  }
+}
+
+// Запис екіпірування солдата (створюється порожнім при першому зверненні).
+function equipmentOf(workshop: WorkshopState, soldierId: string): SoldierEquipment {
+  return workshop.equipped[soldierId] ?? emptyEquipment();
+}
+
+// Ключ запису екіпірування за предметом каталогу.
+function SoldierItemIdOf(id: ItemId): keyof SoldierEquipment {
+  switch (id) {
+    case 'легка броня':
+      return 'armor';
+    case 'оптичний приціл':
+      return 'optics';
+    case 'аптечка':
+      return 'medkit';
+    case 'осколкова граната':
+      return 'grenade';
   }
 }

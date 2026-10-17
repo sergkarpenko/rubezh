@@ -10,7 +10,7 @@ import { economyTick } from './economy';
 import { hireSoldier, hospitalTick } from './squad';
 import { mulberry32, type StatefulRng } from './combat';
 import { createResearch, hireScientist, researchTick, startProject } from './research';
-import { createWorkshop, orderItem, workshopTick, WORKSHOP_CATALOG } from './workshop';
+import { createWorkshop, equipItem, orderItem, workshopTick, WORKSHOP_CATALOG } from './workshop';
 import {
   SAVE_SLOTS,
   SAVE_VERSION,
@@ -467,6 +467,36 @@ describe('save: цех (П11.3, ADR-0026)', () => {
     const p = createParty(42);
     const broken = JSON.parse(serializeParty(p, 'T')) as Record<string, unknown>;
     (broken.state as Record<string, unknown>).workshop = { queue: 'очередь' };
+    expect(() => deserializeParty(JSON.stringify(broken))).toThrow('цех');
+  });
+
+  it('round-trip: екіпірування ростеру відновлюється разом зі складом (П11.3)', () => {
+    const p = createParty(42);
+    p.workshop.store['легка броня'] = 1;
+    p.workshop.store['аптечка'] = 1;
+    equipItem(p.workshop, p.roster.soldiers[0], 'легка броня');
+    equipItem(p.workshop, p.roster.soldiers[0], 'аптечка');
+    expect(p.roster.soldiers[0].maxHp).toBe(12);
+    const restored = deserializeParty(serializeParty(p, 'T'));
+    expect(restored.workshop.equipped).toEqual(p.workshop.equipped);
+    expect(restored.roster.soldiers[0].maxHp).toBe(12);
+    expect(serializeParty(restored, 'T')).toBe(serializeParty(p, 'T'));
+  });
+
+  it('сейв без поля equipped (сейв кроку виробництва П11.3) — порожнє екіпірування', () => {
+    const p = createParty(42);
+    p.workshop.store['аптечка'] = 1;
+    const older = JSON.parse(serializeParty(p, 'T')) as Record<string, unknown>;
+    delete ((older.state as Record<string, unknown>).workshop as Record<string, unknown>).equipped;
+    const restored = deserializeParty(JSON.stringify(older));
+    expect(restored.workshop.equipped).toEqual({});
+    expect(restored.workshop.store['аптечка']).toBe(1);
+  });
+
+  it('поле equipped пошкоджене — throw українською', () => {
+    const p = createParty(42);
+    const broken = JSON.parse(serializeParty(p, 'T')) as Record<string, unknown>;
+    ((broken.state as Record<string, unknown>).workshop as Record<string, unknown>).equipped = 'сумка';
     expect(() => deserializeParty(JSON.stringify(broken))).toThrow('цех');
   });
 });
