@@ -31,9 +31,10 @@ describe('battleSounds/geoSounds: подія → набір звуків (ADR-00
     expect(battleSounds(evB({ type: 'shot', mode: 'aimed', hit: false }))).toEqual(['shot-aimed']);
     expect(battleSounds(evB({ type: 'shot', mode: 'auto', hit: true }))).toEqual(['shot-auto', 'hit']);
   });
-  it('смерть — звук; інші події бою — без звуку', () => {
+  it('смерть і рух — звук; інші події бою — без звуку', () => {
     expect(battleSounds(evB({ type: 'death' }))).toEqual(['death']);
-    expect(battleSounds(evB({ type: 'move' }))).toEqual([]);
+    expect(battleSounds(evB({ type: 'move' }))).toEqual(['move']);
+    expect(battleSounds(evB({ type: 'turn' }))).toEqual([]);
     expect(battleSounds(evB({ type: 'turn' }))).toEqual([]);
     expect(battleSounds(evB({ type: 'overwatch' }))).toEqual([]);
     expect(battleSounds(evB({ type: 'heal' }))).toEqual([]);

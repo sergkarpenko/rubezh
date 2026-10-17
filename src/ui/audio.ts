@@ -10,8 +10,8 @@ import type { GameEvent, ShotMode } from '../core/combat';
 import type { GeoEvent } from '../core/geo';
 
 // Набір звуків (ADR-0059): постріли трьох режимів (різні сигнатури), влучання,
-// смерть, виявлення НЛО, результат місії (перемога/поразка), клік UI.
-export type SoundName = 'click' | 'shot-snap' | 'shot-aimed' | 'shot-auto' | 'hit' | 'death' | 'detect' | 'win' | 'lose';
+// смерть, рух (крок), виявлення НЛО, результат місії (перемога/поразка), клік UI.
+export type SoundName = 'click' | 'move' | 'shot-snap' | 'shot-aimed' | 'shot-auto' | 'hit' | 'death' | 'detect' | 'win' | 'lose';
 
 // --- Мінімальні структурні інтерфейси WebAudio (для моків у тестах) ---
 
@@ -92,11 +92,12 @@ function browserContext(): SoundContext | null {
 
 const SHOT_SOUND: Record<ShotMode, SoundName> = { snap: 'shot-snap', aimed: 'shot-aimed', auto: 'shot-auto' };
 
-// Постріл — звук режиму; влучання — додатковий «удар». Рух/хід/дозор/лікування/
-// граната — без звуку (скоуп ADR-0059).
+// Постріл — звук режиму; влучання — додатковий «удар»; рух — «тупотіння»
+// (серія кроків). Хід/дозор/лікування/граната — без звуку (скоуп ADR-0059).
 export function battleSounds(e: GameEvent): SoundName[] {
   if (e.type === 'shot') return e.hit ? [SHOT_SOUND[e.mode], 'hit'] : [SHOT_SOUND[e.mode]];
   if (e.type === 'death') return ['death'];
+  if (e.type === 'move') return ['move'];
   return [];
 }
 
@@ -159,12 +160,16 @@ function noise(c: SoundContext, t0: number, dur: number, vol: number): void {
 
 // Рецепти звуків (ADR-0059): сигнатури режимів пострілу різні — короткий
 // (щільний шумовий спалах + квадрат), прицільний (довгий свист вниз), черга
-// (коротший різкий імпульс; три події черги = три кулі).
-function playRecipe(c: SoundContext, name: SoundName): void {
-  const t = c.currentTime;
+// (коротші нижчі кулі-імпульси; зсув кулі черги — у play, стакато-циклом).
+function playRecipe(c: SoundContext, name: SoundName, t: number): void {
   switch (name) {
     case 'click':
       note(c, t, 'square', 660, 440, 0.05, 0.04);
+      break;
+    case 'move': // крок: короткий стук (подія move = одна клітинка шляху; серія
+      // клітинок одного дрену звучить тупотінням — стакато-зсув у play)
+      noise(c, t, 0.05, 0.07);
+      note(c, t, 'triangle', 95, 65, 0.05, 0.05);
       break;
     case 'shot-snap':
       noise(c, t, 0.12, 0.18);
@@ -174,8 +179,8 @@ function playRecipe(c: SoundContext, name: SoundName): void {
       note(c, t, 'sawtooth', 900, 240, 0.18, 0.08);
       break;
     case 'shot-auto':
-      noise(c, t, 0.07, 0.14);
-      note(c, t, 'square', 160, 70, 0.07, 0.09);
+      noise(c, t, 0.05, 0.16);
+      note(c, t, 'square', 150, 80, 0.05, 0.09);
       break;
     case 'hit':
       note(c, t, 'triangle', 150, 55, 0.12, 0.16);
@@ -235,6 +240,15 @@ export function createSound(deps: Partial<SoundDeps> = {}): Sound {
   let on = readState() !== '0'; // дефолт — увімкнено (ADR-0059)
   let ctx: SoundContext | null = null;
   let noApi = false; // WebAudio відсутній — далі не пробуємо (один гейт)
+  // Черга (auto): три кулі атаки дренуються журналом одразу — без зсуву вони
+  // зливаються в один імпульс. Кулі черги граються стакато-циклом 0/0.09/0.18с
+  // («тр-р-р»). Детерміновано: зсув залежить лише від порядку викликів.
+  let autoTap = 0;
+  // Тупотіння (move): подія move — одна на клітинку шляху (combat.ts), усі
+  // події ходу дренуються одним батчем з однаковим currentTime — без зсуву
+  // кроки теж зливаються в один стук. Кроки серії зсуваються по 0.14с.
+  let moveTap = 0;
+  let moveAt = -1;
 
   function context(): SoundContext | null {
     if (ctx) return ctx;
@@ -260,7 +274,22 @@ export function createSound(deps: Partial<SoundDeps> = {}): Sound {
         /* тихо */
       }
     }
-    playRecipe(c, name);
+    // Черга — стакато-зсув кулі; кроки одного дрену — стакато-серія «тупотіння»
+    // (подія move = одна клітинка шляху, усі події дрену мають той самий
+    // currentTime; серія замикається новим дреном — новим currentTime).
+    if (name === 'shot-auto') {
+      playRecipe(c, name, c.currentTime + autoTap * 0.09);
+      autoTap = (autoTap + 1) % 3; // три кулі черги — цикл починається знову
+    } else if (name === 'move') {
+      if (moveAt !== c.currentTime) {
+        moveAt = c.currentTime;
+        moveTap = 0; // нова серія кроків — новий хід
+      }
+      playRecipe(c, name, c.currentTime + moveTap * 0.14);
+      moveTap = Math.min(moveTap + 1, 16); // кап довгих батчів (демо-бій)
+    } else {
+      playRecipe(c, name, c.currentTime);
+    }
   }
 
   return {
