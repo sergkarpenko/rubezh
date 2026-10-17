@@ -15,7 +15,7 @@ import {
   startRepair,
   type InterceptChoice,
 } from '../core/intercept';
-import { HIRE_PRICE } from '../core/economy';
+import { hirePrice } from '../core/economy';
 // П11.6 (ADR-0058): екіпірування в картці солдата ростеру — броня/оптика
 // (постійні), аптечка/граната (витратні); дії — лише на геосцені.
 import { equipItem, unequipItem, type SoldierEquipment, type SoldierItemId } from '../core/workshop';
@@ -192,10 +192,10 @@ export function createPanels(deps: PanelsDeps): Panels {
     el('money').textContent = moneyText;
     el('money-card').textContent = moneyText;
     const hire = el<HTMLButtonElement>('btn-hire');
-    hire.disabled = deps.isGameOver() || party.econ.money < HIRE_PRICE;
-    hire.title = hire.disabled
-      ? 'Недостатньо грошей (ціна найму ' + HIRE_PRICE + ')'
-      : 'Новий солдат у кінець ростеру (−' + HIRE_PRICE + ')';
+    // П11.8: ціна найму за пресетом (ADR-0058 — «легкий» 120, «норма» 100, «складний» 90).
+    const hireCost = hirePrice(party.campaign.preset);
+    hire.disabled = deps.isGameOver() || party.econ.money < hireCost;
+    hire.title = hire.disabled ? 'Недостатньо грошей (ціна найму ' + hireCost + ')' : 'Новий солдат у кінець ростеру (−' + hireCost + ')';
   }
 
   // П7.5 (ADR-0032/0027): контекст-стрічка повітряного бою у фокусній зоні — видима лише
@@ -306,7 +306,7 @@ export function createPanels(deps: PanelsDeps): Panels {
     if (soldiers.length === 0) {
       box.innerHTML =
         '<div style="color:#ff9c9c">Загін втрачено.</div>' +
-        (party.econ.money >= HIRE_PRICE
+        (party.econ.money >= hirePrice(party.campaign.preset)
           ? '<div class="meta">Найм доступний — кнопка «Найм солдата».</div>'
           : '<div class="meta">Грошей на найм немає.</div>');
       return;

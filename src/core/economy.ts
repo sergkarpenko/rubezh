@@ -19,7 +19,16 @@ import { type DifficultyPreset, DEFAULT_PRESET, DIFFICULTY_MULTIPLIERS } from '.
 
 export const START_MONEY = 300; // стартовий баланс партії (ADR-0021)
 export const DAILY_ALLOWANCE = 75; // дотація за завершену добу геосцени (П8.6: 100 → 75)
-export const HIRE_PRICE = 100; // ціна найму одного солдата (витрати — П4.3)
+export const HIRE_PRICE = 100; // базова ціна найму одного солдата (ADR-0021)
+
+// П11.8 (тунінг за симуляціями, docs/reports/p11.8-tuning.md): ціна найму
+// солдата синхронізована з economyMultiplier пресету (ADR-0058 «множники
+// діють лише на коштовність»; досі flat 100 — виняток із часів П4.3).
+// Вердикт власника 2026-10-18: комбо-B probe-гріду — «легкий» 120, «норма»
+// 100, «складний» 90. Дефолт «норма» — старі виклики без змін траєкторій.
+export function hirePrice(preset: DifficultyPreset = DEFAULT_PRESET): number {
+  return Math.round(HIRE_PRICE * DIFFICULTY_MULTIPLIERS[preset].economyMultiplier);
+}
 
 // Премія за перемогу в місії за тип НЛО (ADR-0021): важча ціль — більша премія.
 // П8.6 (тунінг за симуляціями, docs/reports/p8.6-tuning.md): премії знижено — у базовій

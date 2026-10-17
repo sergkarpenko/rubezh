@@ -13,7 +13,7 @@
 // mission.ts приймає загін ззовні (opts.squad). Цикл шару застосунка:
 //   createRoster() → missionSquad(roster) → createMission(geo, ufoId, { squad })
 //   → бій → applyMissionResult(roster, mission.state) → completeMission(geo, ufoId, …)
-// Втрати покриваються наймом (П4.3): hireSoldier(econ, roster) списує HIRE_PRICE
+// Втрати покриваються наймом (П4.3): hireSoldier(econ, roster) списує hirePrice
 // з EconomyState і додає солдата в кінець ростеру (ветерани йдуть у бій першими);
 // fireSoldier(roster, id) — звільнення на прохання гравця.
 // Перма-смерть наскрізна: солдат, загиблий у бою, вилучається з ростеру назавжди.
@@ -22,7 +22,7 @@
 // відлік веде hospitalTick(roster) — 1 тік геосцени, HEAL_TICKS_PER_HP тиків на HP.
 
 import type { GameState, Unit } from './combat';
-import { HIRE_PRICE, spend, type EconomyState } from './economy';
+import { hirePrice, spend, type EconomyState } from './economy';
 import { type DifficultyPreset, DEFAULT_PRESET, DIFFICULTY_MULTIPLIERS } from './campaign';
 import { makeSoldier, SQUAD_SPAWN } from './mission';
 
@@ -68,12 +68,13 @@ export function createRoster(size: number = STARTING_ROSTER_SIZE, preset: Diffic
   return { soldiers, hired: size, hospital: {} };
 }
 
-// Найм нового солдата за гроші (ADR-0021): списує HIRE_PRICE з економіки
-// (недостатньо грошей → помилка, ростер не змінюється) і додає солдата
-// в КІНЕЦЬ ростеру — ветерани залишаються першими у missionSquad.
-// Без RNG: id та ім'я — наступні за лічильником hired.
+// Найм нового солдата за гроші (ADR-0021): списує ціну найму за пресетом
+// (П11.8: ×economyMultiplier, ADR-0058 — «легкий» 120, «норма» 100,
+// «складний» 90; недостатньо грошей → помилка, ростер не змінюється)
+// і додає солдата в КІНЕЦЬ ростеру — ветерани залишаються першими у
+// missionSquad. Без RNG: id та ім'я — наступні за лічильником hired.
 export function hireSoldier(econ: EconomyState, roster: Roster, preset: DifficultyPreset = DEFAULT_PRESET): Unit {
-  spend(econ, HIRE_PRICE);
+  spend(econ, hirePrice(preset));
   const soldier = rosterSoldier(roster.hired, preset);
   roster.hired += 1;
   roster.soldiers.push(soldier);
@@ -133,8 +134,10 @@ export function hospitalTick(roster: Roster): void {
 // Банкрутство партії (ADR-0021): боєготових немає і грошей на найм теж —
 // кінець партії. Перевіряти на тіку геосцени; поранені в лікарні НЕ
 // рахуються готовими (сувора умова власника: банкрутство настає одразу).
-export function isBankrupt(econ: EconomyState, roster: Roster): boolean {
-  return readySoldiers(roster).length === 0 && econ.money < HIRE_PRICE;
+// П11.8: поріг найму — за пресетом (hirePrice; дефолт «норма» — старі
+// виклики без пресету зберігають порівняння з HIRE_PRICE байт-у-байт).
+export function isBankrupt(econ: EconomyState, roster: Roster, preset: DifficultyPreset = DEFAULT_PRESET): boolean {
+  return readySoldiers(roster).length === 0 && econ.money < hirePrice(preset);
 }
 
 // Застосувати результат завершеної місії до ростеру (один раз після бою;

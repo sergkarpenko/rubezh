@@ -25,7 +25,7 @@
 // П11.8 (scripts/sim-p11.8.ts).
 
 import { TICK_MINUTES, advanceTime, chebyshevWrap, geoDay, missionTargets, type GeoState, type Ufo } from './geo';
-import { HIRE_PRICE, creditMissionBonus, economyTick } from './economy';
+import { creditMissionBonus, economyTick, hirePrice } from './economy';
 import { applyMissionResult, hireSoldier, hospitalTick, isBankrupt, missionSquad, readySoldiers } from './squad';
 import { FIGHTER_MAX_HP, FIGHTER_REPAIR_COST, interceptRound, interceptTick, repairTick, startIntercept, startRepair } from './intercept';
 import { BALANCED_POLICY, type InterceptPolicy } from './intercept-bot';
@@ -186,10 +186,12 @@ export function partyBotInterceptStep(party: Party, policy: InterceptPolicy): vo
 export function partyBotHireStep(party: Party, policy: PartyBotPolicy): number {
   if (policy.hireUpTo <= 0) return 0;
   let hired = 0;
+  // П11.8: ціна найму за пресетом (hirePrice, ADR-0058) — «норма» 100 байт-у-байт.
+  const cost = hirePrice(party.campaign.preset);
   while (
     readySoldiers(party.roster).length < policy.hireUpTo &&
-    party.econ.money >= HIRE_PRICE &&
-    (party.econ.money - HIRE_PRICE >= policy.hireReserve || readySoldiers(party.roster).length === 0)
+    party.econ.money >= cost &&
+    (party.econ.money - cost >= policy.hireReserve || readySoldiers(party.roster).length === 0)
   ) {
     hireSoldier(party.econ, party.roster, party.campaign.preset);
     hired += 1;
@@ -429,9 +431,10 @@ export function simulateParty(seed: number, preset: DifficultyPreset = DEFAULT_P
     }
 
     // Фаза 5: витрати з журналу економіки (spend не несе призначення —
-    // розрізняємо за сумою: найм 100, ремонт 50; патерн intercept-bot.ts).
+    // розрізняємо за сумою: ремонт 50; патерн intercept-bot.ts). Найм
+    // П11.8 сумою не розрізнити (hirePrice збігається з наймом вченого) —
+    // hireSpent рахуємо за фактом: hiredTotal × ціна найму за пресетом.
     for (const e of party.econ.log.slice(econCursor)) {
-      if (e.type === 'spend' && e.amount === HIRE_PRICE) res.hireSpent += e.amount;
       if (e.type === 'spend' && e.amount === FIGHTER_REPAIR_COST) res.repairSpent += e.amount;
     }
     econCursor = party.econ.log.length;
@@ -471,8 +474,9 @@ export function simulateParty(seed: number, preset: DifficultyPreset = DEFAULT_P
       lastDay = day;
     }
 
-    // Банкрутство (ADR-0021): боєготових немає і грошей на найм немає.
-    if (isBankrupt(party.econ, party.roster)) {
+    // Банкрутство (ADR-0021): боєготових немає і грошей на найм немає
+    // (П11.8: поріг найму за пресетом — 120/100/90).
+    if (isBankrupt(party.econ, party.roster, party.campaign.preset)) {
       res.outcome = 'банкрутство';
       break;
     }
@@ -489,6 +493,9 @@ export function simulateParty(seed: number, preset: DifficultyPreset = DEFAULT_P
   else if (res.outcome === 'банкрутство')
     res.endDay = geoDay(party.geo); // доба настання
   else res.endDay = res.moneyByDay.length; // «триває» = завершені доби горизонту
+  // П11.8: витрати на найм — за фактом найнятих × ціна за пресетом (детерміновано;
+  // spend-події суму не розрізняють після синхронізації hirePrice з наукою).
+  res.hireSpent = res.hiredTotal * hirePrice(preset);
   res.score = campaignScore(party.geo, party.roster, party.econ);
   return res;
 }

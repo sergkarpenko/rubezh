@@ -288,7 +288,8 @@ describe('розподіл точок і завершення проєктів (
 
   it('заповнений проєкт завершується: слот звільнено, лишок лишається в пулі', () => {
     const econ = richEcon();
-    const research = withActive(createResearch(), [{ id: 'оптичний приціл', invested: 29 }]);
+    // П11.8: «оптичний приціл» — 23 точки (тунінг ×0.75), бракує однієї
+    const research = withActive(createResearch(), [{ id: 'оптичний приціл', invested: 22 }]);
     research.pool = 2;
     const geo = geoNoUfo();
     advanceTime(geo, 48);
@@ -302,8 +303,8 @@ describe('розподіл точок і завершення проєктів (
   it('кілька проєктів можуть завершитися за одну добу з великого пулу', () => {
     const econ = richEcon();
     const research = withActive(createResearch(), [
-      { id: 'оптичний приціл', invested: 29 },
-      { id: 'легка броня', invested: 35 },
+      { id: 'оптичний приціл', invested: 22 },
+      { id: 'легка броня', invested: 26 },
     ]);
     research.pool = 3;
     const geo = geoNoUfo();
@@ -317,7 +318,7 @@ describe('розподіл точок і завершення проєктів (
   it('«Розширення лабораторії» відкриває третій слот — стартує третій проєкт', () => {
     const econ = richEcon();
     const research = withActive(createResearch(), [
-      { id: 'розширення лабораторії', invested: 43 },
+      { id: 'розширення лабораторії', invested: 32 },
       { id: 'легка броня', invested: 0 },
     ]);
     research.pool = 1;
