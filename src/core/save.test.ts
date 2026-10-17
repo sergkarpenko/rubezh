@@ -9,6 +9,7 @@ import { advanceTime } from './geo';
 import { economyTick } from './economy';
 import { hireSoldier, hospitalTick } from './squad';
 import { mulberry32, type StatefulRng } from './combat';
+import { createResearch, hireScientist, researchTick, startProject } from './research';
 import {
   SAVE_SLOTS,
   SAVE_VERSION,
@@ -61,6 +62,7 @@ function snapshot(p: Party): string {
     money: p.econ.money,
     lastAllowanceDay: p.econ.lastAllowanceDay,
     econLog: p.econ.log,
+    research: p.research,
   });
 }
 
@@ -370,5 +372,53 @@ describe('save: прапорці підказок (П9.2, ADR-0026)', () => {
     const broken = JSON.parse(serializeParty(p, 'T')) as Record<string, unknown>;
     (broken.state as Record<string, unknown>).hints = 5;
     expect(() => deserializeParty(JSON.stringify(broken))).toThrow('підказки');
+  });
+});
+
+describe('save: наука (П11.2, ADR-0026)', () => {
+  it('createParty: нова партія — порожня наука (без вчених, 2 слоти)', () => {
+    const p = createParty(42);
+    expect(p.research).toEqual(createResearch());
+  });
+
+  it('round-trip: штат, активні і завершені проєкти, пул відновлюються; стабільний формат', () => {
+    const p = createParty(42);
+    hireScientist(p.econ, p.research);
+    hireScientist(p.econ, p.research);
+    startProject(p.econ, p.research, 'оптичний приціл');
+    for (let i = 0; i < 48; i++) {
+      advanceTime(p.geo, 1);
+      economyTick(p.econ, p.geo, p.campaign.preset);
+      researchTick(p.research, p.econ, p.geo, p.campaign.preset);
+    }
+    // одна завершена доба: 2 точки з потоку пішли у проєкт, зарплата списана
+    expect(p.research.active[0].invested).toBe(2);
+    const restored = deserializeParty(serializeParty(p, 'T'));
+    expect(restored.research).toEqual(p.research);
+    expect(serializeParty(restored, 'T')).toBe(serializeParty(p, 'T'));
+  });
+
+  it('старий сейв без поля research — порожня наука (сейв до Фази 11, версія формату не зросла)', () => {
+    const p = createParty(42);
+    for (let i = 0; i < 10; i++) partyTick(p);
+    const legacy = JSON.parse(serializeParty(p, 'T')) as Record<string, unknown>;
+    delete (legacy.state as Record<string, unknown>).research; // сейв до П11.2
+    const restored = deserializeParty(JSON.stringify(legacy));
+    expect(restored.research).toEqual(createResearch());
+    // і траєкторія далі без науки: тік після завантаження — no-op у науці
+    const before = JSON.stringify(restored.research);
+    advanceTime(restored.geo, 48);
+    economyTick(restored.econ, restored.geo, restored.campaign.preset);
+    researchTick(restored.research, restored.econ, restored.geo, restored.campaign.preset);
+    expect(restored.research.log).toEqual([]);
+    expect(JSON.stringify(restored.research)).not.toBe(before); // лише lastSalaryDay рушив
+    expect(restored.research.lastSalaryDay).toBe(1);
+  });
+
+  it('поле research пошкоджене — throw українською, без часткового стану', () => {
+    const p = createParty(42);
+    const broken = JSON.parse(serializeParty(p, 'T')) as Record<string, unknown>;
+    (broken.state as Record<string, unknown>).research = { scientists: 'хмарина' };
+    expect(() => deserializeParty(JSON.stringify(broken))).toThrow('наука');
   });
 });
