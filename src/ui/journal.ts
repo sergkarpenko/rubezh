@@ -9,6 +9,8 @@ import type { GeoEvent } from '../core/geo';
 import { missionTargets } from '../core/geo';
 import { FIGHTER_MAX_HP, FIGHTER_REPAIR_COST } from '../core/intercept';
 import type { EconomyEvent } from '../core/economy';
+// П11.6 (ADR-0058): події науки і цеху → журнал (категорія «База»).
+import type { ResearchEvent } from '../core/research';
 import type { GameEvent, ShotMode } from '../core/combat';
 import { claimHint, type Party } from '../core/save';
 import { el } from './dom';
@@ -17,7 +19,8 @@ import { el } from './dom';
 export const MODE_LABEL: Record<ShotMode, string> = { snap: 'швидкий', aimed: 'прицільний', auto: 'черга' };
 
 // ADR-0027: категорії записів єдиного журналу (фільтри-вкладки).
-export type LogCat = 'geo' | 'econ' | 'battle';
+// П11.6 (ADR-0058): «База» — події науки (а з П11.6-серії — і цеху).
+export type LogCat = 'geo' | 'econ' | 'battle' | 'base';
 export type LogFilter = 'all' | LogCat;
 
 // Залежності від шару застосунку (main.ts): джерела подій і назви юнітів.
@@ -25,6 +28,7 @@ export interface JournalDeps {
   geoLog(): readonly GeoEvent[]; // події геосцени (туман: knownDetected веде журнал)
   econLog(): readonly EconomyEvent[]; // події економіки
   battleLog(): readonly GameEvent[] | null; // події бою; null — бою нема
+  researchLog(): readonly ResearchEvent[]; // П11.6: події науки (ADR-0058)
   unitName(id: string): string; // назва юніта бою для тексту пострілів
   onGeoEvent(e: GeoEvent): void; // П7.5 (ADR-0032): анімації перехоплення з geo-подій
   party(): Party; // П9.2: прапорці підказок живуть у Party (сейв-сумісні, ADR-0026)
@@ -36,6 +40,7 @@ export interface Journal {
   drainGeo(): void; // нові geo-події → журнал (+ анімації перехоплення)
   drainEcon(): void; // нові події економіки → журнал
   drainBattle(): void; // нові події бою → журнал
+  drainResearch(): void; // П11.6: нові події науки → журнал («База»)
   adopt(p: Party): void; // прийняти партію: seen-трекінг з точки входу (нової/завантаженої)
   resetBattle(): void; // новий бій: seenBattleLog = 0
 }
@@ -46,6 +51,7 @@ export function createJournal(deps: JournalDeps): Journal {
   const knownDetected = new Set<string>();
   let seenBattleLog = 0;
   let seenEconLog = 0;
+  let seenResearchLog = 0; // П11.6: seen-трекінг подій науки
 
   function journal(text: string, cls = '', cat: LogCat = 'geo'): void {
     const li = document.createElement('li');
@@ -132,6 +138,16 @@ export function createJournal(deps: JournalDeps): Journal {
     }
   }
 
+  // П11.6 (ADR-0058): події науки → журнал (категорія «База»). Перетворювач —
+  // чиста функція нижче (юніт-тести без DOM).
+  function drainResearchLog(): void {
+    const log = deps.researchLog();
+    for (; seenResearchLog < log.length; seenResearchLog++) {
+      const msg = researchEventText(log[seenResearchLog]);
+      if (msg) journal(msg.text, msg.cls, 'base');
+    }
+  }
+
   // Прийняти партію: seen-трекінг підвинути до кінця логів (історію журналу
   // не відтворюємо — лише нові події), трекінг НЛО перебудувати з логу
   // (ADR-0006). Спільно для нової і завантаженої партії.
@@ -140,6 +156,7 @@ export function createJournal(deps: JournalDeps): Journal {
     knownDetected.clear();
     for (const e of p.geo.log) if (e.type === 'ufo_detected') knownDetected.add(e.ufoId);
     seenEconLog = p.econ.log.length;
+    seenResearchLog = p.research.log.length; // П11.6
   }
 
   return {
@@ -148,6 +165,7 @@ export function createJournal(deps: JournalDeps): Journal {
     drainGeo: drainGeoLog,
     drainBattle: drainBattleLog,
     drainEcon: drainEconLog,
+    drainResearch: drainResearchLog, // П11.6
     adopt,
     resetBattle: () => {
       seenBattleLog = 0;
@@ -232,5 +250,27 @@ export function economyEventText(e: EconomyEvent): { text: string; cls: string }
       return { text: 'Збиття у повітрі (' + e.kind + '): +' + e.amount, cls: 'win' };
     case 'spend':
       return { text: 'Витрати: −' + e.amount, cls: 'lose' };
+  }
+}
+
+// П11.6 (ADR-0058): чистий перетворювач події науки → рядок журналу (для
+// юніт-тестів); null — не для гравця. Зарплата й штрафні звільнення — classe
+// 'lose' (гроші й втрати), найм/точки/завершення — 'win'.
+export function researchEventText(e: ResearchEvent): { text: string; cls: string } | null {
+  switch (e.type) {
+    case 'hire':
+      return { text: '⚑ Вченого найнято: ' + e.name, cls: 'win' };
+    case 'fire':
+      return { text: '⚑ Вченого звільнено: ' + e.name, cls: '' };
+    case 'salary':
+      return { text: '⚑ Зарплата вчених (доба ' + e.day + '): −' + e.amount, cls: 'lose' };
+    case 'salary_shortfall':
+      return { text: '✗ Не вистачило на зарплату (доба ' + e.day + '): звільнено ' + e.fired.join(', '), cls: 'lose' };
+    case 'points':
+      return { text: '⚑ Наука: +' + e.amount + ' точок (доба ' + e.day + ')', cls: 'win' };
+    case 'project_started':
+      return { text: '⚑ Проєкт розпочато: ' + e.id, cls: '' };
+    case 'project_completed':
+      return { text: '⚑ Проєкт завершено: ' + e.id + ' ✓', cls: 'win' };
   }
 }

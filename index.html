@@ -131,6 +131,12 @@
         background: #3a2f10;
         border-color: #8a6d1d;
       }
+      /* П11.6 (ADR-0058): кнопки панелі «Дослідження» — той самий акцент, окремий
+         клас (клас .mission — семантика запуску місії, не плутати у селекторах) */
+      button.research {
+        background: #3a2f10;
+        border-color: #8a6d1d;
+      }
       button.armed {
         background: #3a2f10;
         border-color: #8a6d1d;
@@ -439,6 +445,8 @@
           <button data-filter="geo" id="log-tab-geo">Геосцена</button>
           <button data-filter="econ" id="log-tab-econ">Економіка</button>
           <button data-filter="battle" id="log-tab-battle">Бій</button>
+          <!-- П11.6 (ADR-0058): події науки і цеху -->
+          <button data-filter="base" id="log-tab-base">База</button>
         </div>
         <ul id="log"></ul>
       </section>
@@ -458,6 +466,11 @@
             <span class="meta">· дотація 75/добу · премії за місію 110/170</span>
           </div>
           <button id="btn-hire">Найм солдата (100)</button>
+        </section>
+        <!-- П11.6 (ADR-0058): панель «Дослідження» — штат вчених, слоти, каталог проєктів -->
+        <section class="panel">
+          <h2>Дослідження</h2>
+          <div id="research"></div>
         </section>
         <section class="panel">
           <h2>Ростер загону</h2>
