@@ -86,6 +86,7 @@ const ui: BattleUIState = {
   battleResult: null,
   selectedId: null, // вибраний солдат
   fireMode: null, // «зведений» режим пострілу
+  itemMode: null, // П11.6: «зведений» витратник — аптечка/граната
   hoverPath: null, // прев'ю шляху під курсором
   hoverAp: 0,
   tapCell: null, // ADR-0027 (П6.4): клітинка першого тапу — повторний тап у неї робить хід
@@ -361,6 +362,9 @@ if (typeof document !== 'undefined') {
   el('btn-aimed').onclick = () => input.armFire('aimed');
   el('btn-auto').onclick = () => input.armFire('auto');
   el('btn-ow').onclick = input.armOverwatch;
+  // П11.6 (ADR-0058): витратники в бою — кнопки і гарячі клавіші (M/G)
+  el('btn-medkit').onclick = input.armMedkit;
+  el('btn-grenade').onclick = input.armGrenade;
   el('btn-end').onclick = input.endPlayerTurn;
   el('btn-demo').onclick = () => demo.battle();
   // ADR-0027: фільтри-вкладки єдиного журналу
