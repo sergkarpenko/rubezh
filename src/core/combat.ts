@@ -4,6 +4,9 @@
 // ADR-0003: Детермінізм через ін'єктований RNG (mulberry32)
 // ADR-0004: Формула влучності без залежності від відстані (точність × модифікатор режиму)
 // ADR-0005: Заступа (overwatch) — один постріл зі штрафом точності ×0.7
+// П11.4 (ADR-0058): бойові дії з витратниками — «Лікування» (аптечка)
+// і «Кидок гранати» (осколкова). ШІ прибульців предметів не має (MVP);
+// бій без предметів — байт-у-байт незмінний (критерій П11.4).
 //
 // Чиста логіка: жодних залежностей від DOM/Canvas.
 // Уся недетермінованість ізольована в ін'єктованому RNG (детерміновані тести і реплеї).
@@ -47,12 +50,24 @@ export interface Unit {
   overwatch: boolean; // дозор: реакційний вогонь під час ходу ворога
 }
 
+// П11.4 (ADR-0058): витратники юніта в цьому бою. «По одній на місцію»:
+// дія доступна, поки прапорець true; використання списує його в стані бою.
+// Стан ростеру/складу це ядро не знає — копію на місію готує шар екіпірування
+// (deployConsumables/settleConsumables у workshop.ts).
+export interface UnitItems {
+  medkit: boolean; // «Аптечка»: доступна дія «Лікування»
+  grenade: boolean; // «Осколкова граната»: доступна дія «Кидок»
+}
+
 export type GameEvent =
   | { type: 'move'; unitId: string; from: Vec2; to: Vec2 }
   | { type: 'shot'; shooterId: string; targetId: string; mode: ShotMode; hit: boolean; damage: number }
   | { type: 'death'; unitId: string; killerId: string }
   | { type: 'turn'; turn: number; side: Side }
-  | { type: 'overwatch'; unitId: string; armed: boolean };
+  | { type: 'overwatch'; unitId: string; armed: boolean }
+  // П11.4 (ADR-0058): події нових бойових дій з витратниками
+  | { type: 'heal'; unitId: string; targetId: string; healed: number }
+  | { type: 'grenade'; unitId: string; center: Vec2; hits: { unitId: string; damage: number }[] };
 
 export interface GameMap {
   width: number;
@@ -66,6 +81,7 @@ export interface GameState {
   activeSide: Side;
   rng: RNG;
   log: GameEvent[];
+  items?: Record<string, UnitItems>; // П11.4: витратники юнітів у цьому бою (id → предмети)
 }
 
 export const MOVE_AP_PER_CELL = 1;
@@ -73,6 +89,14 @@ export const HIT_CHANCE_FLOOR = 0.02;
 export const HIT_CHANCE_CAP = 0.95;
 export const OVERWATCH_AP_COST = 3; // вартість дозору
 export const OVERWATCH_ACC_PENALTY = 0.7; // штраф точності реакційного пострілу
+
+// П11.4 (ADR-0058): параметри нових бойових дій. Усі числа — КАНДИДАТИ,
+// тунінг probe-симуляціями П11.8 (патерн П10.4).
+export const HEAL_AP_COST = 4; // «Лікування»: 4 AP
+export const HEAL_AMOUNT = 3; // +3 HP, не вище maxHp
+export const GRENADE_AP_COST = 4; // «Кидок гранати»: 4 AP
+export const GRENADE_RANGE = 6; // дальність кидка (Чебишев) — менша за радіус огляду 12 (map.ts)
+export const GRENADE_DAMAGE: [number, number] = [3, 5]; // пошкодження всієї зони вибуху (один кидок RNG)
 
 export const RIFLE: Weapon = {
   name: 'АР-14 «Гарт»',
@@ -211,6 +235,7 @@ export interface CreateGameOptions {
   units: Unit[];
   rng?: RNG;
   startingSide?: Side;
+  items?: Record<string, UnitItems>; // П11.4: витратники юнітів у цьому бою
 }
 
 export function createGame(opts: CreateGameOptions): GameState {
@@ -221,6 +246,7 @@ export function createGame(opts: CreateGameOptions): GameState {
     activeSide: opts.startingSide ?? 'player',
     rng: opts.rng ?? mulberry32(42),
     log: [],
+    items: opts.items,
   };
   for (const u of state.units) if (u.side === state.activeSide) u.ap = u.maxAp;
   return state;
@@ -355,4 +381,99 @@ export function resolveAttack(state: GameState, shooterId: string, targetId: str
     } // мертва ціль не отримує зайвих куль серії
   }
   return result;
+}
+
+// --- П11.4 (ADR-0058): дії з витратниками ---
+
+// Зона вибуху гранати: епіцентр + чотири сусіди за напрямками (хрест).
+// Експортовано для бота (ai-bot.ts будує зону без дублювання, ADR-0038).
+export function grenadeZone(center: Vec2): Vec2[] {
+  return [
+    { x: center.x, y: center.y },
+    { x: center.x + 1, y: center.y },
+    { x: center.x - 1, y: center.y },
+    { x: center.x, y: center.y + 1 },
+    { x: center.x, y: center.y - 1 },
+  ];
+}
+
+function inCells(pos: Vec2, cells: Vec2[]): boolean {
+  return cells.some((c) => c.x === pos.x && c.y === pos.y);
+}
+
+// Витратники юніта в цьому бою (відсутній запис = предметів немає).
+function unitItems(state: GameState, unitId: string): UnitItems | undefined {
+  return state.items?.[unitId];
+}
+
+export interface HealResult {
+  healed: number; // фактично відновлені HP (з капом maxHp)
+}
+
+// «Лікування» (аптечка, ADR-0058): 4 AP, +3 HP не вище maxHp, ціль — соба або
+// союзник на відстані ≤1 (Чебишев). Витратник один на місію — списується при
+// використанні. Ціль без поранення — помилка (без марнотратства аптечки;
+// кандидат П11.8). Порядок перевірок фіксований (детермінізм, ADR-0003).
+export function useMedkit(state: GameState, healerId: string, targetId: string): HealResult {
+  const u = getUnit(state, healerId);
+  requireActive(state, u);
+  const items = unitItems(state, u.id);
+  if (!items?.medkit) throw new Error('Аптечки немає у юніта: ' + u.id);
+  if (u.ap < HEAL_AP_COST) throw new Error('Недостатньо очок дій для лікування');
+  const t = getUnit(state, targetId);
+  if (!t.alive) throw new Error('Ціль уже мертва');
+  if (t.side !== u.side) throw new Error('Лікування можливе лише по своїх');
+  if (distance(u.pos, t.pos) > 1) throw new Error('Ціль поза межами лікування (відстань ≤1)');
+  if (t.hp >= t.maxHp) throw new Error('Ціль не поранена');
+  const healed = Math.min(HEAL_AMOUNT, t.maxHp - t.hp);
+  t.hp += healed;
+  u.ap -= HEAL_AP_COST;
+  items.medkit = false; // витратник списується (по одній на місію, ADR-0058)
+  state.log.push({ type: 'heal', unitId: u.id, targetId: t.id, healed });
+  return { healed };
+}
+
+export interface GrenadeResult {
+  damage: number; // пошкодження зони (однакове для всіх уражених)
+  affected: string[]; // id уражених у порядку масиву юнітів (детермінізм)
+}
+
+// «Кидок гранати» (ADR-0058): 4 AP, дальність ≤6 (Чебишев), LOS до епіцентру
+// за рельєфом (ADR-0006). Дальність 6 менша за радіус огляду 12 (map.ts), тож
+// епіцентр із чистою лінією — видима кидачу клітинка (вимога ADR-0058).
+// Пошкодження 3–5 (RNG бою): ОДИН кидок RNG на вибух — однакове пошкодження
+// всієї зони (епіцентр + хрест), незалежно від кількості уражених (число —
+// кандидат П11.8). Friendly fire: уражаються всі юніти в зоні, включно зі
+// своїми (свідома тактична ціна, ADR-0058); за смерть союзника kills не
+// ростуть. Порядок уражених — порядок масиву юнітів (детермінізм, ADR-0003).
+export function throwGrenade(state: GameState, throwerId: string, center: Vec2): GrenadeResult {
+  const u = getUnit(state, throwerId);
+  requireActive(state, u);
+  const items = unitItems(state, u.id);
+  if (!items?.grenade) throw new Error('Гранати немає у юніта: ' + u.id);
+  if (u.ap < GRENADE_AP_COST) throw new Error('Недостатньо очок дій для кидка');
+  if (!isInside(state.map, center)) throw new Error('Епіцентр за межами мапи');
+  if (distance(u.pos, center) > GRENADE_RANGE) throw new Error('Епіцентр поза дальністю кидка');
+  if (!hasLineOfSight(state, u.pos, center)) throw new Error('Немає лінії кидка');
+  const zone = grenadeZone(center);
+  const affected = state.units.filter((t) => t.alive && inCells(t.pos, zone));
+  // один кидок RNG на вибух — споживання rng не залежить від зони (детермінізм)
+  const dmin = GRENADE_DAMAGE[0];
+  const dmax = GRENADE_DAMAGE[1];
+  const damage = dmin + Math.floor(state.rng() * (dmax - dmin + 1));
+  const hits: { unitId: string; damage: number }[] = [];
+  for (const t of affected) {
+    t.hp -= damage;
+    if (t.hp <= 0) {
+      t.hp = 0;
+      t.alive = false;
+      if (t.side !== u.side) u.kills += 1; // friendly fire у kills не зараховується
+      state.log.push({ type: 'death', unitId: t.id, killerId: u.id });
+    }
+    hits.push({ unitId: t.id, damage });
+  }
+  u.ap -= GRENADE_AP_COST;
+  items.grenade = false; // витратник списується (по одній на місію, ADR-0058)
+  state.log.push({ type: 'grenade', unitId: u.id, center: { ...center }, hits });
+  return { damage, affected: affected.map((t) => t.id) };
 }
