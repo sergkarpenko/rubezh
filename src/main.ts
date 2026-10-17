@@ -12,6 +12,8 @@ import { hireSoldier, hospitalTick, isBankrupt } from './core/squad';
 import { economyTick } from './core/economy';
 // П11.2 (ADR-0058): тік науки — після дотації того ж дня; без вчених — no-op.
 import { researchTick } from './core/research';
+// П11.3 (ADR-0058): тік цеху — разом із тіком геосцени; без замовлень — no-op.
+import { workshopTick } from './core/workshop';
 import { interceptTick, repairTick, type InterceptEvent } from './core/intercept';
 // пR.2 (ADR-0037): модулі шару UI — демо-драйвер, DOM-хелпер, панель збереження, журнал подій.
 import { DemoDriver } from './ui/demo';
@@ -230,6 +232,9 @@ function partyTick(): void {
   // П11.2 (ADR-0058): зарплата і наукові точки — тим самим контуром доби,
   // одразу після дотації; без вчених — no-op (партії без науки не змінюються).
   researchTick(party.research, party.econ, party.geo, party.campaign.preset);
+  // П11.3 (ADR-0058): виробництво — тіками геосцени (1 виклик = 1 тік);
+  // без замовлень — no-op (партії без цеху не змінюються).
+  workshopTick(party.workshop);
   hospitalTick(party.roster);
   // П7.4 (ADR-0032): погоня й ремонт живуть тіками геосцени разом з партією
   interceptTick(party.intercept, party.geo);

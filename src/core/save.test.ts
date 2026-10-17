@@ -10,6 +10,7 @@ import { economyTick } from './economy';
 import { hireSoldier, hospitalTick } from './squad';
 import { mulberry32, type StatefulRng } from './combat';
 import { createResearch, hireScientist, researchTick, startProject } from './research';
+import { createWorkshop, orderItem, workshopTick, WORKSHOP_CATALOG } from './workshop';
 import {
   SAVE_SLOTS,
   SAVE_VERSION,
@@ -63,6 +64,7 @@ function snapshot(p: Party): string {
     lastAllowanceDay: p.econ.lastAllowanceDay,
     econLog: p.econ.log,
     research: p.research,
+    workshop: p.workshop,
   });
 }
 
@@ -420,5 +422,51 @@ describe('save: наука (П11.2, ADR-0026)', () => {
     const broken = JSON.parse(serializeParty(p, 'T')) as Record<string, unknown>;
     (broken.state as Record<string, unknown>).research = { scientists: 'хмарина' };
     expect(() => deserializeParty(JSON.stringify(broken))).toThrow('наука');
+  });
+});
+
+describe('save: цех (П11.3, ADR-0026)', () => {
+  it('createParty: нова партія — порожній цех', () => {
+    const p = createParty(42);
+    expect(p.workshop).toEqual(createWorkshop());
+  });
+
+  it('round-trip: черга, склад і журнал цеху відновлюються; стабільний формат', () => {
+    const p = createParty(42);
+    // гейт виробництва: «аптечка» завершена (скорочення — наука не чекається)
+    p.research.completed.push('аптечка');
+    orderItem(p.econ, p.workshop, p.research, 'аптечка');
+    orderItem(p.econ, p.workshop, p.research, 'аптечка');
+    const ticks = WORKSHOP_CATALOG['аптечка'].ticks;
+    for (let i = 0; i < ticks + 3; i++) {
+      advanceTime(p.geo, 1);
+      workshopTick(p.workshop);
+    }
+    // одна аптечка здана, друга в роботі
+    expect(p.workshop.store['аптечка']).toBe(1);
+    expect(p.workshop.queue.length).toBe(1);
+    const restored = deserializeParty(serializeParty(p, 'T'));
+    expect(restored.workshop).toEqual(p.workshop);
+    expect(serializeParty(restored, 'T')).toBe(serializeParty(p, 'T'));
+  });
+
+  it('старий сейв без поля workshop — порожній цех (сейви до П11.3, версія формату не зросла)', () => {
+    const p = createParty(42);
+    for (let i = 0; i < 10; i++) partyTick(p);
+    const legacy = JSON.parse(serializeParty(p, 'T')) as Record<string, unknown>;
+    delete (legacy.state as Record<string, unknown>).workshop; // сейв до П11.3
+    const restored = deserializeParty(JSON.stringify(legacy));
+    expect(restored.workshop).toEqual(createWorkshop());
+    // і цех далі no-op: тік після завантаження нічого не міняє
+    advanceTime(restored.geo, 48);
+    workshopTick(restored.workshop);
+    expect(restored.workshop).toEqual(createWorkshop());
+  });
+
+  it('поле workshop пошкоджене — throw українською, без часткового стану', () => {
+    const p = createParty(42);
+    const broken = JSON.parse(serializeParty(p, 'T')) as Record<string, unknown>;
+    (broken.state as Record<string, unknown>).workshop = { queue: 'очередь' };
+    expect(() => deserializeParty(JSON.stringify(broken))).toThrow('цех');
   });
 });
