@@ -11,6 +11,7 @@ import { FIGHTER_MAX_HP, FIGHTER_REPAIR_COST } from '../core/intercept';
 import type { EconomyEvent } from '../core/economy';
 // П11.6 (ADR-0058): події науки і цеху → журнал (категорія «База»).
 import type { ResearchEvent } from '../core/research';
+import type { WorkshopEvent } from '../core/workshop';
 import type { GameEvent, ShotMode } from '../core/combat';
 import { claimHint, type Party } from '../core/save';
 import { el } from './dom';
@@ -29,6 +30,7 @@ export interface JournalDeps {
   econLog(): readonly EconomyEvent[]; // події економіки
   battleLog(): readonly GameEvent[] | null; // події бою; null — бою нема
   researchLog(): readonly ResearchEvent[]; // П11.6: події науки (ADR-0058)
+  workshopLog(): readonly WorkshopEvent[]; // П11.6: події цеху (ADR-0058)
   unitName(id: string): string; // назва юніта бою для тексту пострілів
   onGeoEvent(e: GeoEvent): void; // П7.5 (ADR-0032): анімації перехоплення з geo-подій
   party(): Party; // П9.2: прапорці підказок живуть у Party (сейв-сумісні, ADR-0026)
@@ -41,6 +43,7 @@ export interface Journal {
   drainEcon(): void; // нові події економіки → журнал
   drainBattle(): void; // нові події бою → журнал
   drainResearch(): void; // П11.6: нові події науки → журнал («База»)
+  drainWorkshop(): void; // П11.6: нові події цеху → журнал («База»)
   adopt(p: Party): void; // прийняти партію: seen-трекінг з точки входу (нової/завантаженої)
   resetBattle(): void; // новий бій: seenBattleLog = 0
 }
@@ -52,6 +55,7 @@ export function createJournal(deps: JournalDeps): Journal {
   let seenBattleLog = 0;
   let seenEconLog = 0;
   let seenResearchLog = 0; // П11.6: seen-трекінг подій науки
+  let seenWorkshopLog = 0; // П11.6: seen-трекінг подій цеху
 
   function journal(text: string, cls = '', cat: LogCat = 'geo'): void {
     const li = document.createElement('li');
@@ -148,6 +152,16 @@ export function createJournal(deps: JournalDeps): Journal {
     }
   }
 
+  // П11.6 (ADR-0058): події цеху → журнал (категорія «База»). Перетворювач —
+  // чиста функція нижче (юніт-тести без DOM).
+  function drainWorkshopLog(): void {
+    const log = deps.workshopLog();
+    for (; seenWorkshopLog < log.length; seenWorkshopLog++) {
+      const msg = workshopEventText(log[seenWorkshopLog]);
+      if (msg) journal(msg.text, msg.cls, 'base');
+    }
+  }
+
   // Прийняти партію: seen-трекінг підвинути до кінця логів (історію журналу
   // не відтворюємо — лише нові події), трекінг НЛО перебудувати з логу
   // (ADR-0006). Спільно для нової і завантаженої партії.
@@ -157,6 +171,7 @@ export function createJournal(deps: JournalDeps): Journal {
     for (const e of p.geo.log) if (e.type === 'ufo_detected') knownDetected.add(e.ufoId);
     seenEconLog = p.econ.log.length;
     seenResearchLog = p.research.log.length; // П11.6
+    seenWorkshopLog = p.workshop.log.length; // П11.6
   }
 
   return {
@@ -166,6 +181,7 @@ export function createJournal(deps: JournalDeps): Journal {
     drainBattle: drainBattleLog,
     drainEcon: drainEconLog,
     drainResearch: drainResearchLog, // П11.6
+    drainWorkshop: drainWorkshopLog, // П11.6
     adopt,
     resetBattle: () => {
       seenBattleLog = 0;
@@ -272,5 +288,28 @@ export function researchEventText(e: ResearchEvent): { text: string; cls: string
       return { text: '⚑ Проєкт розпочато: ' + e.id, cls: '' };
     case 'project_completed':
       return { text: '⚑ Проєкт завершено: ' + e.id + ' ✓', cls: 'win' };
+  }
+}
+
+// П11.6 (ADR-0058): чистий перетворювач події цеху → рядок журналу (для
+// юніт-тестів); null — не для гравця. Солдат — за id (ростер журналу не
+// відображає; ім'я видно в панелі ростеру). Виготовлення — 'win', втрата
+// екіпірування загиблого — 'lose' (перма-смерть).
+export function workshopEventText(e: WorkshopEvent): { text: string; cls: string } | null {
+  switch (e.type) {
+    case 'order':
+      return { text: '⚑ Цех: замовлено «' + e.id + '» — ' + e.ticks + ' тік(и)', cls: '' };
+    case 'produced':
+      return { text: '⚑ Цех: виготовлено «' + e.id + '» → склад ✓', cls: 'win' };
+    case 'equip':
+      return { text: '⚑ Цех: ' + e.soldierId + ' споряджено «' + e.id + '»', cls: '' };
+    case 'unequip':
+      return { text: '⚑ Цех: з ' + e.soldierId + ' знято «' + e.id + '» → склад', cls: '' };
+    case 'equipment_lost':
+      return { text: '✗ Екіпірування ' + e.soldierId + ' зникло разом із солдатом (' + e.items.join(', ') + ')', cls: 'lose' };
+    case 'gun_module_installed':
+      return { text: '⚑ Цех: гарматний модуль на винищувачі', cls: '' };
+    case 'gun_module_removed':
+      return { text: '⚑ Цех: гарматний модуль знято на склад', cls: '' };
   }
 }

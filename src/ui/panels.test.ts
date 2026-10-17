@@ -323,3 +323,91 @@ describe('renderCampaign: чипи кампанії і екран перемог
     expect(document.getElementById('campaign-score')!.textContent).toBe('1234');
   });
 });
+
+// П11.6 (Фаза 11, ADR-0058/0013): екіпірування в картці солдата ростеру.
+describe('renderRoster: екіпірування (П11.6, ADR-0058)', () => {
+  it('кнопки чотирьох предметів у кожного солдата; без предмета на складі — вимкнені', () => {
+    const f = makeFixture();
+    f.panels.renderRoster();
+    const s = f.party.roster.soldiers[0]!;
+    const armor = document.getElementById('btn-equip-' + s.id + '-armor') as HTMLButtonElement;
+    const optics = document.getElementById('btn-equip-' + s.id + '-optics') as HTMLButtonElement;
+    const medkit = document.getElementById('btn-equip-' + s.id + '-medkit') as HTMLButtonElement;
+    const grenade = document.getElementById('btn-equip-' + s.id + '-grenade') as HTMLButtonElement;
+    expect(armor && optics && medkit && grenade).toBeTruthy();
+    expect(armor.disabled).toBe(true); // склад порожній
+    expect(armor.title).toContain('немає на складі');
+  });
+
+  it('спорядження брони зі складу — +2 maxHp/hp, предмет ✓, склад порожнішає', () => {
+    const f = makeFixture();
+    const s = f.party.roster.soldiers[0]!;
+    f.party.workshop.store['легка броня'] = 1;
+    f.panels.renderRoster();
+    const beforeHp = s.hp;
+    const beforeMax = s.maxHp;
+    (document.getElementById('btn-equip-' + s.id + '-armor') as HTMLButtonElement).click();
+    expect(f.party.workshop.equipped[s.id]!.armor).toBe(true);
+    expect(f.party.workshop.store['легка броня']).toBe(0);
+    expect(s.maxHp).toBe(beforeMax + 2);
+    expect(s.hp).toBe(beforeHp + 2);
+    f.panels.renderRoster();
+    const armorBtn = document.getElementById('btn-equip-' + s.id + '-armor') as HTMLButtonElement;
+    expect(armorBtn.textContent).toContain('броня ✓');
+    expect(armorBtn.disabled).toBe(false); // тепер це кнопка «зняти»
+  });
+
+  it('зняття броні — назад на склад, hp клемується новим maxHp', () => {
+    const f = makeFixture();
+    const s = f.party.roster.soldiers[0]!;
+    f.party.workshop.store['легка броня'] = 1;
+    f.panels.renderRoster();
+    (document.getElementById('btn-equip-' + s.id + '-armor') as HTMLButtonElement).click();
+    s.hp = s.maxHp; // повне здоров'я у броні
+    f.panels.renderRoster();
+    (document.getElementById('btn-equip-' + s.id + '-armor') as HTMLButtonElement).click();
+    expect(f.party.workshop.store['легка броня']).toBe(1);
+    expect(s.maxHp).toBe(10);
+    expect(s.hp).toBe(10); // hp min(hp, maxHp) — «оздоровлення» нема
+    expect(f.party.workshop.equipped[s.id]).toBeUndefined(); // порожній запис вилучено
+  });
+
+  it('оптика — +0.05 точності; витратники — по одному на солдата', () => {
+    const f = makeFixture();
+    const s = f.party.roster.soldiers[0]!;
+    f.party.workshop.store['оптичний приціл'] = 1;
+    f.party.workshop.store['аптечка'] = 1;
+    f.party.workshop.equipped[s.id] = { armor: false, optics: false, medkit: true, grenade: false };
+    const accBefore = s.firingAccuracy;
+    f.panels.renderRoster();
+    (document.getElementById('btn-equip-' + s.id + '-optics') as HTMLButtonElement).click();
+    expect(s.firingAccuracy).toBeCloseTo(accBefore + 0.05, 10);
+    f.panels.renderRoster();
+    const medkitBtn = document.getElementById('btn-equip-' + s.id + '-medkit') as HTMLButtonElement;
+    expect(medkitBtn.textContent).toContain('аптечка ✓'); // уже при солдатові
+    expect(medkitBtn.disabled).toBe(false); // зняти можна
+    (document.getElementById('btn-equip-' + s.id + '-medkit') as HTMLButtonElement).click();
+    expect(f.party.workshop.store['аптечка']).toBe(2); // 1 + повернуто
+  });
+
+  it('критерій 1: у бою кнопки екіпірування вимкнені (лише геосцена)', () => {
+    const f = makeFixture({ inBattle: () => true });
+    const s = f.party.roster.soldiers[0]!;
+    f.party.workshop.store['аптечка'] = 2;
+    f.panels.renderRoster();
+    expect((document.getElementById('btn-equip-' + s.id + '-medkit') as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('помилка ядра (зняття неспорядженого — стан змінився поза панеллю) — у журнал', () => {
+    const f = makeFixture();
+    const s = f.party.roster.soldiers[0]!;
+    f.party.workshop.store['аптечка'] = 1;
+    f.panels.renderRoster();
+    (document.getElementById('btn-equip-' + s.id + '-medkit') as HTMLButtonElement).click();
+    // предмет зняли напряму через ядро — панель ще не перемальована
+    f.party.workshop.equipped[s.id]!.medkit = false;
+    (document.getElementById('btn-equip-' + s.id + '-medkit') as HTMLButtonElement).click(); // «зняти» ще раз
+    expect(f.deps.journal).toHaveBeenCalledWith(expect.stringContaining('Предмета немає'), 'lose', 'base');
+    expect(f.party.workshop.store['аптечка']).toBe(0); // помилка ядра — склад не змінився
+  });
+});

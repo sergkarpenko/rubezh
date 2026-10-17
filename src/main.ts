@@ -21,6 +21,8 @@ import { el } from './ui/dom';
 import { createSavePanel } from './ui/save-panel';
 // П11.6 (ADR-0058/0037): панель «Дослідження» — модуль src/ui/research-panel.ts.
 import { createResearchPanel } from './ui/research-panel';
+// П11.6 (ADR-0058/0037): панель «Цех» — модуль src/ui/workshop-panel.ts.
+import { createWorkshopPanel } from './ui/workshop-panel';
 // П9.1 (Фаза 9): екран «Як грати» — модуль src/ui/help.ts (перший візит + кнопка «?»).
 import { createHelp } from './ui/help';
 import { createJournal, type LogFilter } from './ui/journal';
@@ -64,6 +66,7 @@ const journalUI = createJournal({
   econLog: () => party.econ.log,
   battleLog: () => (ui.mission ? ui.mission.state.log : null),
   researchLog: () => party.research.log, // П11.6: події науки → журнал («База»)
+  workshopLog: () => party.workshop.log, // П11.6: події цеху → журнал («База»)
   unitName,
   onGeoEvent: (e) => {
     if (hasRaf) geoAnim.push(...interceptAnims(e as InterceptEvent));
@@ -183,6 +186,17 @@ const researchPanel = createResearchPanel({
   renderAll,
 });
 
+// П11.6 (ADR-0058/0037): панель «Цех» — тут лише зв'язування зі станом
+// застосунку і журналом (drain). Екіпірування — у модулі panels (картка солдата).
+const workshopPanel = createWorkshopPanel({
+  getParty: () => party,
+  inBattle: () => ui.mission !== null,
+  isGameOver: () => gameOver,
+  journal,
+  drainWorkshop: () => journalUI.drainWorkshop(),
+  renderAll,
+});
+
 const anim = new AnimEngine({
   schedule: (cb) => requestAnimationFrame(cb),
   cancel: (h) => cancelAnimationFrame(h as number),
@@ -289,6 +303,7 @@ function renderAll(): void {
   panels.renderFinances();
   panels.renderRoster();
   researchPanel.render(); // П11.6: панель «Дослідження» (лише геосцена — кнопки вимкнені в бою)
+  workshopPanel.render(); // П11.6: панель «Цех» (лише геосцена — кнопки вимкнені в бою)
   savePanel.render();
   if (ui.mission) battle.renderBattle();
 }

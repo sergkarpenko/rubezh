@@ -8,12 +8,22 @@ import type { GeoEvent } from '../core/geo';
 import type { GameEvent } from '../core/combat';
 import type { EconomyEvent } from '../core/economy';
 import type { ResearchEvent } from '../core/research';
+import type { WorkshopEvent } from '../core/workshop';
 import { createParty } from '../core/save';
-import { battleEventText, createJournal, economyEventText, geoEventText, researchEventText, type JournalDeps } from './journal';
+import {
+  battleEventText,
+  createJournal,
+  economyEventText,
+  geoEventText,
+  researchEventText,
+  workshopEventText,
+  type JournalDeps,
+} from './journal';
 
 const evGeo = (e: Partial<GeoEvent> & { type: GeoEvent['type'] }): GeoEvent => e as GeoEvent;
 const evBattle = (e: Partial<GameEvent> & { type: GameEvent['type'] }): GameEvent => e as GameEvent;
 const evResearch = (e: Partial<ResearchEvent> & { type: ResearchEvent['type'] }): ResearchEvent => e as ResearchEvent;
+const evWorkshop = (e: Partial<WorkshopEvent> & { type: WorkshopEvent['type'] }): WorkshopEvent => e as WorkshopEvent;
 
 function setupDom(): void {
   // Мінімальна розмітка журналу (index.html): вкладки фільтрів і список записів.
@@ -34,6 +44,7 @@ function makeDeps(over: Partial<JournalDeps> = {}): JournalDeps {
     econLog: () => [],
     battleLog: () => null,
     researchLog: () => [],
+    workshopLog: () => [],
     unitName: (id) => id,
     onGeoEvent: vi.fn(),
     party: () => createParty(42),
@@ -479,5 +490,51 @@ describe('drainResearch: seen-трекінг подій науки (П11.6)', ()
     const lis = [...document.querySelectorAll('#log li')] as HTMLLIElement[];
     expect(lis.find((li) => li.textContent?.includes('Наука'))!.style.display).toBe('');
     expect(lis.find((li) => li.textContent?.includes('Дотація'))!.style.display).toBe('none');
+  });
+});
+
+// П11.6 (ADR-0058): події цеху → журнал (категорія «База», seen-трекінг).
+describe('workshopEventText: перетворювач подій цеху (П11.6)', () => {
+  it('замовлення/виготовлення/екіпірування — з прапорцем ⚑', () => {
+    expect(workshopEventText(evWorkshop({ type: 'order', id: 'аптечка', ticks: 12 }))).toEqual({
+      text: '⚑ Цех: замовлено «аптечка» — 12 тік(и)',
+      cls: '',
+    });
+    expect(workshopEventText(evWorkshop({ type: 'produced', id: 'легка броня' }))).toEqual({
+      text: '⚑ Цех: виготовлено «легка броня» → склад ✓',
+      cls: 'win',
+    });
+    expect(workshopEventText(evWorkshop({ type: 'equip', soldierId: 'с1', id: 'оптичний приціл' }))?.text).toContain(
+      'с1 споряджено «оптичний приціл»'
+    );
+    expect(workshopEventText(evWorkshop({ type: 'unequip', soldierId: 'с1', id: 'аптечка' }))?.text).toContain('з с1 знято «аптечка»');
+  });
+
+  it('втрата екіпірування загиблого — клас lose (перма-смерть)', () => {
+    expect(workshopEventText(evWorkshop({ type: 'equipment_lost', soldierId: 'с2', items: ['armor', 'medkit'] }))).toEqual({
+      text: '✗ Екіпірування с2 зникло разом із солдатом (armor, medkit)',
+      cls: 'lose',
+    });
+  });
+});
+
+describe('drainWorkshop: seen-трекінг подій цеху (П11.6)', () => {
+  it('нові події → журнал категорією «base»; adopt ховає історію', () => {
+    const p = createParty(42);
+    let current = p; // застосунок перемкнувся на нову партію (як adoptParty в main.ts)
+    p.workshop.log.push(evWorkshop({ type: 'order', id: 'аптечка', ticks: 12 }));
+    const j = createJournal(makeDeps({ workshopLog: () => current.workshop.log }));
+    j.drainWorkshop();
+    expect(document.querySelectorAll('#log li[data-cat="base"]')).toHaveLength(1);
+    p.workshop.log.push(evWorkshop({ type: 'produced', id: 'аптечка' }));
+    j.drainWorkshop();
+    expect(document.querySelectorAll('#log li[data-cat="base"]')).toHaveLength(2);
+    const fresh = createParty(7);
+    current = fresh;
+    j.adopt(fresh); // нова партія — seen до кінця її (порожнього) логу
+    fresh.workshop.log.push(evWorkshop({ type: 'order', id: 'легка броня', ticks: 24 }));
+    j.drainWorkshop();
+    expect(document.querySelectorAll('#log li[data-cat="base"]')).toHaveLength(3);
+    expect(document.querySelector('#log li')!.textContent).toContain('легка броня');
   });
 });
