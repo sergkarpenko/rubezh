@@ -18,7 +18,15 @@ import { createEconomy, type EconomyEvent, type EconomyState } from './economy';
 import { createIntercept, interceptRngState, type Fighter, type InterceptEvent, type InterceptState } from './intercept';
 import { createCampaign, DEFAULT_PRESET, type CampaignState, type DifficultyPreset } from './campaign';
 import { createResearch, type ActiveProject, type ProjectId, type ResearchEvent, type ResearchState, type Scientist } from './research';
-import { createWorkshop, emptyStore, type ItemId, type WorkshopEvent, type WorkshopOrder, type WorkshopState } from './workshop';
+import {
+  createWorkshop,
+  emptyStore,
+  type ItemId,
+  type SoldierEquipment,
+  type WorkshopEvent,
+  type WorkshopOrder,
+  type WorkshopState,
+} from './workshop';
 
 export const SAVE_VERSION = 1;
 export const SAVE_SLOTS = 3; // ADR-0026: три слоти, ключі rubezh.save.1..3 у main.ts
@@ -149,6 +157,7 @@ interface ResearchSave {
 interface WorkshopSave {
   queue: WorkshopOrder[];
   store: Record<ItemId, number>;
+  equipped?: Record<string, SoldierEquipment>; // П11.3 екіпірування (старіші сейви — порожньо)
   log: WorkshopEvent[];
 }
 
@@ -232,6 +241,7 @@ export function serializeParty(party: Party, savedAt: string = ''): string {
       workshop: {
         queue: party.workshop.queue.map((o) => ({ ...o })),
         store: { ...party.workshop.store },
+        equipped: Object.fromEntries(Object.entries(party.workshop.equipped).map(([id, eq]) => [id, { ...eq }])),
         log: party.workshop.log.slice(),
       },
     },
@@ -328,7 +338,14 @@ function parseSave(json: string): SaveData {
   }
   // П11.3: поле workshop опційне (сейви до П11.3) — але якщо є, має бути коректним.
   const wsv = st.workshop;
-  if (wsv !== undefined && (!Array.isArray(wsv.queue) || wsv.store === null || typeof wsv.store !== 'object' || !Array.isArray(wsv.log))) {
+  if (
+    wsv !== undefined &&
+    (!Array.isArray(wsv.queue) ||
+      wsv.store === null ||
+      typeof wsv.store !== 'object' ||
+      !Array.isArray(wsv.log) ||
+      (wsv.equipped !== undefined && (typeof wsv.equipped !== 'object' || wsv.equipped === null)))
+  ) {
     fail('Пошкоджені дані збереження: цех');
   }
   return data;
@@ -413,6 +430,7 @@ export function deserializeParty(json: string): Party {
         ? {
             queue: wsv.queue.map((o) => ({ ...o })),
             store: { ...emptyStore(), ...wsv.store },
+            equipped: Object.fromEntries(Object.entries(wsv.equipped ?? {}).map(([id, eq]) => [id, { ...eq }])),
             log: wsv.log.slice(),
           }
         : createWorkshop(),
