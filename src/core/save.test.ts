@@ -10,7 +10,7 @@ import { economyTick } from './economy';
 import { hireSoldier, hospitalTick } from './squad';
 import { mulberry32, type StatefulRng } from './combat';
 import { createResearch, hireScientist, researchTick, startProject } from './research';
-import { createWorkshop, equipItem, orderItem, workshopTick, WORKSHOP_CATALOG } from './workshop';
+import { createWorkshop, equipItem, installGunModule, orderItem, removeGunModule, workshopTick, WORKSHOP_CATALOG } from './workshop';
 import {
   SAVE_SLOTS,
   SAVE_VERSION,
@@ -498,5 +498,17 @@ describe('save: цех (П11.3, ADR-0026)', () => {
     const broken = JSON.parse(serializeParty(p, 'T')) as Record<string, unknown>;
     ((broken.state as Record<string, unknown>).workshop as Record<string, unknown>).equipped = 'сумка';
     expect(() => deserializeParty(JSON.stringify(broken))).toThrow('цех');
+  });
+
+  it('round-trip: гарматний модуль на винищувачі відновлюється (П11.3, ADR-0058)', () => {
+    const p = createParty(42);
+    p.workshop.store['гарматний модуль'] = 1;
+    installGunModule(p.workshop, p.intercept);
+    const restored = deserializeParty(serializeParty(p, 'T'));
+    expect(restored.intercept.fighter.gunModule).toBe(true);
+    // модуль можна зняти після відновлення — повертається на склад
+    removeGunModule(restored.workshop, restored.intercept);
+    expect(restored.workshop.store['гарматний модуль']).toBe(1);
+    expect(restored.intercept.fighter.gunModule).toBe(false);
   });
 });

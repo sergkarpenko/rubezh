@@ -11,10 +11,20 @@ import { advanceTime, createGeoGame, geoTick, type GeoState } from './geo';
 import type { StatefulRng } from './combat';
 import { createResearch, type ResearchState } from './research';
 import { createWorkshop, emptyStore, orderItem, WORKSHOP_CATALOG, workshopTick } from './workshop';
-import { ARMOR_MAX_HP_BONUS, OPTICS_ACCURACY_BONUS, equipItem, removeLostEquipment, unequipItem, type WorkshopState } from './workshop';
+import {
+  ARMOR_MAX_HP_BONUS,
+  OPTICS_ACCURACY_BONUS,
+  equipItem,
+  installGunModule,
+  removeGunModule,
+  removeLostEquipment,
+  unequipItem,
+  type WorkshopState,
+} from './workshop';
 import type { EconomyState } from './economy';
 import { makeSoldier } from './mission';
 import { createRoster, missionSquad, type Roster } from './squad';
+import { createIntercept } from './intercept';
 
 // Геосцена без НЛО, щоб тести не залежали від спавну (прецедент research.test.ts).
 function geoNoUfo(seed = 7): GeoState {
@@ -315,5 +325,59 @@ describe('перма-смерть предметів (критерій П11.3: �
     removeLostEquipment(workshop, [roster.soldiers[1]]);
     expect(workshop.log.length).toBe(logBefore);
     expect(workshop.equipped).toEqual({});
+  });
+});
+
+describe('гарматний модуль винищувача (ADR-0058: один модуль, екіпірування на геосцені)', () => {
+  it('встановлення: з складу на винищувач, подія в журналі', () => {
+    const workshop = stockedWorkshop();
+    workshop.store['гарматний модуль'] = 1;
+    const ic = createIntercept(11);
+    installGunModule(workshop, ic);
+    expect(ic.fighter.gunModule).toBe(true);
+    expect(workshop.store['гарматний модуль']).toBe(0);
+    expect(workshop.log.at(-1)).toEqual({ type: 'gun_module_installed' });
+  });
+
+  it('порожній склад — throw, винищувач без змін', () => {
+    const workshop = createWorkshop();
+    const ic = createIntercept(11);
+    expect(() => installGunModule(workshop, ic)).toThrow('Предмета немає на складі: гарматний модуль');
+    expect(ic.fighter.gunModule).toBeUndefined();
+  });
+
+  it('подвійне встановлення — throw', () => {
+    const workshop = stockedWorkshop();
+    workshop.store['гарматний модуль'] = 1;
+    const ic = createIntercept(11);
+    installGunModule(workshop, ic);
+    workshop.store['гарматний модуль'] = 1;
+    expect(() => installGunModule(workshop, ic)).toThrow('уже встановлено');
+  });
+
+  it('винищувач у польоті — обслуговування неможливе', () => {
+    const workshop = stockedWorkshop();
+    workshop.store['гарматний модуль'] = 1;
+    const ic = createIntercept(11);
+    ic.fighter.status = 'погоня';
+    expect(() => installGunModule(workshop, ic)).toThrow('лише на базі');
+    expect(() => removeGunModule(workshop, ic)).toThrow('лише на базі');
+  });
+
+  it('зняття: модуль назад на склад, прапорець скинуто', () => {
+    const workshop = stockedWorkshop();
+    workshop.store['гарматний модуль'] = 1;
+    const ic = createIntercept(11);
+    installGunModule(workshop, ic);
+    removeGunModule(workshop, ic);
+    expect(ic.fighter.gunModule).toBe(false);
+    expect(workshop.store['гарматний модуль']).toBe(1);
+    expect(workshop.log.at(-1)).toEqual({ type: 'gun_module_removed' });
+  });
+
+  it('зняття не встановленого — throw', () => {
+    const workshop = createWorkshop();
+    const ic = createIntercept(11);
+    expect(() => removeGunModule(workshop, ic)).toThrow('не встановлено');
   });
 });

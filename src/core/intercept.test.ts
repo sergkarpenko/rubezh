@@ -9,6 +9,7 @@ import {
   FIGHTER_MAX_HP,
   FIGHTER_REPAIR_COST,
   FIGHTER_REPAIR_TICKS,
+  GUN_MODULE_DAMAGE,
   RANGE_PROFILES,
   UFO_INTERCEPT_HP,
   createIntercept,
@@ -438,5 +439,52 @@ describe('intercept: детермінізм', () => {
       return JSON.stringify({ minute: geo.minute, geoEvents });
     };
     expect(run(true)).toEqual(run(false));
+  });
+});
+
+describe('intercept: гарматний модуль (П11.3, ADR-0058)', () => {
+  // Фіксований бій: HP обох високі — бої не закінчуються, порівнюємо раунди.
+  function engagedFight(seed = 7): { ic: InterceptState; geo: GeoState } {
+    const ic = createIntercept(seed);
+    const geo = geoWith(mkUfo({ id: 'u1', pos: { x: 8, y: 4 }, target: { x: 15, y: 7 }, detected: true }));
+    startIntercept(ic, geo, 'u1');
+    ic.fighter.pos = { ...geo.ufos[0].pos };
+    interceptTick(ic, geo);
+    expect(ic.fighter.status).toBe('бій');
+    ic.ufoHp['u1'] = 1000;
+    ic.fighter.hp = 1000;
+    return { ic, geo };
+  }
+
+  function rounds(ic: InterceptState, geo: GeoState, n: number): { hit: boolean; damage: number }[] {
+    const out: { hit: boolean; damage: number }[] = [];
+    for (let i = 0; i < n; i++) {
+      interceptRound(ic, geo, 'впритул');
+      const e = ic.log.at(-1);
+      if (e && e.type === 'intercept_round') out.push({ hit: e.fighterHit, damage: e.fighterDamage });
+    }
+    return out;
+  }
+
+  it('з модулем: +2 до урону кожного влучання, промах — 0; rng споживається так само', () => {
+    const withModule = engagedFight(7);
+    withModule.ic.fighter.gunModule = true;
+    const withoutModule = engagedFight(7);
+    const a = rounds(withModule.ic, withModule.geo, 20);
+    const b = rounds(withoutModule.ic, withoutModule.geo, 20);
+    expect(a.length).toBe(b.length);
+    let hits = 0;
+    for (let i = 0; i < a.length; i++) {
+      expect(a[i].hit).toBe(b[i].hit); // ті самі кидки rng
+      if (b[i].hit) {
+        hits += 1;
+        expect(a[i].damage).toBe(b[i].damage + GUN_MODULE_DAMAGE);
+      } else {
+        expect(a[i].damage).toBe(0); // промах і з модулем — 0
+      }
+    }
+    expect(hits).toBeGreaterThan(0); // порівняння не порожнє
+    // бойове rng відмотане однаково: продовження бою байт-у-байт збігається
+    expect(interceptRngState(withModule.ic)).toBe(interceptRngState(withoutModule.ic));
   });
 });

@@ -22,6 +22,7 @@ import { spend, type EconomyState } from './economy';
 import { type DifficultyPreset, DEFAULT_PRESET, DIFFICULTY_MULTIPLIERS } from './campaign';
 import type { ProjectId, ResearchState } from './research';
 import { HIT_CHANCE_CAP, type Unit } from './combat';
+import type { InterceptState } from './intercept';
 
 // Предмети цеху — завершені проєкти науки, крім «Розширення лабораторії».
 export type ItemId = Exclude<ProjectId, 'розширення лабораторії'>;
@@ -54,7 +55,9 @@ export type WorkshopEvent =
   | { type: 'produced'; id: ItemId } // предмет готовий → склад
   | { type: 'equip'; soldierId: string; id: SoldierItemId } // предмет зі складу на солдата
   | { type: 'unequip'; soldierId: string; id: SoldierItemId } // предмет з солдата назад на склад
-  | { type: 'equipment_lost'; soldierId: string; items: (keyof SoldierEquipment)[] }; // предмети загиблого зникли (перма-смерть)
+  | { type: 'equipment_lost'; soldierId: string; items: (keyof SoldierEquipment)[] } // предмети загиблого зникли (перма-смерть)
+  | { type: 'gun_module_installed' } // модуль зі складу на винищувач
+  | { type: 'gun_module_removed' }; // модуль з винищувача назад на склад
 
 export interface WorkshopOrder {
   id: ItemId;
@@ -212,6 +215,38 @@ export function removeLostEquipment(workshop: WorkshopState, lost: Unit[]): void
 // Запис екіпірування солдата (створюється порожнім при першому зверненні).
 function equipmentOf(workshop: WorkshopState, soldierId: string): SoldierEquipment {
   return workshop.equipped[soldierId] ?? emptyEquipment();
+}
+
+// Гарматний модуль на винищувач (ADR-0058): один модуль, екіпірування на
+// геосцені; +2 пошкодження за раунд повітряного бою, доки встановлено
+// (застосовує interceptRound; зняття повертає модуль на склад). Модуль
+// ставиться/знімається лише на базі — винищувач у погоні, бою чи ремонті
+// недоступний для обслуговування.
+export function installGunModule(workshop: WorkshopState, intercept: InterceptState): void {
+  if (intercept.fighter.status !== 'на базі') {
+    throw new Error('Модуль встановлюється лише на базі: винищувач у польоті');
+  }
+  if (intercept.fighter.gunModule) {
+    throw new Error('Гарматний модуль уже встановлено');
+  }
+  if (workshop.store['гарматний модуль'] <= 0) {
+    throw new Error('Предмета немає на складі: гарматний модуль');
+  }
+  workshop.store['гарматний модуль'] -= 1;
+  intercept.fighter.gunModule = true;
+  workshop.log.push({ type: 'gun_module_installed' });
+}
+
+export function removeGunModule(workshop: WorkshopState, intercept: InterceptState): void {
+  if (intercept.fighter.status !== 'на базі') {
+    throw new Error('Модуль знімається лише на базі: винищувач у польоті');
+  }
+  if (!intercept.fighter.gunModule) {
+    throw new Error('Гарматний модуль не встановлено');
+  }
+  intercept.fighter.gunModule = false;
+  workshop.store['гарматний модуль'] += 1;
+  workshop.log.push({ type: 'gun_module_removed' });
 }
 
 // Ключ запису екіпірування за предметом каталогу (гарматний модуль відсіюється
