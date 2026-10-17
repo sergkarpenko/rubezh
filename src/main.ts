@@ -230,7 +230,7 @@ const geoAnim = new AnimEngine({
 // і завантаженої партії.
 function adoptParty(p: Party): Party {
   journalUI.adopt(p);
-  gameOver = isBankrupt(p.econ, p.roster);
+  gameOver = isBankrupt(p.econ, p.roster, p.campaign.preset);
   victoryDismissed = false; // П8.3a: нова/завантажена партія — екран перемоги показується знову
   return p;
 }
@@ -284,7 +284,7 @@ function partyTick(): void {
     const b = party.geo.base;
     geoAnim.push(makeGeoPulseAnim(b.x * GCELL + GCELL / 2, b.y * GCELL + GCELL / 2, (RADAR_RANGE + 0.5) * GCELL));
   }
-  if (!gameOver && isBankrupt(party.econ, party.roster)) {
+  if (!gameOver && isBankrupt(party.econ, party.roster, party.campaign.preset)) {
     gameOver = true;
     journal('✗ Банкрутство: немає боєготових солдатів і грошей на найм — партію програно.', 'lose', 'econ');
   }

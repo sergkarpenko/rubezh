@@ -80,9 +80,13 @@ for (const policyName of POLICIES) {
 }
 
 const out: string[] = [];
-out.push(`# П11.8 — симуляції балансу науки: ${seedCount} сідів × ${PRESETS.length} пресети × ${POLICIES.length} політики (${round1((Date.now() - started) / 1000)} с)`);
+out.push(
+  `# П11.8 — симуляції балансу науки: ${seedCount} сідів × ${PRESETS.length} пресети × ${POLICIES.length} політики (${round1((Date.now() - started) / 1000)} с)`
+);
 out.push('');
-out.push(`Політики: default = ${DEFAULT_PARTY_POLICY.name} (без науки, референс П8.5/П10.4), science = ${SCIENCE_POLICY.name} (вчені + проєкти + цех + екіпірування).`);
+out.push(
+  `Політики: default = ${DEFAULT_PARTY_POLICY.name} (без науки, референс П8.5/П10.4), science = ${SCIENCE_POLICY.name} (вчені + проєкти + цех + екіпірування).`
+);
 out.push('');
 
 for (const policyName of POLICIES) {
@@ -100,15 +104,23 @@ for (const policyName of POLICIES) {
     out.push(
       `| Банкрутств | ${bankrupts.length} (${round1((100 * bankrupts.length) / rs.length)}%)${bankrupts.length ? `, медіана дня ${median(bankrupts.map((r) => r.endDay))}` : ''} |`
     );
-    out.push(`| Середній фінальний рахунок | ${meanOf(rs, (r) => r.score.total)} (медіана ${median(scores)}, мін ${Math.min(...scores)}, макс ${Math.max(...scores)}) |`);
-    out.push(`| Місій запущено | ${meanOf(rs, (r) => r.missionsLaunched)} / партію; перемог ${meanOf(rs, (r) => r.missionsWon)}, поразок ${meanOf(rs, (r) => r.missionsLost)} |`);
+    out.push(
+      `| Середній фінальний рахунок | ${meanOf(rs, (r) => r.score.total)} (медіана ${median(scores)}, мін ${Math.min(...scores)}, макс ${Math.max(...scores)}) |`
+    );
+    out.push(
+      `| Місій запущено | ${meanOf(rs, (r) => r.missionsLaunched)} / партію; перемог ${meanOf(rs, (r) => r.missionsWon)}, поразок ${meanOf(rs, (r) => r.missionsLost)} |`
+    );
     out.push(`| Загиблих / поранень | ${meanOf(rs, (r) => r.soldiersLost)} / ${meanOf(rs, (r) => r.soldiersWounded)} на партію |`);
     out.push(`| Наймано солдатів (витрати) | ${meanOf(rs, (r) => r.hiredTotal)} (${meanOf(rs, (r) => r.hireSpent)}) |`);
-    out.push(`| Вчених наймано / звільнено (спіраль) | ${meanOf(rs, (r) => r.scientistsHired)} / ${meanOf(rs, (r) => r.scientistsFired)} |`);
+    out.push(
+      `| Вчених наймано / звільнено (спіраль) | ${meanOf(rs, (r) => r.scientistsHired)} / ${meanOf(rs, (r) => r.scientistsFired)} |`
+    );
     out.push(
       `| Партій з невиплатою зарплати | ${shortfallParties.length} (${round1((100 * shortfallParties.length) / rs.length)}%); діб з невиплатою ${meanOf(rs, (r) => r.salaryShortfallDays)} / партію |`
     );
-    out.push(`| Зарплата / проєкти / цех (витрати) | ${meanOf(rs, (r) => r.salarySpent)} / ${meanOf(rs, (r) => r.projectSpent)} / ${meanOf(rs, (r) => r.workshopSpent)} |`);
+    out.push(
+      `| Зарплата / проєкти / цех (витрати) | ${meanOf(rs, (r) => r.salarySpent)} / ${meanOf(rs, (r) => r.projectSpent)} / ${meanOf(rs, (r) => r.workshopSpent)} |`
+    );
     out.push(`| Проєктів завершено | ${meanOf(rs, (r) => r.projectsCompleted)} / партію |`);
     out.push(`| Предметів вироблено / екіпіровано | ${meanOf(rs, (r) => r.workshopProduced)} / ${meanOf(rs, (r) => r.equippedItems)} |`);
     out.push('');
@@ -121,14 +133,7 @@ for (const preset of PRESETS) {
   if (!rs) continue;
   out.push(`## Завершені проєкти, «${preset}» (політика science, ${rs.length} партій)`);
   out.push('');
-  const ids: ProjectId[] = [
-    'легка броня',
-    'оптичний приціл',
-    'аптечка',
-    'розширення лабораторії',
-    'осколкова граната',
-    'гарматний модуль',
-  ];
+  const ids: ProjectId[] = ['легка броня', 'оптичний приціл', 'аптечка', 'розширення лабораторії', 'осколкова граната', 'гарматний модуль'];
   out.push('| Проєкт | Партій, що завершили | Середній день завершення |');
   out.push('| --- | --- | --- |');
   for (const id of ids) {
@@ -145,7 +150,9 @@ out.push('');
 out.push(`| Доба |${POLICIES.flatMap((p) => PRESETS.map((x) => ` ${p}/${x} |`)).join('')}`);
 out.push(`| --- |${POLICIES.flatMap((p) => PRESETS.map(() => ' --- |')).join('')}`);
 for (const day of [5, 10, 15, 20, 25, 30]) {
-  out.push(`| Д${day} |${POLICIES.flatMap((p) => PRESETS.map((x) => ` ${curveAt(byCell.get(`${p}/${x}`)!, (r) => r.moneyByDay, day)} |`)).join('')}`);
+  out.push(
+    `| Д${day} |${POLICIES.flatMap((p) => PRESETS.map((x) => ` ${curveAt(byCell.get(`${p}/${x}`)!, (r) => r.moneyByDay, day)} |`)).join('')}`
+  );
 }
 out.push('');
 out.push('## Крива штату вчених (середні наприкінці доби, політика science)');
@@ -154,9 +161,7 @@ out.push(`| Доба |${PRESETS.map((x) => ` ${x} |`).join('')}`);
 out.push(`| --- |${PRESETS.map(() => ' --- |').join('')}`);
 for (const day of [5, 10, 15, 20, 25, 30]) {
   const rs = (preset: DifficultyPreset) => byCell.get(`science/${preset}`);
-  out.push(
-    `| Д${day} |${PRESETS.map((x) => ` ${rs(x) ? round1(meanOf(rs(x)!, (r) => r.scientistsByDay[day - 1] ?? 0)) : 0} |`).join('')}`
-  );
+  out.push(`| Д${day} |${PRESETS.map((x) => ` ${rs(x) ? round1(meanOf(rs(x)!, (r) => r.scientistsByDay[day - 1] ?? 0)) : 0} |`).join('')}`);
 }
 out.push('');
 

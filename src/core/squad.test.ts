@@ -18,7 +18,7 @@ import {
   readySoldiers,
   type Roster,
 } from './squad';
-import { createEconomy, HIRE_PRICE, spend } from './economy';
+import { createEconomy, HIRE_PRICE, hirePrice, spend } from './economy';
 
 // Геопартія з вручну «посадженим» НЛО (спавн вимкнено) — для точкових сценаріїв.
 function mkGeo(ufoId: string): GeoState {
@@ -211,6 +211,21 @@ describe('squad: кадрування (П4.3, ADR-0021)', () => {
     expect(hired.alive).toBe(true);
   });
 
+  // П11.8 (ADR-0058, тунінг комбо-B): ціна найму синхронізована з economyMultiplier
+  it('найм ×пресет: «легкий» 120, «норма» 100, «складний» 90 (hirePrice)', () => {
+    expect(hirePrice('легкий')).toBe(120);
+    expect(hirePrice('норма')).toBe(100);
+    expect(hirePrice('складний')).toBe(90);
+    const econ = createEconomy('легкий'); // старт 300 × 1.2 = 360
+    const r = createRoster(undefined, 'легкий');
+    hireSoldier(econ, r, 'легкий');
+    expect(econ.money).toBe(360 - 120); // списано 120, не flat 100
+    const hard = createEconomy('складний'); // старт 270
+    const hr = createRoster(undefined, 'складний');
+    hireSoldier(hard, hr, 'складний');
+    expect(hard.money).toBe(270 - 90); // списано 90
+  });
+
   it('імена циклічні: після вичерпання пулу — ім’я з номером, id унікальний', () => {
     const econ = createEconomy();
     const r = createRoster(12); // увесь пул імен
@@ -371,5 +386,16 @@ describe('squad: банкрутство (П4.4, ADR-0021)', () => {
     const r = createRoster(1);
     r.hospital['s1'] = 1;
     expect(isBankrupt(econ, r)).toBe(true);
+  });
+
+  // П11.8: поріг найму за пресетом — на «складному» 90 рятують партію, на «легкому» 120 ні
+  it('банкрутство ×пресет: 90 грошей — банкрут лише на «легкому» (поріг 120)', () => {
+    const econ = createEconomy('складний');
+    spend(econ, econ.money - 90); // лишається рівно 90
+    const r = createRoster(1);
+    r.hospital['s1'] = 10;
+    expect(isBankrupt(econ, r, 'легкий')).toBe(true); // 90 < 120
+    expect(isBankrupt(econ, r, 'норма')).toBe(true); // 90 < 100
+    expect(isBankrupt(econ, r, 'складний')).toBe(false); // 90 ≥ 90 — найм доступний
   });
 });

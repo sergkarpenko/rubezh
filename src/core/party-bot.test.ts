@@ -11,7 +11,7 @@
 import { describe, expect, it } from 'vitest';
 import { createParty } from './save';
 import { fireSoldier, readySoldiers } from './squad';
-import { HIRE_PRICE } from './economy';
+import { hirePrice } from './economy';
 import { PASSIVE_POLICY } from './intercept-bot';
 import { DEFAULT_PARTY_POLICY, SCIENCE_POLICY, TICKS_PER_DAY, partyBotHireStep, partyBotScienceStep, simulateParty } from './party-bot';
 
@@ -88,7 +88,7 @@ describe('П8.5: оркестратор — повна партія (фіксо�
     expect(r.soldiersLost).toBe(32);
     expect(r.soldiersWounded).toBe(19);
     expect(r.hiredTotal).toBe(30);
-    expect(r.hireSpent).toBe(30 * HIRE_PRICE);
+    expect(r.hireSpent).toBe(30 * hirePrice('норма')); // П11.8: hirePrice «норми» = 100
   });
 
   // П8.6: банкрутний сід нової лінії — сід 45 зі старої лінії тепер переможний
@@ -112,7 +112,8 @@ describe('П8.5: оркестратор — повна партія (фіксо�
         expect(r.moneyByDay).toHaveLength(4);
         expect(r.readyByDay).toHaveLength(4);
         expect(r.missionsWon + r.missionsLost).toBe(r.missionsLaunched);
-        expect(r.hireSpent).toBe(r.hiredTotal * HIRE_PRICE);
+        // П11.8: ціна найму за пресетом (hirePrice): «легкий» 120, «норма» 100
+        expect(r.hireSpent).toBe(r.hiredTotal * hirePrice(preset));
       }
     }
   });
@@ -179,12 +180,13 @@ describe('П11.8: політика науки — повний флоу (фік�
     expect(JSON.stringify(b)).toBe(JSON.stringify(a));
     expect(a.outcome).toBe('перемога');
     expect(a.scientistsHired).toBe(3);
-    expect(a.completedProjects).toEqual(['аптечка', 'розширення лабораторії']);
-    expect(a.workshopProduced).toBe(11);
-    expect(a.equippedItems).toBe(11);
+    // П11.8 (тунінг ×0.75 точок, комбо-B): за 30 діб — 3 проєкти (до тунінгу — 2)
+    expect(a.completedProjects).toEqual(['аптечка', 'розширення лабораторії', 'оптичний приціл']);
+    expect(a.workshopProduced).toBe(15);
+    expect(a.equippedItems).toBe(15);
     expect(a.salarySpent).toBe(1800);
     expect(a.projectSpent).toBe(270);
-    expect(a.workshopSpent).toBe(440);
+    expect(a.workshopSpent).toBe(640);
     expect(a.scientistsFired).toBe(0);
     expect(a.scientistsByDay[a.scientistsByDay.length - 1]).toBe(3);
   });
