@@ -18,6 +18,7 @@ import { createEconomy, type EconomyEvent, type EconomyState } from './economy';
 import { createIntercept, interceptRngState, type Fighter, type InterceptEvent, type InterceptState } from './intercept';
 import { createCampaign, DEFAULT_PRESET, type CampaignState, type DifficultyPreset } from './campaign';
 import { createResearch, type ActiveProject, type ProjectId, type ResearchEvent, type ResearchState, type Scientist } from './research';
+import { createWorkshop, emptyStore, type ItemId, type WorkshopEvent, type WorkshopOrder, type WorkshopState } from './workshop';
 
 export const SAVE_VERSION = 1;
 export const SAVE_SLOTS = 3; // ADR-0026: три слоти, ключі rubezh.save.1..3 у main.ts
@@ -58,6 +59,7 @@ export interface Party {
   campaign: CampaignState; // П8.2 (ADR-0033): стан кампанії — у Party
   hints: HintFlags; // П9.2: прапорці підказок — у Party (один раз за партію)
   research: ResearchState; // П11.2 (ADR-0058): штат вчених і проєкти — у Party
+  workshop: WorkshopState; // П11.3 (ADR-0058): черга цеху і склад — у Party
 }
 
 // П8.4a (борг П8.4): пресет партії передається в усі фабрики ядра — geo
@@ -74,6 +76,7 @@ export function createParty(seed: number, preset: DifficultyPreset = DEFAULT_PRE
     campaign: createCampaign(preset),
     hints: defaultHints(),
     research: createResearch(),
+    workshop: createWorkshop(),
   };
 }
 
@@ -141,6 +144,14 @@ interface ResearchSave {
   log: ResearchEvent[];
 }
 
+// П11.3 (ADR-0058): стан цеху і складу в сейві; відсутнє поле (сейви до
+// П11.3) = порожній цех (createWorkshop) — версія формату не зростає.
+interface WorkshopSave {
+  queue: WorkshopOrder[];
+  store: Record<ItemId, number>;
+  log: WorkshopEvent[];
+}
+
 export interface SaveData {
   version: number;
   seed: number;
@@ -153,6 +164,7 @@ export interface SaveData {
     campaign?: CampaignSave;
     hints?: HintsSave;
     research?: ResearchSave;
+    workshop?: WorkshopSave;
   };
 }
 
@@ -216,6 +228,11 @@ export function serializeParty(party: Party, savedAt: string = ''): string {
         pool: party.research.pool,
         lastSalaryDay: party.research.lastSalaryDay,
         log: party.research.log.slice(),
+      },
+      workshop: {
+        queue: party.workshop.queue.map((o) => ({ ...o })),
+        store: { ...party.workshop.store },
+        log: party.workshop.log.slice(),
       },
     },
   };
@@ -309,6 +326,11 @@ function parseSave(json: string): SaveData {
   ) {
     fail('Пошкоджені дані збереження: наука');
   }
+  // П11.3: поле workshop опційне (сейви до П11.3) — але якщо є, має бути коректним.
+  const wsv = st.workshop;
+  if (wsv !== undefined && (!Array.isArray(wsv.queue) || wsv.store === null || typeof wsv.store !== 'object' || !Array.isArray(wsv.log))) {
+    fail('Пошкоджені дані збереження: цех');
+  }
   return data;
 }
 
@@ -320,6 +342,8 @@ export function deserializeParty(json: string): Party {
   const g = data.state.geo;
   // П11.2: блок науки зі сейву (може бути відсутнім — сейви до Фази 11)
   const rsv = data.state.research;
+  // П11.3: блок цеху зі сейву (може бути відсутнім — сейви до П11.3)
+  const wsv = data.state.workshop;
   // mulberry32(S) робить перший виклик зі стану S + INC — ідентично
   // наступному виклику оригіналу, що зупинився на S.
   const geo = createGeoGame({ seed: data.seed, rng: mulberry32(g.rngState) });
@@ -382,6 +406,16 @@ export function deserializeParty(json: string): Party {
             log: rsv.log.slice(),
           }
         : createResearch(),
+    // П11.3 (ADR-0058): відсутнє поле workshop (сейви до П11.3) = порожній
+    // цех: без замовлень, порожній склад (критерій сейв-сумісності П11.3).
+    workshop:
+      wsv !== undefined
+        ? {
+            queue: wsv.queue.map((o) => ({ ...o })),
+            store: { ...emptyStore(), ...wsv.store },
+            log: wsv.log.slice(),
+          }
+        : createWorkshop(),
   };
 }
 
