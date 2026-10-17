@@ -159,9 +159,8 @@ function noise(c: SoundContext, t0: number, dur: number, vol: number): void {
 
 // Рецепти звуків (ADR-0059): сигнатури режимів пострілу різні — короткий
 // (щільний шумовий спалах + квадрат), прицільний (довгий свист вниз), черга
-// (коротший різкий імпульс; три події черги = три кулі).
-function playRecipe(c: SoundContext, name: SoundName): void {
-  const t = c.currentTime;
+// (коротші нижчі кулі-імпульси; зсув кулі черги — у play, стакато-циклом).
+function playRecipe(c: SoundContext, name: SoundName, t: number): void {
   switch (name) {
     case 'click':
       note(c, t, 'square', 660, 440, 0.05, 0.04);
@@ -174,8 +173,8 @@ function playRecipe(c: SoundContext, name: SoundName): void {
       note(c, t, 'sawtooth', 900, 240, 0.18, 0.08);
       break;
     case 'shot-auto':
-      noise(c, t, 0.07, 0.14);
-      note(c, t, 'square', 160, 70, 0.07, 0.09);
+      noise(c, t, 0.05, 0.16);
+      note(c, t, 'square', 150, 80, 0.05, 0.09);
       break;
     case 'hit':
       note(c, t, 'triangle', 150, 55, 0.12, 0.16);
@@ -235,6 +234,10 @@ export function createSound(deps: Partial<SoundDeps> = {}): Sound {
   let on = readState() !== '0'; // дефолт — увімкнено (ADR-0059)
   let ctx: SoundContext | null = null;
   let noApi = false; // WebAudio відсутній — далі не пробуємо (один гейт)
+  // Черга (auto): три кулі атаки дренуються журналом одразу — без зсуву вони
+  // зливаються в один імпульс. Кулі черги граються стакато-циклом 0/0.09/0.18с
+  // («тр-р-р»). Детерміновано: зсув залежить лише від порядку викликів.
+  let autoTap = 0;
 
   function context(): SoundContext | null {
     if (ctx) return ctx;
@@ -260,7 +263,13 @@ export function createSound(deps: Partial<SoundDeps> = {}): Sound {
         /* тихо */
       }
     }
-    playRecipe(c, name);
+    // Черга — стакато-зсув кулі; решта звуків — з поточного часу контексту.
+    if (name === 'shot-auto') {
+      playRecipe(c, name, c.currentTime + autoTap * 0.09);
+      autoTap = (autoTap + 1) % 3; // три кулі черги — цикл починається знову
+    } else {
+      playRecipe(c, name, c.currentTime);
+    }
   }
 
   return {

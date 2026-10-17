@@ -142,7 +142,22 @@ describe('Синтез: рецепти за моком SoundContext', () => {
       { v: 240, t: 0.18 },
     ]);
     const auto = mk('shot-auto');
-    expect(auto.osc[0].stop).toBeCloseTo(0.09); // коротший імпульс
+    expect(auto.osc[0].stop).toBeCloseTo(0.07); // коротша нижча куля за snap
+  });
+
+  it('черга: три кулі — стакато-зсув 0/0.09/0.18с, цикл замикається; hit між кулями цикл не збиває', () => {
+    const m = mockContext();
+    const s = createSound({ makeContext: () => m.ctx, store: memStore() });
+    for (let i = 0; i < 3; i++) s.play('shot-auto');
+    expect(m.rec.osc.map((o) => o.start)).toEqual([0, 0.09, 0.18]);
+    s.play('shot-auto'); // четверта куля — цикл з початку
+    expect(m.rec.osc[3].start).toBe(0);
+    const m2 = mockContext();
+    const s2 = createSound({ makeContext: () => m2.ctx, store: memStore() });
+    for (let i = 0; i < 3; i++) {
+      s2.battleEvent({ type: 'shot', shooterId: 's1', targetId: 'a1', mode: 'auto', hit: true, damage: 2 } as never);
+    }
+    expect(m2.rec.osc.filter((o) => o.type === 'square').map((o) => o.start)).toEqual([0, 0.09, 0.18]);
   });
 
   it('багатонотні: detect — 2 ноти, win — 3 висхідні; події мапляться у рецепти', () => {
