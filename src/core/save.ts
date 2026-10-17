@@ -17,6 +17,7 @@ import { createRoster, type Roster } from './squad';
 import { createEconomy, type EconomyEvent, type EconomyState } from './economy';
 import { createIntercept, interceptRngState, type Fighter, type InterceptEvent, type InterceptState } from './intercept';
 import { createCampaign, DEFAULT_PRESET, type CampaignState, type DifficultyPreset } from './campaign';
+import { createResearch, type ActiveProject, type ProjectId, type ResearchEvent, type ResearchState, type Scientist } from './research';
 
 export const SAVE_VERSION = 1;
 export const SAVE_SLOTS = 3; // ADR-0026: три слоти, ключі rubezh.save.1..3 у main.ts
@@ -56,6 +57,7 @@ export interface Party {
   intercept: InterceptState; // П7.4 (ADR-0032): стан винищувача — у Party
   campaign: CampaignState; // П8.2 (ADR-0033): стан кампанії — у Party
   hints: HintFlags; // П9.2: прапорці підказок — у Party (один раз за партію)
+  research: ResearchState; // П11.2 (ADR-0058): штат вчених і проєкти — у Party
 }
 
 // П8.4a (борг П8.4): пресет партії передається в усі фабрики ядра — geo
@@ -71,6 +73,7 @@ export function createParty(seed: number, preset: DifficultyPreset = DEFAULT_PRE
     intercept: createIntercept(seed),
     campaign: createCampaign(preset),
     hints: defaultHints(),
+    research: createResearch(),
   };
 }
 
@@ -125,6 +128,19 @@ interface HintsSave {
   repair: boolean;
 }
 
+// П11.2 (ADR-0058): стан науки в сейві; відсутнє поле (сейви до Фази 11) =
+// порожня наука (createResearch) — версія формату не зростає (прецедент П7.4).
+interface ResearchSave {
+  scientists: Scientist[];
+  hired: number;
+  slots: number;
+  active: ActiveProject[];
+  completed: ProjectId[];
+  pool: number;
+  lastSalaryDay: number;
+  log: ResearchEvent[];
+}
+
 export interface SaveData {
   version: number;
   seed: number;
@@ -136,6 +152,7 @@ export interface SaveData {
     intercept?: InterceptSave;
     campaign?: CampaignSave;
     hints?: HintsSave;
+    research?: ResearchSave;
   };
 }
 
@@ -190,6 +207,16 @@ export function serializeParty(party: Party, savedAt: string = ''): string {
         victoryDay: party.campaign.victoryDay,
       },
       hints: { ...party.hints },
+      research: {
+        scientists: party.research.scientists.map((s) => ({ ...s })),
+        hired: party.research.hired,
+        slots: party.research.slots,
+        active: party.research.active.map((p) => ({ ...p })),
+        completed: party.research.completed.slice(),
+        pool: party.research.pool,
+        lastSalaryDay: party.research.lastSalaryDay,
+        log: party.research.log.slice(),
+      },
     },
   };
   return JSON.stringify(data);
@@ -267,6 +294,21 @@ function parseSave(json: string): SaveData {
   if (data.state.hints !== undefined && (typeof data.state.hints !== 'object' || data.state.hints === null)) {
     fail('Пошкоджені дані збереження: підказки');
   }
+  // П11.2: поле research опційне (сейви до Фази 11) — але якщо є, має бути коректним.
+  const rsv = st.research;
+  if (
+    rsv !== undefined &&
+    (!Array.isArray(rsv.scientists) ||
+      !Number.isInteger(rsv.hired) ||
+      !Number.isInteger(rsv.slots) ||
+      !Array.isArray(rsv.active) ||
+      !Array.isArray(rsv.completed) ||
+      !Number.isInteger(rsv.pool) ||
+      !Number.isInteger(rsv.lastSalaryDay) ||
+      !Array.isArray(rsv.log))
+  ) {
+    fail('Пошкоджені дані збереження: наука');
+  }
   return data;
 }
 
@@ -276,6 +318,8 @@ function parseSave(json: string): SaveData {
 export function deserializeParty(json: string): Party {
   const data = parseSave(json);
   const g = data.state.geo;
+  // П11.2: блок науки зі сейву (може бути відсутнім — сейви до Фази 11)
+  const rsv = data.state.research;
   // mulberry32(S) робить перший виклик зі стану S + INC — ідентично
   // наступному виклику оригіналу, що зупинився на S.
   const geo = createGeoGame({ seed: data.seed, rng: mulberry32(g.rngState) });
@@ -323,6 +367,21 @@ export function deserializeParty(json: string): Party {
     },
     // П9.2: відсутнє поле hints (старі сейви) = усі підказки ще не показано.
     hints: { ...defaultHints(), ...(data.state.hints ?? {}) },
+    // П11.2 (ADR-0058): відсутнє поле research (сейви до Фази 11) = порожня
+    // наука: без вчених, 2 слоти, порожні проєкти і пул (критерій П11.2).
+    research:
+      rsv !== undefined
+        ? {
+            scientists: rsv.scientists.map((s) => ({ ...s })),
+            hired: rsv.hired,
+            slots: rsv.slots,
+            active: rsv.active.map((p) => ({ ...p })),
+            completed: rsv.completed.slice(),
+            pool: rsv.pool,
+            lastSalaryDay: rsv.lastSalaryDay,
+            log: rsv.log.slice(),
+          }
+        : createResearch(),
   };
 }
 

@@ -10,6 +10,8 @@
 import { RADAR_RANGE, advanceTime } from './core/geo';
 import { hireSoldier, hospitalTick, isBankrupt } from './core/squad';
 import { economyTick } from './core/economy';
+// П11.2 (ADR-0058): тік науки — після дотації того ж дня; без вчених — no-op.
+import { researchTick } from './core/research';
 import { interceptTick, repairTick, type InterceptEvent } from './core/intercept';
 // пR.2 (ADR-0037): модулі шару UI — демо-драйвер, DOM-хелпер, панель збереження, журнал подій.
 import { DemoDriver } from './ui/demo';
@@ -225,6 +227,9 @@ function interceptAnims(e: InterceptEvent): Anim[] {
 function partyTick(): void {
   advanceTime(party.geo, 1);
   economyTick(party.econ, party.geo, party.campaign.preset);
+  // П11.2 (ADR-0058): зарплата і наукові точки — тим самим контуром доби,
+  // одразу після дотації; без вчених — no-op (партії без науки не змінюються).
+  researchTick(party.research, party.econ, party.geo, party.campaign.preset);
   hospitalTick(party.roster);
   // П7.4 (ADR-0032): погоня й ремонт живуть тіками геосцени разом з партією
   interceptTick(party.intercept, party.geo);
