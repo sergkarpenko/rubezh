@@ -4,7 +4,7 @@
 // Покроковий драйвер: лог DemoSteps байт-у-байт ідентичний миттєвому autoBattle.
 
 import { describe, expect, it } from 'vitest';
-import { createGame, makeUnit, mulberry32, type GameState } from './combat';
+import { createGame, makeUnit, mulberry32, type GameState, type UnitItems } from './combat';
 import { advanceTime, createGeoGame, type GeoState } from './geo';
 import { aliensTurn, autoBattle, botTurn, DemoSteps } from './ai-bot';
 import { createMission, missionOutcome, type Mission } from './mission';
@@ -152,5 +152,90 @@ describe('bot: глухий кут — солдат без ходу', () => {
     expect(botTurn(g)).toBe(0);
     expect(g.log.filter((e) => e.type === 'shot' || e.type === 'move')).toHaveLength(0);
     expect(g.activeSide).toBe('alien');
+  });
+});
+
+// --- П11.4 (ADR-0058/0038): синхронізація бота з витратниками ---
+
+// Гра з солдатом (2,2), сусідом (3,2) і парою прибульців поруч (8,2)/(8,3).
+function itemsBotGame(items?: Record<string, UnitItems>): GameState {
+  return createGame({
+    map: { width: 20, height: 20, blocked: new Set() },
+    rng: mulberry32(42),
+    items,
+    units: [
+      makeUnit({ id: 's1', side: 'player', pos: { x: 2, y: 2 } }),
+      makeUnit({ id: 's2', side: 'player', pos: { x: 3, y: 2 } }),
+      makeUnit({ id: 'a1', side: 'alien', pos: { x: 8, y: 2 } }),
+      makeUnit({ id: 'a2', side: 'alien', pos: { x: 8, y: 3 } }),
+    ],
+  });
+}
+
+describe('bot: лікування при пораненні (П11.4)', () => {
+  it('поранений солдат з аптечкою лікує собі до стрільби; витратник списано', () => {
+    const g = itemsBotGame({ s1: { medkit: true, grenade: false } });
+    g.units[0].hp = 5;
+    const actions = botTurn(g);
+    expect(g.log[0]).toEqual({ type: 'heal', unitId: 's1', targetId: 's1', healed: 3 });
+    expect(g.units[0].hp).toBe(8);
+    expect(g.items?.s1.medkit).toBe(false);
+    expect(actions).toBeGreaterThan(0);
+  });
+
+  it('здоровий солдат аптечку не витрачає', () => {
+    const g = itemsBotGame({ s1: { medkit: true, grenade: false } });
+    botTurn(g);
+    expect(g.items?.s1.medkit).toBe(true);
+    expect(g.log.some((e) => e.type === 'heal')).toBe(false);
+  });
+});
+
+describe('bot: граната при скупченні ворогів (П11.4)', () => {
+  it('двоє ворогів поруч і без союзників у зоні — кидок по епіцентру', () => {
+    const g = itemsBotGame({ s1: { medkit: false, grenade: true } });
+    // сунемо кидача ближче: (7,2) — обидва вороги в дальності ≤6 і видимі
+    g.units[0].pos = { x: 7, y: 5 };
+    const actions = botTurn(g);
+    const ev = g.log.find((e) => e.type === 'grenade');
+    expect(ev).toBeDefined();
+    expect(g.items?.s1.grenade).toBe(false);
+    expect(actions).toBeGreaterThan(0);
+    // обидва вороги в зоні вибуху — обидва уражені
+    const gren = g.log.find((e) => e.type === 'grenade');
+    if (gren?.type === 'grenade') expect(gren.hits.map((h) => h.unitId).sort()).toEqual(['a1', 'a2']);
+  });
+
+  it('союзник у зоні — бот не кидає (не платить дружнім вогнем)', () => {
+    const g = itemsBotGame({ s2: { medkit: false, grenade: true } });
+    g.units[1].pos = { x: 7, y: 5 };
+    g.units[0].pos = { x: 8, y: 2 }; // с1 в епіцентрі біля обох ворогів
+    g.units[2].pos = { x: 8, y: 2 };
+    botTurn(g);
+    expect(g.log.some((e) => e.type === 'grenade')).toBe(false);
+    expect(g.items?.s2.grenade).toBe(true);
+  });
+
+  it('одиничний ворог — граната не витрачається, далі звичайна логіка', () => {
+    const g = itemsBotGame({ s1: { medkit: false, grenade: true } });
+    g.units[3].pos = { x: 17, y: 17 }; // a2 далеко — скупчення немає
+    g.units[2].pos = { x: 6, y: 2 }; // a1 поруч із s1
+    botTurn(g);
+    expect(g.items?.s1.grenade).toBe(true);
+    expect(g.log.some((e) => e.type === 'shot')).toBe(true);
+  });
+});
+
+describe('bot: ізоляція без предметів (критерій 1 П11.4)', () => {
+  it('наявність невикористаних предметів не міняє хід бота: лог байт-у-байт', () => {
+    const play = (items?: Record<string, UnitItems>) => {
+      const g = itemsBotGame(items);
+      g.units[2].pos = { x: 6, y: 2 }; // a1 біля s1: стрільба відразу
+      botTurn(g); // botTurn сам завершує хід (endTurn усередині)
+      g.units.forEach((u) => (u.ap = u.maxAp));
+      return JSON.stringify(g.log) + '|' + g.units.map((u) => u.hp + ':' + u.ap).join(',');
+    };
+    // аптечка у здорового і граната без скупчення — жодна не спрацює
+    expect(play()).toBe(play({ s1: { medkit: true, grenade: true }, s2: { medkit: true, grenade: false } }));
   });
 });

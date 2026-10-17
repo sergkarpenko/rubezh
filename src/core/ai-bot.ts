@@ -2,6 +2,9 @@
 // Чиста логіка рішень і покроковий драйвер демо-бою: жодного DOM/Canvas
 // (ADR-0002) — паузи і анімації між діями вставляє шар відображення
 // (src/ui/demo.ts). UI-інтеграція бота — не тут: модуль лише виконує дії ядра.
+// П11.4 (ADR-0058): бот синхронізований з витратниками — лікування при
+// пораненні (аптечка), граната при скупченні ворогів (grenadeTarget);
+// без предметів логіка байт-у-байт незмінна (критерій 1 П11.4).
 //
 // Дзеркало ШІ прибульців 3.5 (src/core/ai.ts): найближча видима ціль → постріл
 // (auto > aimed > snap за очікуваним пошкодженням); не можна — рух у бік цілі;
@@ -11,16 +14,46 @@
 // війни чесний (visibleEnemies). Логіка перевірена в пісочниці: 12/12 боїв
 // завершуються, детерміновано.
 
-import { endTurn, moveUnit, resolveAttack, type GameState, type Unit } from './combat';
+import {
+  endTurn,
+  moveUnit,
+  resolveAttack,
+  throwGrenade,
+  useMedkit,
+  GRENADE_RANGE,
+  HEAL_AP_COST,
+  GRENADE_AP_COST,
+  distance,
+  grenadeZone,
+  hasLineOfSight,
+  type GameState,
+  type Unit,
+  type Vec2,
+} from './combat';
 import { visibleEnemies } from './map';
 import { bestPathToNeighbors, bestShootMode, nearestEnemy, pathToward } from './ai-utils';
 import { aiStep } from './ai';
 import { ALIEN_SPAWN, SQUAD_SPAWN, missionOutcome } from './mission';
 
 // Одна жадібна дія солдата: true — дія виконана (виконана дія завжди витрачає AP).
+// П11.4 (ADR-0058/0038): синхронізація з витратниками — лікування при пораненні
+// (аптечка, собі), граната при скупченні ворогів (≥2 у зоні вибуху і жодного
+// союзника — бот не платить дружнім вогнем). Рішення без RNG, порядок фіксований.
 function soldierStep(state: GameState, u: Unit): boolean {
   if (!u.alive || u.ap <= 0) return false;
+  const items = state.items?.[u.id];
+  if (items?.medkit && u.hp < u.maxHp && u.ap >= HEAL_AP_COST) {
+    useMedkit(state, u.id, u.id);
+    return true;
+  }
   const enemies = visibleEnemies(state, 'player');
+  if (items?.grenade && u.ap >= GRENADE_AP_COST && enemies.length > 0) {
+    const center = grenadeTarget(state, u, enemies);
+    if (center) {
+      throwGrenade(state, u.id, center);
+      return true;
+    }
+  }
   if (enemies.length === 0) {
     // Рух до зони НЛО (дзеркало patrolStep, але без резерву на дозор:
     // демо має досягти швидкого контакту).
@@ -43,6 +76,25 @@ function soldierStep(state: GameState, u: Unit): boolean {
     return true;
   }
   return false;
+}
+
+// Кращий епіцентр гранати для бота (П11.4, ADR-0058): позиція видимого ворога,
+// у зоні вибуху (епіцентр + хрест) — ≥2 ворогів і жодного союзника
+// (friendly fire — свідома тактична ціна гравця, бот її не платить);
+// в дальності кидка і з чистою лінією від кидача. Перший за порядком
+// масиву при рівності — детермінізм (ADR-0003, без RNG). null — кидок
+// не вигідний.
+function grenadeTarget(state: GameState, u: Unit, enemies: Unit[]): Vec2 | null {
+  for (const e of enemies) {
+    if (distance(u.pos, e.pos) > GRENADE_RANGE) continue;
+    if (!hasLineOfSight(state, u.pos, e.pos)) continue;
+    const zone = grenadeZone(e.pos);
+    const inZone = (p: Vec2) => zone.some((c) => c.x === p.x && c.y === p.y);
+    const foes = enemies.filter((x) => x.alive && inZone(x.pos)).length;
+    const allies = state.units.filter((x) => x.alive && x.side === u.side && inZone(x.pos)).length;
+    if (foes >= 2 && allies === 0) return { ...e.pos };
+  }
+  return null;
 }
 
 // Хід гравця ботами: кожен живий солдат діє, доки є AP; потім кінець ходу.
