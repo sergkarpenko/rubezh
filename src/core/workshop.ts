@@ -21,7 +21,7 @@
 import { spend, type EconomyState } from './economy';
 import { type DifficultyPreset, DEFAULT_PRESET, DIFFICULTY_MULTIPLIERS } from './campaign';
 import type { ProjectId, ResearchState } from './research';
-import { HIT_CHANCE_CAP, type Unit } from './combat';
+import { HIT_CHANCE_CAP, type Unit, type UnitItems } from './combat';
 import type { InterceptState } from './intercept';
 
 // Предмети цеху — завершені проєкти науки, крім «Розширення лабораторії».
@@ -247,6 +247,34 @@ export function removeGunModule(workshop: WorkshopState, intercept: InterceptSta
   intercept.fighter.gunModule = false;
   workshop.store['гарматний модуль'] += 1;
   workshop.log.push({ type: 'gun_module_removed' });
+}
+
+// П11.4 (ADR-0058): витратники загону на місію — копія екіпірування в стан
+// бою (id солдата → предмети). Ядро бою не знає про ростер/склад: список
+// для GameState.items готує цех, дії списують прапорці вже у копії.
+// Детермінізм: порядок фіксований за загоном, жодного RNG.
+export function deployConsumables(workshop: WorkshopState, squad: Unit[]): Record<string, UnitItems> {
+  const items: Record<string, UnitItems> = {};
+  for (const soldier of squad) {
+    const eq = workshop.equipped[soldier.id];
+    if (eq?.medkit || eq?.grenade) items[soldier.id] = { medkit: eq.medkit, grenade: eq.grenade };
+  }
+  return items;
+}
+
+// П11.4 (ADR-0058): розрахунок витратників після місії — повертає істину в
+// ростер: невикористані лишаються при солдатові («по одній на місію»),
+// використані зникають (на склад не повертаються — витратник витрачено).
+// Загиблих опрацьовує removeLostEquipment — сюди передаємо лише уцілілих.
+// Порожній запис екіпірування не тримаємо (чистий стан у сейві, як в unequipItem).
+export function settleConsumables(workshop: WorkshopState, survivors: Unit[], items: Record<string, UnitItems> | undefined): void {
+  for (const soldier of survivors) {
+    const eq = workshop.equipped[soldier.id];
+    if (!eq) continue;
+    eq.medkit = items?.[soldier.id]?.medkit ?? false;
+    eq.grenade = items?.[soldier.id]?.grenade ?? false;
+    if (!eq.armor && !eq.optics && !eq.medkit && !eq.grenade) delete workshop.equipped[soldier.id];
+  }
 }
 
 // Ключ запису екіпірування за предметом каталогу (гарматний модуль відсіюється

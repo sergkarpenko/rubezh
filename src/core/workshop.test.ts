@@ -14,10 +14,12 @@ import { createWorkshop, emptyStore, orderItem, WORKSHOP_CATALOG, workshopTick }
 import {
   ARMOR_MAX_HP_BONUS,
   OPTICS_ACCURACY_BONUS,
+  deployConsumables,
   equipItem,
   installGunModule,
   removeGunModule,
   removeLostEquipment,
+  settleConsumables,
   unequipItem,
   type WorkshopState,
 } from './workshop';
@@ -379,5 +381,81 @@ describe('гарматний модуль винищувача (ADR-0058: оди
     const workshop = createWorkshop();
     const ic = createIntercept(11);
     expect(() => removeGunModule(workshop, ic)).toThrow('не встановлено');
+  });
+});
+
+// --- П11.4 (ADR-0058): витратники загону на місію і назад ---
+
+describe('deployConsumables / settleConsumables (П11.4)', () => {
+  it('деплой: копія екіпірування в стан бою — лише витратники, лише озброєні', () => {
+    const workshop = stockedWorkshop();
+    const roster = createRoster(3);
+    equipItem(workshop, roster.soldiers[0], 'аптечка');
+    equipItem(workshop, roster.soldiers[1], 'осколкова граната');
+    equipItem(workshop, roster.soldiers[1], 'оптичний приціл'); // постійний — у витратники не йде
+    const items = deployConsumables(workshop, missionSquad(roster));
+    expect(items).toEqual({
+      [roster.soldiers[0].id]: { medkit: true, grenade: false },
+      [roster.soldiers[1].id]: { medkit: false, grenade: true },
+    });
+  });
+
+  it('деплой без екіпірованих — порожній список (бій без предметів)', () => {
+    const workshop = createWorkshop();
+    expect(deployConsumables(workshop, missionSquad(createRoster(2)))).toEqual({});
+  });
+
+  it('розрахунок: використана аптечка зникає, невикористана граната лишається', () => {
+    const workshop = stockedWorkshop();
+    const roster = createRoster(2);
+    equipItem(workshop, roster.soldiers[0], 'аптечка');
+    equipItem(workshop, roster.soldiers[0], 'осколкова граната');
+    const s = roster.soldiers[0];
+    const items = deployConsumables(workshop, [s]);
+    items[s.id].medkit = false; // аптечка витрачена в бою
+    settleConsumables(workshop, [s], items);
+    expect(workshop.equipped[s.id]).toEqual({ armor: false, optics: false, medkit: false, grenade: true });
+    expect(workshop.store['аптечка']).toBe(1); // 2 − 1 екіпірована; використана на склад не повертається
+  });
+
+  it('розрахунок: всі витратники використані — порожній запис екіпірування вилучено', () => {
+    const workshop = stockedWorkshop();
+    const roster = createRoster(1);
+    equipItem(workshop, roster.soldiers[0], 'аптечка');
+    const s = roster.soldiers[0];
+    settleConsumables(workshop, [s], { [s.id]: { medkit: false, grenade: false } });
+    expect(workshop.equipped).toEqual({}); // чистий стан у сейві
+  });
+
+  it('розрахунок: солдат з аптечкою не ходив у бій — запис не чіпається', () => {
+    const workshop = stockedWorkshop();
+    const roster = createRoster(2);
+    equipItem(workshop, roster.soldiers[1], 'аптечка'); // не в загоні місії
+    const s = roster.soldiers[0];
+    settleConsumables(workshop, [s], {});
+    expect(workshop.equipped[roster.soldiers[1].id]).toEqual({ armor: false, optics: false, medkit: true, grenade: false });
+  });
+
+  it('розрахунок без стану бою (бій до П11.4/старий виклик) — витратники втрачаються', () => {
+    const workshop = stockedWorkshop();
+    const roster = createRoster(1);
+    equipItem(workshop, roster.soldiers[0], 'аптечка');
+    settleConsumables(workshop, [roster.soldiers[0]], undefined);
+    expect(workshop.equipped).toEqual({});
+  });
+
+  it('наскрізний цикл: деплой → «використання» в бою → розрахунок (критерій 3)', () => {
+    const workshop = stockedWorkshop();
+    const roster = createRoster(2);
+    equipItem(workshop, roster.soldiers[0], 'аптечка');
+    equipItem(workshop, roster.soldiers[0], 'осколкова граната');
+    equipItem(workshop, roster.soldiers[1], 'аптечка');
+    const squad = missionSquad(roster);
+    const items = deployConsumables(workshop, squad);
+    // бій: обидва витратники першого солдата використано, другий не чіпав
+    items[squad[0].id] = { medkit: false, grenade: false };
+    settleConsumables(workshop, [squad[0], squad[1]], items);
+    expect(workshop.equipped[squad[0].id]).toBeUndefined();
+    expect(workshop.equipped[squad[1].id]).toEqual({ armor: false, optics: false, medkit: true, grenade: false });
   });
 });

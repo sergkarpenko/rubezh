@@ -166,6 +166,14 @@ export function battleEventText(e: GameEvent, name: (id: string) => string): { t
   if (e.type === 'death') {
     return { text: '✝ ' + name(e.unitId) + ' загинув', cls: 'lose' };
   }
+  // П11.4 (ADR-0058): події нових бойових дій з витратниками
+  if (e.type === 'heal') {
+    return { text: '✚ ' + name(e.unitId) + ' лікує ' + name(e.targetId) + ': +' + e.healed + ' HP', cls: 'win' };
+  }
+  if (e.type === 'grenade') {
+    const hits = e.hits.length > 0 ? e.hits.map((h) => '−' + h.damage + ' ' + name(h.unitId)).join(', ') : 'у зоні нікого';
+    return { text: '✦ ' + name(e.unitId) + ' кидає гранату в (' + e.center.x + ', ' + e.center.y + '): ' + hits, cls: '' };
+  }
   return null; // move / turn / overwatch — не для журналу бою
 }
 

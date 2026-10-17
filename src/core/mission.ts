@@ -35,6 +35,7 @@ import {
   type GameMap,
   type GameState,
   type Unit,
+  type UnitItems,
   type Vec2,
 } from './combat';
 import { makeTestMap } from './map';
@@ -123,6 +124,7 @@ export interface Mission {
 
 export interface CreateMissionOptions {
   squad?: Unit[]; // свій загін (максимум 3 — розмір зони висадки)
+  items?: Record<string, UnitItems>; // П11.4 (ADR-0058): витратники загону в бою (deployConsumables)
 }
 
 // Пошук цілі місії з валідацією: лише приземлений виявлений НЛО.
@@ -164,7 +166,7 @@ export function createMission(geo: GeoState, ufoId: string, opts: CreateMissionO
     );
   }
 
-  const state = createGame({ map, units: [...squad, ...aliens], rng });
+  const state = createGame({ map, units: [...squad, ...aliens], rng, items: opts.items });
   return { briefing: { ufoId: ufo.id, kind: ufo.kind, aliens: n, minute: geo.minute }, state };
 }
 
