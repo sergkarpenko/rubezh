@@ -73,7 +73,9 @@ jobs:
       # Артефакт збирається заново щоразу: «свіжий main + лише обрана гілка» —
       # повторне прев'ю тієї ж гілки заміщає старе, чужі прев'ю зникають.
       - name: Скласти артефакт «корінь + /preview/<гілка>/»
-        run: cp -r branch/dist "main/dist/preview/${{ steps.slug.outputs.slug }}"
+        run: |
+          mkdir -p main/dist/preview
+          cp -r branch/dist "main/dist/preview/${{ steps.slug.outputs.slug }}"
       - name: URL прев'ю
         run: |
           url="https://sergkarpenko.github.io/rubezh/preview/${{ steps.slug.outputs.slug }}/"
