@@ -16,6 +16,9 @@ import {
   type InterceptChoice,
 } from '../core/intercept';
 import { HIRE_PRICE } from '../core/economy';
+// П11.6 (ADR-0058): екіпірування в картці солдата ростеру — броня/оптика
+// (постійні), аптечка/граната (витратні); дії — лише на геосцені.
+import { equipItem, unequipItem, type SoldierEquipment, type SoldierItemId } from '../core/workshop';
 import { readySoldiers } from '../core/squad';
 import type { Party } from '../core/save';
 import { drawAnimFrame, drawBaseSprite, drawFighterSprite, drawUfoSprite } from '../render';
@@ -28,6 +31,15 @@ import type { LogCat } from './journal';
 export function hpColor(hp: number, maxHp: number): string {
   return hp >= maxHp ? '#7fbf7f' : hp > maxHp / 2 ? '#d8b25a' : '#ff9c9c';
 }
+
+// П11.6 (ADR-0058): предмети спорядження у картці солдата — коротка мітка,
+// ключ екіпірування і предмет каталогу цеху. Порядок фіксований (детермінізм).
+const EQUIP_ITEMS: [SoldierItemId, keyof SoldierEquipment, string][] = [
+  ['легка броня', 'armor', 'броня'],
+  ['оптичний приціл', 'optics', 'оптика'],
+  ['аптечка', 'medkit', 'аптечка'],
+  ['осколкова граната', 'grenade', 'граната'],
+];
 
 // Залежності від шару застосунку (main.ts): читання стану і дії панелей.
 // Панелі не знають, як стан зберігається у застосунку.
@@ -286,6 +298,8 @@ export function createPanels(deps: PanelsDeps): Panels {
     const box = el('roster');
     box.innerHTML = '';
     const soldiers = party.roster.soldiers;
+    // П11.6: екіпірування — лише на геосцені; у бою/банкрутстві кнопки вимкнені
+    const busy = deps.inBattle() || deps.isGameOver();
     // ADR-0027: чип боєготових у топбарі — завжди видний стан партії
     const readyN = readySoldiers(party.roster).length;
     el('ready').textContent = readyN + '/' + soldiers.length;
@@ -322,6 +336,36 @@ export function createPanels(deps: PanelsDeps): Panels {
         s.kills +
         '</span>';
       box.appendChild(row);
+      // П11.6 (ADR-0058): екіпірування в картці солдата — кнопки «спорядити»
+      // зі складу / «зняти» назад на склад; лише на геосцені (прецедент
+      // збереження). Предмет на солдатові — мітка ✓.
+      const eq = party.workshop.equipped[s.id];
+      const eqRow = document.createElement('div');
+      eqRow.className = 'meta';
+      eqRow.style.marginBottom = '4px';
+      for (const [itemId, slot, label] of EQUIP_ITEMS) {
+        const on = eq?.[slot] === true;
+        const b = document.createElement('button');
+        b.id = 'btn-equip-' + s.id + '-' + slot;
+        b.textContent = on ? label + ' ✓' : label;
+        b.disabled = busy || (!on && party.workshop.store[itemId] <= 0);
+        b.title = on
+          ? 'Зняти «' + itemId + '» — назад на склад'
+          : party.workshop.store[itemId] > 0
+            ? 'Спорядити «' + itemId + '» зі складу'
+            : '«' + itemId + '» немає на складі — замовте в цеху';
+        b.onclick = () => {
+          try {
+            if (on) unequipItem(party.workshop, s, itemId);
+            else equipItem(party.workshop, s, itemId);
+          } catch (e) {
+            deps.journal('✗ ' + (e as Error).message, 'lose', 'base');
+          }
+          deps.renderAll();
+        };
+        eqRow.appendChild(b);
+      }
+      box.appendChild(eqRow);
     }
   }
 
