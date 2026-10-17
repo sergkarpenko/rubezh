@@ -6,6 +6,7 @@
 // DOM-флоу застосунку — у main.ui.test.ts.
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { advanceTime, missionTargets } from '../core/geo';
+import { distance, hasLineOfSight } from '../core/combat';
 import { createParty, type Party } from '../core/save';
 import { initPixelSprites } from '../render';
 import { createBattleUI, type BattleDeps, type BattleUIState } from './battle';
@@ -42,6 +43,8 @@ function setupDom(): void {
       <button id="btn-aimed">Прицільний</button>
       <button id="btn-auto">Черга</button>
       <button id="btn-ow">Дозор</button>
+      <button id="btn-medkit">Лікування</button>
+      <button id="btn-grenade">Граната</button>
       <button id="btn-end">Кінець ходу</button>
       <button id="btn-demo">Демо-бій</button>
     </div>`;
@@ -86,6 +89,7 @@ function makeFixture(demoBusy = false): Fixture {
     hoverAp: 0,
     tapCell: null,
     aimCell: null,
+    itemMode: null, // П11.6
   };
   const battleDeps: BattleDeps = {
     getParty: () => party,
@@ -286,5 +290,111 @@ describe('input: обробники вводу бою (тап-тап, зведе
     const inp = document.createElement('input');
     f.input.onKeyDown({ code: 'Digit1', key: '1', target: inp } as unknown as KeyboardEvent);
     expect(f.ui.fireMode).toBeNull(); // подія з поля вводу проігнорована
+  });
+});
+
+// П11.6 (Фаза 11, ADR-0058/0013): витратники в бою — аптечка і граната.
+// Зведення (кнопка/клавіша M, G), тап-тап, валідації цілі, списання витратника.
+describe('input: витратники бою — аптечка і граната (П11.6)', () => {
+  it('armMedkit без предмета — підказка; без AP — причина; з предметом — зведено (клавіша M)', () => {
+    const f = makeFixture();
+    launchMission(f);
+    const s = f.ui.mission!.state.units.find((u) => u.side === 'player')!;
+    f.ui.selectedId = s.id;
+    f.input.armMedkit();
+    expect(f.binfo()).toContain('Аптечки немає');
+    f.ui.mission!.state.items = { [s.id]: { medkit: true, grenade: false } };
+    s.ap = 2;
+    f.input.onKeyDown({ code: 'KeyM' } as KeyboardEvent);
+    expect(f.binfo()).toContain('Не вистачає AP');
+    expect(f.ui.itemMode).toBeNull();
+    s.ap = 10;
+    f.input.onKeyDown({ code: 'KeyM' } as KeyboardEvent);
+    expect(f.ui.itemMode).toBe('medkit');
+    expect(f.binfo()).toContain('Аптечка');
+  });
+
+  it('аптечка: тап-тап по пораненому союзнику поруч — лікування, витратник списано', () => {
+    const f = makeFixture();
+    launchMission(f);
+    const st = f.ui.mission!.state;
+    const squad = st.units.filter((u) => u.side === 'player');
+    const medic = squad[0]!;
+    const mate = squad[1]!; // сусід по зоні висадки (≤1)
+    st.items = { [medic.id]: { medkit: true, grenade: false } };
+    mate.hp = mate.maxHp - 4; // поранений сусід
+    f.ui.selectedId = medic.id;
+    f.input.armMedkit();
+    clickAt(f, mate.pos.x, mate.pos.y); // перший тап — підказка
+    expect(f.binfo()).toContain('повторний клік');
+    expect(mate.hp).toBe(mate.maxHp - 4); // дії ще не було
+    clickAt(f, mate.pos.x, mate.pos.y); // повторний тап — лікування
+    expect(mate.hp).toBe(mate.maxHp - 1); // +3 HP (HEAL_AMOUNT, кап maxHp)
+    expect(medic.ap).toBe(10 - 4);
+    expect(st.items[medic.id]!.medkit).toBe(false); // витратник списано
+    expect(f.ui.itemMode).toBeNull();
+    expect(f.binfo()).toContain('лікує');
+  });
+
+  it('аптечка: непоранена ціль — відмова без марнотратства; свій солдат у режимі — ціль, не вибір', () => {
+    const f = makeFixture();
+    launchMission(f);
+    const st = f.ui.mission!.state;
+    const squad = st.units.filter((u) => u.side === 'player');
+    const medic = squad[0]!;
+    st.items = { [medic.id]: { medkit: true, grenade: false } };
+    f.ui.selectedId = medic.id;
+    f.input.armMedkit();
+    clickAt(f, squad[1]!.pos.x, squad[1]!.pos.y); // здоровий сусід
+    expect(f.binfo()).toContain('не поранена');
+    expect(f.ui.selectedId).toBe(medic.id); // вибір не перемкнувся
+    expect(st.items[medic.id]!.medkit).toBe(true); // аптечка не витрачена
+  });
+
+  it('граната: зведення (клавіша G), тап-тап епіцентру — кидок, зона уражає', () => {
+    const f = makeFixture();
+    launchMission(f);
+    const st = f.ui.mission!.state;
+    const thrower = st.units.find((u) => u.side === 'player')!;
+    st.items = { [thrower.id]: { medkit: false, grenade: true } };
+    f.ui.selectedId = thrower.id;
+    f.input.onKeyDown({ code: 'KeyG' } as KeyboardEvent);
+    expect(f.ui.itemMode).toBe('grenade');
+    // валідний епіцентр поруч: порожня клітинка в дальності з лінією кидка
+    // (клітинка з юнітом — перевибір солдата, як у режимі пострілу)
+    let target: { x: number; y: number } | null = null;
+    for (let dx = -2; dx <= 2 && target === null; dx++) {
+      for (let dy = -2; dy <= 2 && target === null; dy++) {
+        const c = { x: thrower.pos.x + dx, y: thrower.pos.y + dy };
+        if (st.units.some((u) => u.alive && u.pos.x === c.x && u.pos.y === c.y)) continue;
+        if (distance(thrower.pos, c) > 6) continue;
+        if (!hasLineOfSight(st, thrower.pos, c)) continue;
+        target = c;
+      }
+    }
+    expect(target).not.toBeNull();
+    clickAt(f, target!.x, target!.y); // перший тап — прев'ю зони
+    expect(f.binfo()).toContain('Зона вибуху');
+    clickAt(f, target!.x, target!.y); // повторний тап — кидок
+    expect(st.items[thrower.id]!.grenade).toBe(false); // витратник списано
+    expect(thrower.ap).toBe(10 - 4);
+    expect(f.ui.itemMode).toBeNull();
+    expect(st.log.some((e) => e.type === 'grenade')).toBe(true);
+  });
+
+  it('граната: епіцентр поза дальністю — відмова; Esc — скасування режиму витратника', () => {
+    const f = makeFixture();
+    launchMission(f);
+    const st = f.ui.mission!.state;
+    const thrower = st.units.find((u) => u.side === 'player')!;
+    st.items = { [thrower.id]: { medkit: false, grenade: true } };
+    f.ui.selectedId = thrower.id;
+    f.input.armGrenade();
+    clickAt(f, thrower.pos.x + 7, thrower.pos.y); // >6 клітинок
+    expect(f.binfo()).toContain('поза дальністю');
+    expect(st.items[thrower.id]!.grenade).toBe(true);
+    f.input.onKeyDown({ code: 'Escape', key: 'Escape' } as KeyboardEvent);
+    expect(f.ui.itemMode).toBeNull();
+    expect(f.binfo()).toBe('Режим витратника скасовано.');
   });
 });

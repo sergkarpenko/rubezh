@@ -7,6 +7,10 @@
 // інтерфейс BattleUI; демо-драйвер і повне перемалювання — через Deps.
 
 import {
+  GRENADE_AP_COST,
+  GRENADE_RANGE,
+  HEAL_AMOUNT,
+  HEAL_AP_COST,
   OVERWATCH_AP_COST,
   calculateHitChance,
   distance,
@@ -15,6 +19,8 @@ import {
   moveUnit,
   resolveAttack,
   setOverwatch,
+  throwGrenade,
+  useMedkit,
   type ShotMode,
   type Vec2,
 } from '../core/combat';
@@ -63,6 +69,8 @@ export interface InputUI {
   battleCanvasLeave(): void;
   armFire(mode: ShotMode): void;
   armOverwatch(): void;
+  armMedkit(): void; // П11.6 (ADR-0058): зведення аптечки (клавіша M)
+  armGrenade(): void; // П11.6 (ADR-0058): зведення гранати (клавіша G)
   endPlayerTurn(): void;
   onKeyDown(ev: KeyboardEvent): void;
 }
@@ -80,10 +88,13 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
     const cell = cellFromEvent(ev);
     const u = st.units.find((x) => x.alive && x.pos.x === cell.x && x.pos.y === cell.y);
 
-    if (u && u.side === 'player') {
+    // П11.6: у зведеному режимі аптечки клік по СОЮЗНИКУ — ціль лікування
+    // (тап-тап), а не вибір солдата; вибір у цьому режимі — лише через Esc.
+    if (u && u.side === 'player' && ui.itemMode !== 'medkit') {
       // вибір свого солдата
       ui.selectedId = u.id;
       ui.fireMode = null;
+      ui.itemMode = null; // П11.6: новий солдат — зведення витратника скидаємо
       ui.hoverPath = null;
       ui.tapCell = null;
       ui.aimCell = null; // П6.14
@@ -97,6 +108,91 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
     const sel = battle.selectedUnit();
     if (!sel) {
       battle.binfo('Спершу клікніть свого солдата (синє коло).');
+      return;
+    }
+
+    // П11.6 (ADR-0058): зведені витратники — тап-тап (дзеркало пострілу П6.14):
+    // перший тап — підказка/прев'ю зони, повторний тап у ту саму ціль — дія.
+    if (ui.itemMode === 'medkit') {
+      const t = st.units.find((x) => x.alive && x.side === 'player' && x.pos.x === cell.x && x.pos.y === cell.y);
+      if (!t) {
+        battle.binfo('Аптечка: клікніть пораненого союзника поруч (≤1 клітинка).');
+        return;
+      }
+      if (distance(sel.pos, t.pos) > 1) {
+        battle.binfo('Ціль поза межами лікування (відстань ≤1).');
+        return;
+      }
+      if (t.hp >= t.maxHp) {
+        battle.binfo('Ціль не поранена — аптечка не витрачається.');
+        return;
+      }
+      if (ui.tapCell === null || ui.tapCell.x !== cell.x || ui.tapCell.y !== cell.y) {
+        ui.tapCell = cell;
+        battle.binfo(
+          t.name +
+            ' (HP ' +
+            t.hp +
+            '/' +
+            t.maxHp +
+            ') — повторний клік у цю ціль — лікування (+' +
+            HEAL_AMOUNT +
+            ' HP, ' +
+            HEAL_AP_COST +
+            ' AP).'
+        );
+        battle.renderBattle();
+        return;
+      }
+      ui.itemMode = null;
+      ui.tapCell = null;
+      try {
+        const prevLen = st.log.length;
+        const res = useMedkit(st, sel.id, t.id);
+        battle.enqueueAnims(prevLen);
+        if (!battle.checkOutcome()) {
+          battle.binfo(sel.name + ' лікує ' + t.name + ': +' + res.healed + ' HP. AP ' + sel.ap + '/' + sel.maxAp + '.');
+          deps.renderAll();
+        }
+      } catch (e) {
+        battle.binfo('✗ ' + (e as Error).message);
+        deps.renderAll();
+      }
+      return;
+    }
+
+    // П11.6 (ADR-0058): граната — епіцентр у будь-якій клітинці (юніт не потрібен),
+    // дальність ≤6 і лінія кидка; зона — епіцентр + хрест (прев'ю після першого тапу).
+    if (ui.itemMode === 'grenade') {
+      if (distance(sel.pos, cell) > GRENADE_RANGE) {
+        battle.binfo('Епіцентр поза дальністю кидка (' + GRENADE_RANGE + ' клітинок).');
+        return;
+      }
+      if (!hasLineOfSight(st, sel.pos, cell)) {
+        battle.binfo('Немає лінії кидка до епіцентру (рельєф).');
+        return;
+      }
+      if (!sameCell(ui.tapCell, cell)) {
+        // П6.14: той самий тап-тап
+        ui.tapCell = cell;
+        battle.binfo('Зона вибуху — епіцентр + хрест (рятує тільки броня). Повторний клік у цю клітинку — кидок (4 AP).');
+        battle.renderBattle();
+        return;
+      }
+      ui.itemMode = null;
+      ui.tapCell = null;
+      try {
+        const prevLen = st.log.length;
+        const res = throwGrenade(st, sel.id, cell);
+        battle.enqueueAnims(prevLen);
+        if (!battle.checkOutcome()) {
+          battle.binfo(sel.name + ' кинув гранату (−' + res.damage + ' ураженим). AP ' + sel.ap + '/' + sel.maxAp + '.');
+          deps.renderAll();
+        }
+      } catch (e) {
+        battle.binfo('✗ ' + (e as Error).message);
+        deps.renderAll();
+      }
       return;
     }
 
@@ -170,7 +266,8 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
       const ap = pathApCost(path);
       ui.hoverPath = path;
       ui.hoverAp = ap;
-      if (ui.tapCell === null || ui.tapCell.x !== cell.x || ui.tapCell.y !== cell.y) {
+      if (!sameCell(ui.tapCell, cell)) {
+        // П6.14: той самий тап-тап
         // перший тап — лише прев'ю (Esc скасовує)
         ui.tapCell = cell;
         battle.binfo(
@@ -306,6 +403,7 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
     if (deps.demoBusy()) return; // П6.16: триває демо — хід ведуть боти
     ui.hoverPath = null;
     ui.fireMode = null;
+    ui.itemMode = null; // П11.6
     ui.tapCell = null;
     ui.aimCell = null; // П6.14
     try {
@@ -325,13 +423,16 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
 
   // ADR-0027 (П6.4): Esc — скасовує спершу зведений режим пострілу,
   // за його відсутності — вибір солдата (разом із прев'ю шляху).
+  // П11.6: зведений витратник скасовується тим самим правилом (перший Esc).
   function cancelSelection(): void {
     if (!ui.mission) return;
-    if (ui.fireMode !== null) {
+    if (ui.fireMode !== null || ui.itemMode !== null) {
+      const wasFire = ui.fireMode !== null;
       ui.fireMode = null;
+      ui.itemMode = null;
       ui.tapCell = null;
       ui.aimCell = null; // П6.14
-      battle.binfo('Режим пострілу скасовано.');
+      battle.binfo(wasFire ? 'Режим пострілу скасовано.' : 'Режим витратника скасовано.');
       battle.renderBattle();
       return;
     }
@@ -345,9 +446,59 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
     }
   }
 
+  // П11.6 (ADR-0058): зведення витратника — клавіша M (аптечка) / G (граната)
+  // або кнопка. Перевірки — ті самі, що й у кнопок (фідбек не розходиться,
+  // патерн П6.14): без солдата/предмета/AP — відмова з причиною.
+  function armItem(mode: 'medkit' | 'grenade'): void {
+    if (!battle.playerTurnActive() || !ui.mission) return;
+    if (deps.demoBusy()) return; // П6.16: триває демо — керування заблоковано
+    const sel = battle.selectedUnit();
+    if (!sel) {
+      battle.binfo('Спершу клікніть свого солдата.');
+      return;
+    }
+    const has = ui.mission.state.items?.[sel.id]?.[mode] ?? false;
+    if (!has) {
+      battle.binfo((mode === 'medkit' ? 'Аптечки' : 'Гранати') + ' немає при ' + sel.name + ' (спорядьте в цеху на геосцені).');
+      return;
+    }
+    const cost = mode === 'medkit' ? HEAL_AP_COST : GRENADE_AP_COST;
+    if (sel.ap < cost) {
+      battle.binfo('Не вистачає AP: ' + (mode === 'medkit' ? 'лікування' : 'кидок') + ' коштує ' + cost + ', є ' + sel.ap + '.');
+      return;
+    }
+    ui.fireMode = null;
+    ui.itemMode = mode;
+    ui.tapCell = null;
+    ui.aimCell = null;
+    battle.binfo(
+      mode === 'medkit'
+        ? 'Аптечка: тапніть пораненого союзника поруч (≤1, соба теж) — повторний тап у ціль — лікування (+' +
+            HEAL_AMOUNT +
+            ' HP, ' +
+            HEAL_AP_COST +
+            ' AP).'
+        : 'Граната: тапніть клітинку епіцентру (≤' +
+            GRENADE_RANGE +
+            ', лінія кидка) — повторний тап у неї — кидок (' +
+            GRENADE_AP_COST +
+            ' AP).'
+    );
+    battle.renderBattle();
+  }
+
+  function armMedkit(): void {
+    armItem('medkit');
+  }
+
+  function armGrenade(): void {
+    armItem('grenade');
+  }
+
   // ADR-0027 (П6.4): гарячі клавіші керування боєм — 1/2/3 (режими пострілу),
   // O (дозор), E (кінець ходу), Esc (скасувати). Ключ — за ev.code
   // (фізична клавіша, незалежно від розкладки), цифри — ще й за ev.key.
+  // П11.6 (ADR-0058): M (аптечка), G (граната) — рішення власника серії П11.6.
   // Поля вводу (сід) клавіші не перехоплюють — подія з них ігнорується.
   function isTypingTarget(t: EventTarget | null): boolean {
     return t instanceof HTMLElement && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
@@ -359,6 +510,8 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
     else if (ev.code === 'Digit2' || ev.key === '2') armFire('aimed');
     else if (ev.code === 'Digit3' || ev.key === '3') armFire('auto');
     else if (ev.code === 'KeyO') armOverwatch();
+    else if (ev.code === 'KeyM') armMedkit();
+    else if (ev.code === 'KeyG') armGrenade();
     else if (ev.code === 'KeyE') endPlayerTurn();
     else if (ev.key === 'Escape') cancelSelection();
   }
@@ -369,6 +522,8 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
     battleCanvasLeave,
     armFire,
     armOverwatch,
+    armMedkit,
+    armGrenade,
     endPlayerTurn,
     onKeyDown,
   };

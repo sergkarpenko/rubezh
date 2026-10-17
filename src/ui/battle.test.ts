@@ -8,7 +8,7 @@ import { advanceTime, missionTargets } from '../core/geo';
 import { createGame, makeUnit, type GameState, type Unit } from '../core/combat';
 import { createParty, type Party } from '../core/save';
 import { initPixelSprites } from '../render';
-import { createBattleUI, validFireTargets, type BattleDeps, type BattleUIState } from './battle';
+import { createBattleUI, validFireTargets, validHealTargets, type BattleDeps, type BattleUIState } from './battle';
 
 // Піксельний рушій (ADR-0031): тестовий мок фабрики offscreen-канвасів —
 // той самий патерн, що й у main.ui.test.ts (jsdom без пакета canvas).
@@ -41,6 +41,8 @@ function setupDom(): void {
         <button id="btn-aimed">Прицільний</button>
         <button id="btn-auto">Черга</button>
         <button id="btn-ow">Дозор</button>
+      <button id="btn-medkit">Лікування</button>
+      <button id="btn-grenade">Граната</button>
         <button id="btn-end">Кінець ходу</button>
         <button id="btn-demo">Демо-бій</button>
       </div>
@@ -63,6 +65,7 @@ function makeFixture(over: Partial<BattleDeps> = {}): Fixture {
     battleResult: null,
     selectedId: null,
     fireMode: null,
+    itemMode: null, // П11.6
     hoverPath: null,
     hoverAp: 0,
     tapCell: null,
@@ -238,5 +241,47 @@ describe('battle: флоу місії (запуск/закриття/завер�
     for (const u of st.units) if (u.side === 'alien') u.alive = false;
     expect(f.battle.checkOutcome()).toBe(true);
     expect(f.ui.battleResult).toBe('перемога');
+  });
+});
+
+// П11.6 (Фаза 11, ADR-0058): валідні цілі аптечки і стан кнопок витратників.
+describe('validHealTargets: цілі аптечки (П11.6, ADR-0058)', () => {
+  const healer = makeUnit({ id: 'med', side: 'player', pos: { x: 5, y: 5 } });
+  const mk = (id: string, x: number, y: number, hp = 10, alive = true): Unit => makeUnit({ id, side: 'player', pos: { x, y }, hp, alive });
+  const state = (units: Unit[]): GameState => createGame({ map: { width: 20, height: 20, blocked: new Set() }, units: [healer, ...units] });
+
+  it('поранений сусід поруч — валідна ціль; здоровий/далеко/мертвий/прибулець — ні', () => {
+    const mate = mk('w1', 6, 5, 7); // поранений сусід
+    const st = state([mate, mk('w2', 6, 6, 10), mk('w3', 10, 10, 3), mk('w4', 5, 6, 0, false)]);
+    expect(validHealTargets(st, healer)).toEqual([mate]);
+    healer.hp = 4; // лікар поранений — собі теж ціль (відстань 0)
+    expect(validHealTargets(st, healer).map((t) => t.id)).toEqual(['med', 'w1']);
+    healer.hp = 10;
+    const alien = makeUnit({ id: 'a1', side: 'alien', pos: { x: 5, y: 6 }, hp: 5 });
+    expect(validHealTargets(state([alien]), healer)).toEqual([]);
+  });
+});
+
+describe('renderBattle: кнопки витратників (П11.6, ADR-0058)', () => {
+  it('без вибору — вимкнені з причиною; з предметом — активні, armed у зведеному режимі', () => {
+    const f = makeFixture();
+    f.battle.launch(firstTarget(f));
+    f.battle.renderBattle();
+    const med = document.getElementById('btn-medkit') as HTMLButtonElement;
+    const gren = document.getElementById('btn-grenade') as HTMLButtonElement;
+    expect(med.disabled).toBe(true);
+    expect(gren.disabled).toBe(true);
+    expect(med.title).toContain('аптечки немає');
+    expect(gren.title).toContain('гранати немає');
+    const s = f.ui.mission!.state.units.find((u) => u.side === 'player')!;
+    f.ui.selectedId = s.id;
+    f.ui.mission!.state.items = { [s.id]: { medkit: true, grenade: true } };
+    f.battle.renderBattle();
+    expect(med.disabled).toBe(false);
+    expect(gren.disabled).toBe(false);
+    f.ui.itemMode = 'medkit';
+    f.battle.renderBattle();
+    expect(med.classList.contains('armed')).toBe(true);
+    expect(gren.classList.contains('armed')).toBe(false);
   });
 });

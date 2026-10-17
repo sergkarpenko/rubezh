@@ -848,3 +848,122 @@ describe('П8.3a: перемога кампанії — 30 діб → екран
     expect($('campaign-victory').classList.contains('hidden')).toBe(true);
   });
 });
+
+// П11.6 (Фаза 11, ADR-0058/0013): критичний флоу «дослідити → виробити →
+// екіпірувати → бойова дія» — суто через DOM реального застосунку (кнопки
+// панелей, гарячі клавіші M/G, тап-тап бойовища). Детермінізм — сід 42,
+// «норма»; час ганяємо кнопками доби/тіків, бій — фіксованими кліками.
+describe('П11.6: критичний флоу «дослідити → виробити → екіпірувати → бойова дія» (ADR-0013)', () => {
+  const key = (code: string): void => {
+    document.dispatchEvent(new KeyboardEvent('keydown', { code, bubbles: true }));
+  };
+  const tap = (x: number, y: number): void => {
+    $('battle').dispatchEvent(new MouseEvent('click', { clientX: x * 26 + 13, clientY: y * 26 + 13 }));
+  };
+  const researchDone = (id: string): boolean =>
+    [...document.querySelectorAll('#research .ufo')].some((r) => r.textContent!.includes(id) && r.textContent!.includes('завершено'));
+
+  it('дослідити → виробити → екіпірувати → граната і лікування в бою', () => {
+    // чиста партія: сід 42, «норма» (баланс 300, ростер 6)
+    ($('seed') as HTMLInputElement).value = '42';
+    ($('preset') as HTMLSelectElement).value = 'норма';
+    btn('btn-new').click();
+
+    // 1. ДОСЛІДИТИ: 2 вчених, старт «аптечки» (каталог: індекс 2), доби до завершення
+    btn('btn-hire-scientist').click();
+    btn('btn-hire-scientist').click();
+    btn('btn-start-2').click(); // «аптечка» — 100 (баланс 300−200 = якраз)
+    expect($('money').textContent).toBe('0');
+    let done = researchDone('аптечка');
+    for (let i = 0; i < 60 && !done; i++) {
+      btn('btn-day').click();
+      done = researchDone('аптечка');
+    }
+    expect(done).toBe(true); // 2 вчені = 2 точки/добу → 16 діб
+
+    // Т2 «осколкова граната» (передумова «аптечка» виконана) — ще 20 діб
+    btn('btn-start-4').click();
+    done = researchDone('осколкова граната');
+    for (let i = 0; i < 60 && !done; i++) {
+      btn('btn-day').click();
+      done = researchDone('осколкова граната');
+    }
+    expect(done).toBe(true);
+
+    // 2. ВИРОБИТИ: замовлення обох предметів; одна доба (48 тіків) покриває 12+16
+    btn('btn-order-аптечка').click();
+    btn('btn-order-осколкова-граната').click();
+    btn('btn-day').click();
+    expect($('workshop').textContent).toContain('аптечка 1');
+    expect($('workshop').textContent).toContain('осколкова граната 1');
+
+    // 3. ЕКІПІРУВАТИ: s1 — граната, s2 — аптечка (перші дві картки ростеру)
+    btn('btn-equip-s1-grenade').click();
+    btn('btn-equip-s2-medkit').click();
+    expect($('roster').textContent).toContain('граната ✓');
+    expect($('roster').textContent).toContain('аптечка ✓');
+
+    // 4. Місія: детерміновано чекаємо приземленого НЛО (сід 42) і висаджуємось
+    let found = false;
+    for (let i = 0; i < 1500 && !found; i++) {
+      btn('btn-tick').click();
+      found = document.querySelector('button.mission') !== null;
+    }
+    expect(found).toBe(true);
+    (document.querySelector('button.mission') as HTMLButtonElement).click();
+    expect($('battle-panel').classList.contains('hidden')).toBe(false);
+
+    // 5. БОЙОВА ДІЯ: s1 у (2,2) — граната в скупчення (friendly fire ADR-0058 —
+    // свідома ціна: після вибуху хтось із загону поранений), потім s2 (медик,
+    // (3,2)) лікує пораненого тап-тапом (клавіша M)
+    tap(2, 2); // вибір s1 — зона висадки SQUAD_SPAWN[0]
+    expect($('binfo').textContent).toContain('AP 10/10');
+    key('KeyG'); // зведення гранати (гаряча клавіша G — рішення власника)
+    expect($('binfo').textContent).toContain('Граната');
+    // валідний епіцентр: порожня клітинка з лінією кидка (клік по юніту — перевибір)
+    const candidates: [number, number][] = [
+      [4, 2],
+      [3, 1],
+      [3, 3],
+      [2, 1],
+      [1, 2],
+      [4, 3],
+      [2, 4],
+    ];
+    let thrown = false;
+    for (const [ex, ey] of candidates) {
+      key('KeyG'); // перевзводимо після невдалих спроб (режин міг скинутись вибором)
+      tap(ex, ey);
+      if ($('binfo').textContent.includes('Зона вибуху')) {
+        tap(ex, ey); // повторний тап у ту саму клітинку — кидок
+        thrown = true;
+        break;
+      }
+    }
+    expect(thrown).toBe(true);
+    expect($('log').textContent).toContain('кидає гранату'); // журнал бою (ADR-0027)
+
+    // медик s2: вибір, зведення аптечки (M), тап-тап по пораненому союзнику
+    tap(3, 2); // вибір s2 — SQUAD_SPAWN[1]
+    key('KeyM');
+    expect($('binfo').textContent).toContain('Аптечка');
+    const wounded: [number, number][] = [
+      [2, 2],
+      [2, 3],
+      [3, 2],
+    ]; // сусіди ≤1: s1, s3, соба
+    let healed = false;
+    for (const [tx, ty] of wounded) {
+      key('KeyM');
+      tap(tx, ty);
+      if ($('binfo').textContent.includes('повторний клік')) {
+        tap(tx, ty); // лікування
+        healed = true;
+        break;
+      }
+    }
+    expect(healed).toBe(true);
+    expect($('binfo').textContent).toContain('лікує');
+    expect($('log').textContent).toContain('лікує');
+  });
+});

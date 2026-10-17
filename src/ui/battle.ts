@@ -14,9 +14,12 @@ import { applyMissionResult, missionSquad } from '../core/squad';
 import { deployConsumables, removeLostEquipment, settleConsumables } from '../core/workshop';
 import { creditMissionBonus } from '../core/economy';
 import {
+  GRENADE_AP_COST,
+  HEAL_AP_COST,
   OVERWATCH_AP_COST,
   calculateHitChance,
   distance,
+  grenadeZone,
   hasLineOfSight,
   type GameState,
   type ShotMode,
@@ -41,6 +44,7 @@ export interface BattleUIState {
   battleResult: BattleOutcome | null;
   selectedId: string | null; // вибраний солдат
   fireMode: ShotMode | null; // «зведений» режим пострілу
+  itemMode: 'medkit' | 'grenade' | null; // П11.6 (ADR-0058): зведений режим витратника — аптечка/граната
   hoverPath: Vec2[] | null; // прев'ю шляху під курсором
   hoverAp: number;
   tapCell: Vec2 | null; // ADR-0027 (П6.4): клітинка першого тапу — повторний тап у неї робить хід
@@ -93,6 +97,20 @@ export function validFireTargets(state: GameState, shooter: Unit, vis: ReadonlyS
     if (!vis.has(t.pos.x + ',' + t.pos.y)) continue; // туман: невидима ціль не підсвічується
     if (distance(shooter.pos, t.pos) > shooter.weapon.range) continue;
     if (!hasLineOfSight(state, shooter.pos, t.pos)) continue;
+    out.push(t);
+  }
+  return out;
+}
+
+// П11.6 (ADR-0058): валідні цілі аптечки — живі поранені союзники на
+// відстані ≤1 (Чебишев), включно із самим лікарем. Ті самі перевірки, що й
+// useMedkit у ядрі. Чиста функція: стан лише читається, без RNG.
+export function validHealTargets(state: GameState, healer: Unit): Unit[] {
+  const out: Unit[] = [];
+  for (const t of state.units) {
+    if (t.side !== 'player' || !t.alive) continue;
+    if (distance(healer.pos, t.pos) > 1) continue;
+    if (t.hp >= t.maxHp) continue;
     out.push(t);
   }
   return out;
@@ -211,6 +229,20 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
     if (ui.fireMode !== null && sel && playerTurnActive()) targets = validFireTargets(st, sel, vis);
     for (const t of targets) drawTargetFrame(ctx, { gx: t.pos.x, gy: t.pos.y, cell: BCELL });
 
+    // П11.6 (ADR-0058): обведення валідних цілей аптечки (поранені союзники
+    // поруч) і прев'ю зони вибуху гранати (епіцентр + хрест) після першого тапу.
+    if (ui.itemMode === 'medkit' && sel && playerTurnActive()) {
+      for (const t of validHealTargets(st, sel)) drawTargetFrame(ctx, { gx: t.pos.x, gy: t.pos.y, cell: BCELL });
+    }
+    if (ui.itemMode === 'grenade' && ui.tapCell) {
+      ctx.setLineDash([3, 3]);
+      ctx.strokeStyle = 'rgba(255,159,64,0.8)';
+      for (const c of grenadeZone(ui.tapCell)) {
+        ctx.strokeRect(c.x * BCELL + 2, c.y * BCELL + 2, BCELL - 5, BCELL - 5);
+      }
+      ctx.setLineDash([]);
+    }
+
     // П6.7 (ADR-0029): векторні спрайти юнітів замість геометричних кружків —
     // силует, зброя, HP, рамка вибору і маркер дозору малює render.ts
     // (маркер дозору — строго в межах клітинки, П6.6).
@@ -275,6 +307,26 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
     const owHint = ow.dataset.hint || ow.title;
     ow.dataset.hint = owHint;
     ow.title = owNoAp ? owHint + ' — не вистачає AP (потрібно ' + OVERWATCH_AP_COST + ')' : owHint;
+
+    // П11.6 (ADR-0058): кнопки витратників — аптечка і граната. Приглушені без
+    // предмета у вибраного солдата або без AP (підказка причини, патерн П6.14).
+    const itemButtons: [HTMLButtonElement, 'medkit' | 'grenade', number][] = [
+      [el<HTMLButtonElement>('btn-medkit'), 'medkit', HEAL_AP_COST],
+      [el<HTMLButtonElement>('btn-grenade'), 'grenade', GRENADE_AP_COST],
+    ];
+    for (const [b, mode, cost] of itemButtons) {
+      const hasItem = sel !== undefined && (st.items?.[sel.id]?.[mode] ?? false);
+      const noAp = sel !== undefined && sel.ap < cost;
+      b.disabled = busy || !hasItem || noAp;
+      const hint = b.dataset.hint || b.title;
+      b.dataset.hint = hint;
+      b.title = !hasItem
+        ? hint + ' — ' + (mode === 'medkit' ? 'аптечки' : 'гранати') + ' немає при солдатові'
+        : noAp
+          ? hint + ' — не вистачає AP (потрібно ' + cost + ')'
+          : hint;
+      b.classList.toggle('armed', ui.itemMode === mode);
+    }
   }
 
   function close(): void {
@@ -284,6 +336,7 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
     ui.battleResult = null;
     ui.selectedId = null;
     ui.fireMode = null;
+    ui.itemMode = null; // П11.6
     ui.hoverPath = null;
     ui.tapCell = null;
     ui.aimCell = null; // П6.14
@@ -308,6 +361,7 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
     ui.battleResult = null;
     ui.selectedId = null;
     ui.fireMode = null;
+    ui.itemMode = null; // П11.6
     ui.hoverPath = null;
     ui.tapCell = null;
     ui.aimCell = null; // П6.14
