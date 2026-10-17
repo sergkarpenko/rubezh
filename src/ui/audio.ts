@@ -10,8 +10,8 @@ import type { GameEvent, ShotMode } from '../core/combat';
 import type { GeoEvent } from '../core/geo';
 
 // Набір звуків (ADR-0059): постріли трьох режимів (різні сигнатури), влучання,
-// смерть, виявлення НЛО, результат місії (перемога/поразка), клік UI.
-export type SoundName = 'click' | 'shot-snap' | 'shot-aimed' | 'shot-auto' | 'hit' | 'death' | 'detect' | 'win' | 'lose';
+// смерть, рух (крок), виявлення НЛО, результат місії (перемога/поразка), клік UI.
+export type SoundName = 'click' | 'move' | 'shot-snap' | 'shot-aimed' | 'shot-auto' | 'hit' | 'death' | 'detect' | 'win' | 'lose';
 
 // --- Мінімальні структурні інтерфейси WebAudio (для моків у тестах) ---
 
@@ -92,11 +92,12 @@ function browserContext(): SoundContext | null {
 
 const SHOT_SOUND: Record<ShotMode, SoundName> = { snap: 'shot-snap', aimed: 'shot-aimed', auto: 'shot-auto' };
 
-// Постріл — звук режиму; влучання — додатковий «удар». Рух/хід/дозор/лікування/
-// граната — без звуку (скоуп ADR-0059).
+// Постріл — звук режиму; влучання — додатковий «удар»; рух — тихий «крок».
+// Хід/дозор/лікування/граната — без звуку (скоуп ADR-0059).
 export function battleSounds(e: GameEvent): SoundName[] {
   if (e.type === 'shot') return e.hit ? [SHOT_SOUND[e.mode], 'hit'] : [SHOT_SOUND[e.mode]];
   if (e.type === 'death') return ['death'];
+  if (e.type === 'move') return ['move'];
   return [];
 }
 
@@ -164,6 +165,10 @@ function playRecipe(c: SoundContext, name: SoundName, t: number): void {
   switch (name) {
     case 'click':
       note(c, t, 'square', 660, 440, 0.05, 0.04);
+      break;
+    case 'move': // крок: короткий тихий низький стук (рухи часті — ненав'язливо)
+      noise(c, t, 0.06, 0.06);
+      note(c, t, 'triangle', 100, 70, 0.06, 0.04);
       break;
     case 'shot-snap':
       noise(c, t, 0.12, 0.18);

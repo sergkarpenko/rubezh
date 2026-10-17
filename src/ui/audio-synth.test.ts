@@ -122,6 +122,19 @@ describe('Синтез: рецепти за моком SoundContext', () => {
     ]);
   });
 
+  it('move: тихий низький крок — шум + triangle 100→70, 0.06с', () => {
+    const { s, m } = sound();
+    s.play('move');
+    expect(m.rec.osc).toHaveLength(1);
+    expect(m.rec.osc[0].type).toBe('triangle');
+    expect(m.rec.osc[0].freq).toEqual([
+      { v: 100, t: 0 },
+      { v: 70, t: 0.06 },
+    ]);
+    expect(m.rec.src).toHaveLength(1); // шумовий «стук»
+    expect(m.rec.gain[1][0].v).toBe(0.04); // тихо: рухи часті (шум дещо гучніший)
+  });
+
   it('сигнатури режимів різні: snap — шум+квадрат, aimed — свист sawtooth, auto — коротший', () => {
     const mk = (name: Parameters<ReturnType<typeof createSound>['play']>[0]) => {
       const { s, m } = sound();
