@@ -1,0 +1,94 @@
+# Прев'ю довільної гілки на GitHub Pages до мержу (ADR-0060, П11.5).
+# Запуск — лише вручну (workflow_dispatch, вхід «branch»): білд гілки з
+# base /rubezh/preview/<гілка>/ деплоється артефактом «корінь (main) +
+# /preview/<гілка>/». Основний деплой main (preview.yml) не зачіпається:
+# корінь артефакта — свіжий білд origin/main тим самим ланцюжком, що й
+# preview.yml (vite build + TypeDoc), тож корінь і /api/ байт-у-байт ті самі.
+# Тести/покриття/Codec тут не запускаються — у прев'ю лише білд (ADR-0060).
+name: preview-branch
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: "Гілка для прев'ю (наприклад feat/p11.6-ui)"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Той самий рубіж деплою, що й preview.yml: Pages-деплої не конкурують.
+# cancel-in-progress: false — прев'ю чекає завершення деплою main, а не
+# скасовує його; навпаки, пуш у main може скасувати запущене прев'ю
+# (пріоритет за основним сайтом — ADR-0060; прев'ю перезапускається вручну).
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      slug: ${{ steps.slug.outputs.slug }}
+    steps:
+      - name: Гілка не main
+        run: |
+          if [ "${{ inputs.branch }}" = "main" ]; then
+            echo '::error::main не потребує прев''ю — основний деплой: https://sergkarpenko.github.io/rubezh/'
+            exit 1
+          fi
+      - id: slug
+        name: slug гілки для шляху URL
+        run: echo "slug=$(echo '${{ inputs.branch }}' | tr '/' '-')" >> "$GITHUB_OUTPUT"
+      # Корінь артефакта — origin/main: свіжий білд основного сайту (разом з
+      # /api/), інакше прев'ю-деплой прибрав би TypeDoc-довідку з живого сайту.
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+          path: main
+      # Гілка прев'ю — окремим чекаутом (залежності гілки можуть відрізнятись).
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.branch }}
+          path: branch
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Білд main — корінь артефакта
+        working-directory: main
+        run: |
+          npm install
+          npm run build
+          npm run docs
+      # base — CLI-прапорцем поверх /rubezh/ з vite.config.ts (файл заборонений
+      # AGENTS.md; vite.config не змінюється — ADR-0060).
+      - name: Білд гілки з base прев'ю
+        working-directory: branch
+        run: |
+          npm install
+          npm run build -- --base=/rubezh/preview/${{ steps.slug.outputs.slug }}/
+      # Артефакт збирається заново щоразу: «свіжий main + лише обрана гілка» —
+      # повторне прев'ю тієї ж гілки заміщає старе, чужі прев'ю зникають.
+      - name: Скласти артефакт «корінь + /preview/<гілка>/»
+        run: cp -r branch/dist "main/dist/preview/${{ steps.slug.outputs.slug }}"
+      - name: URL прев'ю
+        run: |
+          url="https://sergkarpenko.github.io/rubezh/preview/${{ steps.slug.outputs.slug }}/"
+          echo "URL прев'ю: $url" >> "$GITHUB_STEP_SUMMARY"
+          echo "::notice::URL прев'ю: $url"
+      - uses: actions/configure-pages@v6
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: main/dist
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}preview/${{ needs.build.outputs.slug }}/
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5
