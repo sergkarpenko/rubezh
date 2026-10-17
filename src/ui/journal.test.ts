@@ -115,6 +115,30 @@ describe('battleEventText: події бою → журнал', () => {
     ).toContain('промах');
   });
 
+  it('П11.4: лікування — клас win; граната — ураження списком, порожня зона — «нікого»', () => {
+    expect(battleEventText(evBattle({ type: 'heal', unitId: 's1', targetId: 's1', healed: 3 }), name)).toEqual({
+      text: '✚ Гарт лікує Гарт: +3 HP',
+      cls: 'win',
+    });
+    expect(
+      battleEventText(
+        evBattle({
+          type: 'grenade',
+          unitId: 's1',
+          center: { x: 8, y: 2 },
+          hits: [
+            { unitId: 'a1', damage: 4 },
+            { unitId: 's1', damage: 4 },
+          ],
+        }),
+        name
+      )?.text
+    ).toBe('✦ Гарт кидає гранату в (8, 2): −4 Морок, −4 Гарт');
+    expect(battleEventText(evBattle({ type: 'grenade', unitId: 's1', center: { x: 5, y: 6 }, hits: [] }), name)?.text).toBe(
+      '✦ Гарт кидає гранату в (5, 6): у зоні нікого'
+    );
+  });
+
   it('смерть — клас lose; рух/хід/дозор — не для журналу', () => {
     expect(battleEventText(evBattle({ type: 'death', unitId: 'a1', killerId: 's1' }), name)).toEqual({
       text: '✝ Морок загинув',

@@ -10,7 +10,8 @@
 import { ALIEN_SPAWN, SQUAD_SPAWN, completeMission, createMission, missionOutcome, type Mission } from '../core/mission';
 import { applyMissionResult, missionSquad } from '../core/squad';
 // П11.3 (ADR-0058): предмети загиблих зникають разом з ними (перма-смерть).
-import { removeLostEquipment } from '../core/workshop';
+// П11.4 (ADR-0058): витратники загону — копія в бій і розрахунок після бою.
+import { deployConsumables, removeLostEquipment, settleConsumables } from '../core/workshop';
 import { creditMissionBonus } from '../core/economy';
 import {
   OVERWATCH_AP_COST,
@@ -297,7 +298,9 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
     deps.cancelGeoAnim(); // П6.9: геосцену сховано — пульс радара скидаємо
     const party = deps.getParty();
     try {
-      ui.mission = createMission(party.geo, ufoId, { squad: missionSquad(party.roster) });
+      const squad = missionSquad(party.roster);
+      // П11.4 (ADR-0058): аптечка/граната при солдатах — у стан бою.
+      ui.mission = createMission(party.geo, ufoId, { squad, items: deployConsumables(party.workshop, squad) });
     } catch (e) {
       deps.journal('✗ ' + (e as Error).message, 'lose');
       return;
@@ -334,6 +337,8 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
     const aftermath = applyMissionResult(party.roster, mission.state);
     // П11.3 (ADR-0058): предмети загиблих на склад не повертаються (перма-смерть).
     removeLostEquipment(party.workshop, aftermath.lost);
+    // П11.4 (ADR-0058): витратники уцілілих — використані зникають, невикористані лишаються.
+    settleConsumables(party.workshop, aftermath.survivors, mission.state.items);
     completeMission(party.geo, mission.briefing.ufoId, outcome);
     for (const s of aftermath.lost) deps.journal('✝ ' + s.name + ' загинув у бою', 'lose', 'battle');
     for (const s of aftermath.wounded)

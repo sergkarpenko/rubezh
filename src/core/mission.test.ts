@@ -246,3 +246,16 @@ describe('mission: наскрізний цикл', () => {
     expect(g.log.some((e) => e.type === 'mission_won' && e.ufoId === 'ufo8')).toBe(true);
   });
 });
+
+describe('mission: витратники загону (П11.4, ADR-0058)', () => {
+  it('opts.items проходить у стан бою; без opts.items — поля items немає', () => {
+    const squad = [makeSoldier('s1', 'Іван'), makeSoldier('s2', 'Олена')];
+    const withItems = createMission(mkGeo('uI1'), 'uI1', {
+      squad,
+      items: { s1: { medkit: true, grenade: true } },
+    });
+    expect(withItems.state.items).toEqual({ s1: { medkit: true, grenade: true } });
+    const bare = createMission(mkGeo('uI2'), 'uI2', { squad: [makeSoldier('s9', 'Тарас')] });
+    expect(bare.state.items).toBeUndefined();
+  });
+});
