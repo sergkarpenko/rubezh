@@ -1,14 +1,14 @@
-// П11.6 (Фаза 11, ADR-0058/0037): панель «Цех» у колонці стану геосцени.
-// Тут — замовлення предметів з оплатою одразу (каталог = завершені проєкти
+// П11.6 (Фаза 11, ADR-0058/0037): панель «Кузня» у колонці стану геосцени.
+// Тут — замовлення предметів з оплатою одразу (каталог = завершені протоколи
 // науки), черга з одним активним замовленням (тики геосцени) і склад
-// (лічильники готових предметів). Екіпірування — у картці солдата ростеру
-// (модуль panels); гарматний модуль ставиться на винищувач (intercept) —
-// поза цією панеллю. Логіка — виклики src/core/workshop (ADR-0002), DOM —
-// через хелпер el (src/ui/dom.ts). Панель активна лише на геосцені
-// (прецедент панелі збереження, П5.3): у бою кнопки вимкнені.
+// (лічильники готових предметів). Екіпірування — у картці оперативника
+// ростеру (модуль panels); гарматний модуль ставиться на перехоплювач
+// (intercept) — поза цією панеллю. Логіка — виклики src/core/workshop
+// (ADR-0002), DOM — через хелпер el (src/ui/dom.ts). Панель активна лише на
+// геосцені (прецедент панелі збереження, П5.3): у бою кнопки вимкнені.
 // Детермінізм: панель лише читає стан ядра, жодного RNG.
 
-import { ITEM_IDS, WORKSHOP_CATALOG, orderItem } from '../core/workshop';
+import { ITEM_IDS, WORKSHOP_CATALOG, itemName, orderItem } from '../core/workshop';
 import { DIFFICULTY_MULTIPLIERS } from '../core/campaign';
 import type { Party } from '../core/save';
 import { itemEffect } from './effects';
@@ -46,22 +46,22 @@ export function createWorkshopPanel(deps: WorkshopPanelDeps): WorkshopPanel {
     queue.style.marginBottom = '4px';
     queue.innerHTML =
       'Активне замовлення: <b>' +
-      (active ? active.id + ' — ' + active.ticksLeft + ' тік(и)' : '—') +
+      (active ? itemName(active.id) + ' — ' + active.ticksLeft + ' тік(и)' : '—') +
       '</b>' +
       (w.queue.length > 1 ? ' · у черзі ще ' + (w.queue.length - 1) : '');
     box.appendChild(queue);
 
-    // склад: лічильники готових предметів
+    // склад: лічильники готових предметів (назви — з каталогу, П12.6)
     const store = document.createElement('div');
     store.className = 'meta';
     store.style.marginBottom = '6px';
-    store.textContent = 'Склад: ' + ITEM_IDS.map((id) => id + ' ' + w.store[id]).join(' · ');
+    store.textContent = 'Склад: ' + ITEM_IDS.map((id) => itemName(id) + ' ' + w.store[id]).join(' · ');
     box.appendChild(store);
 
     // каталог: замовлення — лише досліджені предмети (гейт завершеного
-    // проєкту в orderItem; тут — підказка на кнопці, джерело правди — ядро);
+    // протоколу в orderItem; тут — підказка на кнопці, джерело правди — ядро);
     // числовий ефект ДО замовлення (П12.5, ADR-0065 — числа з констант
-    // каталогів, хелпер effects.ts; «зараз → стане» — від першого солдата)
+    // каталогів, хелпер effects.ts; «зараз → стане» — від першого оперативника)
     const catalog = document.createElement('div');
     const ref = party.roster.soldiers[0];
     for (const id of ITEM_IDS) {
@@ -70,7 +70,7 @@ export function createWorkshopPanel(deps: WorkshopPanelDeps): WorkshopPanel {
       row.className = 'ufo';
       row.style.marginBottom = '4px';
       const info = document.createElement('span');
-      info.textContent = id + ' · ' + def.cost + ' · ' + def.ticks + ' тік(и)';
+      info.textContent = def.name + ' · ' + def.cost + ' · ' + def.ticks + ' тік(и)';
       row.appendChild(info);
       const effect = document.createElement('span');
       effect.className = 'meta';
@@ -86,8 +86,8 @@ export function createWorkshopPanel(deps: WorkshopPanelDeps): WorkshopPanel {
       order.title = notResearched
         ? 'Ще не досліджено (панель «Дослідження»)'
         : party.econ.money < price
-          ? 'Недостатньо коштів (ціна ' + price + ')'
-          : 'Замовити у цеху (−' + price + ', готовність через ' + def.ticks + ' тік(и))';
+          ? 'Недостатньо кредитів (ціна ' + price + ')'
+          : 'Замовити в «Кузні» (−' + price + ', готовність через ' + def.ticks + ' тік(и))';
       order.onclick = () => {
         try {
           orderItem(party.econ, party.workshop, party.research, id, party.campaign.preset);

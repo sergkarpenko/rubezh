@@ -387,7 +387,7 @@ describe('save: наука (П11.2, ADR-0026)', () => {
     const p = createParty(42);
     hireScientist(p.econ, p.research);
     hireScientist(p.econ, p.research);
-    startProject(p.econ, p.research, 'оптичний приціл');
+    startProject(p.econ, p.research, 'optics');
     for (let i = 0; i < 48; i++) {
       advanceTime(p.geo, 1);
       economyTick(p.econ, p.geo, p.campaign.preset);
@@ -434,16 +434,16 @@ describe('save: цех (П11.3, ADR-0026)', () => {
   it('round-trip: черга, склад і журнал цеху відновлюються; стабільний формат', () => {
     const p = createParty(42);
     // гейт виробництва: «аптечка» завершена (скорочення — наука не чекається)
-    p.research.completed.push('аптечка');
-    orderItem(p.econ, p.workshop, p.research, 'аптечка');
-    orderItem(p.econ, p.workshop, p.research, 'аптечка');
-    const ticks = WORKSHOP_CATALOG['аптечка'].ticks;
+    p.research.completed.push('medkit');
+    orderItem(p.econ, p.workshop, p.research, 'medkit');
+    orderItem(p.econ, p.workshop, p.research, 'medkit');
+    const ticks = WORKSHOP_CATALOG['medkit'].ticks;
     for (let i = 0; i < ticks + 3; i++) {
       advanceTime(p.geo, 1);
       workshopTick(p.workshop);
     }
     // одна аптечка здана, друга в роботі
-    expect(p.workshop.store['аптечка']).toBe(1);
+    expect(p.workshop.store['medkit']).toBe(1);
     expect(p.workshop.queue.length).toBe(1);
     const restored = deserializeParty(serializeParty(p, 'T'));
     expect(restored.workshop).toEqual(p.workshop);
@@ -467,15 +467,15 @@ describe('save: цех (П11.3, ADR-0026)', () => {
     const p = createParty(42);
     const broken = JSON.parse(serializeParty(p, 'T')) as Record<string, unknown>;
     (broken.state as Record<string, unknown>).workshop = { queue: 'очередь' };
-    expect(() => deserializeParty(JSON.stringify(broken))).toThrow('цех');
+    expect(() => deserializeParty(JSON.stringify(broken))).toThrow('Кузня');
   });
 
   it('round-trip: екіпірування ростеру відновлюється разом зі складом (П11.3)', () => {
     const p = createParty(42);
-    p.workshop.store['легка броня'] = 1;
-    p.workshop.store['аптечка'] = 1;
-    equipItem(p.workshop, p.roster.soldiers[0], 'легка броня');
-    equipItem(p.workshop, p.roster.soldiers[0], 'аптечка');
+    p.workshop.store['armor'] = 1;
+    p.workshop.store['medkit'] = 1;
+    equipItem(p.workshop, p.roster.soldiers[0], 'armor');
+    equipItem(p.workshop, p.roster.soldiers[0], 'medkit');
     expect(p.roster.soldiers[0].maxHp).toBe(12);
     const restored = deserializeParty(serializeParty(p, 'T'));
     expect(restored.workshop.equipped).toEqual(p.workshop.equipped);
@@ -485,30 +485,30 @@ describe('save: цех (П11.3, ADR-0026)', () => {
 
   it('сейв без поля equipped (сейв кроку виробництва П11.3) — порожнє екіпірування', () => {
     const p = createParty(42);
-    p.workshop.store['аптечка'] = 1;
+    p.workshop.store['medkit'] = 1;
     const older = JSON.parse(serializeParty(p, 'T')) as Record<string, unknown>;
     delete ((older.state as Record<string, unknown>).workshop as Record<string, unknown>).equipped;
     const restored = deserializeParty(JSON.stringify(older));
     expect(restored.workshop.equipped).toEqual({});
-    expect(restored.workshop.store['аптечка']).toBe(1);
+    expect(restored.workshop.store['medkit']).toBe(1);
   });
 
   it('поле equipped пошкоджене — throw українською', () => {
     const p = createParty(42);
     const broken = JSON.parse(serializeParty(p, 'T')) as Record<string, unknown>;
     ((broken.state as Record<string, unknown>).workshop as Record<string, unknown>).equipped = 'сумка';
-    expect(() => deserializeParty(JSON.stringify(broken))).toThrow('цех');
+    expect(() => deserializeParty(JSON.stringify(broken))).toThrow('Кузня');
   });
 
   it('round-trip: гарматний модуль на винищувачі відновлюється (П11.3, ADR-0058)', () => {
     const p = createParty(42);
-    p.workshop.store['гарматний модуль'] = 1;
+    p.workshop.store['gun-module'] = 1;
     installGunModule(p.workshop, p.intercept);
     const restored = deserializeParty(serializeParty(p, 'T'));
     expect(restored.intercept.fighter.gunModule).toBe(true);
     // модуль можна зняти після відновлення — повертається на склад
     removeGunModule(restored.workshop, restored.intercept);
-    expect(restored.workshop.store['гарматний модуль']).toBe(1);
+    expect(restored.workshop.store['gun-module']).toBe(1);
     expect(restored.intercept.fighter.gunModule).toBe(false);
   });
 });

@@ -71,8 +71,8 @@ describe('ResearchPanel: штат вчених', () => {
     const panel = createResearchPanel(makeDeps());
     panel.render();
     const head = el('research').querySelector('div')!.textContent!;
-    expect(head).toContain('Вчених: 0');
-    expect(head).toContain('зарплата ' + SCIENTIST_SALARY + '/добу');
+    expect(head).toContain('Техномантів: 0');
+    expect(head).toContain('утримання ' + SCIENTIST_SALARY + '/добу');
     expect(head).toContain('слоти 0/' + BASE_LAB_SLOTS);
     expect(head).toContain('пул: 0');
   });
@@ -84,9 +84,9 @@ describe('ResearchPanel: каталог проєктів', () => {
     panel.render();
     const starts = document.querySelectorAll<HTMLButtonElement>('[id^="btn-start-"]');
     expect(starts).toHaveLength(6);
-    expect(el('research').textContent).toContain('легка броня');
-    expect(el('research').textContent).toContain('осколкова граната');
-    expect(el('research').textContent).toContain('гарматний модуль');
+    expect(el('research').textContent).toContain('Композитна броня');
+    expect(el('research').textContent).toContain('Імпульсна граната');
+    expect(el('research').textContent).toContain('Гарматний модуль перехоплювача');
   });
 
   it('старт проєкту — у роботі з прогресом, слоти 1/2; другий старт теж успішний, третій — заблокований', () => {
@@ -109,14 +109,14 @@ describe('ResearchPanel: каталог проєктів', () => {
     panel.render();
     const grenade = el<HTMLButtonElement>('btn-start-4'); // «осколкова граната» після «аптечки»
     expect(grenade.disabled).toBe(true);
-    expect(grenade.title).toContain('спершу: аптечка');
+    expect(grenade.title).toContain('спершу: «Регенеративний гель»');
   });
 
   it('завершений проєкт — мітка ✓, кнопки старту немає', () => {
-    party.research.completed.push('аптечка');
+    party.research.completed.push('medkit');
     const panel = createResearchPanel(makeDeps());
     panel.render();
-    const row = [...document.querySelectorAll('#research .ufo')].find((r) => r.textContent!.includes('аптечка'))!;
+    const row = [...document.querySelectorAll('#research .ufo')].find((r) => r.textContent!.includes('Регенеративний гель'))!;
     expect(row.textContent).toContain('✓ завершено');
     expect(row.querySelector('button')).toBeNull();
   });
@@ -127,7 +127,7 @@ describe('ResearchPanel: каталог проєктів', () => {
     panel.render();
     const start = el<HTMLButtonElement>('btn-start-0');
     expect(start.disabled).toBe(true);
-    expect(start.title).toContain('недостатньо коштів');
+    expect(start.title).toContain('недостатньо кредитів');
   });
 });
 
@@ -140,42 +140,42 @@ describe('ResearchPanel: критерій 1 — числові ефекти ДО
     panel.render();
     const s = party.roster.soldiers[0]!;
     // «легка броня»: +2 макс. HP (10 → 12) — «зараз» від першого солдата
-    const armor = row('легка броня').textContent!;
+    const armor = row('Композитна броня').textContent!;
     expect(armor).toContain('+' + ARMOR_MAX_HP_BONUS + ' макс. HP');
     expect(armor).toContain('(' + s.maxHp + ' → ' + (s.maxHp + ARMOR_MAX_HP_BONUS) + ')');
     // «оптичний приціл»: +5% точності (60% → 65%, кап 95%)
-    const optics = row('оптичний приціл').textContent!;
+    const optics = row('Кібернетичне око').textContent!;
     expect(optics).toContain('+' + OPTICS_ACCURACY_BONUS * 100 + '% точності');
     expect(optics).toContain('(' + Math.round(s.firingAccuracy * 100) + '% → ');
     expect(optics).toContain('кап ' + HIT_CHANCE_CAP * 100 + '%');
     // «аптечка»: +3 HP з AP-вартістю (combat.ts)
-    expect(row('аптечка').textContent).toContain('+' + HEAL_AMOUNT + ' HP');
+    expect(row('Регенеративний гель').textContent).toContain('+' + HEAL_AMOUNT + ' HP');
     // «осколкова граната»: пошкодження 3–5, уражає і своїх
-    const grenade = row('осколкова граната').textContent!;
+    const grenade = row('Імпульсна граната').textContent!;
     expect(grenade).toContain(GRENADE_DAMAGE[0] + '–' + GRENADE_DAMAGE[1]);
     expect(grenade).toContain('уражає і своїх');
     // «розширення лабораторії»: слоти 2 → 3 (константи research.ts)
-    expect(row('розширення лабораторії').textContent).toContain('(' + BASE_LAB_SLOTS + ' → ' + MAX_LAB_SLOTS + ')');
+    expect(row('Розширення лабораторії').textContent).toContain('(' + BASE_LAB_SLOTS + ' → ' + MAX_LAB_SLOTS + ')');
     // «гарматний модуль»: +2 пошкодження за раунд (intercept.ts)
-    expect(row('гарматний модуль').textContent).toContain('+' + GUN_MODULE_DAMAGE + ' пошкодження за раунд');
+    expect(row('Гарматний модуль перехоплювача').textContent).toContain('+' + GUN_MODULE_DAMAGE + ' пошкодження за раунд');
   });
 
   it('ефект видимий і в картках активного/завершеного протоколу (до наступної дії)', () => {
     const panel = createResearchPanel(makeDeps());
     panel.render();
     (el('btn-start-0') as HTMLButtonElement).click(); // «легка броня» активна
-    party.research.completed.push('аптечка'); // «аптечка» завершена
+    party.research.completed.push('medkit'); // «аптечка» завершена
     panel.render();
-    expect(row('легка броня').textContent).toContain('макс. HP');
-    expect(row('аптечка').textContent).toContain('+' + HEAL_AMOUNT + ' HP');
+    expect(row('Композитна броня').textContent).toContain('макс. HP');
+    expect(row('Регенеративний гель').textContent).toContain('+' + HEAL_AMOUNT + ' HP');
   });
 
   it('без ростеру покращення показують ефект без «зараз → стане»', () => {
     party.roster.soldiers = [];
     const panel = createResearchPanel(makeDeps());
     panel.render();
-    expect(row('легка броня').textContent).toContain('+' + ARMOR_MAX_HP_BONUS + ' макс. HP');
-    expect(row('легка броня').textContent).not.toContain('→');
+    expect(row('Композитна броня').textContent).toContain('+' + ARMOR_MAX_HP_BONUS + ' макс. HP');
+    expect(row('Композитна броня').textContent).not.toContain('→');
   });
 });
 

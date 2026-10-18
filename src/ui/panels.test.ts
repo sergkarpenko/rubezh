@@ -346,10 +346,10 @@ describe('renderRoster: екіпірування (П11.6, ADR-0058)', () => {
   it('критерій 1 (П12.5): підказки спорядження показують числовий ефект до дії', () => {
     const f = makeFixture();
     const s = f.party.roster.soldiers[0]!;
-    f.party.workshop.store['легка броня'] = 1;
-    f.party.workshop.store['оптичний приціл'] = 1;
-    f.party.workshop.store['аптечка'] = 1;
-    f.party.workshop.store['осколкова граната'] = 1;
+    f.party.workshop.store['armor'] = 1;
+    f.party.workshop.store['optics'] = 1;
+    f.party.workshop.store['medkit'] = 1;
+    f.party.workshop.store['grenade'] = 1;
     f.panels.renderRoster();
     const armor = document.getElementById('btn-equip-' + s.id + '-armor') as HTMLButtonElement;
     expect(armor.title).toContain('+' + ARMOR_MAX_HP_BONUS + ' макс. HP (' + s.maxHp + ' → ' + (s.maxHp + ARMOR_MAX_HP_BONUS) + ')');
@@ -369,13 +369,13 @@ describe('renderRoster: екіпірування (П11.6, ADR-0058)', () => {
   it('спорядження брони зі складу — +2 maxHp/hp, предмет ✓, склад порожнішає', () => {
     const f = makeFixture();
     const s = f.party.roster.soldiers[0]!;
-    f.party.workshop.store['легка броня'] = 1;
+    f.party.workshop.store['armor'] = 1;
     f.panels.renderRoster();
     const beforeHp = s.hp;
     const beforeMax = s.maxHp;
     (document.getElementById('btn-equip-' + s.id + '-armor') as HTMLButtonElement).click();
     expect(f.party.workshop.equipped[s.id]!.armor).toBe(true);
-    expect(f.party.workshop.store['легка броня']).toBe(0);
+    expect(f.party.workshop.store['armor']).toBe(0);
     expect(s.maxHp).toBe(beforeMax + 2);
     expect(s.hp).toBe(beforeHp + 2);
     f.panels.renderRoster();
@@ -387,13 +387,13 @@ describe('renderRoster: екіпірування (П11.6, ADR-0058)', () => {
   it('зняття броні — назад на склад, hp клемується новим maxHp', () => {
     const f = makeFixture();
     const s = f.party.roster.soldiers[0]!;
-    f.party.workshop.store['легка броня'] = 1;
+    f.party.workshop.store['armor'] = 1;
     f.panels.renderRoster();
     (document.getElementById('btn-equip-' + s.id + '-armor') as HTMLButtonElement).click();
     s.hp = s.maxHp; // повне здоров'я у броні
     f.panels.renderRoster();
     (document.getElementById('btn-equip-' + s.id + '-armor') as HTMLButtonElement).click();
-    expect(f.party.workshop.store['легка броня']).toBe(1);
+    expect(f.party.workshop.store['armor']).toBe(1);
     expect(s.maxHp).toBe(10);
     expect(s.hp).toBe(10); // hp min(hp, maxHp) — «оздоровлення» нема
     expect(f.party.workshop.equipped[s.id]).toBeUndefined(); // порожній запис вилучено
@@ -402,8 +402,8 @@ describe('renderRoster: екіпірування (П11.6, ADR-0058)', () => {
   it('оптика — +0.05 точності; витратники — по одному на солдата', () => {
     const f = makeFixture();
     const s = f.party.roster.soldiers[0]!;
-    f.party.workshop.store['оптичний приціл'] = 1;
-    f.party.workshop.store['аптечка'] = 1;
+    f.party.workshop.store['optics'] = 1;
+    f.party.workshop.store['medkit'] = 1;
     f.party.workshop.equipped[s.id] = { armor: false, optics: false, medkit: true, grenade: false };
     const accBefore = s.firingAccuracy;
     f.panels.renderRoster();
@@ -411,16 +411,16 @@ describe('renderRoster: екіпірування (П11.6, ADR-0058)', () => {
     expect(s.firingAccuracy).toBeCloseTo(accBefore + 0.05, 10);
     f.panels.renderRoster();
     const medkitBtn = document.getElementById('btn-equip-' + s.id + '-medkit') as HTMLButtonElement;
-    expect(medkitBtn.textContent).toContain('аптечка ✓'); // уже при солдатові
+    expect(medkitBtn.textContent).toContain('гель ✓'); // уже при солдатові
     expect(medkitBtn.disabled).toBe(false); // зняти можна
     (document.getElementById('btn-equip-' + s.id + '-medkit') as HTMLButtonElement).click();
-    expect(f.party.workshop.store['аптечка']).toBe(2); // 1 + повернуто
+    expect(f.party.workshop.store['medkit']).toBe(2); // 1 + повернуто
   });
 
   it('критерій 1: у бою кнопки екіпірування вимкнені (лише геосцена)', () => {
     const f = makeFixture({ inBattle: () => true });
     const s = f.party.roster.soldiers[0]!;
-    f.party.workshop.store['аптечка'] = 2;
+    f.party.workshop.store['medkit'] = 2;
     f.panels.renderRoster();
     expect((document.getElementById('btn-equip-' + s.id + '-medkit') as HTMLButtonElement).disabled).toBe(true);
   });
@@ -428,13 +428,13 @@ describe('renderRoster: екіпірування (П11.6, ADR-0058)', () => {
   it('помилка ядра (зняття неспорядженого — стан змінився поза панеллю) — у журнал', () => {
     const f = makeFixture();
     const s = f.party.roster.soldiers[0]!;
-    f.party.workshop.store['аптечка'] = 1;
+    f.party.workshop.store['medkit'] = 1;
     f.panels.renderRoster();
     (document.getElementById('btn-equip-' + s.id + '-medkit') as HTMLButtonElement).click();
     // предмет зняли напряму через ядро — панель ще не перемальована
     f.party.workshop.equipped[s.id]!.medkit = false;
     (document.getElementById('btn-equip-' + s.id + '-medkit') as HTMLButtonElement).click(); // «зняти» ще раз
     expect(f.deps.journal).toHaveBeenCalledWith(expect.stringContaining('Предмета немає'), 'lose', 'base');
-    expect(f.party.workshop.store['аптечка']).toBe(0); // помилка ядра — склад не змінився
+    expect(f.party.workshop.store['medkit']).toBe(0); // помилка ядра — склад не змінився
   });
 });

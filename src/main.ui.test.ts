@@ -999,34 +999,34 @@ describe('П11.6: критичний флоу «дослідити → виро�
     btn('btn-hire-scientist').click();
     btn('btn-start-2').click(); // «аптечка» — 100 (баланс 300−200 = якраз)
     expect($('money').textContent).toBe('0');
-    let done = researchDone('аптечка');
+    let done = researchDone('Регенеративний гель');
     for (let i = 0; i < 60 && !done; i++) {
       btn('btn-day').click();
-      done = researchDone('аптечка');
+      done = researchDone('Регенеративний гель');
     }
     expect(done).toBe(true); // 2 вчені = 2 точки/добу → 16 діб
 
     // Т2 «осколкова граната» (передумова «аптечка» виконана) — ще 20 діб
     btn('btn-start-4').click();
-    done = researchDone('осколкова граната');
+    done = researchDone('Імпульсна граната');
     for (let i = 0; i < 60 && !done; i++) {
       btn('btn-day').click();
-      done = researchDone('осколкова граната');
+      done = researchDone('Імпульсна граната');
     }
     expect(done).toBe(true);
 
     // 2. ВИРОБИТИ: замовлення обох предметів; одна доба (48 тіків) покриває 12+16
-    btn('btn-order-аптечка').click();
-    btn('btn-order-осколкова-граната').click();
+    btn('btn-order-medkit').click();
+    btn('btn-order-grenade').click();
     btn('btn-day').click();
-    expect($('workshop').textContent).toContain('аптечка 1');
-    expect($('workshop').textContent).toContain('осколкова граната 1');
+    expect($('workshop').textContent).toContain('Регенеративний гель 1');
+    expect($('workshop').textContent).toContain('Імпульсна граната 1');
 
     // 3. ЕКІПІРУВАТИ: s1 — граната, s2 — аптечка (перші дві картки ростеру)
     btn('btn-equip-s1-grenade').click();
     btn('btn-equip-s2-medkit').click();
     expect($('roster').textContent).toContain('граната ✓');
-    expect($('roster').textContent).toContain('аптечка ✓');
+    expect($('roster').textContent).toContain('гель ✓');
 
     // 4. Місія: детерміновано чекаємо приземленого НЛО (сід 42) і висаджуємось
     let found = false;
@@ -1162,14 +1162,14 @@ describe('П12.5: зрозумілість розвитку — числові �
     btn('status-tab-base').click();
     // дослідження: кожен протокол картки — числовий ефект до старту
     const research = $('research').textContent ?? '';
-    expect(rowText('research', 'легка броня')).toContain('+' + ARMOR_MAX_HP_BONUS + ' макс. HP'); // «зараз → стане» від першого солдата
-    expect(rowText('research', 'легка броня')).toContain('→');
-    expect(rowText('research', 'оптичний приціл')).toContain('+' + OPTICS_ACCURACY_BONUS * 100 + '% точності');
-    expect(rowText('research', 'оптичний приціл')).toContain('кап ' + HIT_CHANCE_CAP * 100 + '%');
-    expect(rowText('research', 'аптечка')).toContain('+' + HEAL_AMOUNT + ' HP');
-    expect(rowText('research', 'осколкова граната')).toContain('пошкодження ' + GRENADE_DAMAGE[0] + '–' + GRENADE_DAMAGE[1]);
-    expect(rowText('research', 'розширення лабораторії')).toContain('(' + BASE_LAB_SLOTS + ' → ' + MAX_LAB_SLOTS + ')');
-    expect(rowText('research', 'гарматний модуль')).toContain('+' + GUN_MODULE_DAMAGE + ' пошкодження за раунд');
+    expect(rowText('research', 'Композитна броня')).toContain('+' + ARMOR_MAX_HP_BONUS + ' макс. HP'); // «зараз → стане» від першого солдата
+    expect(rowText('research', 'Композитна броня')).toContain('→');
+    expect(rowText('research', 'Кібернетичне око')).toContain('+' + OPTICS_ACCURACY_BONUS * 100 + '% точності');
+    expect(rowText('research', 'Кібернетичне око')).toContain('кап ' + HIT_CHANCE_CAP * 100 + '%');
+    expect(rowText('research', 'Регенеративний гель')).toContain('+' + HEAL_AMOUNT + ' HP');
+    expect(rowText('research', 'Імпульсна граната')).toContain('пошкодження ' + GRENADE_DAMAGE[0] + '–' + GRENADE_DAMAGE[1]);
+    expect(rowText('research', 'Розширення лабораторії')).toContain('(' + BASE_LAB_SLOTS + ' → ' + MAX_LAB_SLOTS + ')');
+    expect(rowText('research', 'Гарматний модуль перехоплювача')).toContain('+' + GUN_MODULE_DAMAGE + ' пошкодження за раунд');
     expect(research).not.toContain('у роботі'); // жоден проєкт не запущено — ефекти самі «до дії»
   });
 
@@ -1177,11 +1177,13 @@ describe('П12.5: зрозумілість розвитку — числові �
     startParty();
     btn('status-tab-base').click();
     // цех: кожен предмет — числовий ефект до замовлення; гейт дослідження вимкнений
-    expect(rowText('workshop', 'легка броня')).toContain('+' + ARMOR_MAX_HP_BONUS + ' макс. HP');
-    expect(rowText('workshop', 'аптечка')).toContain('+' + HEAL_AMOUNT + ' HP');
-    expect(rowText('workshop', 'осколкова граната')).toContain('уражає і своїх');
-    expect(rowText('workshop', 'осколкова граната')).toContain('по одній на місію');
-    expect(rowText('workshop', 'гарматний модуль')).toContain('+' + GUN_MODULE_DAMAGE + ' пошкодження за раунд повітряного бою');
-    expect(btn('btn-order-аптечка').disabled).toBe(true); // ще не досліджено — ефект усе одно показано
+    expect(rowText('workshop', 'Композитна броня')).toContain('+' + ARMOR_MAX_HP_BONUS + ' макс. HP');
+    expect(rowText('workshop', 'Регенеративний гель')).toContain('+' + HEAL_AMOUNT + ' HP');
+    expect(rowText('workshop', 'Імпульсна граната')).toContain('уражає і своїх');
+    expect(rowText('workshop', 'Імпульсна граната')).toContain('по одній на місію');
+    expect(rowText('workshop', 'Гарматний модуль перехоплювача')).toContain(
+      '+' + GUN_MODULE_DAMAGE + ' пошкодження за раунд повітряного бою'
+    );
+    expect(btn('btn-order-medkit').disabled).toBe(true); // ще не досліджено — ефект усе одно показано
   });
 });

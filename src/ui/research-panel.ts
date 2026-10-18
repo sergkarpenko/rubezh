@@ -13,6 +13,7 @@ import {
   SCIENTIST_SALARY,
   hireScientist,
   fireScientist,
+  projectName,
   startProject,
   type ProjectDef,
 } from '../core/research';
@@ -45,10 +46,10 @@ export function createResearchPanel(deps: ResearchPanelDeps): ResearchPanel {
     const r = party.research;
     if (r.completed.includes(def.id)) return 'завершено';
     if (r.active.some((p) => p.id === def.id)) return 'у роботі';
-    if (def.prerequisite !== undefined && !r.completed.includes(def.prerequisite)) return 'спершу: ' + def.prerequisite;
+    if (def.prerequisite !== undefined && !r.completed.includes(def.prerequisite)) return 'спершу: «' + projectName(def.prerequisite) + '»';
     if (r.active.length >= r.slots) return 'нема вільного слота (' + r.active.length + '/' + r.slots + ')';
     const price = Math.round(def.cost * DIFFICULTY_MULTIPLIERS[party.campaign.preset].economyMultiplier);
-    if (party.econ.money < price) return 'недостатньо коштів (ціна ' + price + ')';
+    if (party.econ.money < price) return 'недостатньо кредитів (ціна ' + price + ')';
     return null;
   }
 
@@ -63,14 +64,14 @@ export function createResearchPanel(deps: ResearchPanelDeps): ResearchPanel {
     const hirePrice = Math.round(HIRE_SCIENTIST_PRICE * mult);
     const salary = Math.round(SCIENTIST_SALARY * mult);
 
-    // шапка: штат, зарплата, слоти лабораторії, спільний пул точок
+    // шапка: штат, утримання, слоти лабораторії техномагії, спільний пул потоку
     const head = document.createElement('div');
     head.className = 'meta';
     head.style.marginBottom = '4px';
     head.innerHTML =
-      'Вчених: <b>' +
+      'Техномантів: <b>' +
       r.scientists.length +
-      '</b> (зарплата ' +
+      '</b> (утримання ' +
       salary +
       '/добу) · слоти ' +
       r.active.length +
@@ -78,17 +79,17 @@ export function createResearchPanel(deps: ResearchPanelDeps): ResearchPanel {
       r.slots +
       ' · пул: <b>' +
       r.pool +
-      '</b> точок';
+      '</b> потоку';
     box.appendChild(head);
 
-    // найм вченого (прецедент btn-hire у панелі «Фінанси»)
+    // вербування техноманта (прецедент btn-hire у панелі «Фінанси»)
     const hire = document.createElement('button');
     hire.id = 'btn-hire-scientist';
-    hire.textContent = 'Найм вченого (' + hirePrice + ')';
+    hire.textContent = 'Вербувати техноманта (' + hirePrice + ')';
     hire.disabled = busy || party.econ.money < hirePrice;
     hire.title = hire.disabled
-      ? 'Недостатньо грошей (ціна найму ' + hirePrice + ')'
-      : 'Новий вчений у лабораторію (−' + hirePrice + ', зарплата ' + salary + '/добу)';
+      ? 'Недостатньо кредитів (ціна вербування ' + hirePrice + ')'
+      : 'Новий техномант у лабораторію техномагії (−' + hirePrice + ', утримання ' + salary + '/добу)';
     hire.onclick = () => {
       try {
         hireScientist(party.econ, party.research, party.campaign.preset);
@@ -114,7 +115,7 @@ export function createResearchPanel(deps: ResearchPanelDeps): ResearchPanel {
         fire.id = 'btn-fire-' + s.id;
         fire.textContent = 'Звільнити';
         fire.disabled = busy;
-        fire.title = 'Звільнити без повернення коштів (зарплата більше не нараховується)';
+        fire.title = 'Звільнити без повернення кредитів (утримання більше не нараховується)';
         fire.onclick = () => {
           try {
             fireScientist(party.research, s.id);
@@ -129,11 +130,11 @@ export function createResearchPanel(deps: ResearchPanelDeps): ResearchPanel {
       box.appendChild(staff);
     }
 
-    // каталог проєктів: статус кожного + числовий ефект ДО старту (П12.5,
+    // каталог протоколів: статус кожного + числовий ефект ДО старту (П12.5,
     // ADR-0065 — числа з констант каталогів, хелпер effects.ts) + кнопка
-    // старту з підказкою причини
+    // старту з підказкою причини; назви — з каталогу (П12.6, ADR-0064)
     const catalog = document.createElement('div');
-    // «зараз → стане» покращень ростеру — від першого солдата загону
+    // «зараз → стане» покращень ростеру — від першого оперативника загону
     const ref = party.roster.soldiers[0];
     for (let i = 0; i < PROJECTS.length; i++) {
       const def = PROJECTS[i];
@@ -144,7 +145,13 @@ export function createResearchPanel(deps: ResearchPanelDeps): ResearchPanel {
       row.style.marginBottom = '4px';
       const info = document.createElement('span');
       info.textContent =
-        def.id + ' · ' + def.cost + ' · ' + def.points + ' точок' + (def.prerequisite ? ' · після «' + def.prerequisite + '»' : '');
+        def.name +
+        ' · ' +
+        def.cost +
+        ' · ' +
+        def.points +
+        ' потоку' +
+        (def.prerequisite ? ' · після «' + projectName(def.prerequisite) + '»' : '');
       row.appendChild(info);
       const effect = document.createElement('span');
       effect.className = 'meta';
@@ -165,7 +172,7 @@ export function createResearchPanel(deps: ResearchPanelDeps): ResearchPanel {
         start.textContent = 'Старт';
         const reason = startBlockReason(party, def);
         start.disabled = busy || reason !== null;
-        start.title = reason ?? 'Почати дослідження (−' + def.cost + ')';
+        start.title = reason ?? 'Почати протокол (−' + def.cost + ')';
         start.onclick = () => {
           try {
             startProject(party.econ, party.research, def.id, party.campaign.preset);

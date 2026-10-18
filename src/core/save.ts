@@ -17,19 +17,54 @@ import { createRoster, type Roster } from './squad';
 import { createEconomy, type EconomyEvent, type EconomyState } from './economy';
 import { createIntercept, interceptRngState, type Fighter, type InterceptEvent, type InterceptState } from './intercept';
 import { createCampaign, DEFAULT_PRESET, type CampaignState, type DifficultyPreset } from './campaign';
-import { createResearch, type ActiveProject, type ProjectId, type ResearchEvent, type ResearchState, type Scientist } from './research';
+import { createResearch, type ProjectId, type ResearchEvent, type ResearchState, type Scientist } from './research';
 import {
   createWorkshop,
   emptyStore,
   type ItemId,
   type SoldierEquipment,
+  type SoldierItemId,
   type WorkshopEvent,
-  type WorkshopOrder,
   type WorkshopState,
 } from './workshop';
 
 export const SAVE_VERSION = 1;
 export const SAVE_SLOTS = 3; // ADR-0026: три слоти, ключі rubezh.save.1..3 у main.ts
+
+// П12.6 (ADR-0064/0026): міграція ключів каталогів при завантаженні сейвів
+// ≤0.3.0. До П12.6 значення ProjectId/ItemId були українськими рядками і
+// водночас ключами у сейві (completed/store/queue/логи подій); відображувані
+// назви перейменовані за мапою ADR-0064, ключі стали стабільними
+// англійськими ідентифікаторами, незалежними від назв. Формат (структура,
+// version 1) не зростає: міграція — на вході при deserializeParty (прецедент
+// опційних полів П7.4/П8.2). Невідомий ключ лишяється як є — дані не
+// знищуємо, ядро відмовляється явно (throw «Невідомий протокол/предмет»).
+const LEGACY_PROJECT_KEYS: Record<string, ProjectId> = {
+  'легка броня': 'armor',
+  'оптичний приціл': 'optics',
+  аптечка: 'medkit',
+  'осколкова граната': 'grenade',
+  'гарматний модуль': 'gun-module',
+  'розширення лабораторії': 'lab-extension',
+};
+
+function migrateProjectKey(id: string): ProjectId {
+  return LEGACY_PROJECT_KEYS[id] ?? (id as ProjectId);
+}
+
+// Ключі предметів «Кузні» — ті самі, крім «Розширення лабораторії» (слот
+// відкриває, предмета не виробляє — ItemId виключає його за визначенням).
+const LEGACY_ITEM_KEYS: Record<string, ItemId> = {
+  'легка броня': 'armor',
+  'оптичний приціл': 'optics',
+  аптечка: 'medkit',
+  'осколкова граната': 'grenade',
+  'гарматний модуль': 'gun-module',
+};
+
+function migrateItemKey(id: string): ItemId {
+  return LEGACY_ITEM_KEYS[id] ?? (id as ItemId);
+}
 
 // П9.2 (Фаза 9): прапорці показаних підказок журналу — «один раз за партію».
 // true = підказку вже показано; false = ще не показано. Сейв-сумісність (ADR-0026,
@@ -141,22 +176,26 @@ interface HintsSave {
 
 // П11.2 (ADR-0058): стан науки в сейві; відсутнє поле (сейви до Фази 11) =
 // порожня наука (createResearch) — версія формату не зростає (прецедент П7.4).
+// П12.6: id — ключі каталогу; у сейвах ≤0.3.0 — старі українські значення
+// (мігруються на вході, LEGACY_PROJECT_KEYS).
 interface ResearchSave {
   scientists: Scientist[];
   hired: number;
   slots: number;
-  active: ActiveProject[];
-  completed: ProjectId[];
+  active: { id: string; invested: number }[];
+  completed: string[];
   pool: number;
   lastSalaryDay: number;
   log: ResearchEvent[];
 }
 
-// П11.3 (ADR-0058): стан цеху і складу в сейві; відсутнє поле (сейви до
+// П11.3 (ADR-0058): стан «Кузні» і складу в сейві; відсутнє поле (сейви до
 // П11.3) = порожній цех (createWorkshop) — версія формату не зростає.
+// П12.6: id/store — ключі каталогу; у сейвах ≤0.3.0 — старі українські
+// значення (мігруються на вході).
 interface WorkshopSave {
-  queue: WorkshopOrder[];
-  store: Record<ItemId, number>;
+  queue: { id: string; ticksLeft: number }[];
+  store: Record<string, number>;
   equipped?: Record<string, SoldierEquipment>; // П11.3 екіпірування (старіші сейви — порожньо)
   log: WorkshopEvent[];
 }
@@ -346,7 +385,7 @@ function parseSave(json: string): SaveData {
       !Array.isArray(wsv.log) ||
       (wsv.equipped !== undefined && (typeof wsv.equipped !== 'object' || wsv.equipped === null)))
   ) {
-    fail('Пошкоджені дані збереження: цех');
+    fail('Пошкоджені дані збереження: Кузня');
   }
   return data;
 }
@@ -409,29 +448,43 @@ export function deserializeParty(json: string): Party {
     // П9.2: відсутнє поле hints (старі сейви) = усі підказки ще не показано.
     hints: { ...defaultHints(), ...(data.state.hints ?? {}) },
     // П11.2 (ADR-0058): відсутнє поле research (сейви до Фази 11) = порожня
-    // наука: без вчених, 2 слоти, порожні проєкти і пул (критерій П11.2).
+    // наука: без техномантів, 2 слоти, порожні протоколи і пул (критерій П11.2).
+    // П12.6: ключі протоколів мігруються зі старих українських значень
+    // (сейви ≤0.3.0) на англійські — стан у пам'яті однаковий з новою партією.
     research:
       rsv !== undefined
         ? {
             scientists: rsv.scientists.map((s) => ({ ...s })),
             hired: rsv.hired,
             slots: rsv.slots,
-            active: rsv.active.map((p) => ({ ...p })),
-            completed: rsv.completed.slice(),
+            active: rsv.active.map((p) => ({ id: migrateProjectKey(p.id), invested: p.invested })),
+            completed: rsv.completed.map(migrateProjectKey),
             pool: rsv.pool,
             lastSalaryDay: rsv.lastSalaryDay,
-            log: rsv.log.slice(),
+            log: rsv.log.map((e) =>
+              e.type === 'project_started' || e.type === 'project_completed' ? { ...e, id: migrateProjectKey(e.id as string) } : e
+            ),
           }
         : createResearch(),
-    // П11.3 (ADR-0058): відсутнє поле workshop (сейви до П11.3) = порожній
-    // цех: без замовлень, порожній склад (критерій сейв-сумісності П11.3).
+    // П11.3 (ADR-0058): відсутнє поле workshop (сейви до П11.3) = порожня
+    // «Кузня»: без замовлень, порожній склад (критерій сейв-сумісності П11.3).
+    // П12.6: ключі предметів мігруються зі старих українських значень.
     workshop:
       wsv !== undefined
         ? {
-            queue: wsv.queue.map((o) => ({ ...o })),
-            store: { ...emptyStore(), ...wsv.store },
+            queue: wsv.queue.map((o) => ({ id: migrateItemKey(o.id), ticksLeft: o.ticksLeft })),
+            store: {
+              ...emptyStore(),
+              ...Object.fromEntries(Object.entries(wsv.store).map(([k, v]) => [migrateItemKey(k), v])),
+            },
             equipped: Object.fromEntries(Object.entries(wsv.equipped ?? {}).map(([id, eq]) => [id, { ...eq }])),
-            log: wsv.log.slice(),
+            log: wsv.log.map((e) => {
+              if (e.type === 'order' || e.type === 'produced') return { ...e, id: migrateItemKey(e.id as string) };
+              // equip/unequip — предмети оперативників (gun-module сюди не
+              // потрапляє за конструкцією ядра — guard у equipItem/unequipItem)
+              if (e.type === 'equip' || e.type === 'unequip') return { ...e, id: migrateItemKey(e.id as string) as SoldierItemId };
+              return e;
+            }),
           }
         : createWorkshop(),
   };

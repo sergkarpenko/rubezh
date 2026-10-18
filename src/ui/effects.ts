@@ -14,13 +14,13 @@ export function pct(x: number): string {
   return Math.round(x * 100) + '%';
 }
 
-// «Легка броня»: +N макс. HP; з поточним maxHp солдата — «(10 → 12)».
+// «Композитна броня»: +N макс. HP; з поточним maxHp оперативника — «(10 → 12)».
 export function armorEffect(currentMaxHp?: number): string {
   const base = '+' + ARMOR_MAX_HP_BONUS + ' макс. HP';
   return currentMaxHp === undefined ? base : base + ' (' + currentMaxHp + ' → ' + (currentMaxHp + ARMOR_MAX_HP_BONUS) + ')';
 }
 
-// «Оптичний приціл»: +5% точності з капом; з поточною точністю — «(60% → 65%)».
+// «Кібернетичне око»: +5% точності з капом; з поточною точністю — «(60% → 65%)».
 export function opticsEffect(currentAccuracy?: number): string {
   const base = '+' + pct(OPTICS_ACCURACY_BONUS) + ' точності';
   const cap = ' (кап ' + pct(HIT_CHANCE_CAP) + ')';
@@ -28,12 +28,12 @@ export function opticsEffect(currentAccuracy?: number): string {
   return base + ' (' + pct(currentAccuracy) + ' → ' + pct(Math.min(HIT_CHANCE_CAP, currentAccuracy + OPTICS_ACCURACY_BONUS)) + ')' + cap;
 }
 
-// «Аптечка» (витратник): лікує +3 HP (4 AP), ціль поруч, по одній на місію.
+// «Регенеративний гель» (витратник): лікує +3 HP (4 AP), ціль поруч, по одній на місцію.
 export function medkitEffect(): string {
   return 'лікує +' + HEAL_AMOUNT + ' HP (' + HEAL_AP_COST + ' AP), по одній на місію';
 }
 
-// «Осколкова граната» (витратник): пошкодження 3–5, дальність 6, зона хреста,
+// «Імпульсна граната» (витратник): пошкодження 3–5, дальність 6, зона хреста,
 // уражає і своїх, 4 AP, по одній на місію.
 export function grenadeEffect(): string {
   return (
@@ -52,34 +52,36 @@ export function grenadeEffect(): string {
 // «Розширення лабораторії»: слоти 2 → 3 (константи research.ts).
 export function labSlotsEffect(): string {
   const n = MAX_LAB_SLOTS - BASE_LAB_SLOTS;
-  return '+' + n + ' слот' + (n === 1 ? '' : n < 5 ? 'и' : 'ів') + ' лабораторії (' + BASE_LAB_SLOTS + ' → ' + MAX_LAB_SLOTS + ')';
+  return (
+    '+' + n + ' слот' + (n === 1 ? '' : n < 5 ? 'и' : 'ів') + ' лабораторії техномагії (' + BASE_LAB_SLOTS + ' → ' + MAX_LAB_SLOTS + ')'
+  );
 }
 
-// «Гарматний модуль»: +2 пошкодження за раунд повітряного бою (intercept.ts).
+// «Гарматний модуль перехоплювача»: +2 пошкодження за раунд повітряного бою (intercept.ts).
 export function gunModuleEffect(): string {
   return '+' + GUN_MODULE_DAMAGE + ' пошкодження за раунд повітряного бою';
 }
 
 // Ефект протоколу дослідження ДО старту; soldier — звідки береться «зараз»
-// для покращень ростеру (перший солдат загону; без ростеру — без «→»).
+// для покращень ростеру (перший оперативник загону; без ростеру — без «→»).
 export function projectEffect(id: ProjectId, soldier?: Unit): string {
   switch (id) {
-    case 'легка броня':
+    case 'armor':
       return armorEffect(soldier?.maxHp);
-    case 'оптичний приціл':
+    case 'optics':
       return opticsEffect(soldier?.firingAccuracy);
-    case 'аптечка':
+    case 'medkit':
       return medkitEffect();
-    case 'осколкова граната':
+    case 'grenade':
       return grenadeEffect();
-    case 'розширення лабораторії':
+    case 'lab-extension':
       return labSlotsEffect();
-    case 'гарматний модуль':
+    case 'gun-module':
       return gunModuleEffect();
   }
 }
 
-// Ефект предмета цеху ДО замовлення (механіка витратників — у підказках).
+// Ефект предмета «Кузні» ДО замовлення (механіка витратників — у підказках).
 export function itemEffect(id: ItemId, soldier?: Unit): string {
   return projectEffect(id, soldier);
 }

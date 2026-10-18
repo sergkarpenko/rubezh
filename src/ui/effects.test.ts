@@ -66,7 +66,7 @@ describe('effects: формати чисел з констант', () => {
   });
 
   it('розширення лабораторії: слоти з констант research.ts (2 → 3)', () => {
-    expect(labSlotsEffect()).toBe('+1 слот лабораторії (' + BASE_LAB_SLOTS + ' → ' + MAX_LAB_SLOTS + ')');
+    expect(labSlotsEffect()).toBe('+1 слот лабораторії техномагії (' + BASE_LAB_SLOTS + ' → ' + MAX_LAB_SLOTS + ')');
   });
 
   it('гарматний модуль: +N пошкодження за раунд — з intercept.ts', () => {
@@ -79,18 +79,18 @@ describe('effects: диспетчери каталогів', () => {
     for (const def of PROJECTS) {
       expect(projectEffect(def.id, soldier(10, 0.6))).not.toBe('');
     }
-    expect(projectEffect('легка броня', soldier(10, 0.6))).toBe(armorEffect(10));
-    expect(projectEffect('оптичний приціл', soldier(10, 0.6))).toBe(opticsEffect(0.6));
-    expect(projectEffect('аптечка')).toBe(medkitEffect());
-    expect(projectEffect('осколкова граната')).toBe(grenadeEffect());
-    expect(projectEffect('розширення лабораторії')).toBe(labSlotsEffect());
-    expect(projectEffect('гарматний модуль')).toBe(gunModuleEffect());
+    expect(projectEffect('armor', soldier(10, 0.6))).toBe(armorEffect(10));
+    expect(projectEffect('optics', soldier(10, 0.6))).toBe(opticsEffect(0.6));
+    expect(projectEffect('medkit')).toBe(medkitEffect());
+    expect(projectEffect('grenade')).toBe(grenadeEffect());
+    expect(projectEffect('lab-extension')).toBe(labSlotsEffect());
+    expect(projectEffect('gun-module')).toBe(gunModuleEffect());
   });
 
   it('itemEffect: ефект для КОЖНОГО предмета цеху (критерій 1)', () => {
     for (const id of ITEM_IDS) {
       expect(itemEffect(id, soldier(10, 0.6))).not.toBe('');
     }
-    expect(itemEffect('легка броня')).toBe(armorEffect(undefined));
+    expect(itemEffect('armor')).toBe(armorEffect(undefined));
   });
 });

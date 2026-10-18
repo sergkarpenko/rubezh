@@ -181,7 +181,7 @@ describe('П11.8: політика науки — повний флоу (фік�
     expect(a.outcome).toBe('перемога');
     expect(a.scientistsHired).toBe(3);
     // П11.8 (тунінг ×0.75 точок, комбо-B): за 30 діб — 3 проєкти (до тунінгу — 2)
-    expect(a.completedProjects).toEqual(['аптечка', 'розширення лабораторії', 'оптичний приціл']);
+    expect(a.completedProjects).toEqual(['medkit', 'lab-extension', 'optics']);
     expect(a.workshopProduced).toBe(15);
     expect(a.equippedItems).toBe(15);
     expect(a.salarySpent).toBe(1800);
@@ -214,53 +214,53 @@ describe('П11.8: partyBotScienceStep — детерміновані рішен�
 
   it('стартує перший доступний проєкт за пріоритетом — один за крок', () => {
     const p = createParty(42, 'норма');
-    partyBotScienceStep(p, { ...NO_SCIENCE_BASE, scientistsUpTo: 0, projects: ['осколкова граната', 'аптечка'] });
+    partyBotScienceStep(p, { ...NO_SCIENCE_BASE, scientistsUpTo: 0, projects: ['grenade', 'medkit'] });
     // «осколкова граната»: передумова «аптечка» не завершена — гейт;
     // «аптечка» стартує першою доступною (100 кошти), слот один зайнятий
-    expect(p.research.active.map((x) => x.id)).toEqual(['аптечка']);
+    expect(p.research.active.map((x) => x.id)).toEqual(['medkit']);
     expect(p.econ.money).toBe(200);
   });
 
   it('проєкт не стартує без слота (слоти лабораторії — гейт ADR-0058)', () => {
     const p = createParty(42, 'норма');
     p.research.slots = 2;
-    p.research.active.push({ id: 'оптичний приціл', invested: 0 }, { id: 'легка броня', invested: 0 });
-    partyBotScienceStep(p, { ...NO_SCIENCE_BASE, scientistsUpTo: 0, projects: ['аптечка'] });
+    p.research.active.push({ id: 'optics', invested: 0 }, { id: 'armor', invested: 0 });
+    partyBotScienceStep(p, { ...NO_SCIENCE_BASE, scientistsUpTo: 0, projects: ['medkit'] });
     expect(p.research.active).toHaveLength(2); // слоти зайняті — нижчі пріоритети не стартуються
     expect(p.econ.money).toBe(300);
   });
 
   it('цех: замовлення лише завершеного проєкту, за дефіцитом, одне в черзі', () => {
     const p = createParty(42, 'норма');
-    partyBotScienceStep(p, { ...NO_SCIENCE_BASE, scientistsUpTo: 0, workshopOrders: ['аптечка'] });
+    partyBotScienceStep(p, { ...NO_SCIENCE_BASE, scientistsUpTo: 0, workshopOrders: ['medkit'] });
     expect(p.workshop.queue).toHaveLength(0); // проєкт не досліджено — гейт
-    p.research.completed.push('аптечка');
-    partyBotScienceStep(p, { ...NO_SCIENCE_BASE, scientistsUpTo: 0, workshopOrders: ['аптечка'] });
-    expect(p.workshop.queue.map((o) => o.id)).toEqual(['аптечка']); // дефіцит 6 готових солдатів
+    p.research.completed.push('medkit');
+    partyBotScienceStep(p, { ...NO_SCIENCE_BASE, scientistsUpTo: 0, workshopOrders: ['medkit'] });
+    expect(p.workshop.queue.map((o) => o.id)).toEqual(['medkit']); // дефіцит 6 готових солдатів
     expect(p.econ.money).toBe(260); // 40 кошти за замовлення (норма ×1.0)
-    partyBotScienceStep(p, { ...NO_SCIENCE_BASE, scientistsUpTo: 0, workshopOrders: ['аптечка'] });
+    partyBotScienceStep(p, { ...NO_SCIENCE_BASE, scientistsUpTo: 0, workshopOrders: ['medkit'] });
     expect(p.workshop.queue).toHaveLength(1); // одне активне замовлення — дублі не копляться
   });
 
   it('цех: без дефіциту замовлення немає (склад покриває потребу)', () => {
     const p = createParty(42, 'норма');
-    p.research.completed.push('аптечка');
-    p.workshop.store['аптечка'] = 6; // усім боєготовим вистачає
-    partyBotScienceStep(p, { ...NO_SCIENCE_BASE, scientistsUpTo: 0, workshopOrders: ['аптечка'] });
+    p.research.completed.push('medkit');
+    p.workshop.store['medkit'] = 6; // усім боєготовим вистачає
+    partyBotScienceStep(p, { ...NO_SCIENCE_BASE, scientistsUpTo: 0, workshopOrders: ['medkit'] });
     expect(p.workshop.queue).toHaveLength(0);
     expect(p.econ.money).toBe(300);
   });
 
   it('екіпірування: броня зі складу → +2 maxHp боєготовому; гарматний модуль → на винищувач', () => {
     const p = createParty(42, 'норма');
-    p.workshop.store['легка броня'] = 1;
-    p.workshop.store['гарматний модуль'] = 1;
+    p.workshop.store['armor'] = 1;
+    p.workshop.store['gun-module'] = 1;
     partyBotScienceStep(p, { ...NO_SCIENCE_BASE, scientistsUpTo: 0, equip: true });
     const first = readySoldiers(p.roster)[0];
     expect(p.workshop.equipped[first.id]?.armor).toBe(true);
     expect(first.maxHp).toBe(12); // 10 + 2 (ADR-0058)
     expect(p.intercept.fighter.gunModule).toBe(true);
-    expect(p.workshop.store['гарматний модуль']).toBe(0);
+    expect(p.workshop.store['gun-module']).toBe(0);
     // повторний крок: предмет уже при солдатові/винищувачі — без змін і винятків
     partyBotScienceStep(p, { ...NO_SCIENCE_BASE, scientistsUpTo: 0, equip: true });
     expect(first.maxHp).toBe(12);
@@ -269,10 +269,10 @@ describe('П11.8: partyBotScienceStep — детерміновані рішен�
 
   it('гарматний модуль не ставиться поза базою (винищувач у польоті)', () => {
     const p = createParty(42, 'норма');
-    p.workshop.store['гарматний модуль'] = 1;
+    p.workshop.store['gun-module'] = 1;
     p.intercept.fighter.status = 'ремонт';
     partyBotScienceStep(p, { ...NO_SCIENCE_BASE, scientistsUpTo: 0, equip: true });
     expect(p.intercept.fighter.gunModule).toBeFalsy(); // гейт «лише на базі» (ADR-0058; поле опційне)
-    expect(p.workshop.store['гарматний модуль']).toBe(1);
+    expect(p.workshop.store['gun-module']).toBe(1);
   });
 });
