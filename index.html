@@ -580,8 +580,8 @@
             <span class="chip">Перехоплення: <b id="ictx-target">—</b></span>
             <span class="chip">Статус: <b id="ictx-status">—</b></span>
             <span class="chip">Раунд: <b id="ictx-round">—</b></span>
-            <span class="chip">Винищувач: <b id="ictx-fighter">—</b></span>
-            <span class="chip">НЛО: <b id="ictx-ufo">—</b></span>
+            <span class="chip">Перехоплюач: <b id="ictx-fighter">—</b></span>
+            <span class="chip">Зонд: <b id="ictx-ufo">—</b></span>
           </div>
         </section>
         <section class="panel hidden" id="battle-panel">
@@ -610,7 +610,7 @@
           <button data-filter="econ" id="log-tab-econ">Економіка</button>
           <button data-filter="battle" id="log-tab-battle">Бій</button>
           <!-- П11.6 (ADR-0058): події науки і цеху -->
-          <button data-filter="base" id="log-tab-base">База</button>
+          <button data-filter="base" id="log-tab-base">Вузол</button>
         </div>
         <ul id="log"></ul>
       </section>
@@ -622,11 +622,11 @@
              збереження; активна вкладка — localStorage поза сейвом (ADR-0026) -->
         <div id="status-tabs"></div>
         <section class="panel" data-tab="base">
-          <h2>Сканери (виявлені НЛО)</h2>
+          <h2>Сенсорна сітка (виявлені зонди)</h2>
           <div id="ufos"></div>
         </section>
         <section class="panel" data-tab="base">
-          <h2>Винищувач</h2>
+          <h2>Перехоплюач</h2>
           <div id="fighter"></div>
         </section>
         <section class="panel" data-tab="squad">
@@ -635,7 +635,7 @@
             Баланс: <b id="money-card">—</b>
             <span class="meta">· дотація 75/добу · премії за місію 110/170</span>
           </div>
-          <button id="btn-hire">Найм солдата (100)</button>
+          <button id="btn-hire">Вербувати оперативника (100)</button>
         </section>
         <!-- П11.6 (ADR-0058): панель «Дослідження» — штат вчених, слоти, каталог проєктів -->
         <section class="panel" data-tab="base">
@@ -644,7 +644,7 @@
         </section>
         <!-- П11.6 (ADR-0058): панель «Цех» — замовлення, черга, склад -->
         <section class="panel" data-tab="base">
-          <h2>Цех</h2>
+          <h2>Кузня</h2>
           <div id="workshop"></div>
         </section>
         <section class="panel" data-tab="squad">

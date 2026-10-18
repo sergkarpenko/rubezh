@@ -28,7 +28,7 @@ export const STATUS_TAB_KEY = 'rubezh.settings.status-tab';
 // ADR-0065 не визначає, — рішення власника сесії П12.4: обидві в «Базі».
 export const STATUS_TABS: ReadonlyArray<{ id: StatusTabId; label: string }> = [
   { id: 'squad', label: 'Загін' },
-  { id: 'base', label: 'База' },
+  { id: 'base', label: 'Вузол' },
   { id: 'system', label: 'Система' },
 ];
 

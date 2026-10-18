@@ -332,7 +332,7 @@ function partyTick(): void {
   }
   if (!gameOver && isBankrupt(p.econ, p.roster, p.campaign.preset)) {
     gameOver = true;
-    journal('✗ Банкрутство: немає боєготових солдатів і грошей на найм — партію програно.', 'lose', 'econ');
+    journal('✗ Банкрутство: немає боєготових оперативників і кредитів на вербування — партію програно.', 'lose', 'econ');
   }
 
   // П8.3: перевірка кампанії на межі 30-ї доби
@@ -378,7 +378,7 @@ function startNewParty(seed: number, preset: DifficultyPreset = 'норма'): v
   party = newParty(seed, preset);
   screens?.showGame();
   renderAll();
-  journal('Нова партія (сід ' + seed + ', складність «' + party.campaign.preset + '»). Рухайте час — радар шукає НЛО.');
+  journal('Нова партія (сід ' + seed + ', складність «' + party.campaign.preset + '»). Рухайте час — сенсорна сітка шукає зонди Розриву.');
 }
 
 // П12.2 (ADR-0065): «Продовжити» — останній активний слот через API панелі
@@ -424,7 +424,7 @@ if (typeof document !== 'undefined') {
     try {
       const p = activeParty();
       const s = hireSoldier(p.econ, p.roster, p.campaign.preset);
-      journal('+ Найм: ' + s.name + ' у ростері', '', 'econ');
+      journal('+ Вербування: ' + s.name + ' у ростері', '', 'econ');
       renderAll();
     } catch (e) {
       journal('✗ ' + (e as Error).message, 'lose', 'econ');

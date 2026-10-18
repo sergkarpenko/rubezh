@@ -156,7 +156,8 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
     // не переривається) — показуємо його як «заморожено».
     el('bctx-kind').textContent = mission.briefing.kind;
     el('bctx-time').textContent = geoClock(deps.getParty().geo) + ' · заморожено';
-    el('bctx-turn').textContent = 'хід ' + mission.state.turn + ' · ' + (mission.state.activeSide === 'player' ? 'загін' : 'прибульці');
+    el('bctx-turn').textContent =
+      'хід ' + mission.state.turn + ' · ' + (mission.state.activeSide === 'player' ? 'загін' : 'демони Розриву');
     const selCtx = selectedUnit();
     el('bctx-unit').textContent = selCtx
       ? selCtx.name + ': HP ' + selCtx.hp + '/' + selCtx.maxHp + ' · AP ' + selCtx.ap + '/' + selCtx.maxAp
@@ -321,7 +322,7 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
       const hint = b.dataset.hint || b.title;
       b.dataset.hint = hint;
       b.title = !hasItem
-        ? hint + ' — ' + (mode === 'medkit' ? 'аптечки' : 'гранати') + ' немає при солдатові'
+        ? hint + ' — ' + (mode === 'medkit' ? 'гелю' : 'гранати') + ' немає при оперативникові'
         : noAp
           ? hint + ' — не вистачає AP (потрібно ' + cost + ')'
           : hint;
@@ -366,8 +367,8 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
     ui.tapCell = null;
     ui.aimCell = null; // П6.14
     deps.resetBattleLog();
-    deps.journal('▶ Місія: загін висаджено біля НЛО ' + ufoId, '', 'battle');
-    binfo('Ваш хід: клікніть свого солдата (синє коло), потім клітинку — прев’ю шляху; повторний клік у ту саму клітинку — хід.');
+    deps.journal('▶ Місія: загін висаджено біля зонду Розриву ' + ufoId, '', 'battle');
+    binfo('Ваш хід: клікніть свого оперативника (синє коло), потім клітинку — прев’ю шляху; повторний клік у ту саму клітинку — хід.');
     deps.renderAll();
   }
 
@@ -410,7 +411,7 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
         '<button id="btn-close">← Повернутись на геосцену</button>';
     } else {
       el('bresult').innerHTML =
-        '<div class="banner lose">ЗАГІН ВТРАЧЕНО ✗ — НЛО лишається активним</div>' +
+        '<div class="banner lose">ЗАГІН ВТРАЧЕНО ✗ — зонд Розриву лишається активним</div>' +
         '<button id="btn-close">← Повернутись на геосцену</button>';
     }
     (document.getElementById('btn-close') as HTMLButtonElement).onclick = close;

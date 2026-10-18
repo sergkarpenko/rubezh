@@ -204,7 +204,7 @@ export const TOOLBAR_ACTIONS: readonly ToolbarAction[] = [
     id: 'ow',
     btnId: 'btn-ow',
     label: 'Дозор',
-    hint: OVERWATCH_AP_COST + ' AP · реакційний вогонь у хід прибульців · клавіша O',
+    hint: OVERWATCH_AP_COST + ' AP · реакційний вогонь у хід демонів Розриву · клавіша O',
     icon: ICON_OW,
   },
   {

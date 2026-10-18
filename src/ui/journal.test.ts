@@ -62,7 +62,7 @@ describe('geoEventText: фільтр туману стратегічного ж�
   it('доба і виявлення — видно завжди', () => {
     expect(geoEventText(evGeo({ type: 'day', day: 2, minute: 0 }), known)).toEqual({ text: '— Доба 2 —', cls: '' });
     expect(geoEventText(evGeo({ type: 'ufo_detected', ufoId: 'u2', pos: { x: 1, y: 1 }, minute: 5 }), known)).toEqual({
-      text: 'Виявлено НЛО: u2',
+      text: 'Виявлено зонд Розриву: u2',
       cls: '',
     });
   });
@@ -89,27 +89,27 @@ describe('geoEventText: фільтр туману стратегічного ж�
     expect(geoEventText(evGeo({ type: 'intercept_engage', ufoId: 'u1', minute: 2 }), known)?.text).toContain('повітряний бій');
     expect(geoEventText(evGeo({ type: 'intercept_break_off', minute: 3 }), known)?.text).toContain('Розрив контакту');
     expect(geoEventText(evGeo({ type: 'ufo_shot_down', ufoId: 'u1', minute: 4 }), known)).toEqual({
-      text: '✦ НЛО u1 збитий! На місці падіння — місія',
+      text: '✦ Зонд Розриву u1 збитий! На місці падіння — місія',
       cls: 'win',
     });
-    expect(geoEventText(evGeo({ type: 'fighter_returned', minute: 5 }), known)?.text).toContain('повернувся на базу');
+    expect(geoEventText(evGeo({ type: 'fighter_returned', minute: 5 }), known)?.text).toContain('повернувся у вузол «Рубіж»');
     expect(geoEventText(evGeo({ type: 'fighter_repair_start', minute: 6 }), known)).toEqual({
-      text: '✦ Ремонт винищувача оплачено (−50)',
+      text: '✦ Ремонт перехоплювача оплачено (−50)',
       cls: 'lose',
     });
     expect(geoEventText(evGeo({ type: 'fighter_repair_done', minute: 7 }), known)).toEqual({
-      text: '✦ Ремонт винищувача завершено — знову боєготовий',
+      text: '✦ Ремонт перехоплювача завершено — знову боєготовий',
       cls: 'win',
     });
   });
 
   it('переривання перехоплення: пошкодження — lose, зникнення НЛО — нейтральний', () => {
     expect(geoEventText(evGeo({ type: 'intercept_aborted', reason: 'fighter_damaged', minute: 1 }), known)).toEqual({
-      text: '✦ Винищувач пошкоджений — вимушене переривання бою',
+      text: '✦ Перехоплювач пошкоджений — вимушене переривання бою',
       cls: 'lose',
     });
     expect(geoEventText(evGeo({ type: 'intercept_aborted', reason: 'ufo_lost', ufoId: 'u1', minute: 2 }), known)).toEqual({
-      text: '✦ НЛО u1 зник з трекінгу — перехоплення перервано',
+      text: '✦ Зонд Розриву u1 зник з трекінгу — перехоплення перервано',
       cls: '',
     });
   });

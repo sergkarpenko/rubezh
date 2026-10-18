@@ -167,7 +167,7 @@ describe('battle: флоу місії (запуск/закриття/завер�
     expect(f.ui.mission).not.toBeNull();
     expect(f.ui.selectedId).toBeNull();
     expect(f.deps.resetBattleLog).toHaveBeenCalled();
-    expect(f.deps.journal).toHaveBeenCalledWith('▶ Місія: загін висаджено біля НЛО ' + ufoId, '', 'battle');
+    expect(f.deps.journal).toHaveBeenCalledWith('▶ Місія: загін висаджено біля зонду Розриву ' + ufoId, '', 'battle');
     expect(document.getElementById('binfo')!.textContent).toContain('Ваш хід');
     expect(f.deps.renderAll).toHaveBeenCalled();
     const first = f.ui.mission;
@@ -267,7 +267,7 @@ describe('renderBattle: кнопки витратників (П11.6, ADR-0058)',
     const gren = document.getElementById('btn-grenade') as HTMLButtonElement;
     expect(med.disabled).toBe(true);
     expect(gren.disabled).toBe(true);
-    expect(med.title).toContain('аптечки немає');
+    expect(med.title).toContain('гелю немає');
     expect(gren.title).toContain('гранати немає');
     const s = f.ui.mission!.state.units.find((u) => u.side === 'player')!;
     f.ui.selectedId = s.id;

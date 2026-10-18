@@ -97,7 +97,7 @@ export function createJournal(deps: JournalDeps): Journal {
       if (msg) journal(msg.text, msg.cls);
       // П9.2: «Ремонт завершено» — подія ядра; підказка один раз за партію.
       if (e.type === 'fighter_repair_done' && claimHint(p.hints, 'repair')) {
-        journal('Підказка: винищувач відремонтований і знову боєготовий — можна перехоплювати.');
+        journal('Підказка: перехоплювач відремонтований і знову боєготовий — можна перехоплювати.');
       }
       // П7.5 (ADR-0032): події перехоплення — джерело анімацій трасерів повітряного
       // бою (сутово відображення: дії ядра вже застосовані; лог лише читається).
@@ -117,13 +117,13 @@ export function createJournal(deps: JournalDeps): Journal {
     // «Можна перехопити»: виявлений НЛО у повітрі + боєготовий винищувач
     if (f.status === 'на базі' && f.hp === FIGHTER_MAX_HP && p.geo.ufos.some((u) => u.detected && u.status === 'летить')) {
       if (claimHint(p.hints, 'intercept')) {
-        journal('Підказка: виявлений НЛО у повітрі можна перехопити — кнопка «Перехопити» у панелі «Сканери».');
+        journal('Підказка: виявлений зонд Розриву у повітрі можна перехопити — кнопка «Перехопити» у панелі «Сенсорна сітка».');
       }
     }
     // «Доступна місія»: приземлений/збитий виявлений НЛО — ціль місії (missionTargets)
     if (missionTargets(p.geo).length > 0) {
       if (claimHint(p.hints, 'mission')) {
-        journal('Підказка: НЛО на землі — можна висадити загін, кнопка «Запустити місію» у панелі «Сканери».');
+        journal('Підказка: зонд Розриву на землі — можна висадити загін, кнопка «Запустити місію» у панелі «Сенсорна сітка».');
       }
     }
   }
@@ -227,37 +227,37 @@ export function geoEventText(e: GeoEvent, knownDetected: ReadonlySet<string>): {
     case 'day':
       return { text: '— Доба ' + e.day + ' —', cls: '' };
     case 'ufo_detected':
-      return { text: 'Виявлено НЛО: ' + e.ufoId, cls: '' };
+      return { text: 'Виявлено зонд Розриву: ' + e.ufoId, cls: '' };
     case 'ufo_landed':
-      return knownDetected.has(e.ufoId) ? { text: 'НЛО ' + e.ufoId + ' приземлився — відкрито вікно місії', cls: '' } : null;
+      return knownDetected.has(e.ufoId) ? { text: 'Зонд Розриву ' + e.ufoId + ' приземлився — відкрито вікно місії', cls: '' } : null;
     case 'ufo_left':
-      return knownDetected.has(e.ufoId) ? { text: 'НЛО ' + e.ufoId + ' відлетів і зник', cls: '' } : null;
+      return knownDetected.has(e.ufoId) ? { text: 'Зонд Розриву ' + e.ufoId + ' відлетів і зник', cls: '' } : null;
     case 'mission_won':
       return { text: 'Місію зачищено ✓', cls: 'win' };
     case 'mission_lost':
       return { text: 'Загін втрачено ✗', cls: 'lose' };
     case 'intercept_start':
-      return { text: '✦ Перехоплення: винищувач піднявся на НЛО ' + e.ufoId, cls: '' };
+      return { text: '✦ Перехоплення: перехоплювач піднявся на зонд Розриву ' + e.ufoId, cls: '' };
     case 'intercept_engage':
-      return { text: '✦ Винищувач зблизився з НЛО ' + e.ufoId + ' — повітряний бій', cls: '' };
+      return { text: '✦ Перехоплювач зблизився із зондом Розриву ' + e.ufoId + ' — повітряний бій', cls: '' };
     case 'intercept_break_off':
-      return { text: '✦ Розрив контакту — винищувач повернувся на базу', cls: '' };
+      return { text: '✦ Розрив контакту — перехоплювач повернувся у вузол «Рубіж»', cls: '' };
     case 'intercept_aborted':
       return {
         text:
           e.reason === 'fighter_damaged'
-            ? '✦ Винищувач пошкоджений — вимушене переривання бою'
-            : '✦ НЛО ' + e.ufoId + ' зник з трекінгу — перехоплення перервано',
+            ? '✦ Перехоплювач пошкоджений — вимушене переривання бою'
+            : '✦ Зонд Розриву ' + e.ufoId + ' зник з трекінгу — перехоплення перервано',
         cls: e.reason === 'fighter_damaged' ? 'lose' : '',
       };
     case 'ufo_shot_down':
-      return { text: '✦ НЛО ' + e.ufoId + ' збитий! На місці падіння — місія', cls: 'win' };
+      return { text: '✦ Зонд Розриву ' + e.ufoId + ' збитий! На місці падіння — місія', cls: 'win' };
     case 'fighter_returned':
-      return { text: '✦ Винищувач повернувся на базу', cls: '' };
+      return { text: '✦ Перехоплювач повернувся у вузол «Рубіж»', cls: '' };
     case 'fighter_repair_start':
-      return { text: '✦ Ремонт винищувача оплачено (−' + FIGHTER_REPAIR_COST + ')', cls: 'lose' };
+      return { text: '✦ Ремонт перехоплювача оплачено (−' + FIGHTER_REPAIR_COST + ')', cls: 'lose' };
     case 'fighter_repair_done':
-      return { text: '✦ Ремонт винищувача завершено — знову боєготовий', cls: 'win' };
+      return { text: '✦ Ремонт перехоплювача завершено — знову боєготовий', cls: 'win' };
     default:
       return null; // ufo_spawned / ufo_move — приховано туманом
   }

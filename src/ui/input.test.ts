@@ -218,7 +218,7 @@ describe('input: обробники вводу бою (тап-тап, зведе
     const f = makeFixture();
     launchMission(f);
     clickAt(f, 10, 10); // порожня клітинка, вибору нема
-    expect(f.binfo()).toBe('Спершу клікніть свого солдата (синє коло).');
+    expect(f.binfo()).toBe('Спершу клікніть свого оперативника (синє коло).');
   });
 
   it('клік по своєму солдату — вибір і стан скинуто', () => {
@@ -234,7 +234,7 @@ describe('input: обробники вводу бою (тап-тап, зведе
     const f = makeFixture();
     launchMission(f);
     f.input.armFire('snap');
-    expect(f.binfo()).toBe('Спершу клікніть свого солдата.');
+    expect(f.binfo()).toBe('Спершу клікніть свого оперативника.');
     const s = f.ui.mission!.state.units.find((u) => u.side === 'player')!;
     f.ui.selectedId = s.id;
     s.ap = 0; // не вистачає на швидкий постріл (3 AP)
@@ -302,7 +302,7 @@ describe('input: витратники бою — аптечка і гранат�
     const s = f.ui.mission!.state.units.find((u) => u.side === 'player')!;
     f.ui.selectedId = s.id;
     f.input.armMedkit();
-    expect(f.binfo()).toContain('Аптечки немає');
+    expect(f.binfo()).toContain('Гелю немає');
     f.ui.mission!.state.items = { [s.id]: { medkit: true, grenade: false } };
     s.ap = 2;
     f.input.onKeyDown({ code: 'KeyM' } as KeyboardEvent);
@@ -311,7 +311,7 @@ describe('input: витратники бою — аптечка і гранат�
     s.ap = 10;
     f.input.onKeyDown({ code: 'KeyM' } as KeyboardEvent);
     expect(f.ui.itemMode).toBe('medkit');
-    expect(f.binfo()).toContain('Аптечка');
+    expect(f.binfo()).toContain('Гель');
   });
 
   it('аптечка: тап-тап по пораненому союзнику поруч — лікування, витратник списано', () => {

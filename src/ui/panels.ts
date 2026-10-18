@@ -153,7 +153,7 @@ export function createPanels(deps: PanelsDeps): Panels {
         ib.textContent = '✦ Перехопити';
         const readyFighter = party.intercept.fighter.hp === FIGHTER_MAX_HP;
         ib.disabled = deps.inBattle() || deps.isGameOver() || !readyFighter;
-        ib.title = !readyFighter ? 'Винищувач пошкоджений — спочатку ремонт' : 'Підняти винищувач на перехоплення';
+        ib.title = !readyFighter ? 'Перехоплювач пошкоджений — спочатку ремонт' : 'Підняти перехоплюач на перехоплення';
         ib.onclick = () => {
           if (deps.inBattle()) return;
           try {
@@ -176,8 +176,8 @@ export function createPanels(deps: PanelsDeps): Panels {
         else if (ready === 0)
           btn.title =
             party.roster.soldiers.length === 0
-              ? 'Ростер порожній — найм солдата за гроші'
-              : 'Усі солдати поранені — чекайте одужання або наймайте';
+              ? 'Ростер порожній — вербування оперативника за кредити'
+              : 'Усі оперативники поранені — чекайте одужання або вербуйте';
         btn.onclick = () => deps.launchMission(u.id);
         div.appendChild(btn);
       }
@@ -197,7 +197,9 @@ export function createPanels(deps: PanelsDeps): Panels {
     // П11.8: ціна найму за пресетом (ADR-0058 — «легкий» 120, «норма» 100, «складний» 90).
     const hireCost = hirePrice(party.campaign.preset);
     hire.disabled = deps.isGameOver() || party.econ.money < hireCost;
-    hire.title = hire.disabled ? 'Недостатньо грошей (ціна найму ' + hireCost + ')' : 'Новий солдат у кінець ростеру (−' + hireCost + ')';
+    hire.title = hire.disabled
+      ? 'Недостатньо кредитів (ціна вербування ' + hireCost + ')'
+      : 'Новий оперативник у кінець ростеру (−' + hireCost + ')';
   }
 
   // П7.5 (ADR-0032/0027): контекст-стрічка повітряного бою у фокусній зоні — видима лише
@@ -253,7 +255,7 @@ export function createPanels(deps: PanelsDeps): Panels {
       ctx.className = 'meta';
       ctx.style.marginBottom = '4px';
       ctx.textContent =
-        'Бій з ' + (ufo ? ufo.id : '?') + ' · раунд ' + party.intercept.round + ' · НЛО HP ' + (ufo ? party.intercept.ufoHp[ufo.id] : '?');
+        'Бій з ' + (ufo ? ufo.id : '?') + ' · раунд ' + party.intercept.round + ' · зонд HP ' + (ufo ? party.intercept.ufoHp[ufo.id] : '?');
       box.appendChild(ctx);
       const row = document.createElement('div');
       row.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap;margin-bottom:4px';
@@ -281,7 +283,7 @@ export function createPanels(deps: PanelsDeps): Panels {
       b.textContent = 'Ремонт (' + FIGHTER_REPAIR_COST + ')';
       b.disabled = deps.isGameOver() || party.econ.money < FIGHTER_REPAIR_COST;
       b.title = b.disabled
-        ? 'Недостатньо грошей (ціна ремонту ' + FIGHTER_REPAIR_COST + ')'
+        ? 'Недостатньо кредитів (ціна ремонту ' + FIGHTER_REPAIR_COST + ')'
         : 'Повний HP після ремонту (−' + FIGHTER_REPAIR_COST + ')';
       b.onclick = () => {
         try {
@@ -309,14 +311,14 @@ export function createPanels(deps: PanelsDeps): Panels {
       box.innerHTML =
         '<div style="color:#ff9c9c">Загін втрачено.</div>' +
         (party.econ.money >= hirePrice(party.campaign.preset)
-          ? '<div class="meta">Найм доступний — кнопка «Найм солдата».</div>'
-          : '<div class="meta">Грошей на найм немає.</div>');
+          ? '<div class="meta">Вербування доступне — кнопка «Вербувати оперативника».</div>'
+          : '<div class="meta">Кредитів на вербування немає.</div>');
       return;
     }
     const head = document.createElement('div');
     head.className = 'meta';
     head.style.marginBottom = '4px';
-    head.textContent = soldiers.length + ' солдатів (' + readyN + ' боєготових)';
+    head.textContent = soldiers.length + ' оперативників (' + readyN + ' боєготових)';
     box.appendChild(head);
     for (const s of soldiers) {
       const heal = party.roster.hospital[s.id];

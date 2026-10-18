@@ -46,9 +46,9 @@ describe('П9.1: екран «Як грати» — контент з конст
     const text = $('help-screen').textContent ?? '';
     expect(text).toContain('Як грати');
     // Легенда
-    expect(text).toContain('База');
-    expect(text).toContain('Радар');
-    expect(text).toContain('НЛО');
+    expect(text).toContain('Вузол «Рубіж»');
+    expect(text).toContain('Сенсорна сітка');
+    expect(text).toContain('Зонди Розриву');
     expect(text).toContain('Перехоплення');
     expect(text).toContain('Місії');
     // Мета кампанії (ADR-0033): 30 діб + ваги рахунку (ветерани 50 / гроші 0.25)

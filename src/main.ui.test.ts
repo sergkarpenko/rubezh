@@ -204,7 +204,7 @@ describe('П12.2: флоу стартового екрана і навігаці
     expect($('log').textContent).toContain('Нова партія (сід 42, складність «норма»)');
     expect($('clock').textContent).toBe('Д1 00:00');
     expect($('money').textContent).toBe('300');
-    expect($('roster').textContent).toContain('6 солдатів (6 боєготових)');
+    expect($('roster').textContent).toContain('6 оперативників (6 боєготових)');
   });
 
   it('сейв у флоу: тики → слот 1 (ADR-0026)', () => {
@@ -251,7 +251,7 @@ describe('П12.2: флоу стартового екрана і навігаці
     expect($('log').textContent).toContain('Завантажено: слот 1');
     expect($('clock').textContent).toBe('Д1 01:30'); // стан точки збереження
     expect($('money').textContent).toBe('300');
-    expect($('roster').textContent).toContain('6 солдатів (6 боєготових)');
+    expect($('roster').textContent).toContain('6 оперативників (6 боєготових)');
   });
 
   it('вихід без дій після завантаження — без підтвердження; «Як грати» з меню', () => {
@@ -272,7 +272,7 @@ describe('UI-флоу прев’ю: геосцена → місія → бій 
     // без партії покрито describe'ом П12.2 вище
     startParty();
     expect($('clock').textContent).toBe('Д1 00:00');
-    expect($('roster').textContent).toContain('6 солдатів (6 боєготових)');
+    expect($('roster').textContent).toContain('6 оперативників (6 боєготових)');
     expect($('money').textContent).toBe('300');
     expect($('ready').textContent).toBe('6/6'); // П6.2: чип боєготових у топбарі
     expect($('money-card').textContent).toBe('300'); // П6.2: дублювання балансу чипом і карткою (ADR-0027)
@@ -360,7 +360,7 @@ describe('UI-флоу прев’ю: геосцена → місія → бій 
     btn('btn-end').click();
     expect($('bresult').textContent).toBe(''); // загін 3×10 HP виживає перший хід ШІ (сід 42)
     expect($('bctx-turn').textContent).toContain('хід 2'); // П6.3: стрічка відобразила хід 2
-    expect($('binfo').textContent).toContain('Хід прибульців відпрацьовано');
+    expect($('binfo').textContent).toContain('Хід демонів Розриву відпрацьовано');
   });
 
   it('демо-бій: покрокове відтворення доводить бій до результату (П6.16)', async () => {
@@ -395,15 +395,15 @@ describe('критичний флоу економіки: найм → місі�
   it('скидання партії: баланс 300, ростер 6', () => {
     startParty();
     expect($('money').textContent).toBe('300');
-    expect($('roster').textContent).toContain('6 солдатів (6 боєготових)');
+    expect($('roster').textContent).toContain('6 оперативників (6 боєготових)');
   });
 
   it('найм: −100, новобранець «Дмитро» в кінці ростеру', () => {
     btn('btn-hire').click();
     expect($('money').textContent).toBe('200');
-    expect($('roster').textContent).toContain('7 солдатів (7 боєготових)');
+    expect($('roster').textContent).toContain('7 оперативників (7 боєготових)');
     expect($('roster').textContent).toContain('Дмитро');
-    expect($('log').textContent).toContain('Найм: Дмитро');
+    expect($('log').textContent).toContain('Вербування: Дмитро');
     expect($('log').textContent).toContain('Витрати: −100');
   });
 
@@ -431,7 +431,7 @@ describe('критичний флоу економіки: найм → місі�
   it('поранений не боєготовий: статус у ростері, місія недоступна поки вікно триває', () => {
     btn('btn-close').click();
     expect($('battle-panel').classList.contains('hidden')).toBe(true);
-    expect($('roster').textContent).toContain('6 солдатів (5 боєготових)');
+    expect($('roster').textContent).toContain('6 оперативників (5 боєготових)');
     expect($('roster').textContent).toContain('лікарня: 8 тик(и)');
     expect($('roster').textContent).toContain('HP 6/10');
     expect(btn('btn-tick').disabled).toBe(false);
@@ -441,7 +441,7 @@ describe('критичний флоу економіки: найм → місі�
     for (let i = 0; i < 8; i++) btn('btn-tick').click();
     expect($('roster').textContent).not.toContain('лікарня');
     expect($('roster').textContent).toContain('HP 10/10');
-    expect($('roster').textContent).toContain('6 солдатів (6 боєготових)');
+    expect($('roster').textContent).toContain('6 оперативників (6 боєготових)');
     expect($('money').textContent).toBe('310'); // доти не було — доба не завершена
     expect($('clock').textContent).toBe('Д1 15:00'); // 22 + 8 тіків по 30 хв
   });
@@ -473,7 +473,7 @@ describe('журнал з фільтрами-вкладками (П6.2, ADR-0027
     btn('log-tab-econ').click();
     btn('btn-hire').click(); // 385 → 285 (два записи: «Найм» + «Витрати»)
     const hireLi = Array.from(document.querySelectorAll('#log li[data-cat="econ"]')).find((li) =>
-      li.textContent!.includes('Найм')
+      li.textContent!.includes('Вербування')
     ) as HTMLElement;
     expect(hireLi.style.display).toBe('');
     btn('log-tab-battle').click();
@@ -709,7 +709,7 @@ describe('керування: гарячі клавіші і тач-патерн
   it('E завершує хід: ШІ відпрацьовує синхронно, хід 2 гравцю', () => {
     key('e', 'KeyE');
     expect($('bctx-turn').textContent).toContain('хід 2');
-    expect($('binfo').textContent).toContain('Хід прибульців відпрацьовано');
+    expect($('binfo').textContent).toContain('Хід демонів Розриву відпрацьовано');
   });
 
   it('поля вводу: гарячі клавіші ігноруються (поле діалогу) — хід не завершується', () => {
@@ -866,7 +866,7 @@ describe('П7.4: винищувач — запуск → бій → пошкод
       }
       expect(ready).toBe(true);
       expect(fighterText()).toContain('HP 4/4');
-      expect($('log').textContent).toContain('Ремонт винищувача завершено');
+      expect($('log').textContent).toContain('Ремонт перехоплювача завершено');
     } else {
       expect(fighterText()).toContain('боєготовий');
       expect($('log').textContent).toContain('збитий');
@@ -1071,7 +1071,7 @@ describe('П11.6: критичний флоу «дослідити → виро�
     // медик s2: вибір, зведення аптечки (M), тап-тап по пораненому союзнику
     tap(3, 2); // вибір s2 — SQUAD_SPAWN[1]
     key('KeyM');
-    expect($('binfo').textContent).toContain('Аптечка');
+    expect($('binfo').textContent).toContain('Гель');
     const wounded: [number, number][] = [
       [2, 2],
       [2, 3],
@@ -1123,9 +1123,9 @@ describe('П12.4: вкладки статус-колонки «Загін»/«Б
     btn('status-tab-squad').click();
     expect(visibleTitles()).toEqual(['Фінанси', 'Ростер загону']);
     btn('status-tab-base').click();
-    expect(visibleTitles()).toEqual(['Сканери (виявлені НЛО)', 'Винищувач', 'Дослідження', 'Цех']);
+    expect(visibleTitles()).toEqual(['Сенсорна сітка (виявлені зонди)', 'Перехоплюач', 'Дослідження', 'Кузня']);
     // приховані панелі зберігають контент у DOM (контракти не послаблюються)
-    expect($('roster').textContent).toContain('солдат');
+    expect($('roster').textContent).toContain('оперативник');
     expect($('money-card').textContent).not.toBe('');
     btn('status-tab-system').click();
     expect(visibleTitles()).toEqual(['Збереження']);
