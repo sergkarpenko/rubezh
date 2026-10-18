@@ -126,10 +126,12 @@ export function createScreens(deps: ScreensDeps): Screens {
   const topbar = el('topbar');
   const layout = el('layout');
   startScreen.innerHTML = startScreenHtml(deps.version);
-  // П13.4 ітерація 3 (ADR-0068/0071): фон стартового екрана — WebP-ассет,
-  // згенерований кодом (палітра Розриву). URL — з vite-імпорту (base-аварійний);
-  // це CSS-фон, не Image-завантаження: headless/офлайн/без файла бачать
-  // суцільний колір #0a0a12 з CSS (фолбек, тести від ассета не залежать).
+  // П13.4 ітерація 4 (ADR-0068/0071): фон стартового екрана — розмите
+  // затемнене саме лого (WebP, похідна кодом від оригіналу власника):
+  // палітра фону за побудовою та сама, що в лого — швів не виникає.
+  // URL — з vite-імпорту (base-аварійний); це CSS-фон, не
+  // Image-завантаження: headless/офлайн/без файла бачать суцільний
+  // колір #0a0a12 з CSS (фолбек, тести від ассета не залежать).
   startScreen.style.backgroundImage = `url("${startBgUrl}")`;
   newGameDialog.innerHTML = newGameDialogHtml();
   gameMenu.innerHTML = gameMenuHtml();
