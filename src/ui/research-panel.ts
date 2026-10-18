@@ -18,6 +18,7 @@ import {
 } from '../core/research';
 import { DIFFICULTY_MULTIPLIERS } from '../core/campaign';
 import type { Party } from '../core/save';
+import { projectEffect } from './effects';
 import { el } from './dom';
 import type { LogCat } from './journal';
 
@@ -128,8 +129,12 @@ export function createResearchPanel(deps: ResearchPanelDeps): ResearchPanel {
       box.appendChild(staff);
     }
 
-    // каталог проєктів: статус кожного + кнопка старту з підказкою причини
+    // каталог проєктів: статус кожного + числовий ефект ДО старту (П12.5,
+    // ADR-0065 — числа з констант каталогів, хелпер effects.ts) + кнопка
+    // старту з підказкою причини
     const catalog = document.createElement('div');
+    // «зараз → стане» покращень ростеру — від першого солдата загону
+    const ref = party.roster.soldiers[0];
     for (let i = 0; i < PROJECTS.length; i++) {
       const def = PROJECTS[i];
       const active = r.active.find((p) => p.id === def.id);
@@ -141,6 +146,10 @@ export function createResearchPanel(deps: ResearchPanelDeps): ResearchPanel {
       info.textContent =
         def.id + ' · ' + def.cost + ' · ' + def.points + ' точок' + (def.prerequisite ? ' · після «' + def.prerequisite + '»' : '');
       row.appendChild(info);
+      const effect = document.createElement('span');
+      effect.className = 'meta';
+      effect.textContent = ' · ' + projectEffect(def.id, ref);
+      row.appendChild(effect);
       const status = document.createElement('span');
       status.className = 'meta';
       if (done) {

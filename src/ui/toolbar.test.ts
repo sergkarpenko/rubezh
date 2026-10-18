@@ -5,6 +5,7 @@
 // «renderBattle не чіпає іконки» (idle → 0 перерисовок) — у src/ui/battle.test.ts
 // (там готова фікстура бою); іконки малюються матрицями один раз при створенні.
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { GRENADE_AP_COST, GRENADE_DAMAGE, GRENADE_RANGE, HEAL_AP_COST, HEAL_AMOUNT, OVERWATCH_AP_COST, RIFLE } from '../core/combat';
 import { ICON_SIZE, TOOLBAR_ACTIONS, createToolbar, drawToolbarIcon, type ToolbarActionId } from './toolbar';
 
 // No-op контекст малювання — той самий патерн, що й у battle.test.ts (jsdom
@@ -72,5 +73,34 @@ describe('тулбар: перелік дій (П13.2, ADR-0066)', () => {
   it('headless без 2d-контексту — без винятку (тести від канви не залежать)', () => {
     const bare = { getContext: () => null } as unknown as HTMLCanvasElement;
     expect(() => drawToolbarIcon(bare, TOOLBAR_ACTIONS[0]!.icon)).not.toThrow();
+  });
+});
+
+// П12.5 (ADR-0065): числові підписи механіки на плитках — числа ТІЛЬКИ з
+// констант каталогу combat.ts (одне місце правди, не дублі руками).
+describe('тулбар: числові підказки механіки з констант (П12.5, ADR-0065)', () => {
+  const hint = (id: ToolbarActionId): string => TOOLBAR_ACTIONS.find((a) => a.id === id)!.hint;
+
+  it('режими пострілу: AP, множник, кулі — з RIFLE.modes', () => {
+    for (const mode of ['snap', 'aimed', 'auto'] as const) {
+      const m = RIFLE.modes[mode];
+      expect(hint(mode)).toContain(m.apCost + ' AP');
+      expect(hint(mode)).toContain('×' + m.accuracyMod);
+      expect(hint(mode)).toContain(m.shots + (m.shots === 1 ? ' куля' : ' кулі'));
+    }
+  });
+
+  it('дозор і лікування: AP з констант, +N HP лікування', () => {
+    expect(hint('ow')).toContain(OVERWATCH_AP_COST + ' AP');
+    expect(hint('medkit')).toContain(HEAL_AP_COST + ' AP');
+    expect(hint('medkit')).toContain('+' + HEAL_AMOUNT + ' HP');
+  });
+
+  it('граната: AP, пошкодження 3–5, дальність, уражає і своїх — з констант', () => {
+    const g = hint('grenade');
+    expect(g).toContain(GRENADE_AP_COST + ' AP');
+    expect(g).toContain('пошкодження ' + GRENADE_DAMAGE[0] + '–' + GRENADE_DAMAGE[1]);
+    expect(g).toContain('≤' + GRENADE_RANGE);
+    expect(g).toContain('уражає і своїх');
   });
 });

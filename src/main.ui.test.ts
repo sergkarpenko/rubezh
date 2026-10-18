@@ -21,6 +21,12 @@ import { beforeAll, describe, expect, it, vi } from 'vitest';
 // index.html — через ?raw-імпорт (vitest/vite): без node:fs і process.cwd(), тож
 // @types/node не потрібен (ADR-0012 — нових залежностей немає; tsconfig.json не чіпаємо).
 import htmlRaw from '../index.html?raw';
+// П12.5 (ADR-0065): числа тверджень — з констант каталогів ядра (одне місце
+// правди), не дублі руками.
+import { ARMOR_MAX_HP_BONUS, OPTICS_ACCURACY_BONUS } from './core/workshop';
+import { BASE_LAB_SLOTS, MAX_LAB_SLOTS } from './core/research';
+import { GRENADE_DAMAGE, HEAL_AMOUNT, HIT_CHANCE_CAP } from './core/combat';
+import { GUN_MODULE_DAMAGE } from './core/intercept';
 
 const $ = (id: string): HTMLElement => document.getElementById(id) as HTMLElement;
 const btn = (id: string): HTMLButtonElement => $(id) as HTMLButtonElement;
@@ -1142,5 +1148,40 @@ describe('П12.4: вкладки статус-колонки «Загін»/«Б
     btn('btn-close').click();
     expect($('status').classList.contains('dimmed')).toBe(false);
     expect(visibleTitles()).toEqual(['Фінанси', 'Ростер загону']); // вкладка «Загін» активна після бою
+  });
+});
+
+describe('П12.5: зрозумілість розвитку — числові ефекти до дії (ADR-0065)', () => {
+  const rowText = (root: string, name: string): string =>
+    Array.from(document.querySelectorAll('#' + root + ' .ufo'))
+      .map((r) => r.textContent ?? '')
+      .find((t) => t.includes(name)) ?? '';
+
+  it('флоу: вкладка «База» — ефекти протоколів видимі ДО старту (критерії 1–2)', () => {
+    startParty();
+    btn('status-tab-base').click();
+    // дослідження: кожен протокол картки — числовий ефект до старту
+    const research = $('research').textContent ?? '';
+    expect(rowText('research', 'легка броня')).toContain('+' + ARMOR_MAX_HP_BONUS + ' макс. HP'); // «зараз → стане» від першого солдата
+    expect(rowText('research', 'легка броня')).toContain('→');
+    expect(rowText('research', 'оптичний приціл')).toContain('+' + OPTICS_ACCURACY_BONUS * 100 + '% точності');
+    expect(rowText('research', 'оптичний приціл')).toContain('кап ' + HIT_CHANCE_CAP * 100 + '%');
+    expect(rowText('research', 'аптечка')).toContain('+' + HEAL_AMOUNT + ' HP');
+    expect(rowText('research', 'осколкова граната')).toContain('пошкодження ' + GRENADE_DAMAGE[0] + '–' + GRENADE_DAMAGE[1]);
+    expect(rowText('research', 'розширення лабораторії')).toContain('(' + BASE_LAB_SLOTS + ' → ' + MAX_LAB_SLOTS + ')');
+    expect(rowText('research', 'гарматний модуль')).toContain('+' + GUN_MODULE_DAMAGE + ' пошкодження за раунд');
+    expect(research).not.toContain('у роботі'); // жоден проєкт не запущено — ефекти самі «до дії»
+  });
+
+  it('флоу: вкладка «База» — ефекти предметів цеху видимі ДО замовлення (критерії 1–2)', () => {
+    startParty();
+    btn('status-tab-base').click();
+    // цех: кожен предмет — числовий ефект до замовлення; гейт дослідження вимкнений
+    expect(rowText('workshop', 'легка броня')).toContain('+' + ARMOR_MAX_HP_BONUS + ' макс. HP');
+    expect(rowText('workshop', 'аптечка')).toContain('+' + HEAL_AMOUNT + ' HP');
+    expect(rowText('workshop', 'осколкова граната')).toContain('уражає і своїх');
+    expect(rowText('workshop', 'осколкова граната')).toContain('по одній на місію');
+    expect(rowText('workshop', 'гарматний модуль')).toContain('+' + GUN_MODULE_DAMAGE + ' пошкодження за раунд повітряного бою');
+    expect(btn('btn-order-аптечка').disabled).toBe(true); // ще не досліджено — ефект усе одно показано
   });
 });

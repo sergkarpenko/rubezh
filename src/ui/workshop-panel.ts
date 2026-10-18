@@ -11,6 +11,7 @@
 import { ITEM_IDS, WORKSHOP_CATALOG, orderItem } from '../core/workshop';
 import { DIFFICULTY_MULTIPLIERS } from '../core/campaign';
 import type { Party } from '../core/save';
+import { itemEffect } from './effects';
 import { el } from './dom';
 import type { LogCat } from './journal';
 
@@ -58,8 +59,11 @@ export function createWorkshopPanel(deps: WorkshopPanelDeps): WorkshopPanel {
     box.appendChild(store);
 
     // каталог: замовлення — лише досліджені предмети (гейт завершеного
-    // проєкту в orderItem; тут — підказка на кнопці, джерело правди — ядро)
+    // проєкту в orderItem; тут — підказка на кнопці, джерело правди — ядро);
+    // числовий ефект ДО замовлення (П12.5, ADR-0065 — числа з констант
+    // каталогів, хелпер effects.ts; «зараз → стане» — від першого солдата)
     const catalog = document.createElement('div');
+    const ref = party.roster.soldiers[0];
     for (const id of ITEM_IDS) {
       const def = WORKSHOP_CATALOG[id];
       const row = document.createElement('div');
@@ -68,6 +72,10 @@ export function createWorkshopPanel(deps: WorkshopPanelDeps): WorkshopPanel {
       const info = document.createElement('span');
       info.textContent = id + ' · ' + def.cost + ' · ' + def.ticks + ' тік(и)';
       row.appendChild(info);
+      const effect = document.createElement('span');
+      effect.className = 'meta';
+      effect.textContent = ' · ' + itemEffect(id, ref);
+      row.appendChild(effect);
       const order = document.createElement('button');
       order.id = 'btn-order-' + id.replace(/ /g, '-'); // id без пробілів (HTML)
       order.className = 'research'; // той самий акцент, що й у панелі «Дослідження»
