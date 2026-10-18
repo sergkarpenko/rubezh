@@ -77,7 +77,7 @@ describe('typeof-гейт: без WebAudio — no-op без винятків (AD
 });
 
 describe('тумблер і сховище (ADR-0026: localStorage поза сейвом, тихо)', () => {
-  it('дефолт — увімкнено; toggle перемикає і персистить rubezh.sound', () => {
+  it('дефолт — увімкнено; toggle перемикає і персистить rubezh.settings.sound (П12.3)', () => {
     const store = memStore();
     const s = createSound({ makeContext: () => null, store });
     expect(s.enabled()).toBe(true);
@@ -105,3 +105,5 @@ describe('тумблер і сховище (ADR-0026: localStorage поза се
 
 // Синтез (рецепти за моком SoundContext) і байт-у-байт інваріант —
 // audio-synth.test.ts у коміті wiring: тести йдуть разом із точками викликів.
+// Фолбек-міграція ключа (rubezh.sound → rubezh.settings.sound, П12.3) — у
+// src/ui/settings.test.ts: browserStore живе на localStorage (jsdom).
