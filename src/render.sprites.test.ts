@@ -237,8 +237,11 @@ describe('солдат і прибульчик: різні матриці, зб�
     const a = mockCtx();
     drawAlienSprite(a.ctx, alien());
     expect(s.calls.find((c) => c.m === 'drawImage')!.args[0]).not.toBe(a.calls.find((c) => c.m === 'drawImage')!.args[0]);
-    expect(rf.canvases[0].pixels.some((p) => p.color === '#6ea8ff')).toBe(true); // тіло солдата
-    expect(rf.canvases[1].pixels.some((p) => p.color === '#ff6b6b')).toBe(true); // мантія прибульця
+    expect(rf.canvases[0].pixels.some((p) => p.color === '#175d8a')).toBe(true); // тіло оперативника
+    expect(rf.canvases[1].pixels.some((p) => p.color === '#a32eff')).toBe(true); // пурпурне тіло демона Розриву
+    // П12.7 (ADR-0064): неонові акценти — візор ціан у оперативника, «тріщини світла» в демона
+    expect(rf.canvases[0].pixels.some((p) => p.color === '#00e5ff')).toBe(true); // неоновий візор
+    expect(rf.canvases[1].pixels.some((p) => p.color === '#ffd9f2')).toBe(true); // тріщини світла
   });
 
   it('«АР-14 Гарт»: ствол кольором зброї, дуло — крайній правий піксель растру', () => {
@@ -246,20 +249,20 @@ describe('солдат і прибульчик: різні матриці, зб�
     initPixelSprites(rf.make);
     drawSoldierSprite(mockCtx().ctx, soldier());
     const ras = rf.canvases[0];
-    const barrel = ras.pixels.filter((p) => p.color === '#e8eef7');
+    const barrel = ras.pixels.filter((p) => p.color === '#e6f7ff');
     expect(barrel.length).toBeGreaterThanOrEqual(4);
     expect(barrel.some((p) => p.x === ras.width - 1)).toBe(true); // дуло за межами тіла
   });
 
-  it('«Імпульсний різак»: піки кольором різака над головою, кольору ствола в растрі нема', () => {
+  it('«Фазовий різак»: піки кольором різака над головою, кольору ствола в растрі нема', () => {
     const rf = rasterFactory();
     initPixelSprites(rf.make);
     drawAlienSprite(mockCtx().ctx, alien());
     const ras = rf.canvases[0];
-    const fork = ras.pixels.filter((p) => p.color === '#ffd27a');
+    const fork = ras.pixels.filter((p) => p.color === '#ff2e88');
     expect(fork.length).toBeGreaterThanOrEqual(4);
     expect(fork.every((p) => p.y < 3)).toBe(true); // верхні рядки — над головою (голова з y = 3)
-    expect(ras.pixels.some((p) => p.color === '#e8eef7')).toBe(false); // жодного ствола
+    expect(ras.pixels.some((p) => p.color === '#e6f7ff')).toBe(false); // жодного ствола
   });
 });
 
@@ -299,7 +302,7 @@ describe('читабельність стану (ADR-0007)', () => {
     expect((owS!.args as number[])[1]).toBe(CX - 13); // верхній лівий кут клітинки
     expect((owS!.args as number[])[2]).toBe(CY - 13);
     const bolt = rf.canvases[1]; // перша матриця після силуета — блискавка
-    expect(bolt.pixels.some((p) => p.color === '#d8b25a')).toBe(true); // золото знака
+    expect(bolt.pixels.some((p) => p.color === '#ffb347')).toBe(true); // бурштин знака (П12.7, ADR-0064)
     expect(bolt.pixels.some((p) => p.color === '#0b0e15')).toBe(true); // темний кант
 
     const a = mockCtx();
@@ -330,7 +333,9 @@ describe('детермінованість малювання (ADR-0003 — бе
 });
 
 describe('спрайти геосцени (піксель-арт П6.12)', () => {
-  it('база «Радарний пост» (доробка П6.12): 12×12 @2× = 24px вище центру, напис «БАЗА» під спрайтом', () => {
+  it('вузол-маяк «Рубіж» (П12.7, ADR-0064): 12×12 @2× = 24px вище центру, неоновий маяк, напис «ВУЗОЛ» під спрайтом', () => {
+    const rf = rasterFactory();
+    initPixelSprites(rf.make);
     const { ctx, calls } = mockCtx();
     drawBaseSprite(ctx, { cx: 18, cy: 18, size: 36 });
     const d = calls.find((c) => c.m === 'drawImage');
@@ -339,10 +344,12 @@ describe('спрайти геосцени (піксель-арт П6.12)', () =>
     expect((d!.args as number[])[2]).toBe(18 - 4 - 12); // спрайт зміщено вгору
     expect((d!.args as number[])[3]).toBe(24);
     expect((d!.args as number[])[4]).toBe(24);
-    const label = calls.find((c) => c.m === 'fillText' && c.args[0] === 'БАЗА');
+    const label = calls.find((c) => c.m === 'fillText' && c.args[0] === 'ВУЗОЛ');
     expect(label).toBeDefined();
     expect((label!.args as number[])[1]).toBe(18);
     expect((label!.args as number[])[2]).toBe(18 + 13); // напис під спрайтом
+    // неоновий маяк-вогонь на вершині вежі (ціан «Рубіжу»)
+    expect(rf.canvases[0].pixels.some((p) => p.color === '#00e5ff')).toBe(true);
   });
 
   it('НЛО: три види — три різні матриці; приземлений залитий, «розвідник» — порожній ромб', () => {

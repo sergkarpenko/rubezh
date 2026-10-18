@@ -50,7 +50,7 @@ import {
 } from './core/sprites';
 
 const HP_TEXT = '#0b0e15';
-const SELECT_RING = '#d7e4f7';
+const SELECT_RING = '#9adfff'; // П12.7: рамка вибору — гама ціану «Рубіжу» (ADR-0064)
 const UFO_SOFT_ALPHA = 0.85;
 const RADAR_PULSE = '#00e5ff'; // П12.7: пульс сенсорної сітки — неоновий ціан «Рубіжу» (ADR-0064)
 
@@ -182,7 +182,7 @@ export function drawBaseSprite(ctx: CanvasRenderingContext2D, b: BaseSprite): vo
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillStyle = BASE_OUTLINE;
-  ctx.fillText('БАЗА', b.cx, b.cy + 13);
+  ctx.fillText('ВУЗОЛ', b.cx, b.cy + 13);
 }
 
 export function drawFighterSprite(ctx: CanvasRenderingContext2D, f: FighterSprite): void {
