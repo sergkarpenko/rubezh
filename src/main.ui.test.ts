@@ -14,7 +14,7 @@
 // П6.4 (ADR-0027): керування — гарячі клавіші 1/2/3/O/E/Esc (поля вводу
 // ігнорують) і тач-патерн «тап — прев'ю — повторний тап у ту саму
 // клітинку — хід» (мишка — той самий патерн, click).
-// П6.16: демо-бій — покрокове відтворення; фейк-таймери прокручують паузи
+// П13.3 (ADR-0067): авто-бій — покрокове відтворення; фейк-таймери прокручують паузи
 // між діями ботів, поки бій не дійде до результату (банер у #bresult).
 
 import { beforeAll, describe, expect, it, vi } from 'vitest';
@@ -31,21 +31,21 @@ import { GUN_MODULE_DAMAGE } from './core/intercept';
 const $ = (id: string): HTMLElement => document.getElementById(id) as HTMLElement;
 const btn = (id: string): HTMLButtonElement => $(id) as HTMLButtonElement;
 
-// П6.16: демо-бій — покрокове відтворення (пауза 160 мс між діями, таймер).
-// Фейк-таймери прокручують паузи, поки бій не дійде до результату (btn-demo
-// disabled у renderBattle після finishBattle). Крок 200 мс > паузи — 1–2
-// дії за ітерацію; ліміт ітерацій — страховка від зависання.
-const DEMO_STEP_MS = 200;
-async function runDemoSteps(): Promise<void> {
-  for (let i = 0; i < 6000 && !btn('btn-demo').disabled; i++) {
-    await vi.advanceTimersByTimeAsync(DEMO_STEP_MS);
+// П13.3 (ADR-0067): авто-бій — покрокове відтворення; фейк-таймери прокручують
+// паузи між діями політика-ядра-за-гравця, поки бій не дійде до результату
+// (btn-auto-battle disabled у renderBattle після finishBattle).
+// Флоу «Авто → Стоп → ручна дія → Авто» — критерій 1 П13.3.
+const AUTO_STEP_MS = 200;
+async function runAutoSteps(): Promise<void> {
+  for (let i = 0; i < 6000 && !btn('btn-auto-battle').disabled; i++) {
+    await vi.advanceTimersByTimeAsync(AUTO_STEP_MS);
   }
 }
-async function runDemo(): Promise<void> {
+async function runAutoBattle(): Promise<void> {
   vi.useFakeTimers();
   try {
-    btn('btn-demo').click();
-    await runDemoSteps();
+    btn('btn-auto-battle').click();
+    await runAutoSteps();
   } finally {
     vi.useRealTimers();
   }
@@ -98,8 +98,8 @@ beforeAll(async () => {
   // П6.16: jsdom надає requestAnimationFrame — у цьому середовищі він
   // недетермінований, тому стабимо його як відсутній ДО імпорту main.ts:
   // main.ts при імпорті зафіксує hasRaf = false (той самий патерн П6.8 —
-  // «без rAF анімації не ставляться у чергу»), і покрокове демо крокує
-  // лише таймерами пауз (фейк-таймери у runDemo). rAF-гілку рушія
+  // «без rAF анімації не ставляться у чергу»), і покроковий авто-бій крокує
+  // лише таймерами пауз (фейк-таймери у runAutoBattle). rAF-гілку рушія
   // (onIdle → пауза) покриває render.test.ts на фейковому планувальнику.
   vi.stubGlobal('requestAnimationFrame', undefined);
   vi.stubGlobal('cancelAnimationFrame', undefined);
@@ -363,18 +363,51 @@ describe('UI-флоу прев’ю: геосцена → місія → бій 
     expect($('binfo').textContent).toContain('Хід демонів Розриву відпрацьовано');
   });
 
-  it('демо-бій: покрокове відтворення доводить бій до результату (П6.16)', async () => {
+  it('П13.3 (ADR-0067): флоу «Авто → Стоп → ручна дія → Авто» — бій доведено до результату (критерій 1)', async () => {
+    const cap = (): string => (document.querySelector('#btn-auto-battle .tb-cap') as HTMLElement | null)?.textContent ?? '';
+    const cv = $('battle') as HTMLCanvasElement;
+    const cellClick = (x: number, y: number): void => {
+      cv.dispatchEvent(new MouseEvent('click', { clientX: x * 26 + 13, clientY: y * 26 + 13 }));
+    };
     vi.useFakeTimers();
     try {
-      btn('btn-demo').click();
-      await vi.advanceTimersByTimeAsync(600); // кілька дій ботів (пауза 160 мс)
-      expect($('bresult').textContent).toBe(''); // кроки тривають — не миттєвий прогін
-      await runDemoSteps();
+      // Авто: політика ядра веде загін — покроково (перша дія одразу), не миттєво
+      btn('btn-auto-battle').click();
+      expect(cap()).toBe('Стоп'); // підпис плитки — стан драйвера
+      expect(btn('btn-auto-battle').classList.contains('armed')).toBe(true); // підсвітка тривалості
+      expect($('binfo').textContent).toContain('Авто-бій'); // стартове повідомлення драйвера
+      expect($('bresult').textContent).toBe(''); // бій триває — не миттєвий прогін
+      btn('btn-ow').click(); // ручне керування заблоковане під час авто-бою
+      expect($('binfo').textContent).not.toContain('дозорі');
+      // Стоп: завершує поточну дію (кроки атомарні), керування — назад гравцю
+      btn('btn-auto-battle').click();
+      expect(cap()).toBe('Авто');
+      expect(btn('btn-auto-battle').classList.contains('armed')).toBe(false);
+      // ручна дія з досягнутого стану: оперативник із AP у зоні висадки — дозор
+      // (перша дія політики витратила AP одного солдата — перебираємо зони)
+      let overwatched = false;
+      for (const [x, y] of [
+        [2, 2],
+        [3, 2],
+        [4, 2],
+      ]) {
+        cellClick(x, y);
+        btn('btn-ow').click();
+        if ($('binfo').textContent.includes('дозорі')) {
+          overwatched = true;
+          break;
+        }
+      }
+      expect(overwatched).toBe(true);
+      // Авто знову — з будь-якого моменту; доводимо бій до результату
+      btn('btn-auto-battle').click();
+      expect(cap()).toBe('Стоп');
+      await runAutoSteps();
     } finally {
       vi.useRealTimers();
     }
     expect($('bresult').textContent).toMatch(/ЗАЧИЩЕНО|ЗАГІН ВТРАЧЕНО/);
-    expect(btn('btn-demo').disabled).toBe(true); // бій завершено — демо більше не тискається
+    expect(btn('btn-auto-battle').disabled).toBe(true); // бій завершено — авто-бій більше не тискається
     expect($('log').textContent).toMatch(/Місію зачищено|Загін втрачено/);
   });
 
@@ -389,7 +422,7 @@ describe('UI-флоу прев’ю: геосцена → місія → бій 
 
 describe('критичний флоу економіки: найм → місія → поранення → одужання (П4.5, ADR-0021)', () => {
   // Сід 42 детермінований (перевірено сценарієм у пісочниці): перша місія —
-  // «розвідник» на 22-му тіку; демо-бій — перемога, s2 гине, s1 поранений
+  // «розвідник» на 22-му тіку; авто-бій — перемога, s2 гине, s1 поранений
   // 6/10 → лікарня 8 тіків; премія +150.
 
   it('скидання партії: баланс 300, ростер 6', () => {
@@ -419,8 +452,8 @@ describe('критичний флоу економіки: найм → місі�
     expect(btn('btn-tick').disabled).toBe(true);
   });
 
-  it('поранення: демо-бій — перемога, поранений у лікарні, премія за місію', async () => {
-    await runDemo();
+  it('поранення: авто-бій — перемога, поранений у лікарні, премія за місію', async () => {
+    await runAutoBattle();
     expect($('bresult').textContent).toContain('ЗАЧИЩЕНО');
     expect($('bresult').textContent).toContain('поранених: 1');
     expect($('log').textContent).toContain('Іван поранений — лікарня: 8 тик(и)');
@@ -544,14 +577,14 @@ describe('панель збереження: 3 слоти, лише на гео�
     expect(btn('btn-save-1').disabled).toBe(true);
     expect(btn('btn-load-1').disabled).toBe(true);
     expect(btn('btn-del-1').disabled).toBe(true);
-    await runDemo(); // завершити бій (детерміновано: сід 42)
+    await runAutoBattle(); // завершити бій (детерміновано: сід 42)
     btn('btn-close').click();
     expect(btn('btn-save-1').disabled).toBe(false);
     expect(btn('btn-load-1').disabled).toBe(false);
   });
 
   it('лікарня у сейві: поранений відновлюється після завантаження', () => {
-    // демо-бій цієї партії: перемога, s2 загинув, Іван поранений 6/10 (сід 42)
+    // авто-бій цієї партії: перемога, s2 загинув, Іван поранений 6/10 (сід 42)
     expect($('roster').textContent).toContain('лікарня: 8 тик(и)');
     expect($('money').textContent).toBe('410'); // 300 + премія 110 (П8.6)
     btn('btn-save-3').click();
@@ -634,7 +667,7 @@ describe('бойова фокусна зона (П6.3, ADR-0027)', () => {
   });
 
   it('після бою: dimmed знято, збереження активне', async () => {
-    await runDemo();
+    await runAutoBattle();
     expect($('bresult').textContent).toMatch(/ЗАЧИЩЕНО|ЗАГІН ВТРАЧЕНО/);
     btn('btn-close').click();
     expect($('geo-panel').classList.contains('hidden')).toBe(false);
@@ -1144,7 +1177,7 @@ describe('П12.4: вкладки статус-колонки «Загін»/«Б
     (document.querySelector('button.mission') as HTMLButtonElement).click();
     expect($('status').classList.contains('dimmed')).toBe(true); // чинний механізм П6.3
     expect($('status').contains($('status-tabs'))).toBe(true); // вкладки приглушуються разом з колонкою
-    await runDemo();
+    await runAutoBattle();
     btn('btn-close').click();
     expect($('status').classList.contains('dimmed')).toBe(false);
     expect(visibleTitles()).toEqual(['Фінанси', 'Ростер загону']); // вкладка «Загін» активна після бою

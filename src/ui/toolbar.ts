@@ -9,9 +9,9 @@
 import type { PixelSprite } from '../core/sprites';
 import { GRENADE_AP_COST, GRENADE_DAMAGE, GRENADE_RANGE, HEAL_AP_COST, HEAL_AMOUNT, OVERWATCH_AP_COST, RIFLE } from '../core/combat';
 
-// Ідентифікатори дій тулбара — чинні дії бою (src/ui/battle.ts + input/demo);
-// «Авто»/«Стоп» — окремий крок П13.3 (ADR-0067), тут їх немає.
-export type ToolbarActionId = 'snap' | 'aimed' | 'auto' | 'ow' | 'medkit' | 'grenade' | 'end' | 'demo';
+// Ідентифікатори дій тулбара — чинні дії бою (src/ui/battle.ts + input/
+// auto-battle); «Авто»/«Стоп» — перемикач авто-бою (П13.3, ADR-0067).
+export type ToolbarActionId = 'snap' | 'aimed' | 'auto' | 'ow' | 'medkit' | 'grenade' | 'end' | 'auto-battle';
 
 // Палітра іконок (ігровий трек, style-references): білі силуети фігурок,
 // неонові акценти блакитний («Рубіж»/гравець) і рожевий (акценти).
@@ -158,20 +158,21 @@ const ICON_END: PixelSprite = {
   palette: ICON_PALETTE,
 };
 
-// Демо-бій: трикутник «плей» — бій дограють боти.
-const ICON_DEMO: PixelSprite = {
+// П13.3 (ADR-0067): авто-бій — трикутник «плей» (політика веде загін) і
+// білі смуги «пауза» праворуч («Стоп» — керування назад гравцю).
+const ICON_AUTO_BATTLE: PixelSprite = {
   rows: [
     '............',
-    '..CC........',
+    '..CCC.......',
     '..CCCC......',
-    '..CCCCCC....',
-    '..CCCCCCC...',
-    '..CCCCCCCC..',
-    '..CCCCCCCC..',
-    '..CCCCCCC...',
-    '..CCCCCC....',
+    '..CCCCC...WW',
+    '..CCCCCC..WW',
+    '..CCCCCCC.WW',
+    '..CCCCCCC.WW',
+    '..CCCCCC..WW',
+    '..CCCCC...WW',
     '..CCCC......',
-    '..CC........',
+    '..CCC.......',
     '............',
   ],
   palette: ICON_PALETTE,
@@ -193,7 +194,8 @@ function fireModeHint(mode: 'snap' | 'aimed' | 'auto', key: string): string {
 }
 
 // Перелік дій — за чинними діями бою (src/ui/battle.ts): режими пострілу,
-// дозор, витратники (П11.6, ADR-0058), кінець ходу, демо-бій (до П13.3).
+// дозор, витратники (П11.6, ADR-0058), кінець ходу, авто-бій (П13.3, ADR-0067
+// — підпис «Авто» міняється на «Стоп» у renderBattle за станом драйвера).
 // П12.5 (ADR-0065): усі числа механіки — з констант каталогів (combat.ts),
 // текст не дублює числа руками.
 export const TOOLBAR_ACTIONS: readonly ToolbarAction[] = [
@@ -230,7 +232,13 @@ export const TOOLBAR_ACTIONS: readonly ToolbarAction[] = [
     icon: ICON_GRENADE,
   },
   { id: 'end', btnId: 'btn-end', label: 'Кінець', hint: 'клавіша E', icon: ICON_END },
-  { id: 'demo', btnId: 'btn-demo', label: 'Демо', hint: 'Бій дограють боти (демо ітерації P)', icon: ICON_DEMO },
+  {
+    id: 'auto-battle',
+    btnId: 'btn-auto-battle',
+    label: 'Авто',
+    hint: 'Авто-бій: політика ядра веде загін; «Стоп» — продовжити вручну',
+    icon: ICON_AUTO_BATTLE,
+  },
 ];
 
 export interface ToolbarDeps {

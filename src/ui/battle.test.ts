@@ -77,7 +77,8 @@ function makeFixture(over: Partial<BattleDeps> = {}): Fixture {
       cancel: vi.fn(),
     },
     hasRaf: () => false, // node-середовище: анімації не ставляться в чергу
-    stopDemo: vi.fn(),
+    stopAuto: vi.fn(),
+    autoBusy: () => false, // П13.3: авто-бій не триває
     cancelGeoAnim: vi.fn(),
     ...over,
   };
@@ -190,17 +191,32 @@ describe('battle: флоу місії (запуск/закриття/завер�
     expect(document.getElementById('bctx-turn')!.textContent).toContain('хід 1');
     expect(document.getElementById('bctx-unit')!.textContent).toBe('не вибраний');
     expect((document.getElementById('btn-end') as HTMLButtonElement).disabled).toBe(false);
-    expect((document.getElementById('btn-demo') as HTMLButtonElement).disabled).toBe(false);
+    expect((document.getElementById('btn-auto-battle') as HTMLButtonElement).disabled).toBe(false);
     expect(f.deps.drainBattle).toHaveBeenCalled();
   });
 
-  it('закриття бою: стан скинуто, демо і анімації зупинено, bresult очищено', () => {
+  it('П13.3 (ADR-0067): плитка авто-бою — «Стоп» і підсвітка під час драйвера, «Авто» після зупинки', () => {
+    const busy = vi.fn(() => true);
+    const f = makeFixture({ autoBusy: busy });
+    f.battle.launch(firstTarget(f));
+    f.battle.renderBattle();
+    const ab = document.getElementById('btn-auto-battle') as HTMLButtonElement;
+    expect(ab.disabled).toBe(false); // «Стоп» доступний будь-коли без результату
+    expect((ab.querySelector('.tb-cap') as HTMLElement).textContent).toBe('Стоп');
+    expect(ab.classList.contains('armed')).toBe(true);
+    busy.mockReturnValue(false); // «Стоп» натиснуто — драйвер зупинився
+    f.battle.renderBattle();
+    expect((ab.querySelector('.tb-cap') as HTMLElement).textContent).toBe('Авто');
+    expect(ab.classList.contains('armed')).toBe(false);
+  });
+
+  it('закриття бою: стан скинуто, авто-бій і анімації зупинено, bresult очищено', () => {
     const f = makeFixture();
     f.battle.launch(firstTarget(f));
     f.battle.close();
     expect(f.ui.mission).toBeNull();
     expect(f.ui.battleResult).toBeNull();
-    expect(f.deps.stopDemo).toHaveBeenCalled();
+    expect(f.deps.stopAuto).toHaveBeenCalled();
     expect(f.deps.anim.cancel).toHaveBeenCalled();
     expect(f.deps.resetBattleLog).toHaveBeenCalled();
     expect(document.getElementById('bresult')!.innerHTML).toBe('');

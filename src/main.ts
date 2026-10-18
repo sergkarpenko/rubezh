@@ -2,7 +2,7 @@
 // Превью «Рубіж» — точка входу шару відображення (ADR-0010: ванільний TS +
 // Canvas 2D; ADR-0001: браузер; ADR-0007: мінімалістична графіка).
 // пR.2 (ADR-0037): тут лише init, partyTick, renderAll і зв'язування модулів
-// src/ui/* (demo, save-panel, journal, panels, battle, input) з чистим ядром
+// src/ui/* (auto-battle, save-panel, journal, panels, battle, input) з чистим ядром
 // src/core (ADR-0002) та анімаційним рушієм render.ts (ADR-0029). Історія
 // ітерацій — docs/workflow.md. DOM-ініціалізація — лише у браузері
 // (typeof document): node-середовище (vitest) імпортує модуль без побічних ефектів.
@@ -15,8 +15,9 @@ import { researchTick } from './core/research';
 // П11.3 (ADR-0058): тік цеху — разом із тіком геосцени; без замовлень — no-op.
 import { workshopTick } from './core/workshop';
 import { interceptTick, repairTick, type InterceptEvent } from './core/intercept';
-// пR.2 (ADR-0037): модулі шару UI — демо-драйвер, DOM-хелпер, панель збереження, журнал подій.
-import { DemoDriver } from './ui/demo';
+// П13.3 (ADR-0067): драйвер авто-бою — модуль src/ui/auto-battle.ts
+// (переробка демо-драйвера пR.2: «Авто»/«Стоп», політика ядра party-bot).
+import { AutoBattleDriver } from './ui/auto-battle';
 import { el } from './ui/dom';
 import { createSavePanel } from './ui/save-panel';
 // П11.6 (ADR-0058/0037): панель «Дослідження» — модуль src/ui/research-panel.ts.
@@ -153,16 +154,17 @@ const battle = createBattleUI(ui, {
     cancel: () => anim.cancel(),
   },
   hasRaf: () => hasRaf,
-  stopDemo: () => demo.stop(),
+  stopAuto: () => autoBattle.stop(),
+  autoBusy: () => autoBattle.busy, // П13.3: підпис плитки «Авто»/«Стоп»
   cancelGeoAnim: () => geoAnim.cancel(),
 });
 
 // пR.2 (ADR-0037): ввід тактичного бою (клік/hover/клавіші, зведення режимів,
 // дозор, кінець ходу) — модуль src/ui/input.ts; тут — лише зв'язування зі
-// станом бою (ui), діями бою (battle) і демо-драйвером.
+// станом бою (ui), діями бою (battle) і драйвером авто-бою (П13.3).
 const input = createInput(ui, battle, {
   renderAll,
-  demoBusy: () => demo.busy,
+  autoBusy: () => autoBattle.busy,
 });
 
 // П6.8 (ADR-0029): анімаційний рушій — черга анімацій, rAF-цикл живе лише
@@ -172,9 +174,11 @@ const input = createInput(ui, battle, {
 // (стан і лог бою від анімації не залежать — критерій «байт-у-байт»).
 const hasRaf = typeof requestAnimationFrame === 'function';
 
-// пR.2 (ADR-0037): покрокове демо П6.16 — стан і таймери драйвера в src/ui/demo.ts;
-// тут лише зв'язування з місією, анімаціями та відображенням.
-const demo = new DemoDriver({
+// П13.3 (ADR-0067): покроковий драйвер авто-бою — стан і таймери в
+// src/ui/auto-battle.ts; тут лише зв'язування з місією, анімаціями та
+// відображення. «Авто» вмикається з будь-якого моменту бою, «Стоп»
+// завершує поточну дію і повертає керування гравцю.
+const autoBattle = new AutoBattleDriver({
   getMission: () => ui.mission,
   battleFinished: () => ui.battleResult !== null,
   renderBattle: () => battle.renderBattle(),
@@ -250,7 +254,7 @@ const anim = new AnimEngine({
   schedule: (cb) => requestAnimationFrame(cb),
   cancel: (h) => cancelAnimationFrame(h as number),
   draw: () => battle.renderBattle(),
-  onIdle: () => demo.onAnimIdle(), // П6.16: анімації дії демо відтворені — пауза і наступна дія
+  onIdle: () => autoBattle.onAnimIdle(), // П13.3: анімації дії відтворені — пауза і наступна дія авто-бою
 });
 // П6.9 (ADR-0029): пульс радара геосцени — той самий рушій (черга + rAF лише
 // під час активних анімацій, idle → 0 перерисовок), окремий інстанс зі своєю
@@ -445,7 +449,12 @@ if (typeof document !== 'undefined') {
       else if (id === 'medkit') input.armMedkit();
       else if (id === 'grenade') input.armGrenade();
       else if (id === 'end') input.endPlayerTurn();
-      else if (id === 'demo') demo.battle();
+      // П13.3 (ADR-0067): «Авто»/«Стоп» — після зупинки драйвера плитка
+      // оновлює підпис («Стоп» → «Авто») одразу; старт оновлює сам (крок).
+      else if (id === 'auto-battle') {
+        autoBattle.toggle();
+        battle.renderBattle();
+      }
     },
   });
   // ADR-0027: фільтри-вкладки єдиного журналу
