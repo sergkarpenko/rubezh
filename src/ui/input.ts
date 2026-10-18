@@ -4,7 +4,7 @@
 // пострілу, дозор, кінець ходу (синхронний хід прибульців), гарячі клавіші
 // 1/2/3/O/E/Esc і чиста клік-математика (cellFromPoint, samePath, sameCell).
 // Стан бою — спільний об'єкт BattleUIState (модуль battle), дії бою —
-// інтерфейс BattleUI; демо-драйвер і повне перемалювання — через Deps.
+// інтерфейс BattleUI; драйвер авто-бою і повне перемалювання — через Deps.
 
 import {
   GRENADE_AP_COST,
@@ -60,7 +60,7 @@ export function sameCell(a: Vec2 | null, b: Vec2 | null): boolean {
 // Залежності від шару застосунку (main.ts).
 export interface InputDeps {
   renderAll(): void;
-  demoBusy(): boolean; // П6.16: триває демо — керування заблоковано
+  autoBusy(): boolean; // П13.3 (ADR-0067): триває авто-бій — керування заблоковано
 }
 
 export interface InputUI {
@@ -83,7 +83,7 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
 
   function battleCanvasClick(ev: MouseEvent): void {
     if (!battle.playerTurnActive() || !ui.mission) return;
-    if (deps.demoBusy()) return; // П6.16: триває демо — бойовище не клікається
+    if (deps.autoBusy()) return; // П13.3: триває авто-бій — бойовище не клікається
     const st = ui.mission.state;
     const cell = cellFromEvent(ev);
     const u = st.units.find((x) => x.alive && x.pos.x === cell.x && x.pos.y === cell.y);
@@ -351,7 +351,7 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
 
   function armFire(mode: ShotMode): void {
     if (!battle.playerTurnActive() || !ui.mission) return;
-    if (deps.demoBusy()) return; // П6.16: триває демо — керування заблоковано
+    if (deps.autoBusy()) return; // П13.3: триває авто-бій — керування заблоковано
     const sel = battle.selectedUnit();
     if (!sel) {
       battle.binfo('Спершу клікніть свого оперативника.');
@@ -376,7 +376,7 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
 
   function armOverwatch(): void {
     if (!battle.playerTurnActive() || !ui.mission) return;
-    if (deps.demoBusy()) return; // П6.16: триває демо — керування заблоковано
+    if (deps.autoBusy()) return; // П13.3: триває авто-бій — керування заблоковано
     const sel = battle.selectedUnit();
     if (!sel) {
       battle.binfo('Спершу клікніть свого оперативника.');
@@ -400,7 +400,7 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
 
   function endPlayerTurn(): void {
     if (!battle.playerTurnActive() || !ui.mission) return;
-    if (deps.demoBusy()) return; // П6.16: триває демо — хід ведуть боти
+    if (deps.autoBusy()) return; // П13.3: триває авто-бій — хід веде політика ядра
     ui.hoverPath = null;
     ui.fireMode = null;
     ui.itemMode = null; // П11.6
@@ -451,7 +451,7 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
   // патерн П6.14): без солдата/предмета/AP — відмова з причиною.
   function armItem(mode: 'medkit' | 'grenade'): void {
     if (!battle.playerTurnActive() || !ui.mission) return;
-    if (deps.demoBusy()) return; // П6.16: триває демо — керування заблоковано
+    if (deps.autoBusy()) return; // П13.3: триває авто-бій — керування заблоковано
     const sel = battle.selectedUnit();
     if (!sel) {
       battle.binfo('Спершу клікніть свого оперативника.');

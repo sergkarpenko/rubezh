@@ -69,7 +69,8 @@ export interface BattleDeps {
   renderAll(): void;
   anim: BattleAnimAdapter;
   hasRaf(): boolean; // rAF нема у тестовому середовищі — анімації не ставляться в чергу
-  stopDemo(): void; // П6.16: закриття бою зупиняє демо
+  stopAuto(): void; // П13.3 (ADR-0067): закриття бою зупиняє авто-бій
+  autoBusy(): boolean; // П13.3: стан драйвера авто-бою — підпис плитки «Авто»/«Стоп»
   cancelGeoAnim(): void; // П6.9: геосцену сховано — пульс радара скидаємо
 }
 
@@ -289,7 +290,15 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
     // стан кнопок керування
     const busy = !playerTurnActive();
     (el('btn-end') as HTMLButtonElement).disabled = busy;
-    (el('btn-demo') as HTMLButtonElement).disabled = ui.battleResult !== null;
+    // П13.3 (ADR-0067): плитка «Авто»/«Стоп» — перемикач авто-бою. Доступна
+    // весь бій без результату (в т.ч. в хід демонів Розриву — «Стоп» має
+    // працювати будь-коли); підпис і підсвітка — за станом драйвера.
+    const ab = el<HTMLButtonElement>('btn-auto-battle');
+    const abBusy = deps.autoBusy();
+    ab.disabled = ui.battleResult !== null;
+    const abCap = ab.querySelector<HTMLElement>('.tb-cap');
+    if (abCap !== null) abCap.textContent = abBusy ? 'Стоп' : 'Авто';
+    ab.classList.toggle('armed', abBusy);
     // П6.14: кнопки режимів без достатку AP — приглушені (disabled) з причиною
     // «не вистачає AP» у підказці; підказка з index.html зберігається (dataset).
     for (const m of ['snap', 'aimed', 'auto'] as ShotMode[]) {
@@ -331,7 +340,7 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
   }
 
   function close(): void {
-    deps.stopDemo(); // П6.16: демо могло тривати — таймер і стан драйвера скидаємо
+    deps.stopAuto(); // П13.3: авто-бій міг тривати — таймер і стан драйвера скидаємо
     deps.anim.cancel(); // П6.8: бій закрито — чергу анімацій скидаємо
     ui.mission = null;
     ui.battleResult = null;

@@ -4,6 +4,7 @@
 // іконки-канви), клік → onAction з id дії. Причини блокування та
 // «renderBattle не чіпає іконки» (idle → 0 перерисовок) — у src/ui/battle.test.ts
 // (там готова фікстура бою); іконки малюються матрицями один раз при створенні.
+// П13.3 (ADR-0067): остання плитка — перемикач авто-бою «Авто»/«Стоп».
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { GRENADE_AP_COST, GRENADE_DAMAGE, GRENADE_RANGE, HEAL_AP_COST, HEAL_AMOUNT, OVERWATCH_AP_COST, RIFLE } from '../core/combat';
 import { ICON_SIZE, TOOLBAR_ACTIONS, createToolbar, drawToolbarIcon, type ToolbarActionId } from './toolbar';
@@ -37,12 +38,12 @@ beforeEach(() => {
 });
 
 describe('тулбар: перелік дій (П13.2, ADR-0066)', () => {
-  it('плитки — усі чинні дії бою (id, підписи, іконки); клік → onAction; «Авто»/«Стоп» немає (П13.3)', () => {
+  it('плитки — усі чинні дії бою (id, підписи, іконки); клік → onAction; «Авто»/«Стоп» — перемикач авто-бою (П13.3)', () => {
     const onAction = vi.fn();
     createToolbar(document.getElementById('btoolbar')!, { onAction });
     const buttons = [...document.querySelectorAll('#btoolbar button')];
     expect(buttons.map((b) => b.id)).toEqual(TOOLBAR_ACTIONS.map((a) => a.btnId)); // той самий порядок
-    expect(TOOLBAR_ACTIONS.map((a) => a.id)).toEqual(['snap', 'aimed', 'auto', 'ow', 'medkit', 'grenade', 'end', 'demo']);
+    expect(TOOLBAR_ACTIONS.map((a) => a.id)).toEqual(['snap', 'aimed', 'auto', 'ow', 'medkit', 'grenade', 'end', 'auto-battle']);
     expect(TOOLBAR_ACTIONS.map((a) => a.label)).toEqual([
       'Швидкий',
       'Прицільний',
@@ -51,7 +52,7 @@ describe('тулбар: перелік дій (П13.2, ADR-0066)', () => {
       'Лікування',
       'Граната',
       'Кінець',
-      'Демо',
+      'Авто',
     ]);
     for (const b of buttons) {
       const icon = b.querySelector('canvas.tb-icon') as HTMLCanvasElement;

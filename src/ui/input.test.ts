@@ -46,7 +46,7 @@ function setupDom(): void {
       <button id="btn-medkit">Лікування</button>
       <button id="btn-grenade">Граната</button>
       <button id="btn-end">Кінець ходу</button>
-      <button id="btn-demo">Демо-бій</button>
+      <button id="btn-auto-battle"><span class="tb-cap">Авто</span></button>
     </div>`;
   const proto = HTMLCanvasElement.prototype as unknown as {
     getContext: () => CanvasRenderingContext2D;
@@ -74,11 +74,11 @@ interface Fixture {
   ui: BattleUIState;
   battle: ReturnType<typeof createBattleUI>;
   input: ReturnType<typeof createInput>;
-  deps: InputDeps & { demoBusy: ReturnType<typeof vi.fn> };
+  deps: InputDeps & { autoBusy: ReturnType<typeof vi.fn> };
   binfo(): string;
 }
 
-function makeFixture(demoBusy = false): Fixture {
+function makeFixture(autoBusy = false): Fixture {
   const party = createParty(42);
   const ui: BattleUIState = {
     mission: null,
@@ -99,18 +99,19 @@ function makeFixture(demoBusy = false): Fixture {
     renderAll: vi.fn(),
     anim: { active: () => null, now: 0, push: vi.fn(), cancel: vi.fn() },
     hasRaf: () => false,
-    stopDemo: vi.fn(),
+    stopAuto: vi.fn(),
+    autoBusy: () => false, // П13.3: авто-бій не триває
     cancelGeoAnim: vi.fn(),
   };
   const battle = createBattleUI(ui, battleDeps);
-  const busy = vi.fn(() => demoBusy);
-  const input = createInput(ui, battle, { renderAll: vi.fn(), demoBusy: busy });
+  const busy = vi.fn(() => autoBusy);
+  const input = createInput(ui, battle, { renderAll: vi.fn(), autoBusy: busy });
   return {
     party,
     ui,
     battle,
     input,
-    deps: { renderAll: vi.fn(), demoBusy: busy },
+    deps: { renderAll: vi.fn(), autoBusy: busy },
     binfo: () => document.getElementById('binfo')!.textContent ?? '',
   };
 }
@@ -253,7 +254,7 @@ describe('input: обробники вводу бою (тап-тап, зведе
     expect(f.binfo()).toContain('постріл: 3 AP');
   });
 
-  it('дозор без AP — причина; під час демо — керування заблоковано', () => {
+  it('дозор без AP — причина; під час авто-бою — керування заблоковано', () => {
     const f = makeFixture();
     launchMission(f);
     const s = f.ui.mission!.state.units.find((u) => u.side === 'player')!;
@@ -261,13 +262,13 @@ describe('input: обробники вводу бою (тап-тап, зведе
     s.ap = 1;
     f.input.armOverwatch();
     expect(f.binfo()).toContain('дозор коштує 3');
-    const demoF = makeFixture(true); // П6.16: триває демо
-    launchMission(demoF);
-    const d = demoF.ui.mission!.state.units.find((u) => u.side === 'player')!;
-    demoF.ui.selectedId = d.id;
-    demoF.input.armFire('snap');
-    demoF.input.endPlayerTurn();
-    expect(demoF.ui.fireMode).toBeNull(); // демо — мовчки без дій
+    const autoF = makeFixture(true); // П13.3 (ADR-0067): триває авто-бій
+    launchMission(autoF);
+    const d = autoF.ui.mission!.state.units.find((u) => u.side === 'player')!;
+    autoF.ui.selectedId = d.id;
+    autoF.input.armFire('snap');
+    autoF.input.endPlayerTurn();
+    expect(autoF.ui.fireMode).toBeNull(); // авто-бій — мовчки без дій
   });
 
   it('клавіша Esc: скасовує зведений режим, потім вибір (ADR-0027)', () => {

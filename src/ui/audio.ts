@@ -300,7 +300,7 @@ export function createSound(deps: Partial<SoundDeps> = {}): Sound {
         moveTap = 0; // нова серія кроків — новий хід
       }
       playRecipe(c, name, c.currentTime + moveTap * 0.14);
-      moveTap = Math.min(moveTap + 1, 16); // кап довгих батчів (демо-бій)
+      moveTap = Math.min(moveTap + 1, 16); // кап довгих батчів (авто-бій)
     } else {
       playRecipe(c, name, c.currentTime);
     }
