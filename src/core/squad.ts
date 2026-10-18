@@ -85,7 +85,7 @@ export function hireSoldier(econ: EconomyState, roster: Roster, preset: Difficul
 // (як перма-смерть, але добровільно). Солдата з таким id немає → помилка.
 export function fireSoldier(roster: Roster, id: string): Unit {
   const rec = roster.soldiers.find((s) => s.id === id);
-  if (!rec) throw new Error('Солдата немає в ростері: ' + id);
+  if (!rec) throw new Error('Оперативника немає в ростері: ' + id);
   roster.soldiers = roster.soldiers.filter((s) => s.id !== id);
   return rec;
 }
@@ -103,7 +103,7 @@ export function missionSquad(roster: Roster, size: number = SQUAD_SPAWN.length):
     throw new Error(
       roster.soldiers.length === 0
         ? 'Ростер порожній — немає кого відправити на місію'
-        : 'Немає боєготових солдатів — усі поранені в лікарні'
+        : 'Немає боєготових оперативників — усі поранені в лікарні'
     );
   }
   return squad;
@@ -149,13 +149,13 @@ export function isBankrupt(econ: EconomyState, roster: Roster, preset: Difficult
 // тиків; дозор скидається; kills зберігаються — стаж ветерана.
 export function applyMissionResult(roster: Roster, state: GameState): MissionAftermath {
   const deployed = state.units.filter((u) => u.side === 'player');
-  if (deployed.length === 0) throw new Error('У стані місії немає солдатів гравця');
+  if (deployed.length === 0) throw new Error('У стані місії немає оперативників гравця');
   const lost: Unit[] = [];
   const survivors: Unit[] = [];
   const wounded: Unit[] = [];
   for (const u of deployed) {
     const rec = roster.soldiers.find((s) => s.id === u.id);
-    if (!rec) throw new Error('Солдат не з цього ростеру: ' + u.id);
+    if (!rec) throw new Error('Оперативник не з цього ростеру: ' + u.id);
     if (!u.alive) {
       roster.soldiers = roster.soldiers.filter((s) => s.id !== u.id);
       delete roster.hospital[u.id];

@@ -113,7 +113,7 @@ export function botTurn(state: GameState): number {
 // Хід прибульців: цикл aiStep (patrol = зона висадки, як у MissionBattle 5.1.5)
 // до завершення, потім кінець ходу. Повертає кількість дій.
 export function aliensTurn(state: GameState): number {
-  if (state.activeSide !== 'alien') throw new Error('aliensTurn: зараз не хід прибульців');
+  if (state.activeSide !== 'alien') throw new Error('aliensTurn: зараз не хід демонів Розриву');
   let actions = 0;
   let guard = 0;
   while (guard++ < 60 && aiStep(state, SQUAD_SPAWN)) actions++;

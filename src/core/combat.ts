@@ -113,7 +113,7 @@ export const RIFLE: Weapon = {
 // dmg 2-5 проти 3-6 у гравця + нижча стартова точність прибульців .50/.45/.40 → ~70% перемог гравця,
 // в середньому 1.5 уцілілого з 3 — втрати залишаються відчутними).
 export const ALIEN_CUTTER: Weapon = {
-  name: 'Імпульсний різак',
+  name: 'Фазовий різак',
   damage: [2, 5],
   range: 12,
   modes: {
@@ -418,7 +418,7 @@ export function useMedkit(state: GameState, healerId: string, targetId: string):
   const u = getUnit(state, healerId);
   requireActive(state, u);
   const items = unitItems(state, u.id);
-  if (!items?.medkit) throw new Error('Аптечки немає у юніта: ' + u.id);
+  if (!items?.medkit) throw new Error('Гелю немає у юніта: ' + u.id);
   if (u.ap < HEAL_AP_COST) throw new Error('Недостатньо очок дій для лікування');
   const t = getUnit(state, targetId);
   if (!t.alive) throw new Error('Ціль уже мертва');

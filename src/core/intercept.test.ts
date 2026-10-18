@@ -63,7 +63,7 @@ describe('intercept: запуск перехоплення', () => {
     const ic = createIntercept();
     const geo = geoWith(mkUfo({ id: 'u1', pos: { x: 3, y: 3 }, target: { x: 10, y: 3 }, detected: true }));
     startIntercept(ic, geo, 'u1');
-    expect(() => startIntercept(ic, geo, 'u1')).toThrow('не на базі');
+    expect(() => startIntercept(ic, geo, 'u1')).toThrow('не у вузлі');
   });
 
   it('пошкоджений винищувач не стартує', () => {
@@ -272,7 +272,7 @@ describe('intercept: ремонт', () => {
     const geo = geoWith(mkUfo({ id: 'u1', pos: { x: 8, y: 4 }, target: { x: 15, y: 7 }, detected: true }));
     startIntercept(ic, geo, 'u1');
     ic.fighter.hp = 1;
-    expect(() => startRepair(ic, geo, createEconomy())).toThrow('на базі');
+    expect(() => startRepair(ic, geo, createEconomy())).toThrow('у вузлі «Рубіж»');
   });
 
   it('НЛО зник під час бою — переривання, винищувач на базі', () => {
@@ -329,7 +329,7 @@ describe('intercept: ремонт — економіка (П7.4)', () => {
     expect(ic.fighter.hp).toBe(0);
     expect(ic.fighter.status).toBe('на базі');
     expect(ic.fighter.repairTicksLeft).toBeUndefined();
-    expect(() => startRepair(ic, geo, econ)).toThrow('грошей');
+    expect(() => startRepair(ic, geo, econ)).toThrow('кредитів');
     econ.money = FIGHTER_REPAIR_COST; // з'явилися гроші — ремонт оплачується
     startRepair(ic, geo, econ);
     expect(ic.fighter.status).toBe('ремонт');

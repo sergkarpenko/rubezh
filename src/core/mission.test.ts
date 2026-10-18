@@ -85,7 +85,7 @@ describe('mission: структура', () => {
     const m = createMission(g, 'uB');
     const aliens = m.state.units.filter((u) => u.side === 'alien');
     expect(aliens.length).toBe(3);
-    expect(aliens.every((u) => u.weapon.name === 'Імпульсний різак')).toBe(true);
+    expect(aliens.every((u) => u.weapon.name === 'Фазовий різак')).toBe(true);
     expect(aliens.map((u) => u.firingAccuracy)).toEqual([0.5, 0.45, 0.4]);
   });
 

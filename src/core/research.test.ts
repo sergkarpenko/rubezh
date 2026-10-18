@@ -76,7 +76,7 @@ describe('найм і звільнення вчених (ADR-0058)', () => {
   it('недостатньо грошей → throw, штат не змінюється', () => {
     const econ = richEcon(HIRE_SCIENTIST_PRICE - 1);
     const research = createResearch();
-    expect(() => hireScientist(econ, research)).toThrow('Недостатньо грошей');
+    expect(() => hireScientist(econ, research)).toThrow('Недостатньо кредитів');
     expect(research.scientists).toEqual([]);
     expect(research.hired).toBe(0);
   });
@@ -124,7 +124,7 @@ describe('startProject — слоти і правила старту (ADR-0058)'
   it('недостатньо коштів → throw, слот не зайнято', () => {
     const econ = richEcon(PROJECT_CATALOG['armor'].cost - 1);
     const research = createResearch();
-    expect(() => startProject(econ, research, 'armor')).toThrow('Недостатньо грошей');
+    expect(() => startProject(econ, research, 'armor')).toThrow('Недостатньо кредитів');
     expect(research.active).toEqual([]);
   });
 

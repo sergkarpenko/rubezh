@@ -111,7 +111,7 @@ export interface GeoOptions {
 export function createGeoGame(opts: GeoOptions = {}): GeoState {
   const base = opts.base ?? { x: Math.floor(WORLD_W / 2), y: Math.floor(WORLD_H / 2) };
   if (base.x < 0 || base.y < 0 || base.x >= WORLD_W || base.y >= WORLD_H) {
-    throw new Error('База за межами мапи світу');
+    throw new Error('Вузол «Рубіж» за межами мапи світу');
   }
   const preset = opts.preset ?? DEFAULT_PRESET;
   const multipliers = DIFFICULTY_MULTIPLIERS[preset];
