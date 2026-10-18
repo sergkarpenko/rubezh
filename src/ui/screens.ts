@@ -10,6 +10,8 @@
 
 import type { DifficultyPreset } from '../core/campaign';
 import { el } from './dom';
+import logoUrl from '../../assets/logo.webp';
+import startBgUrl from '../../assets/start-bg.webp';
 
 // Стан шару відображення (ADR-0065): до вибору гравця партії немає —
 // показується стартовий екран; після старту/продовження — ігровий екран.
@@ -40,14 +42,16 @@ export interface Screens {
 }
 
 // Контент стартового екрана (конкатенація рядків — стиль шару відображення,
-// патерн help.ts). Логотип текстовий — місце під PNG-ассет П13.4 (ADR-0068):
-// секція #start-logo замінюється ассетом без змін навігації. Термінологія
-// Розриву — одразу за мапою перейменувань ADR-0064 (щоб П12.6 не перероблював
-// стартовий екран).
+// патерн help.ts). П13.4 (ADR-0068/0071): текстовий логотип — фолбек; ассет
+// завантажується ліниво (loadLogo нижче) і вбудовується у той самий
+// #start-logo — навігація не змінюється. Фолбек — єдине місце правди для
+// тестів: у headless/офлайн/без файла onload не спрацює — текст лишається.
+// Термінологія Розриву — одразу за мапою перейменувань ADR-0064 (щоб П12.6
+// не перероблював стартовий екран).
 function startScreenHtml(version: string): string {
   return (
     '<div class="panel start-box">' +
-    '<h1 class="start-logo" id="start-logo">РУБІЖ</h1>' +
+    '<h1 class="start-logo" id="start-logo"><span class="start-logo-text">РУБІЖ</span></h1>' +
     '<p class="start-tagline">Остання лінія оборони людства проти Аномалії «Розрив»</p>' +
     '<div class="start-menu">' +
     '<button id="btn-start-new">Нова партія</button>' +
@@ -122,11 +126,41 @@ export function createScreens(deps: ScreensDeps): Screens {
   const topbar = el('topbar');
   const layout = el('layout');
   startScreen.innerHTML = startScreenHtml(deps.version);
+  // П13.4 ітерація 4 (ADR-0068/0071): фон стартового екрана — розмите
+  // затемнене саме лого (WebP, похідна кодом від оригіналу власника):
+  // палітра фону за побудовою та сама, що в лого — швів не виникає.
+  // URL — з vite-імпорту (base-аварійний); це CSS-фон, не
+  // Image-завантаження: headless/офлайн/без файла бачать суцільний
+  // колір #0a0a12 з CSS (фолбек, тести від ассета не залежать).
+  startScreen.style.backgroundImage = `url("${startBgUrl}")`;
   newGameDialog.innerHTML = newGameDialogHtml();
   gameMenu.innerHTML = gameMenuHtml();
   exitConfirm.innerHTML = exitConfirmHtml();
 
   let current: ScreenName = 'стартовий';
+
+  // П13.4 (ADR-0068/0071): ліниве завантаження ассета лого (WebP) — один раз, при
+  // першому показі стартового екрана. URL — з vite-імпорту (base-аварійний:
+  // і корінь, і прев'ю гілок, ADR-0060). При успіху <img> вбудовується у
+  // #start-logo, клас logo-loaded ховає текст; при недоступності ассета
+  // (headless/офлайн/відсутній файл) onload/onerror не змінює DOM —
+  // текстовий фолбек лишається. Без rAF-анімацій (idle → 0 перерисовок).
+  let logoRequested = false;
+  function loadLogo(): void {
+    if (logoRequested) return;
+    logoRequested = true;
+    const probe = new Image();
+    probe.onload = () => {
+      const logo = document.createElement('img');
+      logo.id = 'start-logo-img';
+      logo.className = 'start-logo-img';
+      logo.alt = 'РУБІЖ';
+      logo.src = logoUrl;
+      el('start-logo').insertBefore(logo, el('start-logo').firstChild);
+      el('start-logo').classList.add('logo-loaded');
+    };
+    probe.src = logoUrl;
+  }
 
   // Продовжити: доступне лише при живих сейвах; причина — у тултіп (EARS
   // Фази 12: за відсутності сейвів пункт недоступний з причиною).
@@ -140,6 +174,7 @@ export function createScreens(deps: ScreensDeps): Screens {
   function showStart(): void {
     current = 'стартовий';
     render();
+    loadLogo(); // П13.4: ліниво, один раз (ADR-0068)
     startScreen.classList.remove('hidden');
     topbar.classList.add('hidden');
     layout.classList.add('hidden');

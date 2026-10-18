@@ -385,7 +385,7 @@
       }
 
       /* П12.2 (ADR-0065): стартовий екран і діалоги навігації — контент
-         генерує src/ui/screens.ts; логотип текстовий (місце під PNG — П13.4,
+         генерує src/ui/screens.ts; логотип текстовий (фолбек під ассет — П13.4,
          ADR-0068); неоновий ціан — «Рубіж»/гравець (палітра П12.7, ADR-0064) */
       #start-screen {
         position: fixed;
@@ -393,7 +393,13 @@
         left: 0;
         right: 0;
         bottom: 0;
-        background: #0d1017;
+        /* П13.4 ітерація 4 (ADR-0068/0071): фон — розмите затемнене саме лого
+           (assets/start-bg.webp, ставить screens.ts з vite-імпорту);
+           фолбек без ассета — суцільний колір */
+        background: #0a0a12;
+        background-size: cover;
+        background-position: center;
+        background-repeat: no-repeat;
         display: flex;
         align-items: center;
         justify-content: center;
@@ -412,6 +418,19 @@
         margin: 8px 0 4px;
         color: #00e5ff;
         text-shadow: 0 0 18px rgba(0, 229, 255, 0.45);
+      }
+      /* П13.4 (ADR-0068/0071): ассет лого (WebP); фолбек — текст. Текст ховається
+         лише після onload ассета (клас logo-loaded); у headless/офлайн/без
+         файла текстовий логотип лишається — тести від ассета не залежать */
+      .start-logo.logo-loaded .start-logo-text {
+        display: none;
+      }
+      .start-logo-img {
+        display: block;
+        width: 100%;
+        height: auto;
+        margin: 0 auto;
+        border-radius: 10px;
       }
       .start-tagline {
         color: #7d8794;
