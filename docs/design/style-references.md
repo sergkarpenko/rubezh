@@ -73,7 +73,7 @@ Immersive cyberpunk background for a game title screen: deep blue-black space (#
 **4. Рамка панелі (опційно, оформлення):**
 Sci-fi UI panel frame ornament, 3D beveled metal edges with neon cyan (#00E5FF) edge lighting and subtle magenta (#FF2E88) accents, ornate cyberpunk corner details, circuit-line etching, on a fully transparent background — the frame is an empty border ornament, the inside and outside are transparent, high detail, no text, no watermark.
 
-**5. Favicon (опційно, ігровий трек — плоский для читаості в 32×32):**
+**5. Favicon (опційно, ігровий трек — плоский для читабельності в 32×32):**
 Simple game favicon: angular dark shield with a neon cyan rift crack, flat vector style, minimal, readable at 32×32 pixels, no text.
 
 Після генерації: власник обирає варіант → зберігає PNG у `assets/` (GitHub web або через Vibe Code) → валідація через прев'ю гілки (ADR-0060) у кроці П13.4/П13.5 до мержу (ADR-0068).
