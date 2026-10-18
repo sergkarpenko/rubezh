@@ -413,6 +413,19 @@
         color: #00e5ff;
         text-shadow: 0 0 18px rgba(0, 229, 255, 0.45);
       }
+      /* П13.4 (ADR-0068): PNG-ассет лого; фолбек — текст. Текст ховається
+         лише після onload ассета (клас logo-loaded); у headless/офлайн/без
+         файла текстовий логотип лишається — тести від ассета не залежать */
+      .start-logo.logo-loaded .start-logo-text {
+        display: none;
+      }
+      .start-logo-img {
+        display: block;
+        width: 100%;
+        height: auto;
+        margin: 0 auto;
+        border-radius: 10px;
+      }
       .start-tagline {
         color: #7d8794;
         font-size: 13px;

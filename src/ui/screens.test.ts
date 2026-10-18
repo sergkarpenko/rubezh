@@ -4,7 +4,7 @@
 // вимкнення (продовжити без сейвів, налаштування — п12.3), переходи без
 // rAF-анімацій (idle → 0 перерисовок, ADR-0029). Повний флоу із сейвами —
 // у src/main.ui.test.ts (там живе панель збереження).
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createScreens, type ScreensDeps } from './screens';
 
 // Скелетні секції — ті самі id, що й в index.html (контент генерує модуль).
@@ -214,5 +214,88 @@ describe('П12.2: «Продовжити» і вікно «Меню» гри (AD
     expect(deps.onExitToStart).toHaveBeenCalled();
     expect(visible('exit-confirm')).toBe(false);
     expect(visible('game-menu')).toBe(false);
+  });
+});
+
+// П13.4 (ADR-0068): лого стартового екрана — PNG-ассет з текстовим фолбеком.
+// Фолбек — єдине місце правди для тестів: у headless jsdom ассет не
+// завантажується, тож DOM-тести стартового екрана від PNG не залежать
+// (критерій 1). Image стабиться фейком (детермінізм: onload/onerror — лише
+// явні виклики в тесті, ADR-0003-дух без випадкових подій).
+class FakeImage {
+  onload: (() => void) | null = null;
+  onerror: (() => void) | null = null;
+  src = '';
+}
+
+describe('П13.4: лого стартового екрана — PNG з текстовим фолбеком (ADR-0068)', () => {
+  let probes: FakeImage[];
+
+  beforeEach(() => {
+    probes = [];
+    vi.stubGlobal(
+      'Image',
+      class {
+        onload: (() => void) | null = null;
+        onerror: (() => void) | null = null;
+        src = '';
+        constructor() {
+          probes.push(this as unknown as FakeImage);
+        }
+      }
+    );
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('критерій 1 — headless без ассета: текстовий фолбек «РУБІЖ», без img', () => {
+    createScreens(makeDeps()).showStart();
+    expect(probes).toHaveLength(1); // запит іде, але onload не спрацював
+    const h1 = $('start-logo');
+    expect(h1.textContent).toBe('РУБІЖ'); // фолбек — місце правди
+    expect(h1.querySelector('img')).toBeNull();
+    expect(h1.classList.contains('logo-loaded')).toBe(false);
+  });
+
+  it('успіх: <img> у #start-logo з alt «РУБІЖ», клас logo-loaded, текст лишається у DOM', () => {
+    createScreens(makeDeps()).showStart();
+    probes[0].onload!();
+    const h1 = $('start-logo');
+    const img = h1.querySelector('img');
+    expect(img).not.toBeNull();
+    expect(img!.id).toBe('start-logo-img');
+    expect(img!.alt).toBe('РУБІЖ');
+    expect(img!.getAttribute('src')).toContain('logo');
+    expect(h1.classList.contains('logo-loaded')).toBe(true); // CSS ховає текст
+    expect(h1.textContent).toBe('РУБІЖ'); // фолбек — джерело для тверджень
+  });
+
+  it('ліниво і один раз: повторні showStart не дублюють запит і <img>', () => {
+    const screens = createScreens(makeDeps());
+    screens.showStart();
+    screens.showGame();
+    screens.showStart(); // вихід у меню → назад на стартовий
+    expect(probes).toHaveLength(1);
+    probes[0].onload!();
+    screens.showStart();
+    expect($('start-logo').querySelectorAll('img')).toHaveLength(1);
+  });
+
+  it('недоступний ассет (провал завантаження): фолбек лишається, без img і класу', () => {
+    createScreens(makeDeps()).showStart();
+    // провал: жоден колбек не спрацював (onerror модуль не підписує — фолбек
+    // і нічого не робити — еквівалентні за DOM-станом)
+    const h1 = $('start-logo');
+    expect(h1.textContent).toBe('РУБІЖ');
+    expect(h1.querySelector('img')).toBeNull();
+    expect(h1.classList.contains('logo-loaded')).toBe(false);
+  });
+
+  it('ліниво до показу: createScreens без showStart не завантажує ассет', () => {
+    const screens = createScreens(makeDeps());
+    screens.showGame();
+    expect(probes).toHaveLength(0); // запит лише при першому showStart
   });
 });
