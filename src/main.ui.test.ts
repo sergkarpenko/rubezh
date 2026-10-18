@@ -1086,3 +1086,61 @@ describe('П11.6: критичний флоу «дослідити → виро�
     expect($('log').textContent).toContain('лікує');
   });
 });
+
+describe('П12.4: вкладки статус-колонки «Загін»/«База»/«Система» (ADR-0065)', () => {
+  const colPanels = (): HTMLElement[] => Array.from(document.querySelectorAll('#status section.panel[data-tab]'));
+  const visible = (p: HTMLElement): boolean => !p.classList.contains('hidden');
+  const visibleTitles = (): string[] =>
+    colPanels()
+      .filter(visible)
+      .map((p) => p.querySelector('h2')!.textContent ?? '');
+
+  it('розмітка: скелет #status-tabs у колонці, 7 панелей з data-tab; «Загін» — фінанси/ростер, «База» — сканери/винищувач/дослідження/цех (рішення власника П12.4), «Система» — збереження', () => {
+    const col = htmlRaw.match(/<aside id="status">[\s\S]*?<\/aside>/)![0];
+    expect(col).toContain('<div id="status-tabs"></div>'); // скелет — контент генерує модуль
+    expect((col.match(/data-tab="/g) ?? []).length).toBe(7); // усі панелі колонки розподілені
+    const byTab = (tab: string): number =>
+      (col.match(new RegExp('<section class="panel" data-tab="' + tab + '">[\\s\\S]*?</section>', 'g')) ?? []).length;
+    expect(byTab('squad')).toBe(2); // фінанси + ростер (ADR-0065)
+    expect(byTab('base')).toBe(4); // дослідження + цех (ADR-0065) + сканери + винищувач (рішення власника)
+    expect(byTab('system')).toBe(1); // збереження (ADR-0065)
+    // патерн стилю — як #log-tabs журналу; id кнопок — префікс status-tab- (урок П11.6)
+    expect(htmlRaw).toContain('#status-tabs button.active');
+    for (const t of ['squad', 'base', 'system']) {
+      expect(document.getElementById('status-tab-' + t)).not.toBeNull(); // модуль згенерував кнопки
+    }
+  });
+
+  it('флоу: перемикання вкладок показує всі 7 панелей, панелі лишаються в DOM, вибір персиститься поза сейвом', () => {
+    startParty();
+    expect(colPanels().length).toBe(7); // жодна панель не втрачена (критерій 1)
+    btn('status-tab-squad').click();
+    expect(visibleTitles()).toEqual(['Фінанси', 'Ростер загону']);
+    btn('status-tab-base').click();
+    expect(visibleTitles()).toEqual(['Сканери (виявлені НЛО)', 'Винищувач', 'Дослідження', 'Цех']);
+    // приховані панелі зберігають контент у DOM (контракти не послаблюються)
+    expect($('roster').textContent).toContain('солдат');
+    expect($('money-card').textContent).not.toBe('');
+    btn('status-tab-system').click();
+    expect(visibleTitles()).toEqual(['Збереження']);
+    expect(localStorage.getItem('rubezh.settings.status-tab')).toBe('system'); // ключ П12.3-формату
+  });
+
+  it('у бою колонка dimmed (П6.3 без змін), вкладки — у колонці; після бою dimmed знято', async () => {
+    startParty();
+    btn('status-tab-squad').click();
+    let found = false;
+    for (let i = 0; i < 1500 && !found; i++) {
+      btn('btn-tick').click();
+      found = document.querySelector('button.mission') !== null;
+    }
+    expect(found).toBe(true); // сід 42: місія детерміновано
+    (document.querySelector('button.mission') as HTMLButtonElement).click();
+    expect($('status').classList.contains('dimmed')).toBe(true); // чинний механізм П6.3
+    expect($('status').contains($('status-tabs'))).toBe(true); // вкладки приглушуються разом з колонкою
+    await runDemo();
+    btn('btn-close').click();
+    expect($('status').classList.contains('dimmed')).toBe(false);
+    expect(visibleTitles()).toEqual(['Фінанси', 'Ростер загону']); // вкладка «Загін» активна після бою
+  });
+});

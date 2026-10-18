@@ -91,6 +91,22 @@
         flex-direction: column;
         gap: 16px;
       }
+      /* П12.4 (ADR-0065): вкладки статус-колонки «Загін»/«База»/«Система» —
+         патерн фільтрів журналу #log-tabs; панелі лишаються в DOM,
+         перемикання видимості — класом .hidden (без анімацій, ADR-0029) */
+      #status-tabs {
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
+      }
+      #status-tabs button {
+        padding: 4px 10px;
+        font-size: 12px;
+      }
+      #status-tabs button.active {
+        background: #31435f;
+        border-color: #6ea8ff;
+      }
       /* ADR-0027: двоколонковий каркас до ~900px (iPad Pro 1024/1366), нижче — складання */
       @media (max-width: 899px) {
         main#layout {
@@ -599,15 +615,21 @@
         <ul id="log"></ul>
       </section>
       <aside id="status">
-        <section class="panel">
+        <!-- П12.4 (ADR-0065): вкладки колонки «Загін»/«База»/«Система» — контент
+             генерує src/ui/status-tabs.ts; панелі — атрибут data-tab: «Загін» —
+             ростер/фінанси, «База» — сканери/винищувач/дослідження/цех (розподіл
+             «Сканери»/«Винищувач» — рішення власника, сесія П12.4), «Система» —
+             збереження; активна вкладка — localStorage поза сейвом (ADR-0026) -->
+        <div id="status-tabs"></div>
+        <section class="panel" data-tab="base">
           <h2>Сканери (виявлені НЛО)</h2>
           <div id="ufos"></div>
         </section>
-        <section class="panel">
+        <section class="panel" data-tab="base">
           <h2>Винищувач</h2>
           <div id="fighter"></div>
         </section>
-        <section class="panel">
+        <section class="panel" data-tab="squad">
           <h2>Фінанси</h2>
           <div style="margin-bottom: 8px">
             Баланс: <b id="money-card">—</b>
@@ -616,20 +638,20 @@
           <button id="btn-hire">Найм солдата (100)</button>
         </section>
         <!-- П11.6 (ADR-0058): панель «Дослідження» — штат вчених, слоти, каталог проєктів -->
-        <section class="panel">
+        <section class="panel" data-tab="base">
           <h2>Дослідження</h2>
           <div id="research"></div>
         </section>
         <!-- П11.6 (ADR-0058): панель «Цех» — замовлення, черга, склад -->
-        <section class="panel">
+        <section class="panel" data-tab="base">
           <h2>Цех</h2>
           <div id="workshop"></div>
         </section>
-        <section class="panel">
+        <section class="panel" data-tab="squad">
           <h2>Ростер загону</h2>
           <div id="roster"></div>
         </section>
-        <section class="panel">
+        <section class="panel" data-tab="system">
           <h2>Збереження</h2>
           <div id="save-panel"></div>
         </section>
