@@ -33,14 +33,23 @@ else
     echo "[WARN] AGENTS.md не знайдено"
 fi
 
-# 1b. Залежності лише з ADR (ADR-0012): package.json у коміті → docs/adr/ у тому ж коміті
+# 1b. Залежності лише з ADR (ADR-0012): package.json у коміті → docs/adr/ у тому ж коміті.
+# Виняток ADR-0070: version-bump (контентні рядки дифа — лише поле "version") — це
+# реліз-крок ADR-0054, не зміна залежностей; `npm version` проходить хук без --no-verify.
 if git diff --cached --name-only | grep -qE '^package\.json$'; then
-    if git diff --cached --name-only | grep -qE '^docs/adr/'; then
-        echo "[OK] package.json з ADR (процес ADR-0012)"
+    if git diff --cached -U0 -- package.json \
+        | grep -E '^[+-]' | grep -vE '^(\+\+\+|---)' \
+        | grep -qvE '^[+-][[:space:]]*"version"[[:space:]]*:'; then
+        # є рядки дифа крім поля "version" — зміна залежностей/скриптів/конфігурації
+        if git diff --cached --name-only | grep -qE '^docs/adr/'; then
+            echo "[OK] package.json з ADR (процес ADR-0012)"
+        else
+            echo "[FAIL] package.json БЕЗ ADR! Залежності — лише за ADR-0012:"
+            echo "       ADR + явна авторизація власника, окремий коміт chore(deps):"
+            exit 1
+        fi
     else
-        echo "[FAIL] package.json БЕЗ ADR! Залежності — лише за ADR-0012:"
-        echo "       ADR + явна авторизація власника, окремий коміт chore(deps):"
-        exit 1
+        echo "[OK] package.json: лише version-bump (виняток ADR-0070, реліз-крок ADR-0054)"
     fi
 fi
 
