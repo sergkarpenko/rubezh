@@ -203,7 +203,7 @@ describe('ResearchPanel: помилки ядра — у журнал, без к�
     panel.render(); // кнопка активна: коштів вистачає, слот вільний
     party.econ.money = 0; // гроші зникли поза панеллю — ядро кине, панель ще не перемальована
     (el('btn-start-0') as HTMLButtonElement).click();
-    expect(deps.journal).toHaveBeenCalledWith(expect.stringContaining('Недостатньо грошей'), 'lose', 'base');
+    expect(deps.journal).toHaveBeenCalledWith(expect.stringContaining('Недостатньо кредитів'), 'lose', 'base');
     expect(deps.renderAll).toHaveBeenCalledTimes(1);
     expect(party.research.active).toHaveLength(0); // стан ядра не змінився
   });

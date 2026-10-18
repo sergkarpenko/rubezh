@@ -345,12 +345,12 @@ describe('П11.4: лікування (аптечка)', () => {
   it('аптечка одна на місію: повторний виклик — throw', () => {
     const g = itemsGame({ s1: { medkit: true, grenade: false } });
     useMedkit(g, 's1', 's2');
-    expect(() => useMedkit(g, 's1', 's1')).toThrow('Аптечки немає');
+    expect(() => useMedkit(g, 's1', 's1')).toThrow('Гелю немає');
   });
 
   it('помилки правил: без аптечки, AP, ворог, відстань 2, здорова ціль, мертва ціль, не свій хід', () => {
     const g = itemsGame({ s1: { medkit: true, grenade: false } });
-    expect(() => useMedkit(g, 's2', 's2')).toThrow('Аптечки немає'); // запису items немає = предметів немає
+    expect(() => useMedkit(g, 's2', 's2')).toThrow('Гелю немає'); // запису items немає = предметів немає
     g.units[0].ap = 3;
     expect(() => useMedkit(g, 's1', 's2')).toThrow('Недостатньо очок дій');
     g.units[0].ap = 10;

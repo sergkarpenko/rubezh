@@ -155,7 +155,7 @@ describe('WorkshopPanel: критерій 1 — лише на геосцені',
     panel.render();
     party.econ.money = 0;
     (el('btn-order-medkit') as HTMLButtonElement).click();
-    expect(deps.journal).toHaveBeenCalledWith(expect.stringContaining('Недостатньо грошей'), 'lose', 'base');
+    expect(deps.journal).toHaveBeenCalledWith(expect.stringContaining('Недостатньо кредитів'), 'lose', 'base');
     expect(party.workshop.queue).toHaveLength(0);
   });
 });

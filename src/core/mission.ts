@@ -130,7 +130,7 @@ export interface CreateMissionOptions {
 // Пошук цілі місії з валідацією: лише приземлений виявлений НЛО.
 function findTarget(geo: GeoState, ufoId: string): Ufo {
   const ufo = missionTargets(geo).find((u) => u.id === ufoId);
-  if (!ufo) throw new Error('Місію можна запустити лише з приземленого виявленого НЛО: ' + ufoId);
+  if (!ufo) throw new Error('Місію можна запустити лише з приземленого виявленого зонду Розриву: ' + ufoId);
   return ufo;
 }
 
@@ -143,9 +143,9 @@ export function createMission(geo: GeoState, ufoId: string, opts: CreateMissionO
 
   const squad = opts.squad ?? [makeSoldier('s1', 'Іван'), makeSoldier('s2', 'Олена'), makeSoldier('s3', 'Тарас')];
   if (squad.length === 0) throw new Error('Загін не може бути порожнім');
-  if (squad.length > SQUAD_SPAWN.length) throw new Error('Максимум ' + SQUAD_SPAWN.length + ' солдатів у зоні висадки');
+  if (squad.length > SQUAD_SPAWN.length) throw new Error('Максимум ' + SQUAD_SPAWN.length + ' оперативників у зоні висадки');
   for (const u of squad) {
-    if (u.side !== 'player') throw new Error('У загині можуть бути лише солдати гравця: ' + u.id);
+    if (u.side !== 'player') throw new Error('У загині можуть бути лише оперативники гравця: ' + u.id);
   }
   squad.forEach((u, i) => {
     u.pos = { ...SQUAD_SPAWN[i] };
@@ -186,7 +186,7 @@ export function missionOutcome(state: GameState): MissionOutcome {
 // Перемога: НЛО зникає (зачищено). Поразка: НЛО лишається, вікно триває.
 export function completeMission(geo: GeoState, ufoId: string, outcome: 'перемога' | 'поразка'): void {
   const ufo = geo.ufos.find((u) => u.id === ufoId);
-  if (!ufo) throw new Error('Невідомий НЛО: ' + ufoId);
+  if (!ufo) throw new Error('Невідомий зонд Розриву: ' + ufoId);
   if (outcome === 'перемога') {
     geo.ufos = geo.ufos.filter((u) => u.id !== ufoId);
     geo.log.push({ type: 'mission_won', ufoId, minute: geo.minute });

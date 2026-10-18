@@ -81,7 +81,7 @@ describe('замовлення (ADR-0058: оплата при замовленн
   it('недостатньо грошей — throw черги не змінюється (spend, у мінус неможливо)', () => {
     const econ = richEcon(10);
     const workshop = createWorkshop();
-    expect(() => orderItem(econ, workshop, researchWith('medkit'), 'medkit')).toThrow('Недостатньо грошей');
+    expect(() => orderItem(econ, workshop, researchWith('medkit'), 'medkit')).toThrow('Недостатньо кредитів');
     expect(workshop.queue).toEqual([]);
   });
 

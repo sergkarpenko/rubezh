@@ -133,14 +133,14 @@ function markShotDown(geo: GeoState, ufoId: string): void {
 // боєготовий (на базі, повний HP — ремонт блокує запуск, П7.4).
 export function startIntercept(state: InterceptState, geo: GeoState, ufoId: string): void {
   if (state.fighter.status !== 'на базі') {
-    throw new Error('Винищувач не на базі: перехоплення неможливе');
+    throw new Error('Перехоплювач не у вузлі «Рубіж»: перехоплення неможливе');
   }
   if (state.fighter.hp < FIGHTER_MAX_HP) {
-    throw new Error('Винищувач пошкоджений: спочатку ремонт');
+    throw new Error('Перехоплювач пошкоджений: спочатку ремонт');
   }
   const ufo = geo.ufos.find((u) => u.id === ufoId);
   if (!ufo || !ufo.detected || ufo.status !== 'летить') {
-    throw new Error('Перехоплення можливе лише на виявлений НЛО у повітрі');
+    throw new Error('Перехоплення можливе лише на виявлений зонд Розриву у повітрі');
   }
   state.fighter.status = 'погоня';
   state.fighter.targetId = ufoId;
@@ -288,10 +288,10 @@ function returnToBase(state: InterceptState, geo: GeoState): void {
 // стартувати нове перехоплення до завершення (EARS, ADR-0032).
 export function startRepair(state: InterceptState, geo: GeoState, econ: EconomyState): void {
   if (state.fighter.status !== 'на базі') {
-    throw new Error('Ремонт можливий лише на базі');
+    throw new Error('Ремонт можливий лише у вузлі «Рубіж»');
   }
   if (state.fighter.hp >= FIGHTER_MAX_HP) {
-    throw new Error('Винищувач не потребує ремонту');
+    throw new Error('Перехоплювач не потребує ремонту');
   }
   spend(econ, FIGHTER_REPAIR_COST); // П7.4: гроші + тіки, патерн лікарні (ADR-0021)
   state.fighter.status = 'ремонт';

@@ -121,7 +121,7 @@ describe('spend — витрати (примітив найму П4.3)', () => {
   it('грошей менше суми — помилка з українським текстом, баланс не змінюється', () => {
     const econ = createEconomy();
     spend(econ, 250); // лишається 50
-    expect(() => spend(econ, HIRE_PRICE)).toThrow('Недостатньо грошей: 50 < 100');
+    expect(() => spend(econ, HIRE_PRICE)).toThrow('Недостатньо кредитів: 50 < 100');
     expect(econ.money).toBe(50);
     expect(econ.log).toHaveLength(1);
   });

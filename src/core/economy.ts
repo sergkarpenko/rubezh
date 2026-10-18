@@ -112,7 +112,7 @@ export function spend(state: EconomyState, amount: number): void {
     throw new Error('Сума витрат має бути цілим числом більше 0');
   }
   if (state.money < amount) {
-    throw new Error('Недостатньо грошей: ' + state.money + ' < ' + amount);
+    throw new Error('Недостатньо кредитів: ' + state.money + ' < ' + amount);
   }
   state.money -= amount;
   state.log.push({ type: 'spend', amount });

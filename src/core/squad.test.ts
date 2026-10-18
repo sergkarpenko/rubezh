@@ -241,7 +241,7 @@ describe('squad: кадрування (П4.3, ADR-0021)', () => {
     const econ = createEconomy();
     spend(econ, 250); // лишається 50 < HIRE_PRICE
     const r = createRoster();
-    expect(() => hireSoldier(econ, r)).toThrow('Недостатньо грошей');
+    expect(() => hireSoldier(econ, r)).toThrow('Недостатньо кредитів');
     expect(r.soldiers).toHaveLength(6);
     expect(r.hired).toBe(6);
   });
@@ -261,7 +261,7 @@ describe('squad: кадрування (П4.3, ADR-0021)', () => {
     const fired = fireSoldier(r, 's2');
     expect(fired.id).toBe('s2');
     expect(r.soldiers.map((s) => s.id)).toEqual(['s1', 's3', 's4', 's5', 's6']);
-    expect(() => fireSoldier(r, 's2')).toThrow('Солдата немає в ростері');
+    expect(() => fireSoldier(r, 's2')).toThrow('Оперативника немає в ростері');
   });
 
   it('ветерани йдуть у бій першими: найм додає в кінець, missionSquad не чіпає новобранця', () => {
@@ -293,7 +293,7 @@ describe('squad: лікарня (П4.4, ADR-0021)', () => {
   it('усі поранені → помилка з українським текстом', () => {
     const r = createRoster(1);
     r.hospital['s1'] = 2;
-    expect(() => missionSquad(r)).toThrow('Немає боєготових солдатів');
+    expect(() => missionSquad(r)).toThrow('Немає боєготових оперативників');
   });
 
   it('hospitalTick: 1 HP = 2 тики, потім солдат знову боєготовий', () => {
