@@ -16,10 +16,12 @@
 
 import {
   FOG_EDGE,
+  GEO_GRID_COLOR,
   GRID_COLOR,
   NIGHT_BG,
   TRACER_MS,
   animT,
+  geoCellTone,
   hasVisibleNeighbor,
   moveAnimPos,
   terrainShade,
@@ -50,7 +52,7 @@ import {
 const HP_TEXT = '#0b0e15';
 const SELECT_RING = '#d7e4f7';
 const UFO_SOFT_ALPHA = 0.85;
-const RADAR_PULSE = '#4f8cff'; // колір пульсу радара — сімейство кольору бази
+const RADAR_PULSE = '#00e5ff'; // П12.7: пульс сенсорної сітки — неоновий ціан «Рубіжу» (ADR-0064)
 
 // --- П6.12 (ADR-0031): піксель-арт — offscreen-канваси ---
 
@@ -227,12 +229,49 @@ export function drawNightTerrain(ctx: CanvasRenderingContext2D, w: number, h: nu
   for (let j = 1; j < rows; j++) ctx.fillRect(0, j * cell - 1, w, 1);
 }
 
+// --- П12.7 (ADR-0064): терен геосцени — двотоновий із неоновою сіткою ---
+// Палітра і тон — чиста логіка src/core/render-core.ts (geoCellTone —
+// детермінований хеш, без RNG, ADR-0003); тут — лише Canvas-виклики.
+// Кадр еквівалентний малюванню з нуля (патерн renderGeo, урок П6.6):
+// повна заливка фону → двотонові клітинки на всю сторону GCELL → тонкі
+// неонові лінії сітки по межах (у геосцені немає проміжків між клітинками).
+// Чиста функція без DOM-стану; викликається з src/ui/panels.ts (renderGeo).
+export function drawGeoTerrain(ctx: CanvasRenderingContext2D, w: number, h: number, cell: number): void {
+  // фон на весь buffer — краї канви не блимають
+  ctx.fillStyle = NIGHT_BG;
+  ctx.fillRect(0, 0, w, h);
+  const cols = Math.ceil(w / cell);
+  const rows = Math.ceil(h / cell);
+  // двотоновий терен: тон клітинки — хеш координат, мозаїка стабільна між кадрами
+  for (let y = 0; y < rows; y++) {
+    for (let x = 0; x < cols; x++) {
+      ctx.fillStyle = geoCellTone(x, y);
+      ctx.fillRect(x * cell, y * cell, cell, cell);
+    }
+  }
+  // тонка неонова сітка: лінії по межах клітинок наскрізь (ціан «Рубіжу»)
+  ctx.strokeStyle = GEO_GRID_COLOR;
+  ctx.lineWidth = 1;
+  for (let x = 0; x <= cols; x++) {
+    ctx.beginPath();
+    ctx.moveTo(x * cell, 0);
+    ctx.lineTo(x * cell, rows * cell);
+    ctx.stroke();
+  }
+  for (let y = 0; y <= rows; y++) {
+    ctx.beginPath();
+    ctx.moveTo(0, y * cell);
+    ctx.lineTo(cols * cell, y * cell);
+    ctx.stroke();
+  }
+}
+
 // --- П6.14: UX прицілювання — обведення валідних цілей і шанс попадання ---
 
-// Обведення цілі — колір трасерів прибульців П6.13 (неон), плашка шансу — спалах.
-export const TARGET_FRAME_COLOR = 'rgba(255,154,82,0.9)';
+// Обведення цілі — бурштиновий неон П12.7 (ADR-0064), плашка шансу — бурштин.
+export const TARGET_FRAME_COLOR = 'rgba(255,179,71,0.9)';
 export const CHANCE_LABEL_BG = 'rgba(10,13,18,0.85)';
-export const CHANCE_LABEL_TEXT = '#ffe38a';
+export const CHANCE_LABEL_TEXT = '#ffcf5c';
 
 export interface TargetFrame {
   gx: number; // клітинка цілі
@@ -278,15 +317,17 @@ export function drawChanceLabel(ctx: CanvasRenderingContext2D, l: ChanceLabel): 
   ctx.fillText(l.text, x + 2, y + 2);
 }
 
-// П6.13: яскравіші неонові трасери/спалахи (нічна палітра — «дарк» терен,
-// неонові акценти): холодний блакитний у гравця, розпечений оранж у прибульців;
-// свічення — shadowBlur навколо лінії/кільця (обов'язково скидається).
-const TRACER_PLAYER = '#6fd3ff';
-const TRACER_ALIEN = '#ff9a52';
-const IMPACT = '#ffe38a';
+// П6.13 (П12.7, ADR-0064): неонові трасери/спалахи у гамі Рубіжу — холодний
+// ціан у гравця («Рубіж»), пурпур-маджента у демонів Розриву, спалах влучання
+// і маркери дозору — бурштин; свічення — shadowBlur навколо лінії/кільця
+// (обов'язково скидається). Глітч-акценти — лише в подієвих кадрах нижче,
+// статичний шар не зашумлюється (читабельність пріоритет, ADR-0064).
+const TRACER_PLAYER = '#00e5ff';
+const TRACER_RIFT = '#ff2e88';
+const IMPACT = '#ffb347';
 const TRACER_GLOW = 6; // радіус свічення трасера
 const IMPACT_GLOW = 8; // радіус свічення спалаху
-const OW_FLASH = '#d8b25a';
+const OW_FLASH = '#ffb347';
 
 // Один кадр анімаційного шару (малюється поверх статичного стану).
 // move — силует у проміжній позиції; tracer — куля летить від стрільця до цілі,
@@ -333,7 +374,7 @@ export function drawAnimFrame(ctx: CanvasRenderingContext2D, a: Anim, now: numbe
     if (t < share) {
       // фаза 1: куля летить — відрізок від стрільця до поточного «заголовка»
       const f = t / share;
-      const color = a.side === 'player' ? TRACER_PLAYER : TRACER_ALIEN;
+      const color = a.side === 'player' ? TRACER_PLAYER : TRACER_RIFT;
       ctx.strokeStyle = color;
       ctx.lineWidth = 2;
       ctx.shadowColor = color; // П6.13: неонове свічення трасера
