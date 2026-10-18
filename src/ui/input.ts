@@ -107,7 +107,7 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
 
     const sel = battle.selectedUnit();
     if (!sel) {
-      battle.binfo('Спершу клікніть свого солдата (синє коло).');
+      battle.binfo('Спершу клікніть свого оперативника (синє коло).');
       return;
     }
 
@@ -116,7 +116,7 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
     if (ui.itemMode === 'medkit') {
       const t = st.units.find((x) => x.alive && x.side === 'player' && x.pos.x === cell.x && x.pos.y === cell.y);
       if (!t) {
-        battle.binfo('Аптечка: клікніть пораненого союзника поруч (≤1 клітинка).');
+        battle.binfo('Гель: клікніть пораненого союзника поруч (≤1 клітинка).');
         return;
       }
       if (distance(sel.pos, t.pos) > 1) {
@@ -124,7 +124,7 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
         return;
       }
       if (t.hp >= t.maxHp) {
-        battle.binfo('Ціль не поранена — аптечка не витрачається.');
+        battle.binfo('Ціль не поранена — гель не витрачається.');
         return;
       }
       if (ui.tapCell === null || ui.tapCell.x !== cell.x || ui.tapCell.y !== cell.y) {
@@ -203,7 +203,7 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
         return;
       }
       if (!ui.fireMode) {
-        battle.binfo('Виберіть режим пострілу на тулбарі, потім клікніть видимого прибульця.');
+        battle.binfo('Виберіть режим пострілу на тулбарі, потім клікніть видимого демона Розриву.');
         return;
       }
       // П6.14: причини невалідної цілі — ті самі перевірки, що й assertCanFire ядра
@@ -354,7 +354,7 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
     if (deps.demoBusy()) return; // П6.16: триває демо — керування заблоковано
     const sel = battle.selectedUnit();
     if (!sel) {
-      battle.binfo('Спершу клікніть свого солдата.');
+      battle.binfo('Спершу клікніть свого оперативника.');
       return;
     }
     // П6.14: без достатку AP режим не зводиться — кнопка приглушена, гаряча
@@ -379,7 +379,7 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
     if (deps.demoBusy()) return; // П6.16: триває демо — керування заблоковано
     const sel = battle.selectedUnit();
     if (!sel) {
-      battle.binfo('Спершу клікніть свого солдата.');
+      battle.binfo('Спершу клікніть свого оперативника.');
       return;
     }
     // П6.14: та сама перевірка AP, що й у кнопки (підказка причини в binfo)
@@ -391,7 +391,7 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
       const prevLen = ui.mission.state.log.length;
       setOverwatch(ui.mission.state, sel.id);
       battle.enqueueAnims(prevLen); // П6.8: спалах дозору
-      battle.binfo(sel.name + ' у дозорі (реакційний вогонь у хід прибульців). AP ' + sel.ap + '/' + sel.maxAp + '.');
+      battle.binfo(sel.name + ' у дозорі (реакційний вогонь у хід демонів Розриву). AP ' + sel.ap + '/' + sel.maxAp + '.');
     } catch (e) {
       battle.binfo('✗ ' + (e as Error).message);
     }
@@ -412,7 +412,7 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
       const actions = aliensTurn(ui.mission.state); // синхронно, одним кліком (5.1.4)
       battle.enqueueAnims(prevLen); // П6.8: відтворення ходу прибульців поверх фінального стану
       if (!battle.checkOutcome()) {
-        battle.binfo('Хід прибульців відпрацьовано (' + actions + ' дій). Ваш хід — хід ' + ui.mission.state.turn + '.');
+        battle.binfo('Хід демонів Розриву відпрацьовано (' + actions + ' дій). Ваш хід — хід ' + ui.mission.state.turn + '.');
         deps.renderAll();
       }
     } catch (e) {
@@ -454,12 +454,12 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
     if (deps.demoBusy()) return; // П6.16: триває демо — керування заблоковано
     const sel = battle.selectedUnit();
     if (!sel) {
-      battle.binfo('Спершу клікніть свого солдата.');
+      battle.binfo('Спершу клікніть свого оперативника.');
       return;
     }
     const has = ui.mission.state.items?.[sel.id]?.[mode] ?? false;
     if (!has) {
-      battle.binfo((mode === 'medkit' ? 'Аптечки' : 'Гранати') + ' немає при ' + sel.name + ' (спорядьте в цеху на геосцені).');
+      battle.binfo((mode === 'medkit' ? 'Гелю' : 'Гранати') + ' немає при ' + sel.name + ' (спорядьте у «Кузні» на геосцені).');
       return;
     }
     const cost = mode === 'medkit' ? HEAL_AP_COST : GRENADE_AP_COST;
@@ -473,7 +473,7 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
     ui.aimCell = null;
     battle.binfo(
       mode === 'medkit'
-        ? 'Аптечка: тапніть пораненого союзника поруч (≤1, соба теж) — повторний тап у ціль — лікування (+' +
+        ? 'Гель: тапніть пораненого союзника поруч (≤1, соба теж) — повторний тап у ціль — лікування (+' +
             HEAL_AMOUNT +
             ' HP, ' +
             HEAL_AP_COST +

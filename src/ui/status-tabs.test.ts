@@ -13,12 +13,12 @@ import { createStatusTabs, DEFAULT_STATUS_TAB, STATUS_TAB_KEY, STATUS_TABS, type
 const SKELETON = `
 <aside id="status">
   <div id="status-tabs"></div>
-  <section class="panel" data-tab="base"><h2>Сканери (виявлені НЛО)</h2><div id="ufos"></div></section>
-  <section class="panel" data-tab="base"><h2>Винищувач</h2><div id="fighter"></div></section>
+  <section class="panel" data-tab="base"><h2>Сенсорна сітка (виявлені зонди)</h2><div id="ufos"></div></section>
+  <section class="panel" data-tab="base"><h2>Перехоплюач</h2><div id="fighter"></div></section>
   <section class="panel" data-tab="squad"><h2>Фінанси</h2><b id="money-card">300</b><button id="btn-hire">Найм</button></section>
   <section class="panel" data-tab="base"><h2>Дослідження</h2><div id="research"></div></section>
-  <section class="panel" data-tab="base"><h2>Цех</h2><div id="workshop"></div></section>
-  <section class="panel" data-tab="squad"><h2>Ростер загону</h2><div id="roster">6 солдатів</div></section>
+  <section class="panel" data-tab="base"><h2>Кузня</h2><div id="workshop"></div></section>
+  <section class="panel" data-tab="squad"><h2>Ростер загону</h2><div id="roster">6 оперативників</div></section>
   <section class="panel" data-tab="system"><h2>Збереження</h2><div id="save-panel"></div></section>
 </aside>`;
 
@@ -61,7 +61,7 @@ describe('П12.4: вкладки статус-колонки — перемик�
     }
     // «Загін»: фінанси і ростер видимі, «База»/«Система» приховані
     expect(visibleIds('squad')).toEqual(['Фінанси', 'Ростер загону']);
-    expect(visibleIds('base')).toEqual(['Сканери (виявлені НЛО)', 'Винищувач', 'Дослідження', 'Цех']);
+    expect(visibleIds('base')).toEqual(['Сенсорна сітка (виявлені зонди)', 'Перехоплюач', 'Дослідження', 'Кузня']);
     expect(visibleIds('system')).toEqual(['Збереження']);
     expect(
       panels()
@@ -78,10 +78,10 @@ describe('П12.4: вкладки статус-колонки — перемик�
       panels()
         .filter(visible)
         .map((p) => p.querySelector('h2')!.textContent)
-    ).toEqual(['Сканери (виявлені НЛО)', 'Винищувач', 'Дослідження', 'Цех']);
+    ).toEqual(['Сенсорна сітка (виявлені зонди)', 'Перехоплюач', 'Дослідження', 'Кузня']);
     expect(btn('status-tab-squad').classList.contains('active')).toBe(false);
     // приховані панелі зберігають контент (контракти DOM-тестів не послаблюються)
-    expect($('roster').textContent).toBe('6 солдатів');
+    expect($('roster').textContent).toBe('6 оперативників');
     btn('status-tab-system').click();
     expect(
       panels()

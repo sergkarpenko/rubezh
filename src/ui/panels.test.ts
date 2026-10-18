@@ -163,7 +163,7 @@ describe('renderUfos: сканери НЛО', () => {
     f.panels.renderUfos();
     const btn2 = document.querySelector('button.mission') as HTMLButtonElement;
     expect(btn2.disabled).toBe(true);
-    expect(btn2.title).toContain('Усі солдати поранені');
+    expect(btn2.title).toContain('Усі оперативники поранені');
     btn2.onclick = null;
   });
 
@@ -277,7 +277,7 @@ describe('renderRoster: ростер і чип боєготових (ADR-0027)',
     f.panels.renderRoster();
     expect(document.getElementById('ready')!.textContent).toBe('5/6');
     const box = document.getElementById('roster')!;
-    expect(box.textContent).toContain('6 солдатів (5 боєготових)');
+    expect(box.textContent).toContain('6 оперативників (5 боєготових)');
     expect(box.innerHTML).toContain('лікарня: 3 тик(и)');
     expect(box.innerHTML).toContain('#ff9c9c'); // hpColor(4, 10) — поранений
   });
@@ -288,10 +288,10 @@ describe('renderRoster: ростер і чип боєготових (ADR-0027)',
     f.party.econ.money = 300;
     f.panels.renderRoster();
     expect(document.getElementById('roster')!.textContent).toContain('Загін втрачено');
-    expect(document.getElementById('roster')!.textContent).toContain('Найм доступний');
+    expect(document.getElementById('roster')!.textContent).toContain('Вербування доступне');
     f.party.econ.money = 10;
     f.panels.renderRoster();
-    expect(document.getElementById('roster')!.textContent).toContain('Грошей на найм немає');
+    expect(document.getElementById('roster')!.textContent).toContain('Кредитів на вербування немає');
   });
 });
 
@@ -411,7 +411,7 @@ describe('renderRoster: екіпірування (П11.6, ADR-0058)', () => {
     expect(s.firingAccuracy).toBeCloseTo(accBefore + 0.05, 10);
     f.panels.renderRoster();
     const medkitBtn = document.getElementById('btn-equip-' + s.id + '-medkit') as HTMLButtonElement;
-    expect(medkitBtn.textContent).toContain('гель ✓'); // уже при солдатові
+    expect(medkitBtn.textContent).toContain('гель ✓'); // уже при оперативникові
     expect(medkitBtn.disabled).toBe(false); // зняти можна
     (document.getElementById('btn-equip-' + s.id + '-medkit') as HTMLButtonElement).click();
     expect(f.party.workshop.store['medkit']).toBe(2); // 1 + повернуто
