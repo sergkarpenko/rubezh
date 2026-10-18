@@ -51,17 +51,21 @@ describe('П9.1: екран «Як грати» — контент з конст
     expect(text).toContain('Зонди Розриву');
     expect(text).toContain('Перехоплення');
     expect(text).toContain('Місії');
-    // Мета кампанії (ADR-0033): 30 діб + ваги рахунку (ветерани 50 / гроші 0.25)
+    // Мета кампанії (ADR-0033): 30 діб + ваги рахунку (ветерани 50 / кредити 0.25 —
+    // глосарій П12.6: «кредити», не «гроші»)
     expect(text).toContain('30 діб');
     expect(text).toContain('50 за живого ветерана');
-    expect(text).toContain('0.25 за кожну грошову одиницю');
+    expect(text).toContain('0.25 за кожен кредит');
     // Числа економіки (П8.6): дотація 75, премії 110/170
     expect(text).toContain('дотація 75/добу');
     expect(text).toContain('110 (розвідник) / 170 (збирач)');
-    // Керування: тап-тап + гарячі клавіші 1/2/3/O/E/Esc
+    // Керування: тулбар дій (П13.2) + тап-тап + гарячі клавіші 1/2/3/O/M/G/E/Esc (урок П11.9)
+    expect(text).toContain('плитки тулбара збоку');
     expect(text).toContain('повторний тап у ту саму клітинку — хід');
     expect(text).toContain('1');
     expect(text).toContain('O');
+    expect(text).toContain('гель');
+    expect(text).toContain('граната');
     expect(text).toContain('E');
     expect(text).toContain('Esc');
   });
