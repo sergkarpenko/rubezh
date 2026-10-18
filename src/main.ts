@@ -51,6 +51,9 @@ import { campaignTick, type DifficultyPreset } from './core/campaign';
 // тут — лише зв'язування з партією, панеллю збереження і «Як грати».
 import { createScreens, type Screens } from './ui/screens';
 import { createSettings } from './ui/settings';
+// П12.4 (ADR-0065): вкладки статус-колонки «Загін»/«База»/«Система» —
+// модуль src/ui/status-tabs.ts (панелі в DOM, персист поза сейвом).
+import { createStatusTabs } from './ui/status-tabs';
 
 // пR.2 (ADR-0037): масштаб сітки (GCELL/BCELL) — спільний модуль src/ui/grid.ts.
 
@@ -427,6 +430,12 @@ if (typeof document !== 'undefined') {
       journal('✗ ' + (e as Error).message, 'lose', 'econ');
     }
   };
+  // П12.4 (ADR-0065): вкладки статус-колонки «Загін»/«База»/«Система» —
+  // панелі лишаються в DOM (renderAll оновлює їх без змін), активна вкладка
+  // запам'ятовується в localStorage поза сейвом (ADR-0026, формат
+  // rubezh.settings.*), помилки сховища — тихо. Приглушення в бою — чинний
+  // механізм #status.dimmed (П6.3): вкладки живуть у колонці.
+  createStatusTabs();
   // П13.2 (ADR-0066): бойові дії — з вертикального тулбара збоку (плитки і
   // іконки будує src/ui/toolbar.ts; стани/причини блокування — renderBattle).
   createToolbar(el('btoolbar'), {
