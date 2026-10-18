@@ -203,7 +203,7 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
         return;
       }
       if (!ui.fireMode) {
-        battle.binfo('Виберіть режим пострілу (кнопка зліва), потім клікніть видимого прибульця.');
+        battle.binfo('Виберіть режим пострілу на тулбарі, потім клікніть видимого прибульця.');
         return;
       }
       // П6.14: причини невалідної цілі — ті самі перевірки, що й assertCanFire ядра

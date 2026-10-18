@@ -9,6 +9,7 @@ import { createGame, makeUnit, type GameState, type Unit } from '../core/combat'
 import { createParty, type Party } from '../core/save';
 import { initPixelSprites } from '../render';
 import { createBattleUI, validFireTargets, validHealTargets, type BattleDeps, type BattleUIState } from './battle';
+import { createToolbar } from './toolbar';
 
 // Піксельний рушій (ADR-0031): тестовий мок фабрики offscreen-канвасів —
 // той самий патерн, що й у main.ui.test.ts (jsdom без пакета canvas).
@@ -36,16 +37,8 @@ function setupDom(): void {
       <div id="bresult"></div>
       <canvas id="battle" width="520" height="520"></canvas>
       <div id="binfo">—</div>
-      <div id="bcontrols">
-        <button id="btn-snap">Швидкий</button>
-        <button id="btn-aimed">Прицільний</button>
-        <button id="btn-auto">Черга</button>
-        <button id="btn-ow">Дозор</button>
-      <button id="btn-medkit">Лікування</button>
-      <button id="btn-grenade">Граната</button>
-        <button id="btn-end">Кінець ходу</button>
-        <button id="btn-demo">Демо-бій</button>
-      </div>
+      <!-- П13.2 (ADR-0066): плитки дій генерує createToolbar (як в застосунку) -->
+      <div id="btoolbar"></div>
     </section>`;
   const proto = HTMLCanvasElement.prototype as unknown as { getContext: () => CanvasRenderingContext2D };
   proto.getContext = () => noopCtx;
@@ -106,6 +99,9 @@ beforeEach(() => {
     height: h,
     getContext: () => noopCtx,
   }));
+  // П13.2 (ADR-0066): плитки дій — з тулбара (як в застосунку; у бойових
+  // тестах кліки не потрібні — лише стани/тултіпи).
+  createToolbar(document.getElementById('btoolbar')!, { onAction: () => {} });
 });
 
 describe('validFireTargets: валідні цілі зведеного режиму пострілу (П6.14)', () => {
@@ -283,5 +279,45 @@ describe('renderBattle: кнопки витратників (П11.6, ADR-0058)',
     f.battle.renderBattle();
     expect(med.classList.contains('armed')).toBe(true);
     expect(gren.classList.contains('armed')).toBe(false);
+  });
+});
+
+// П13.2 (ADR-0066): тулбар бойових дій — критерії кроку: причини блокування
+// дій на плитках (П6.14) та іконки без повторного малювання (idle → 0 перерисовок).
+describe('тулбар: причини блокування дій (П13.2, критерій 1)', () => {
+  it('без AP — постріл з причиною; хід прибульців — приглушено; зведення — .armed (без вибору — див. тест витратників вище)', () => {
+    const f = makeFixture();
+    f.battle.launch(firstTarget(f));
+    const s = f.ui.mission!.state.units.find((u) => u.side === 'player')!;
+    f.ui.selectedId = s.id;
+    s.ap = 0;
+    f.battle.renderBattle();
+    const snap = document.getElementById('btn-snap') as HTMLButtonElement;
+    expect(snap.disabled).toBe(true); // AP не вистачає
+    expect(snap.title).toContain('не вистачає AP (потрібно ' + s.weapon.modes.snap.apCost + ')');
+    s.ap = s.maxAp;
+    f.ui.fireMode = 'snap';
+    f.battle.renderBattle();
+    expect(snap.classList.contains('armed')).toBe(true); // зведений режим — плитка .armed
+    f.ui.mission!.state.activeSide = 'alien';
+    f.battle.renderBattle();
+    expect((document.getElementById('btn-end') as HTMLButtonElement).disabled).toBe(true); // хід прибульців
+    expect(snap.disabled).toBe(true);
+  });
+
+  it('renderBattle не перемальовує іконки плиток (idle → 0 перерисовок, ADR-0029)', () => {
+    let iconCtxCalls = 0;
+    for (const icon of [...document.querySelectorAll<HTMLCanvasElement>('#btoolbar canvas')]) {
+      const orig = icon.getContext.bind(icon);
+      icon.getContext = ((type: string) => {
+        iconCtxCalls++;
+        return orig(type as '2d');
+      }) as HTMLCanvasElement['getContext'];
+    }
+    const f = makeFixture();
+    f.battle.launch(firstTarget(f));
+    f.battle.renderBattle(); // стан плиток — DOM, іконки не чіпаються
+    f.battle.renderBattle();
+    expect(iconCtxCalls).toBe(0);
   });
 });

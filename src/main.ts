@@ -33,6 +33,8 @@ import { createPanels } from './ui/panels';
 import { GCELL } from './ui/grid';
 // пR.2 (ADR-0037): бойовище і флоу бою — модуль src/ui/battle.ts.
 import { createBattleUI, type BattleUIState } from './ui/battle';
+// П13.2 (ADR-0066): вертикальний тулбар бойових дій збоку — модуль src/ui/toolbar.ts.
+import { createToolbar } from './ui/toolbar';
 import { createInput } from './ui/input';
 // П6.7 (ADR-0029): векторні спрайти — чисті функції малювання шару відображення.
 // П6.8 (ADR-0029): анімаційний рушій — черга + rAF лише під час активних анімацій.
@@ -368,15 +370,18 @@ if (typeof document !== 'undefined') {
       journal('✗ ' + (e as Error).message, 'lose', 'econ');
     }
   };
-  el('btn-snap').onclick = () => input.armFire('snap');
-  el('btn-aimed').onclick = () => input.armFire('aimed');
-  el('btn-auto').onclick = () => input.armFire('auto');
-  el('btn-ow').onclick = input.armOverwatch;
-  // П11.6 (ADR-0058): витратники в бою — кнопки і гарячі клавіші (M/G)
-  el('btn-medkit').onclick = input.armMedkit;
-  el('btn-grenade').onclick = input.armGrenade;
-  el('btn-end').onclick = input.endPlayerTurn;
-  el('btn-demo').onclick = () => demo.battle();
+  // П13.2 (ADR-0066): бойові дії — з вертикального тулбара збоку (плитки і
+  // іконки будує src/ui/toolbar.ts; стани/причини блокування — renderBattle).
+  createToolbar(el('btoolbar'), {
+    onAction: (id) => {
+      if (id === 'snap' || id === 'aimed' || id === 'auto') input.armFire(id);
+      else if (id === 'ow') input.armOverwatch();
+      else if (id === 'medkit') input.armMedkit();
+      else if (id === 'grenade') input.armGrenade();
+      else if (id === 'end') input.endPlayerTurn();
+      else if (id === 'demo') demo.battle();
+    },
+  });
   // ADR-0027: фільтри-вкладки єдиного журналу
   for (const b of document.querySelectorAll<HTMLButtonElement>('#log-tabs button')) {
     b.onclick = () => journalUI.setFilter(b.dataset.filter as LogFilter);
