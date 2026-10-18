@@ -6,7 +6,10 @@
 // підказки причин, вимкненість у бою (прецедент збереження, критерій 1).
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createParty, type Party } from '../core/save';
-import { BASE_LAB_SLOTS, SCIENTIST_SALARY, HIRE_SCIENTIST_PRICE } from '../core/research';
+import { BASE_LAB_SLOTS, MAX_LAB_SLOTS, SCIENTIST_SALARY, HIRE_SCIENTIST_PRICE } from '../core/research';
+import { GRENADE_DAMAGE, HEAL_AMOUNT, HIT_CHANCE_CAP } from '../core/combat';
+import { GUN_MODULE_DAMAGE } from '../core/intercept';
+import { ARMOR_MAX_HP_BONUS, OPTICS_ACCURACY_BONUS } from '../core/workshop';
 import { createResearchPanel, type ResearchPanelDeps } from './research-panel';
 import { el } from './dom';
 
@@ -125,6 +128,54 @@ describe('ResearchPanel: каталог проєктів', () => {
     const start = el<HTMLButtonElement>('btn-start-0');
     expect(start.disabled).toBe(true);
     expect(start.title).toContain('недостатньо коштів');
+  });
+});
+
+describe('ResearchPanel: критерій 1 — числові ефекти ДО старту (П12.5, ADR-0065)', () => {
+  // Рядок картки протоколу за назвою.
+  const row = (name: string): HTMLElement => [...document.querySelectorAll('#research .ufo')].find((r) => r.textContent!.includes(name))!;
+
+  it('кожен протокол показує числовий ефект до старту — числа з констант каталогів', () => {
+    const panel = createResearchPanel(makeDeps());
+    panel.render();
+    const s = party.roster.soldiers[0]!;
+    // «легка броня»: +2 макс. HP (10 → 12) — «зараз» від першого солдата
+    const armor = row('легка броня').textContent!;
+    expect(armor).toContain('+' + ARMOR_MAX_HP_BONUS + ' макс. HP');
+    expect(armor).toContain('(' + s.maxHp + ' → ' + (s.maxHp + ARMOR_MAX_HP_BONUS) + ')');
+    // «оптичний приціл»: +5% точності (60% → 65%, кап 95%)
+    const optics = row('оптичний приціл').textContent!;
+    expect(optics).toContain('+' + OPTICS_ACCURACY_BONUS * 100 + '% точності');
+    expect(optics).toContain('(' + Math.round(s.firingAccuracy * 100) + '% → ');
+    expect(optics).toContain('кап ' + HIT_CHANCE_CAP * 100 + '%');
+    // «аптечка»: +3 HP з AP-вартістю (combat.ts)
+    expect(row('аптечка').textContent).toContain('+' + HEAL_AMOUNT + ' HP');
+    // «осколкова граната»: пошкодження 3–5, уражає і своїх
+    const grenade = row('осколкова граната').textContent!;
+    expect(grenade).toContain(GRENADE_DAMAGE[0] + '–' + GRENADE_DAMAGE[1]);
+    expect(grenade).toContain('уражає і своїх');
+    // «розширення лабораторії»: слоти 2 → 3 (константи research.ts)
+    expect(row('розширення лабораторії').textContent).toContain('(' + BASE_LAB_SLOTS + ' → ' + MAX_LAB_SLOTS + ')');
+    // «гарматний модуль»: +2 пошкодження за раунд (intercept.ts)
+    expect(row('гарматний модуль').textContent).toContain('+' + GUN_MODULE_DAMAGE + ' пошкодження за раунд');
+  });
+
+  it('ефект видимий і в картках активного/завершеного протоколу (до наступної дії)', () => {
+    const panel = createResearchPanel(makeDeps());
+    panel.render();
+    (el('btn-start-0') as HTMLButtonElement).click(); // «легка броня» активна
+    party.research.completed.push('аптечка'); // «аптечка» завершена
+    panel.render();
+    expect(row('легка броня').textContent).toContain('макс. HP');
+    expect(row('аптечка').textContent).toContain('+' + HEAL_AMOUNT + ' HP');
+  });
+
+  it('без ростеру покращення показують ефект без «зараз → стане»', () => {
+    party.roster.soldiers = [];
+    const panel = createResearchPanel(makeDeps());
+    panel.render();
+    expect(row('легка броня').textContent).toContain('+' + ARMOR_MAX_HP_BONUS + ' макс. HP');
+    expect(row('легка броня').textContent).not.toContain('→');
   });
 });
 

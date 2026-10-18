@@ -21,6 +21,7 @@ import { hirePrice } from '../core/economy';
 import { equipItem, unequipItem, type SoldierEquipment, type SoldierItemId } from '../core/workshop';
 import { readySoldiers } from '../core/squad';
 import type { Party } from '../core/save';
+import { itemEffect } from './effects';
 import { drawAnimFrame, drawBaseSprite, drawFighterSprite, drawUfoSprite } from '../render';
 import type { Anim } from '../core/render-core';
 import { el } from './dom';
@@ -338,7 +339,9 @@ export function createPanels(deps: PanelsDeps): Panels {
       box.appendChild(row);
       // П11.6 (ADR-0058): екіпірування в картці солдата — кнопки «спорядити»
       // зі складу / «зняти» назад на склад; лише на геосцені (прецедент
-      // збереження). Предмет на солдатові — мітка ✓.
+      // збереження). Предмет на солдатові — мітка ✓. П12.5 (ADR-0065):
+      // підказка спорядження несе числовий ефект ДО дії — «зараз → стане»
+      // цього солдата, числа з констант (хелпер effects.ts).
       const eq = party.workshop.equipped[s.id];
       const eqRow = document.createElement('div');
       eqRow.className = 'meta';
@@ -352,7 +355,7 @@ export function createPanels(deps: PanelsDeps): Panels {
         b.title = on
           ? 'Зняти «' + itemId + '» — назад на склад'
           : party.workshop.store[itemId] > 0
-            ? 'Спорядити «' + itemId + '» зі складу'
+            ? 'Спорядити «' + itemId + '» зі складу — ' + itemEffect(itemId, s)
             : '«' + itemId + '» немає на складі — замовте в цеху';
         b.onclick = () => {
           try {

@@ -7,6 +7,7 @@
 // («П13.2»): темно-сірі плитки, неонові акценти #00E5FF/#FF2E88, білі силуети.
 
 import type { PixelSprite } from '../core/sprites';
+import { GRENADE_AP_COST, GRENADE_DAMAGE, GRENADE_RANGE, HEAL_AP_COST, HEAL_AMOUNT, OVERWATCH_AP_COST, RIFLE } from '../core/combat';
 
 // Ідентифікатори дій тулбара — чинні дії бою (src/ui/battle.ts + input/demo);
 // «Авто»/«Стоп» — окремий крок П13.3 (ADR-0067), тут їх немає.
@@ -184,25 +185,48 @@ export interface ToolbarAction {
   icon: PixelSprite;
 }
 
+// П12.5 (ADR-0065): підказки режимів пострілу — числа ТІЛЬКИ з констант
+// RIFLE (combat.ts, одне місце правди): AP, множник точності, кількість куль.
+function fireModeHint(mode: 'snap' | 'aimed' | 'auto', key: string): string {
+  const m = RIFLE.modes[mode];
+  return m.apCost + ' AP · ×' + m.accuracyMod + ' · ' + m.shots + (m.shots === 1 ? ' куля' : ' кулі') + ' · клавіша ' + key;
+}
+
 // Перелік дій — за чинними діями бою (src/ui/battle.ts): режими пострілу,
 // дозор, витратники (П11.6, ADR-0058), кінець ходу, демо-бій (до П13.3).
+// П12.5 (ADR-0065): усі числа механіки — з констант каталогів (combat.ts),
+// текст не дублює числа руками.
 export const TOOLBAR_ACTIONS: readonly ToolbarAction[] = [
-  { id: 'snap', btnId: 'btn-snap', label: 'Швидкий', hint: '3 AP · ×0.8 · 1 куля · клавіша 1', icon: ICON_SNAP },
-  { id: 'aimed', btnId: 'btn-aimed', label: 'Прицільний', hint: '5 AP · ×1.15 · 1 куля · клавіша 2', icon: ICON_AIMED },
-  { id: 'auto', btnId: 'btn-auto', label: 'Черга', hint: '4 AP · ×0.5 · 3 кулі · клавіша 3', icon: ICON_AUTO },
-  { id: 'ow', btnId: 'btn-ow', label: 'Дозор', hint: '3 AP · реакційний вогонь у хід прибульців · клавіша O', icon: ICON_OW },
+  { id: 'snap', btnId: 'btn-snap', label: 'Швидкий', hint: fireModeHint('snap', '1'), icon: ICON_SNAP },
+  { id: 'aimed', btnId: 'btn-aimed', label: 'Прицільний', hint: fireModeHint('aimed', '2'), icon: ICON_AIMED },
+  { id: 'auto', btnId: 'btn-auto', label: 'Черга', hint: fireModeHint('auto', '3'), icon: ICON_AUTO },
+  {
+    id: 'ow',
+    btnId: 'btn-ow',
+    label: 'Дозор',
+    hint: OVERWATCH_AP_COST + ' AP · реакційний вогонь у хід прибульців · клавіша O',
+    icon: ICON_OW,
+  },
   {
     id: 'medkit',
     btnId: 'btn-medkit',
     label: 'Лікування',
-    hint: '4 AP · +3 HP пораненому союзнику поруч (≤1) · клавіша M',
+    hint: HEAL_AP_COST + ' AP · +' + HEAL_AMOUNT + ' HP пораненому союзнику поруч (≤1) · клавіша M',
     icon: ICON_MEDKIT,
   },
   {
     id: 'grenade',
     btnId: 'btn-grenade',
     label: 'Граната',
-    hint: '4 AP · граната, зона епіцентр + хрест (≤6) · клавіша G',
+    hint:
+      GRENADE_AP_COST +
+      ' AP · пошкодження ' +
+      GRENADE_DAMAGE[0] +
+      '–' +
+      GRENADE_DAMAGE[1] +
+      ', зона епіцентр + хрест (≤' +
+      GRENADE_RANGE +
+      '), уражає і своїх · клавіша G',
     icon: ICON_GRENADE,
   },
   { id: 'end', btnId: 'btn-end', label: 'Кінець', hint: 'клавіша E', icon: ICON_END },

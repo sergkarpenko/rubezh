@@ -6,7 +6,9 @@
 // активним замовленням, склад-лічильники, вимкненість у бою (критерій 1).
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createParty, type Party } from '../core/save';
-import { ITEM_IDS, WORKSHOP_CATALOG, workshopTick } from '../core/workshop';
+import { ITEM_IDS, WORKSHOP_CATALOG, ARMOR_MAX_HP_BONUS, OPTICS_ACCURACY_BONUS, workshopTick } from '../core/workshop';
+import { GRENADE_DAMAGE, GRENADE_RANGE, HEAL_AMOUNT, HIT_CHANCE_CAP } from '../core/combat';
+import { GUN_MODULE_DAMAGE } from '../core/intercept';
 import { createWorkshopPanel, type WorkshopPanelDeps } from './workshop-panel';
 import { el } from './dom';
 
@@ -98,6 +100,43 @@ describe('WorkshopPanel: замовлення, черга і склад', () => 
     panel.render();
     const text = el('workshop').textContent!;
     for (const id of ITEM_IDS) expect(text).toContain(id + ' 0');
+  });
+});
+
+describe('WorkshopPanel: критерій 1 — числові ефекти ДО замовлення (П12.5, ADR-0065)', () => {
+  // Рядок картки предмета за назвою.
+  const row = (name: string): HTMLElement => [...document.querySelectorAll('#workshop .ufo')].find((r) => r.textContent!.includes(name))!;
+
+  it('кожен предмет показує числовий ефект до замовлення — числа з констант каталогів', () => {
+    const panel = createWorkshopPanel(makeDeps());
+    panel.render();
+    const s = party.roster.soldiers[0]!;
+    // «легка броня»: +2 макс. HP (10 → 12)
+    const armor = row('легка броня').textContent!;
+    expect(armor).toContain('+' + ARMOR_MAX_HP_BONUS + ' макс. HP');
+    expect(armor).toContain('(' + s.maxHp + ' → ' + (s.maxHp + ARMOR_MAX_HP_BONUS) + ')');
+    // «оптичний приціл»: +5% точності (кап 95%)
+    expect(row('оптичний приціл').textContent).toContain('+' + OPTICS_ACCURACY_BONUS * 100 + '% точності');
+    expect(row('оптичний приціл').textContent).toContain('кап ' + HIT_CHANCE_CAP * 100 + '%');
+    // «аптечка»: механіка витратника — +3 HP, по одній на місію
+    const medkit = row('аптечка').textContent!;
+    expect(medkit).toContain('+' + HEAL_AMOUNT + ' HP');
+    expect(medkit).toContain('по одній на місію');
+    // «осколкова граната»: пошкодження 3–5, дальність, уражає і своїх, по одній на місію
+    const grenade = row('осколкова граната').textContent!;
+    expect(grenade).toContain('пошкодження ' + GRENADE_DAMAGE[0] + '–' + GRENADE_DAMAGE[1]);
+    expect(grenade).toContain('дальність ' + GRENADE_RANGE);
+    expect(grenade).toContain('уражає і своїх');
+    expect(grenade).toContain('по одній на місію');
+    // «гарматний модуль»: +2 пошкодження за раунд повітряного бою
+    expect(row('гарматний модуль').textContent).toContain('+' + GUN_MODULE_DAMAGE + ' пошкодження за раунд повітряного бою');
+  });
+
+  it('ефект видимий до ПЕРШОГО замовлення (гейт дослідження вимкнений — ефект усе одно показано)', () => {
+    const panel = createWorkshopPanel(makeDeps());
+    panel.render();
+    expect(el<HTMLButtonElement>('btn-order-аптечка').disabled).toBe(true); // ще не досліджено
+    expect(row('аптечка').textContent).toContain('+' + HEAL_AMOUNT + ' HP'); // критерій: до дії
   });
 });
 

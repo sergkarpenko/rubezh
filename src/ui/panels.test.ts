@@ -7,6 +7,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { advanceTime, detectedUfos, geoClock, missionTargets } from '../core/geo';
 import { FIGHTER_MAX_HP, startIntercept } from '../core/intercept';
 import { createParty, type Party } from '../core/save';
+import { ARMOR_MAX_HP_BONUS, OPTICS_ACCURACY_BONUS } from '../core/workshop';
+import { GRENADE_DAMAGE, GRENADE_RANGE, HEAL_AMOUNT, HIT_CHANCE_CAP } from '../core/combat';
 import { initPixelSprites } from '../render';
 import { createPanels, hpColor, type PanelsDeps } from './panels';
 
@@ -337,6 +339,31 @@ describe('renderRoster: екіпірування (П11.6, ADR-0058)', () => {
     expect(armor && optics && medkit && grenade).toBeTruthy();
     expect(armor.disabled).toBe(true); // склад порожній
     expect(armor.title).toContain('немає на складі');
+  });
+
+  // П12.5 (ADR-0065): підказка спорядження несе числовий ефект ДО дії —
+  // «зараз → стане» цього солдата; числа з констант (не дублі руками).
+  it('критерій 1 (П12.5): підказки спорядження показують числовий ефект до дії', () => {
+    const f = makeFixture();
+    const s = f.party.roster.soldiers[0]!;
+    f.party.workshop.store['легка броня'] = 1;
+    f.party.workshop.store['оптичний приціл'] = 1;
+    f.party.workshop.store['аптечка'] = 1;
+    f.party.workshop.store['осколкова граната'] = 1;
+    f.panels.renderRoster();
+    const armor = document.getElementById('btn-equip-' + s.id + '-armor') as HTMLButtonElement;
+    expect(armor.title).toContain('+' + ARMOR_MAX_HP_BONUS + ' макс. HP (' + s.maxHp + ' → ' + (s.maxHp + ARMOR_MAX_HP_BONUS) + ')');
+    const optics = document.getElementById('btn-equip-' + s.id + '-optics') as HTMLButtonElement;
+    expect(optics.title).toContain('+' + OPTICS_ACCURACY_BONUS * 100 + '% точності');
+    expect(optics.title).toContain('(' + Math.round(s.firingAccuracy * 100) + '% → ');
+    expect(optics.title).toContain('кап ' + HIT_CHANCE_CAP * 100 + '%');
+    const medkit = document.getElementById('btn-equip-' + s.id + '-medkit') as HTMLButtonElement;
+    expect(medkit.title).toContain('+' + HEAL_AMOUNT + ' HP');
+    expect(medkit.title).toContain('по одній на місію');
+    const grenade = document.getElementById('btn-equip-' + s.id + '-grenade') as HTMLButtonElement;
+    expect(grenade.title).toContain(GRENADE_DAMAGE[0] + '–' + GRENADE_DAMAGE[1]);
+    expect(grenade.title).toContain('дальність ' + GRENADE_RANGE);
+    expect(grenade.title).toContain('уражає і своїх');
   });
 
   it('спорядження брони зі складу — +2 maxHp/hp, предмет ✓, склад порожнішає', () => {
