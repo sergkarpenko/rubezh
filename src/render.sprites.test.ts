@@ -31,13 +31,24 @@ import {
   type MakeOffscreen,
 } from './render';
 import { GEO_GRID_COLOR, NIGHT_BG, cellHash, geoCellTone, type TerrainCell } from './core/render-core';
-import { SPRITE_SCALE, type UnitSprite } from './core/sprites';
+import {
+  ALIEN_STAND,
+  BASE_SPRITE,
+  FIGHTER_SPRITE,
+  OW_BOLT,
+  SOLDIER_STAND,
+  SPRITE_SCALE,
+  UFO_LANDED_SPRITE,
+  UFO_SCOUT_SPRITE,
+  type UnitSprite,
+} from './core/sprites';
+import { BCELL, GCELL } from './ui/grid';
 
-// Клітиночка прев'ю: BCELL = 26, центр (13, 13), радіус силуету 8 (як у renderBattle).
-const CX = 13;
-const CY = 13;
+// Клітиночка прев'ю: BCELL = 36 (П13.5, ADR-0068), центр (18, 18), радіус силуету 8 (як у renderBattle).
+const CX = 18;
+const CY = 18;
 const R = 8;
-const CELL = 26;
+const CELL = 36;
 
 type Call = { m: string; args: unknown[] };
 
@@ -162,8 +173,38 @@ function extent(calls: Call[]): { minX: number; maxX: number; minY: number; maxY
   return { minX: Math.min(...xs), maxX: Math.max(...xs), minY: Math.min(...ys), maxY: Math.max(...ys) };
 }
 
+describe('П13.5 (ADR-0068): масштаб піксель-арту — матриці зафіксовані тестами', () => {
+  // Критерій 1 кроку: механізм ADR-0031 без змін (кеш, nearest-neighbor, цілий
+  // кратний масштаб — тести вище), масштаб ТІЛЬКИ в матрицях/кроці сітки.
+  const rect = (rows: readonly string[]): boolean => new Set(rows.map((r) => r.length)).size === 1;
+
+  it('матриці прямокутні: юніти 16×16, вузол 16×16, НЛО/перехоплюач 12×12, дозор 5×5', () => {
+    for (const [def, px] of [
+      [SOLDIER_STAND, 16],
+      [ALIEN_STAND, 16],
+      [BASE_SPRITE, 16],
+      [UFO_LANDED_SPRITE, 12],
+      [UFO_SCOUT_SPRITE, 12],
+      [FIGHTER_SPRITE, 12],
+      [OW_BOLT, 5],
+    ] as const) {
+      expect(def.rows.length).toBe(px);
+      expect(def.rows[0]!.length).toBe(px);
+      expect(rect(def.rows)).toBe(true); // усі рядки рівні (урок растра: довжина за rows[0])
+    }
+  });
+
+  it('ціле кратне масштабування в клітинках: юніт 32px ≤ BCELL 36, гео 24/32px ≤ GCELL 44', () => {
+    expect(SPRITE_SCALE).toBe(2); // ціле кратне (ADR-0031)
+    expect(SOLDIER_STAND.rows.length * SPRITE_SCALE).toBeLessThanOrEqual(BCELL);
+    expect(BASE_SPRITE.rows.length * SPRITE_SCALE).toBeLessThanOrEqual(GCELL);
+    expect(UFO_SCOUT_SPRITE.rows.length * SPRITE_SCALE).toBeLessThanOrEqual(GCELL);
+    expect(FIGHTER_SPRITE.rows.length * SPRITE_SCALE).toBeLessThanOrEqual(GCELL);
+  });
+});
+
 describe('спрайти юнітів: межі клітинки (урок П6.6)', () => {
-  it('солдат з усіма маркерами не виходить за клітинку 26px', () => {
+  it('солдат з усіма маркерами не виходить за клітинку 36px (П13.5)', () => {
     const { ctx, calls } = mockCtx();
     drawSoldierSprite(ctx, soldier({ selected: true, overwatch: true }));
     const e = extent(calls);
@@ -173,7 +214,7 @@ describe('спрайти юнітів: межі клітинки (урок П6.6
     expect(e.maxY).toBeLessThanOrEqual(CELL);
   });
 
-  it('прибульчик з усіма маркерами не виходить за клітинку 26px', () => {
+  it('прибульчик з усіма маркерами не виходить за клітинку 36px (П13.5)', () => {
     const { ctx, calls } = mockCtx();
     drawAlienSprite(ctx, alien({ selected: true, overwatch: true }));
     const e = extent(calls);
@@ -185,15 +226,15 @@ describe('спрайти юнітів: межі клітинки (урок П6.6
 });
 
 describe('піксель-арт: offscreen-канваси, nearest-neighbor, кеш (П6.12, ADR-0031)', () => {
-  it('drawImage з offscreen-канваса: цілий масштаб 2× (24px у клітинці 26), згладжування вимкнене', () => {
+  it('drawImage з offscreen-канваса: цілий масштаб 2× (32px у клітинці 36 — П13.5), згладжування вимкнене', () => {
     const s = animCtx(); // Proxy: записує і виклики, і присвоєння властивостей
     drawSoldierSprite(s.ctx, soldier());
     const d = s.calls.find((c) => c.m === 'drawImage');
     expect(d).toBeDefined();
-    expect((d!.args as number[])[1]).toBe(CX - (12 * SPRITE_SCALE) / 2); // Math.round(13 - 12) = 1
-    expect((d!.args as number[])[2]).toBe(CY - (12 * SPRITE_SCALE) / 2);
-    expect((d!.args as number[])[3]).toBe(12 * SPRITE_SCALE);
-    expect((d!.args as number[])[4]).toBe(12 * SPRITE_SCALE);
+    expect((d!.args as number[])[1]).toBe(CX - (16 * SPRITE_SCALE) / 2); /* Math.round(18 - 16) = 2; матриця 16×16 (П13.5) */
+    expect((d!.args as number[])[2]).toBe(CY - (16 * SPRITE_SCALE) / 2);
+    expect((d!.args as number[])[3]).toBe(16 * SPRITE_SCALE);
+    expect((d!.args as number[])[4]).toBe(16 * SPRITE_SCALE);
     expect(s.sets.some((x) => x.p === 'imageSmoothingEnabled' && x.v === false)).toBe(true);
   });
 
@@ -284,8 +325,10 @@ describe('читабельність стану (ADR-0007)', () => {
     const lines = sel.calls.filter((c) => c.m === 'lineTo');
     expect(moves.length).toBe(4); // по одній дужці на кут
     expect(lines.length).toBe(8); // два плечі на кут
-    // кути — на межах спрайта (±12 від центру), в межах клітинки (урок П6.6)
-    expect(moves.some((c) => (c.args as number[])[0] === CX - 12 && (c.args as number[])[1] === CY - 12 + 4)).toBe(true);
+
+    expect(moves.some((c) => (c.args as number[])[0] === CX - 16 && (c.args as number[])[1] === CY - 16 + 6)).toBe(
+      true
+    ); /* дужки на межах спрайта 32px (П13.5) */
 
     const notSel = mockCtx();
     drawSoldierSprite(notSel.ctx, soldier());
@@ -299,8 +342,8 @@ describe('читабельність стану (ADR-0007)', () => {
     drawSoldierSprite(s.ctx, soldier({ overwatch: true }));
     const owS = s.calls.find((c) => c.m === 'drawImage' && (c.args as number[])[3] === 10);
     expect(owS).toBeDefined();
-    expect((owS!.args as number[])[1]).toBe(CX - 13); // верхній лівий кут клітинки
-    expect((owS!.args as number[])[2]).toBe(CY - 13);
+    expect((owS!.args as number[])[1]).toBe(CX - 17); // верхній лівий кут клітинки (центр CX-12, розмір 10 — П13.5)
+    expect((owS!.args as number[])[2]).toBe(CY - 17);
     const bolt = rf.canvases[1]; // перша матриця після силуета — блискавка
     expect(bolt.pixels.some((p) => p.color === '#ffb347')).toBe(true); // бурштин знака (П12.7, ADR-0064)
     expect(bolt.pixels.some((p) => p.color === '#0b0e15')).toBe(true); // темний кант
@@ -309,8 +352,8 @@ describe('читабельність стану (ADR-0007)', () => {
     drawAlienSprite(a.ctx, alien({ overwatch: true }));
     const owA = a.calls.find((c) => c.m === 'drawImage' && (c.args as number[])[3] === 10);
     expect(owA).toBeDefined();
-    expect((owA!.args as number[])[1]).toBe(CX + 2); // нижній правий кут, в межах клітинки
-    expect((owA!.args as number[])[2]).toBe(CY + 2);
+    expect((owA!.args as number[])[1]).toBe(CX + 7); // нижній правий кут (центр CX+12), в межах клітинки
+    expect((owA!.args as number[])[2]).toBe(CY + 7);
   });
 });
 
@@ -333,21 +376,21 @@ describe('детермінованість малювання (ADR-0003 — бе
 });
 
 describe('спрайти геосцени (піксель-арт П6.12)', () => {
-  it('вузол-маяк «Рубіж» (П12.7, ADR-0064): 12×12 @2× = 24px вище центру, неоновий маяк, напис «ВУЗОЛ» під спрайтом', () => {
+  it('вузол-маяк «Рубіж» (П12.7, ADR-0064; П13.5 — 16×16): 16×16 @2× = 32px вище центру, неоновий маяк, напис «ВУЗОЛ» під спрайтом', () => {
     const rf = rasterFactory();
     initPixelSprites(rf.make);
     const { ctx, calls } = mockCtx();
-    drawBaseSprite(ctx, { cx: 18, cy: 18, size: 36 });
+    drawBaseSprite(ctx, { cx: 22, cy: 22, size: 44 }); // GCELL 44 (П13.5)
     const d = calls.find((c) => c.m === 'drawImage');
     expect(d).toBeDefined();
-    expect((d!.args as number[])[1]).toBe(18 - 12); // Math.round(cx - 24/2)
-    expect((d!.args as number[])[2]).toBe(18 - 4 - 12); // спрайт зміщено вгору
-    expect((d!.args as number[])[3]).toBe(24);
-    expect((d!.args as number[])[4]).toBe(24);
+    expect((d!.args as number[])[1]).toBe(22 - 16); // Math.round(cx - 32/2)
+    expect((d!.args as number[])[2]).toBe(22 - 6 - 16); // спрайт зміщено вгору
+    expect((d!.args as number[])[3]).toBe(32);
+    expect((d!.args as number[])[4]).toBe(32);
     const label = calls.find((c) => c.m === 'fillText' && c.args[0] === 'ВУЗОЛ');
     expect(label).toBeDefined();
-    expect((label!.args as number[])[1]).toBe(18);
-    expect((label!.args as number[])[2]).toBe(18 + 13); // напис під спрайтом
+    expect((label!.args as number[])[1]).toBe(22);
+    expect((label!.args as number[])[2]).toBe(22 + 16); // напис під спрайтом
     // неоновий маяк-вогонь на вершині вежі (ціан «Рубіжу»)
     expect(rf.canvases[0].pixels.some((p) => p.color === '#00e5ff')).toBe(true);
   });
@@ -411,12 +454,12 @@ describe('П6.9: м’які позначки НЛО геосцени', () => {
     }
   });
 
-  it('позначка в межах клітинки 36px (урок П6.6): 10×10 у масштабі 2× → 20px', () => {
+  it('позначка в межах клітинки 44px (урок П6.6; П13.5): 12×12 у масштабі 2× → 24px', () => {
     const { ctx, calls } = mockCtx();
-    drawUfoSprite(ctx, { cx: 18, cy: 18, landed: true, kind: 'збирач' });
+    drawUfoSprite(ctx, { cx: 22, cy: 22, landed: true, kind: 'збирач' });
     const e = extent(calls);
-    expect(e.maxX - e.minX).toBeLessThanOrEqual(20);
-    expect(e.maxY - e.minY).toBeLessThanOrEqual(20);
+    expect(e.maxX - e.minX).toBeLessThanOrEqual(24);
+    expect(e.maxY - e.minY).toBeLessThanOrEqual(24);
   });
 });
 // --- П6.13 (П12.7, ADR-0064): неонова палітра бойовища — терен, сітка, туман ---

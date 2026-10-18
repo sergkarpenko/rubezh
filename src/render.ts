@@ -118,7 +118,7 @@ function drawPixelSprite(ctx: CanvasRenderingContext2D, def: PixelSprite, cx: nu
 }
 
 function drawOverwatchMarker(ctx: CanvasRenderingContext2D, u: UnitSprite): void {
-  const off = u.side === 'player' ? -8 : 7; // кути клітинки: згори-ліворуч / знизу-праворуч
+  const off = u.side === 'player' ? -12 : 12; // кути клітинки: згори-ліворуч / знизу-праворуч (П13.5: BCELL 36)
   drawPixelSprite(ctx, OW_BOLT, u.cx + off, u.cy + off, SPRITE_SCALE);
 }
 
@@ -126,8 +126,8 @@ function drawOverwatchMarker(ctx: CanvasRenderingContext2D, u: UnitSprite): void
 // спрайта — не перекривають силует (кільце навколо центру лягало на пікселі);
 // кути матриць спрайтів прозорі — дужки лягають на чисте місце.
 function drawSelectionBrackets(ctx: CanvasRenderingContext2D, cx: number, cy: number): void {
-  const s = 12; // половина спрайта (24px у клітинці 26)
-  const arm = 4; // довжина плеча дужки
+  const s = 16; // половина спрайта (32px у клітинці 36 — П13.5)
+  const arm = 6; // довжина плеча дужки
   ctx.strokeStyle = SELECT_RING;
   ctx.lineWidth = 2;
   ctx.beginPath();
@@ -148,7 +148,7 @@ function drawSelectionBrackets(ctx: CanvasRenderingContext2D, cx: number, cy: nu
 }
 
 function drawHpText(ctx: CanvasRenderingContext2D, text: string, x: number, y: number): void {
-  ctx.font = '9px system-ui';
+  ctx.font = '11px system-ui'; // П13.5: читабельність при більшому спрайті
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillStyle = HP_TEXT;
@@ -177,12 +177,12 @@ export function drawUnitSprite(ctx: CanvasRenderingContext2D, u: UnitSprite): vo
 
 export function drawBaseSprite(ctx: CanvasRenderingContext2D, b: BaseSprite): void {
   // спрайт — трохи вище центру клітинки, під ним напис (обидва в межах клітинки)
-  drawPixelSprite(ctx, BASE_SPRITE, b.cx, b.cy - 4, SPRITE_SCALE);
-  ctx.font = '9px system-ui';
+  drawPixelSprite(ctx, BASE_SPRITE, b.cx, b.cy - 6, SPRITE_SCALE);
+  ctx.font = '11px system-ui'; // П13.5: більший підпис під більшим спрайтом
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillStyle = BASE_OUTLINE;
-  ctx.fillText('ВУЗОЛ', b.cx, b.cy + 13);
+  ctx.fillText('ВУЗОЛ', b.cx, b.cy + 16);
 }
 
 export function drawFighterSprite(ctx: CanvasRenderingContext2D, f: FighterSprite): void {
@@ -192,7 +192,7 @@ export function drawFighterSprite(ctx: CanvasRenderingContext2D, f: FighterSprit
 export function drawUfoSprite(ctx: CanvasRenderingContext2D, u: UfoSprite): void {
   ctx.globalAlpha = UFO_SOFT_ALPHA;
   const def = u.landed ? UFO_LANDED_SPRITE : u.kind === 'розвідник' ? UFO_SCOUT_SPRITE : UFO_HARVESTER_SPRITE;
-  drawPixelSprite(ctx, def, u.cx, u.cy, SPRITE_SCALE); // 10×10 → 20px у клітинці GCELL 36
+  drawPixelSprite(ctx, def, u.cx, u.cy, SPRITE_SCALE); // П13.5: 12×12 → 24px у клітинці GCELL 44
   ctx.globalAlpha = 1;
 }
 
