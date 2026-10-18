@@ -11,6 +11,7 @@
 import type { DifficultyPreset } from '../core/campaign';
 import { el } from './dom';
 import logoUrl from '../../assets/logo.webp';
+import startBgUrl from '../../assets/start-bg.webp';
 
 // Стан шару відображення (ADR-0065): до вибору гравця партії немає —
 // показується стартовий екран; після старту/продовження — ігровий екран.
@@ -125,6 +126,11 @@ export function createScreens(deps: ScreensDeps): Screens {
   const topbar = el('topbar');
   const layout = el('layout');
   startScreen.innerHTML = startScreenHtml(deps.version);
+  // П13.4 ітерація 3 (ADR-0068/0071): фон стартового екрана — WebP-ассет,
+  // згенерований кодом (палітра Розриву). URL — з vite-імпорту (base-аварійний);
+  // це CSS-фон, не Image-завантаження: headless/офлайн/без файла бачать
+  // суцільний колір #0a0a12 з CSS (фолбек, тести від ассета не залежать).
+  startScreen.style.backgroundImage = `url("${startBgUrl}")`;
   newGameDialog.innerHTML = newGameDialogHtml();
   gameMenu.innerHTML = gameMenuHtml();
   exitConfirm.innerHTML = exitConfirmHtml();

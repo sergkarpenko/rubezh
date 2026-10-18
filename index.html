@@ -393,7 +393,13 @@
         left: 0;
         right: 0;
         bottom: 0;
-        background: #0d1017;
+        /* П13.4 ітерація 3 (ADR-0068/0071): фолбек-колір — база фону Розриву;
+           саму картинку (assets/start-bg.webp) ставить screens.ts з
+           vite-імпорту — headless/офлайн лишаються на суцільному кольорі */
+        background: #0a0a12;
+        background-size: cover;
+        background-position: center;
+        background-repeat: no-repeat;
         display: flex;
         align-items: center;
         justify-content: center;
@@ -405,6 +411,10 @@
         max-width: 420px;
         width: 100%;
         text-align: center;
+        /* ітерація 3: лого і меню пливають на фонові — панель прозора;
+           кнопки мають власний темний фон (читабельність) */
+        background: transparent;
+        border-color: transparent;
       }
       .start-logo {
         font-size: 56px;
@@ -425,6 +435,9 @@
         height: auto;
         margin: 0 auto;
         border-radius: 10px;
+        /* ітерація 3: у зоні сяйва фон сторінки яскравіший за темний тло
+           лого — lighten (max) прибирає прямокутник ассета, букви лишаються */
+        mix-blend-mode: lighten;
       }
       .start-tagline {
         color: #7d8794;
