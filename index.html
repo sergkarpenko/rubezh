@@ -161,12 +161,56 @@
         height: auto;
       }
       /* ADR-0027 (П6.3): бойовище — квадрат на ширину фокусної колонки, кап 720px;
-         на десктопі (двоколонковий каркас від 900px) це не менше 520px */
+         П13.2 (ADR-0066): бойовище і тулбар — у спільному гнучкому рядку */
+      #battle-stage {
+        display: flex;
+        gap: 10px;
+        align-items: flex-start;
+      }
       #battle {
         width: 100%;
         max-width: 720px;
         aspect-ratio: 1;
         height: auto;
+        flex: 1 1 auto;
+        min-width: 0;
+      }
+      /* П13.2 (ADR-0066): вертикальний тулбар дій збоку — темно-сірі квадратні
+         плитки, заокруглені кути, неонові акценти, білі силуети; тач-цілі ≥ 44px */
+      #btoolbar {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      #btoolbar button {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 2px;
+        width: 52px;
+        min-height: 48px;
+        padding: 4px 2px 3px;
+        box-sizing: border-box;
+        background: #232633;
+        border: 1px solid #3a4152;
+        border-radius: 10px;
+      }
+      #btoolbar button canvas {
+        background: transparent;
+      }
+      #btoolbar button .tb-cap {
+        font-size: 9px;
+        line-height: 1.1;
+        color: #9fb0c3;
+        white-space: nowrap;
+      }
+      #btoolbar button.armed {
+        background: #0f2c36;
+        border-color: #00e5ff;
+        box-shadow: 0 0 10px rgba(0, 229, 255, 0.35);
+      }
+      #btoolbar button.armed .tb-cap {
+        color: #00e5ff;
       }
       /* ADR-0027 (П6.3): контекст-стрічка бою — тип місії, заморожений час, чий хід, активний юніт */
       #bctx {
@@ -427,21 +471,12 @@
             <span class="chip">Юніт: <b id="bctx-unit">—</b></span>
           </div>
           <div id="bresult"></div>
-          <canvas id="battle" width="520" height="520"></canvas>
-          <div id="binfo" style="margin: 8px 0 10px; min-height: 18px">—</div>
-          <!-- ADR-0027 (П6.3): панель керування — під бойовищем;
-               П6.4: у дужках — гарячі клавіші (1/2/3/O/E/Esc) -->
-          <div id="bcontrols" style="display: flex; gap: 8px; flex-wrap: wrap">
-            <button id="btn-snap" title="3 AP · ×0.8 · 1 куля · клавіша 1">Швидкий (1)</button>
-            <button id="btn-aimed" title="5 AP · ×1.15 · 1 куля · клавіша 2">Прицільний (2)</button>
-            <button id="btn-auto" title="4 AP · ×0.5 · 3 кулі · клавіша 3">Черга (3)</button>
-            <button id="btn-ow" title="3 AP · реакційний вогонь у хід прибульців · клавіша O">Дозор (O)</button>
-            <!-- П11.6 (ADR-0058): витратники — аптечка/граната (клавіші M/G — рішення власника серії П11.6) -->
-            <button id="btn-medkit" title="4 AP · +3 HP пораненому союзнику поруч (≤1) · клавіша M">Лікування (M)</button>
-            <button id="btn-grenade" title="4 AP · граната, зона епіцентр + хрест (≤6) · клавіша G">Граната (G)</button>
-            <button id="btn-end" title="клавіша E">Кінець ходу (E)</button>
-            <button id="btn-demo" title="Бій дограють боти (демо ітерації P)">Демо-бій</button>
+          <!-- П13.2 (ADR-0066): тулбар дій збоку (генерує src/ui/toolbar.ts); нижня смуга #bcontrols вилучена -->
+          <div id="battle-stage">
+            <canvas id="battle" width="520" height="520"></canvas>
+            <div id="btoolbar"></div>
           </div>
+          <div id="binfo" style="margin: 8px 0 10px; min-height: 18px">—</div>
         </section>
       </div>
       <section class="panel" id="journal">

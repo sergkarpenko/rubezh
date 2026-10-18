@@ -459,14 +459,20 @@ describe('панель збереження: 3 слоти, лише на гео�
 });
 
 describe('бойова фокусна зона (П6.3, ADR-0027)', () => {
-  it('розмітка: керування під бойовищем, бойовище — квадрат (ширина колонки, кап 720px)', () => {
+  it('розмітка: тулбар дій збоку (П13.2, ADR-0066), бойовище — квадрат (ширина колонки, кап 720px)', () => {
     const panel = htmlRaw.match(/<section class="panel hidden" id="battle-panel">[\s\S]*?<\/section>/)![0];
-    expect(panel.indexOf('id="battle"')).toBeLessThan(panel.indexOf('id="bcontrols"')); // панель керування — під бойовищем
+    expect(panel).not.toContain('id="bcontrols"'); // нижня смуга кнопок вилучена (ADR-0066)
     expect(panel.indexOf('id="bctx"')).toBeLessThan(panel.indexOf('id="battle"')); // контекст-стрічка — над бойовищем
+    expect(panel.indexOf('id="battle"')).toBeLessThan(panel.indexOf('id="btoolbar"')); // тулбар — збоку бойовища
     const css = htmlRaw.match(/#battle \{[^}]*\}/)![0];
     expect(css).toContain('width: 100%'); // на ширину фокусної колонки
     expect(css).toContain('max-width: 720px'); // кап ~720px (ADR-0027)
     expect(css).toContain('aspect-ratio: 1'); // квадрат
+    // П13.2 (ADR-0066): тулбар вертикальний, плитки — тач-цілі ≥ 44px
+    const tb = htmlRaw.match(/#btoolbar \{[^}]*\}/)![0];
+    expect(tb).toContain('flex-direction: column');
+    const tbBtn = htmlRaw.match(/#btoolbar button \{[^}]*\}/)![0];
+    expect(tbBtn).toContain('min-height: 48px');
     const cv = $('battle') as HTMLCanvasElement;
     expect(cv.width).toBe(520); // buffer 520×520: на десктопі бойовище не менше поточних 520px
   });
