@@ -50,6 +50,7 @@ import { campaignTick, type DifficultyPreset } from './core/campaign';
 // П12.2 (ADR-0065): каркас екранів і навігації — модуль src/ui/screens.ts;
 // тут — лише зв'язування з партією, панеллю збереження і «Як грати».
 import { createScreens, type Screens } from './ui/screens';
+import { createSettings } from './ui/settings';
 
 // пR.2 (ADR-0037): масштаб сітки (GCELL/BCELL) — спільний модуль src/ui/grid.ts.
 
@@ -453,17 +454,9 @@ if (typeof document !== 'undefined') {
   document.addEventListener('click', (ev) => {
     if ((ev.target as HTMLElement | null)?.closest('button')) sound.play('click');
   });
-  // П11.7 (ADR-0059): тумблер звуку у топбарі — стан у localStorage rubezh.sound,
-  // поза сейвом (ADR-0026); підпис кнопки синхронізується з тумблером.
-  const btnSound = el<HTMLButtonElement>('btn-sound');
-  const renderSound = (): void => {
-    btnSound.textContent = sound.enabled() ? 'Звук: увімк' : 'Звук: вимк';
-  };
-  btnSound.onclick = () => {
-    sound.toggle();
-    renderSound();
-  };
-  renderSound();
+  // П12.3 (ADR-0065/0059): тумблер звуку мігрував з топбара у вікно
+  // «Налаштування» (settings.ts) — єдине джерело стану залишається
+  // аудіо-модуль; підпис «Звук: увімк/вимк» тепер у вікні.
   savePanel.detectStorage();
   // П9.1 (EARS Фази 9): перший візит (усі слоти порожні або сховище недоступне)
   // — показ «Як грати»; кнопка «?» у топбарі відкриває його будь-коли.
@@ -473,6 +466,9 @@ if (typeof document !== 'undefined') {
   });
   el('btn-help').onclick = help.open;
   help.maybeShowOnFirstVisit();
+  // П12.3 (ADR-0065): вікно «Налаштування» — тумблер звуку мігрував з топбара;
+  // стан — аудіо-модуль (ADR-0059), персист поза сейвом (ADR-0026).
+  const settings = createSettings({ sound });
   // П12.2 (ADR-0065): каркас екранів — зв'язування з панеллю збереження
   // («Продовжити» — останній активний слот, ADR-0026), «Як грати» (help.ts
   // без змін) і стартом нової партії (сід + складність з діалогу).
@@ -486,6 +482,7 @@ if (typeof document !== 'undefined') {
     onNewGame: startNewParty,
     onContinue: continueGame,
     onHelp: help.open,
+    onSettings: settings.open, // П12.3: зі стартового екрана і з меню гри
     hasUnsavedChanges,
     onExitToStart: () => screens?.showStart(),
   });

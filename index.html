@@ -417,10 +417,12 @@
         color: #6d7d92;
       }
       /* П12.2 (ADR-0065): модальні вікна навігації — діалог нової партії,
-         меню гри, підтвердження виходу (без анімацій — перемикання класів) */
+         меню гри, підтвердження виходу (без анімацій — перемикання класів);
+         П12.3: вікно «Налаштування» — той самий патерн */
       #new-game-dialog,
       #game-menu,
-      #exit-confirm {
+      #exit-confirm,
+      #settings-dialog {
         position: fixed;
         top: 0;
         left: 0;
@@ -465,6 +467,14 @@
       .dialog-actions button {
         flex: 1;
         padding: 10px;
+      }
+      .screen-dialog h3 {
+        /* П12.3: заголовок секції вікна налаштувань — стиль панельних h2 */
+        font-size: 12px;
+        margin: 12px 0 0;
+        color: #9fb0c3;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
       }
       .screen-dialog p {
         margin: 8px 0 0;
@@ -538,13 +548,10 @@
       <div class="actions">
         <button id="btn-tick">+1 тік (30 хв)</button>
         <button id="btn-day">+1 доба</button>
-        <!-- П12.2 (ADR-0065): вікно «Меню» гри — «Як грати», «На стартовий екран»
-             (з підтвердженням при незбережених діях); «Налаштування» — п12.3 -->
-        <button id="btn-menu" title="Меню: «Як грати», вихід на стартовий екран; налаштування — крок п12.3">Меню</button>
+        <!-- П12.2 (ADR-0065): кнопка «Меню» у топбарі — «Налаштування» (П12.3,
+             вікно settings.ts), «Як грати», «На стартовий екран» -->
+        <button id="btn-menu" title="Меню: налаштування, «Як грати», вихід на стартовий екран">Меню</button>
         <button id="btn-help" title="Як грати: легенда, мета кампанії, керування">?</button>
-        <button id="btn-sound" title="Звукові ефекти (WebAudio): увімк/вимк — стан запам'ятовується у браузері, поза сейвом">
-          Звук: увімк
-        </button>
       </div>
     </header>
     <main id="layout">
@@ -645,5 +652,8 @@
     <section class="hidden" id="new-game-dialog"></section>
     <section class="hidden" id="game-menu"></section>
     <section class="hidden" id="exit-confirm"></section>
+    <!-- П12.3 (ADR-0065/0059): скелет вікна «Налаштування» — контент генерує
+         src/ui/settings.ts; тумблер звуку мігрував сюди з топбара (П11.7) -->
+    <section class="hidden" id="settings-dialog"></section>
   </body>
 </html>

@@ -31,6 +31,7 @@ function makeDeps(overrides: Partial<ScreensDeps> = {}): ScreensDeps {
     onNewGame: vi.fn(),
     onContinue: vi.fn(() => true),
     onHelp: vi.fn(),
+    onSettings: vi.fn(),
     hasUnsavedChanges: () => false,
     onExitToStart: vi.fn(),
     ...overrides,
@@ -73,16 +74,18 @@ describe('П12.2: екрани — стартовий і ігровий (ADR-006
     expect(rafCalls).toBe(0);
   });
 
-  it('стартовий екран: логотип, меню, версія; «Налаштування» вимкнені з причиною (п12.3)', () => {
-    createScreens(makeDeps()).showStart();
+  it('стартовий екран: логотип, меню, версія; «Налаштування» відкривають вікно (п12.3)', () => {
+    const deps = makeDeps();
+    createScreens(deps).showStart();
     expect($('start-logo').textContent).toBe('РУБІЖ');
     expect(document.querySelector('.start-tagline')!.textContent).toContain('Розрив'); // ADR-0064: термінологія одразу
     expect(btn('btn-start-new').textContent).toBe('Нова партія');
     expect(btn('btn-start-continue').textContent).toBe('Продовжити');
     expect(btn('btn-start-help').textContent).toBe('Як грати');
     expect(document.querySelector('.start-version')!.textContent).toContain('Версія 0.3.0-тест'); // ADR-0054
-    expect(btn('btn-start-settings').disabled).toBe(true); // пункт присутній, вікно — п12.3
-    expect(btn('btn-start-settings').title).toContain('п12.3');
+    expect(btn('btn-start-settings').disabled).toBe(false); // п12.3: пункт активний
+    btn('btn-start-settings').click();
+    expect(deps.onSettings).toHaveBeenCalled(); // вікно — settings.ts (ADR-0065)
   });
 
   it('«Продовжити»: без сейвів — вимкнений з причиною; з сейвами — активний (EARS Фази 12)', () => {
@@ -162,7 +165,7 @@ describe('П12.2: «Продовжити» і вікно «Меню» гри (AD
     expect(deps.onContinue).not.toHaveBeenCalled();
   });
 
-  it('меню: відкриття/закриття, «Як грати» закриває меню, «Налаштування» вимкнені (п12.3)', () => {
+  it('меню: відкриття/закриття, «Як грати» закриває меню, «Налаштування» — теж (п12.3)', () => {
     const deps = makeDeps();
     const screens = createScreens(deps);
     screens.showGame();
@@ -172,8 +175,11 @@ describe('П12.2: «Продовжити» і вікно «Меню» гри (AD
     expect(deps.onHelp).toHaveBeenCalled();
     expect(visible('game-menu')).toBe(false);
     screens.openMenu();
-    expect(btn('btn-menu-settings').disabled).toBe(true);
-    expect(btn('btn-menu-settings').title).toContain('п12.3');
+    expect(btn('btn-menu-settings').disabled).toBe(false); // п12.3: пункт активний
+    btn('btn-menu-settings').click();
+    expect(deps.onSettings).toHaveBeenCalled(); // вікно — settings.ts (ADR-0065)
+    expect(visible('game-menu')).toBe(false); // один діалог одночасно (ADR-0065)
+    screens.openMenu();
     btn('btn-menu-close').click();
     expect(visible('game-menu')).toBe(false);
     screens.openMenu();

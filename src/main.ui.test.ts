@@ -167,8 +167,22 @@ describe('П12.2: флоу стартового екрана і навігаці
     // EARS Фази 12: без сейвів «Продовжити» недоступний з причиною
     expect(btn('btn-start-continue').disabled).toBe(true);
     expect(btn('btn-start-continue').title).toBe('Немає збережених партій');
-    expect(btn('btn-start-settings').disabled).toBe(true); // вікно — п12.3
-    expect(btn('btn-start-settings').title).toContain('п12.3');
+    // П12.3 (ADR-0065/0059): тумблер звуку мігрував з топбара у вікно
+    // «Налаштування» — зі стартового екрана
+    expect(document.getElementById('btn-sound')).toBeNull(); // топбар більше не тримає тумблер
+    btn('btn-start-settings').click();
+    expect($('settings-dialog').classList.contains('hidden')).toBe(false);
+    expect(btn('settings-sound').textContent).toBe('Звук: увімк'); // підпис тепер у вікні
+    btn('settings-sound').click(); // вимк — одразу в localStorage поза сейвом (ADR-0026)
+    expect(btn('settings-sound').textContent).toBe('Звук: вимк');
+    expect(localStorage.getItem('rubezh.settings.sound')).toBe('0');
+    btn('settings-close').click();
+    expect($('settings-dialog').classList.contains('hidden')).toBe(true);
+    btn('btn-start-settings').click(); // повернути стан — дефолт «увімк» (ADR-0059)
+    btn('settings-sound').click();
+    expect(btn('settings-sound').textContent).toBe('Звук: увімк');
+    expect(localStorage.getItem('rubezh.settings.sound')).toBe('1');
+    btn('settings-close').click();
   });
 
   it('«Нова партія»: діалог сід/складність → ігровий екран (EARS Фази 12, ADR-0033)', () => {
@@ -201,7 +215,13 @@ describe('П12.2: флоу стартового екрана і навігаці
     const opsBefore = canvasOps.length;
     btn('btn-menu').click();
     expect($('game-menu').classList.contains('hidden')).toBe(false);
-    expect(btn('btn-menu-settings').disabled).toBe(true); // п12.3
+    // П12.3: «Налаштування» з меню гри — меню закривається, вікно відкривається
+    btn('btn-menu-settings').click();
+    expect($('game-menu').classList.contains('hidden')).toBe(true); // один діалог (ADR-0065)
+    expect($('settings-dialog').classList.contains('hidden')).toBe(false);
+    expect(btn('settings-sound').textContent).toBe('Звук: увімк'); // стан з минулих тестів
+    btn('settings-close').click();
+    btn('btn-menu').click();
     btn('btn-menu-exit').click();
     expect($('exit-confirm').classList.contains('hidden')).toBe(false); // підтвердження
     expect($('start-screen').classList.contains('hidden')).toBe(true); // виходу ще не було

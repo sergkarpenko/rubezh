@@ -64,7 +64,11 @@ export interface SoundContext {
 // «увімкнено» (рішення власника, сесія П11.7). Контракт «тихо» тримає фабрика:
 // помилка читання/запису будь-якого адаптера — дефолт/мовчки пропущений персист
 // (прецедент save-panel.ts; тумблер у сесії працює, без повідомлень у журнал).
-export const SOUND_KEY = 'rubezh.sound';
+// П12.3 (ADR-0065): формат розширювальний — ключі rubezh.settings.*; ключ
+// топбара П11.7 rubezh.sound лишився фолбеком читання (вибір користувача
+// мігрує без втрат), після першого запису прибирається (без дублікатів).
+export const SOUND_KEY = 'rubezh.settings.sound';
+const LEGACY_SOUND_KEY = 'rubezh.sound';
 
 export interface SoundStore {
   read(): string | null;
@@ -72,8 +76,18 @@ export interface SoundStore {
 }
 
 const browserStore: SoundStore = {
-  read: () => localStorage.getItem(SOUND_KEY),
-  write: (v) => localStorage.setItem(SOUND_KEY, v),
+  read: () => {
+    const cur = localStorage.getItem(SOUND_KEY);
+    return cur !== null ? cur : localStorage.getItem(LEGACY_SOUND_KEY); // фолбек-міграція
+  },
+  write: (v) => {
+    localStorage.setItem(SOUND_KEY, v);
+    try {
+      localStorage.removeItem(LEGACY_SOUND_KEY); // мігрували — старий ключ не лишаємо
+    } catch {
+      /* тихо */
+    }
+  },
 };
 
 // typeof-гейт (патерн hasRaf, main.ts): без WebAudio — no-op, без винятків.
