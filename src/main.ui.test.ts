@@ -45,6 +45,17 @@ async function runDemo(): Promise<void> {
   }
 }
 
+// П12.2 (ADR-0065): хелпер запуску партії через новий флоу — стартовий екран →
+// діалог нової партії (інпути сіду/пресету мігрували з топбара в діалог).
+// Заміняє прямий старт btn-new: ті самі сід/складність, твердження-контракти
+// флоу не послаблює.
+function startParty(seed = '42', preset = 'норма'): void {
+  btn('btn-start-new').click();
+  ($('new-game-seed') as HTMLInputElement).value = seed;
+  ($('new-game-preset') as HTMLSelectElement).value = preset;
+  btn('btn-new-game-start').click();
+}
+
 // П6.14: журнал операцій малювання no-op контексту (fillText/strokeRect/...) —
 // рамки валідних цілей і плашки шансу assertions робимо по ньому.
 const canvasOps: string[] = [];
@@ -132,9 +143,108 @@ beforeAll(async () => {
   await import('./main');
 });
 
+// П12.2 (ADR-0065): критичний флоу екранів — «старт → нова партія → меню →
+// стартовий екран → продовжити». Детермінізм: сід 42; сейв/завантаження через
+// реальну панель (ADR-0026); переходи — без rAF-анімацій, 0 перерисовок
+// канви (ADR-0029). Стартовий стан (порожні слоти, «Як грати» першого візиту)
+// — лише тут: describe виконується першим у файлі.
+describe('П12.2: флоу стартового екрана і навігації (ADR-0065, ADR-0013)', () => {
+  it('стартовий екран: логотип, меню, версія; партії немає; «Продовжити» вимкнено без сейвів', () => {
+    // перший візит (П9.1): «Як грати» показано поверх стартового екрана
+    expect($('help-screen').classList.contains('hidden')).toBe(false);
+    btn('btn-help-close').click();
+    // ADR-0065: сторінка → стартовий екран; каркас гри приховано
+    expect($('start-screen').classList.contains('hidden')).toBe(false);
+    expect($('topbar').classList.contains('hidden')).toBe(true);
+    expect($('layout').classList.contains('hidden')).toBe(true);
+    expect($('start-logo').textContent).toBe('РУБІЖ');
+    expect((document.querySelector('.start-version') as HTMLElement).textContent).toContain('Версія'); // ADR-0054
+    // партію не створено: панелі топбара/колонки не відрендерені (idle → 0 перерисовок)
+    expect($('money').textContent).toBe('—');
+    expect($('clock').textContent).toBe('—');
+    btn('btn-tick').click(); // кнопки гра-шару без партії — no-op
+    expect($('clock').textContent).toBe('—');
+    // EARS Фази 12: без сейвів «Продовжити» недоступний з причиною
+    expect(btn('btn-start-continue').disabled).toBe(true);
+    expect(btn('btn-start-continue').title).toBe('Немає збережених партій');
+    expect(btn('btn-start-settings').disabled).toBe(true); // вікно — п12.3
+    expect(btn('btn-start-settings').title).toContain('п12.3');
+  });
+
+  it('«Нова партія»: діалог сід/складність → ігровий екран (EARS Фази 12, ADR-0033)', () => {
+    btn('btn-start-new').click();
+    expect($('new-game-dialog').classList.contains('hidden')).toBe(false);
+    expect(($('new-game-seed') as HTMLInputElement).value).toBe('42'); // дефолти діалогу
+    expect(($('new-game-preset') as HTMLSelectElement).value).toBe('норма');
+    btn('btn-new-game-start').click();
+    expect($('new-game-dialog').classList.contains('hidden')).toBe(true);
+    expect($('start-screen').classList.contains('hidden')).toBe(true); // ігровий екран
+    expect($('topbar').classList.contains('hidden')).toBe(false);
+    expect($('layout').classList.contains('hidden')).toBe(false);
+    expect($('log').textContent).toContain('Нова партія (сід 42, складність «норма»)');
+    expect($('clock').textContent).toBe('Д1 00:00');
+    expect($('money').textContent).toBe('300');
+    expect($('roster').textContent).toContain('6 солдатів (6 боєготових)');
+  });
+
+  it('сейв у флоу: тики → слот 1 (ADR-0026)', () => {
+    for (let i = 0; i < 3; i++) btn('btn-tick').click();
+    expect($('clock').textContent).toBe('Д1 01:30');
+    btn('btn-save-1').click();
+    expect($('log').textContent).toContain('Збережено: слот 1');
+    expect(localStorage.getItem('rubezh.save.1')).not.toBeNull();
+  });
+
+  it('меню → вихід: незбережені дії — підтвердження; переходи без перерисовок (критерій 3)', () => {
+    for (let i = 0; i < 2; i++) btn('btn-tick').click(); // дії після сейву — бруд
+    expect($('clock').textContent).toBe('Д1 02:30');
+    const opsBefore = canvasOps.length;
+    btn('btn-menu').click();
+    expect($('game-menu').classList.contains('hidden')).toBe(false);
+    expect(btn('btn-menu-settings').disabled).toBe(true); // п12.3
+    btn('btn-menu-exit').click();
+    expect($('exit-confirm').classList.contains('hidden')).toBe(false); // підтвердження
+    expect($('start-screen').classList.contains('hidden')).toBe(true); // виходу ще не було
+    btn('btn-exit-no').click(); // скасування — лишаємось у грі
+    expect($('exit-confirm').classList.contains('hidden')).toBe(true);
+    expect($('clock').textContent).toBe('Д1 02:30');
+    btn('btn-menu').click();
+    btn('btn-menu-exit').click();
+    btn('btn-exit-yes').click(); // вихід без збереження
+    expect($('start-screen').classList.contains('hidden')).toBe(false);
+    expect($('topbar').classList.contains('hidden')).toBe(true);
+    // діалоги і переходи екранів — 0 перерисовок канви (без rAF, ADR-0029)
+    expect(canvasOps.length).toBe(opsBefore);
+  });
+
+  it('«Продовжити»: останній слот завантажується, стан сейву відновлено (критерії 1–2)', () => {
+    expect(btn('btn-start-continue').disabled).toBe(false); // сейв у слоті 1
+    expect(btn('btn-start-continue').title).not.toContain('Немає');
+    btn('btn-start-continue').click();
+    expect($('start-screen').classList.contains('hidden')).toBe(true); // знову гра
+    expect($('log').textContent).toContain('Завантажено: слот 1');
+    expect($('clock').textContent).toBe('Д1 01:30'); // стан точки збереження
+    expect($('money').textContent).toBe('300');
+    expect($('roster').textContent).toContain('6 солдатів (6 боєготових)');
+  });
+
+  it('вихід без дій після завантаження — без підтвердження; «Як грати» з меню', () => {
+    btn('btn-menu').click();
+    btn('btn-menu-help').click();
+    expect($('help-screen').classList.contains('hidden')).toBe(false);
+    btn('btn-help-close').click();
+    btn('btn-menu').click();
+    btn('btn-menu-exit').click();
+    expect($('exit-confirm').classList.contains('hidden')).toBe(true); // змін немає — миттєво
+    expect($('start-screen').classList.contains('hidden')).toBe(false);
+  });
+});
+
 describe('UI-флоу прев’ю: геосцена → місія → бій → результат (ADR-0013)', () => {
-  it('ініціалізація: журнал старту, годинник, ростер, фінанси, панель бою прихована', () => {
-    expect($('log').textContent).toContain('Партію розпочато');
+  it('нова партія через флоу: стартовий стан гри — годинник, ростер, фінанси, панель бою прихована', () => {
+    // П12.2: партія через хелпер флоу (стартовий екран → діалог); ініціалізацію
+    // без партії покрито describe'ом П12.2 вище
+    startParty();
     expect($('clock').textContent).toBe('Д1 00:00');
     expect($('roster').textContent).toContain('6 солдатів (6 боєготових)');
     expect($('money').textContent).toBe('300');
@@ -145,13 +255,9 @@ describe('UI-флоу прев’ю: геосцена → місія → бій 
     expect(btn('btn-tick').disabled).toBe(false);
   });
 
-  // П9.1 (EARS Фази 9): перший візит — усі слоти порожні на імпорті main.ts
-  // (MemoryStorage порожній) → екран показано сам; «?» відкриває/закриває.
-  it('П9.1: перший візит (порожні слоти) — «Як грати» показано; «?» відкриває/закриває', () => {
-    expect($('help-screen').classList.contains('hidden')).toBe(false);
-    expect($('help-screen').textContent).toContain('Як грати');
-    btn('btn-help-close').click();
-    expect($('help-screen').classList.contains('hidden')).toBe(true);
+  // П9.1 (EARS Фази 9): показ першого візиту — у describe П12.2 (перед закриттям);
+  // тут — кнопка «?» у топбарі відкриває/закриває будь-коли.
+  it('П9.1: «?» у топбарі відкриває/закриває «Як грати»', () => {
     btn('btn-help').click(); // кнопка «?» у топбарі — будь-коли
     expect($('help-screen').classList.contains('hidden')).toBe(false);
     btn('btn-help-close').click();
@@ -166,33 +272,28 @@ describe('UI-флоу прев’ю: геосцена → місія → бій 
   });
 
   it('нова партія зі сідом: годинник і журнал', () => {
-    ($('seed') as HTMLInputElement).value = '42';
-    btn('btn-new').click();
+    startParty();
     expect($('clock').textContent).toBe('Д1 00:00');
     expect($('log').textContent).toContain('Нова партія (сід 42, складність «норма»)');
   });
 
   it('П8.4a: вибір «легкий» — нова партія з множниками легкого рівня', () => {
-    ($('preset') as HTMLSelectElement).value = 'легкий';
-    btn('btn-new').click();
+    startParty('42', 'легкий');
     // журнал фіксує пресет; стартові кошти 300 × 1.2 = 360 (П8.4, ADR-0033)
     expect($('log').textContent).toContain('складність «легкий»');
     expect($('money').textContent).toBe('360');
     // повертаємо «норму»: наступні тести очікують дефолтний баланс і HP 10
-    ($('preset') as HTMLSelectElement).value = 'норма';
-    btn('btn-new').click();
+    startParty();
     expect($('money').textContent).toBe('300');
   });
 
   it('П10.3: вибір «складний» — нова партія з множниками складного рівня', () => {
-    ($('preset') as HTMLSelectElement).value = 'складний';
-    btn('btn-new').click();
+    startParty('42', 'складний');
     expect($('log').textContent).toContain('складність «складний»');
     // економіка ×0.9 (П10.4): стартові кошти 300 → 270
     expect($('money').textContent).toBe('270');
     // повертаємо «норму»: наступні тести очікують дефолтний баланс
-    ($('preset') as HTMLSelectElement).value = 'норма';
-    btn('btn-new').click();
+    startParty();
     expect($('money').textContent).toBe('300');
   });
 
@@ -266,8 +367,7 @@ describe('критичний флоу економіки: найм → місі�
   // 6/10 → лікарня 8 тіків; премія +150.
 
   it('скидання партії: баланс 300, ростер 6', () => {
-    ($('seed') as HTMLInputElement).value = '42';
-    btn('btn-new').click();
+    startParty();
     expect($('money').textContent).toBe('300');
     expect($('roster').textContent).toContain('6 солдатів (6 боєготових)');
   });
@@ -364,8 +464,7 @@ describe('панель збереження: 3 слоти, лише на гео�
   });
 
   it('критичний флоу: зберегти → «перезавантаження» (нова партія) → завантажити → жорсткий збіг стану', () => {
-    ($('seed') as HTMLInputElement).value = '42';
-    btn('btn-new').click();
+    startParty();
     // дотікати до виявленого приземленого НЛО (трекінг НЛО має потрапити у сейв)
     let found = false;
     for (let i = 0; i < 1500 && !found; i++) {
@@ -384,7 +483,7 @@ describe('панель збереження: 3 слоти, лише на гео�
     expect(localStorage.getItem('rubezh.save.1')).not.toBeNull();
 
     // «перезавантаження сторінки»: свіжа партія — слот виживає у localStorage
-    btn('btn-new').click();
+    startParty();
     expect($('clock').textContent).toBe('Д1 00:00');
     expect($('ufos').textContent).toContain('Нічого не виявлено');
 
@@ -478,8 +577,7 @@ describe('бойова фокусна зона (П6.3, ADR-0027)', () => {
   });
 
   it('контекст-стрічка: тип місії, заморожений час, чий хід; колонка стану dimmed; збереження вимкнене', () => {
-    ($('seed') as HTMLInputElement).value = '42';
-    btn('btn-new').click();
+    startParty();
     let found = false;
     for (let i = 0; i < 1500 && !found; i++) {
       btn('btn-tick').click();
@@ -530,8 +628,7 @@ describe('керування: гарячі клавіші і тач-патерн
   };
 
   it('підготовка: нова партія (сід 42) → місія → вибір солдата у зоні висадки', () => {
-    ($('seed') as HTMLInputElement).value = '42';
-    btn('btn-new').click();
+    startParty();
     let found = false;
     for (let i = 0; i < 1500 && !found; i++) {
       btn('btn-tick').click();
@@ -589,14 +686,16 @@ describe('керування: гарячі клавіші і тач-патерн
     expect($('binfo').textContent).toContain('Хід прибульців відпрацьовано');
   });
 
-  it('поля вводу: гарячі клавіші ігноруються (сід) — хід не завершується', () => {
-    const seed = $('seed') as HTMLInputElement;
-    seed.focus();
-    key('e', 'KeyE', seed); // keydown із поля вводу — ігнорується
+  it('поля вводу: гарячі клавіші ігноруються (поле діалогу) — хід не завершується', () => {
+    // П12.2: поле сіду — у діалозі нової партії (мігрувало з топбара); target
+    // keydown — те саме поле вводу, контракт гарячих клавіш незмінний
+    const field = $('new-game-seed') as HTMLInputElement;
+    field.focus();
+    key('e', 'KeyE', field); // keydown із поля вводу — ігнорується
     expect($('bctx-turn').textContent).toContain('хід 2'); // хід не передано
-    key('1', 'Digit1', seed); // і режим пострілу не зводиться
+    key('1', 'Digit1', field); // і режим пострілу не зводиться
     expect(btn('btn-snap').classList.contains('armed')).toBe(false);
-    seed.blur();
+    field.blur();
   });
 });
 
@@ -614,8 +713,7 @@ describe('П6.14: UX прицілювання — обведення цілей,
   const frame = (x: number, y: number): string => 'strokeRect(' + (x * 26 + 2) + ',' + (y * 26 + 2) + ',22,22)';
 
   it('підготовка: нова партія (сід 42) → місія → солдат (3,2) крокує на (4,2) — 1 AP', () => {
-    ($('seed') as HTMLInputElement).value = '42';
-    btn('btn-new').click();
+    startParty();
     let found = false;
     for (let i = 0; i < 1500 && !found; i++) {
       btn('btn-tick').click();
@@ -697,8 +795,7 @@ describe('П7.4: винищувач — запуск → бій → пошкод
   };
 
   it('критичний флоу: перехоплення → бій → пошкодження → ремонт (−50) → знову боєготовий', () => {
-    ($('seed') as HTMLInputElement).value = '42';
-    btn('btn-new').click();
+    startParty();
     expect(fighterText()).toContain('боєготовий');
     expect(fighterText()).toContain('HP 4/4');
     // спроби перехоплення: НЛО може сісти/зникнути під час погоні (EARS, ADR-0032) —
@@ -751,7 +848,7 @@ describe('П7.4: винищувач — запуск → бій → пошкод
   });
 
   it('кнопка «Ремонт (50)» з’являється лише для пошкодженого винищувача', () => {
-    btn('btn-new').click(); // чиста партія — здоровий винищувач
+    startParty(); // чиста партія — здоровий винищувач
     expect(document.getElementById('btn-repair')).toBeNull(); // здоровий — кнопки немає
   });
 });
@@ -778,8 +875,7 @@ describe('П7.5: повітряний бій — контекст-стрічка
   };
 
   it('контекст-стрічка прихована на геосцені, видима в погоню/бій, ховається після бою', () => {
-    ($('seed') as HTMLInputElement).value = '42';
-    btn('btn-new').click();
+    startParty();
     // на базі — прихована (джерело правди — панель «Винищувач» у колонці стану)
     expect($('ictx').classList.contains('hidden')).toBe(true);
     // запускаємо перехоплення: кнопка лише для виявленого НЛО в повітрі (критерій 1)
@@ -819,8 +915,7 @@ describe('П7.5: повітряний бій — контекст-стрічка
 
 describe('П8.3a: перемога кампанії — 30 діб → екран → «Грати далі» (endless), рахунок зафіксований', () => {
   it('підготовка: нова партія — екрана перемоги нема, кампанія «триває»', () => {
-    ($('seed') as HTMLInputElement).value = '42';
-    btn('btn-new').click();
+    startParty();
     expect($('clock').textContent).toBe('Д1 00:00');
     expect($('campaign-status').textContent).toBe('кампанія: триває');
     expect($('campaign-progress').textContent).toBe('Д1/30');
@@ -871,9 +966,7 @@ describe('П11.6: критичний флоу «дослідити → виро�
 
   it('дослідити → виробити → екіпірувати → граната і лікування в бою', () => {
     // чиста партія: сід 42, «норма» (баланс 300, ростер 6)
-    ($('seed') as HTMLInputElement).value = '42';
-    ($('preset') as HTMLSelectElement).value = 'норма';
-    btn('btn-new').click();
+    startParty();
 
     // 1. ДОСЛІДИТИ: 2 вчених, старт «аптечки» (каталог: індекс 2), доби до завершення
     btn('btn-hire-scientist').click();

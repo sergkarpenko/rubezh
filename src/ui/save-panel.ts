@@ -18,6 +18,9 @@ export interface SavePanelDeps {
   isGameOver(): boolean; // банкрутство (ADR-0021)
   journal(text: string, cls?: string): void;
   renderAll(): void;
+  // П12.2 (ADR-0065): успішне збереження — шар застосунку фіксує точку
+  // «без незбережених змін» (підтвердження виходу, ADR-0026).
+  onSaved?(slot: number): void;
 }
 
 export interface SavePanel {
@@ -28,6 +31,7 @@ export interface SavePanel {
   detectStorage(): void;
   isStorageOk(): boolean;
   slotsEmpty(): boolean; // П9.1: усі 3 слоти порожні — перший візит (EARS Фази 9)
+  latestSlot(): number | null; // П12.2 (ADR-0065): останній активний слот для «Продовжити»
 }
 
 // ADR-0026: сховище — localStorage, ключі rubezh.save.1..3. Ядро бачить лише
@@ -126,6 +130,7 @@ export function createSavePanel(deps: SavePanelDeps): SavePanel {
     try {
       saveToSlot(store, slot, deps.getParty(), new Date().toISOString());
       deps.journal('Збережено: слот ' + slot + '.');
+      deps.onSaved?.(slot); // П12.2: точка «незбережених змін немає» (ADR-0026)
     } catch (e) {
       deps.journal('✗ Збереження не вдалось: ' + (e as Error).message, 'lose');
     }
@@ -163,6 +168,28 @@ export function createSavePanel(deps: SavePanelDeps): SavePanel {
     return true;
   }
 
+  // П12.2 (ADR-0065): «Продовжити» — останній активний слот (найпізніший
+  // savedAt; за рівності — старший номер слота). Пошкоджені слоти пропускаємо
+  // (метадані не читаються); без сейвів — null.
+  function latestSlot(): number | null {
+    let best: number | null = null;
+    let bestAt = '';
+    for (let slot = 1; slot <= SAVE_SLOTS; slot++) {
+      const json = store.read(slot);
+      if (json === null) continue;
+      try {
+        const at = slotMeta(json).savedAt;
+        if (best === null || at >= bestAt) {
+          best = slot;
+          bestAt = at;
+        }
+      } catch {
+        continue; // пошкоджений слот — не кандидат на продовження
+      }
+    }
+    return best;
+  }
+
   return {
     render: renderSavePanel,
     save: saveSlot,
@@ -171,5 +198,6 @@ export function createSavePanel(deps: SavePanelDeps): SavePanel {
     detectStorage,
     isStorageOk: () => storageOk,
     slotsEmpty,
+    latestSlot,
   };
 }
