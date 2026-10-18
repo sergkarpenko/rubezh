@@ -18,7 +18,7 @@ import {
 import { hirePrice } from '../core/economy';
 // П11.6 (ADR-0058): екіпірування в картці солдата ростеру — броня/оптика
 // (постійні), аптечка/граната (витратні); дії — лише на геосцені.
-import { equipItem, unequipItem, type SoldierEquipment, type SoldierItemId } from '../core/workshop';
+import { equipItem, unequipItem, itemName, type SoldierEquipment, type SoldierItemId } from '../core/workshop';
 import { readySoldiers } from '../core/squad';
 import type { Party } from '../core/save';
 import { itemEffect } from './effects';
@@ -33,13 +33,14 @@ export function hpColor(hp: number, maxHp: number): string {
   return hp >= maxHp ? '#7fbf7f' : hp > maxHp / 2 ? '#d8b25a' : '#ff9c9c';
 }
 
-// П11.6 (ADR-0058): предмети спорядження у картці солдата — коротка мітка,
-// ключ екіпірування і предмет каталогу цеху. Порядок фіксований (детермінізм).
+// П11.6 (ADR-0058): предмети спорядження у картці оперативника — коротка мітка,
+// ключ екіпірування і предмет каталогу «Кузні». Порядок фіксований (детермінізм).
+// П12.6 (ADR-0064): ключі каталогу англійські; назви — з каталогу (WORKSHOP_CATALOG).
 const EQUIP_ITEMS: [SoldierItemId, keyof SoldierEquipment, string][] = [
-  ['легка броня', 'armor', 'броня'],
-  ['оптичний приціл', 'optics', 'оптика'],
-  ['аптечка', 'medkit', 'аптечка'],
-  ['осколкова граната', 'grenade', 'граната'],
+  ['armor', 'armor', 'броня'],
+  ['optics', 'optics', 'око'],
+  ['medkit', 'medkit', 'гель'],
+  ['grenade', 'grenade', 'граната'],
 ];
 
 // Залежності від шару застосунку (main.ts): читання стану і дії панелей.
@@ -337,11 +338,12 @@ export function createPanels(deps: PanelsDeps): Panels {
         s.kills +
         '</span>';
       box.appendChild(row);
-      // П11.6 (ADR-0058): екіпірування в картці солдата — кнопки «спорядити»
-      // зі складу / «зняти» назад на склад; лише на геосцені (прецедент
-      // збереження). Предмет на солдатові — мітка ✓. П12.5 (ADR-0065):
-      // підказка спорядження несе числовий ефект ДО дії — «зараз → стане»
-      // цього солдата, числа з констант (хелпер effects.ts).
+      // П11.6 (ADR-0058): екіпірування в картці оперативника — кнопки
+      // «спорядити» зі складу / «зняти» назад на склад; лише на геосцені
+      // (прецедент збереження). Предмет на оперативникові — мітка ✓.
+      // П12.5 (ADR-0065): підказка спорядження несе числовий ефект ДО дії —
+      // «зараз → стане» цього оперативника, числа з констант (effects.ts).
+      // П12.6: назви предметів — з каталогу (ідентифікатор — не відображення).
       const eq = party.workshop.equipped[s.id];
       const eqRow = document.createElement('div');
       eqRow.className = 'meta';
@@ -353,10 +355,10 @@ export function createPanels(deps: PanelsDeps): Panels {
         b.textContent = on ? label + ' ✓' : label;
         b.disabled = busy || (!on && party.workshop.store[itemId] <= 0);
         b.title = on
-          ? 'Зняти «' + itemId + '» — назад на склад'
+          ? 'Зняти «' + itemName(itemId) + '» — назад на склад'
           : party.workshop.store[itemId] > 0
-            ? 'Спорядити «' + itemId + '» зі складу — ' + itemEffect(itemId, s)
-            : '«' + itemId + '» немає на складі — замовте в цеху';
+            ? 'Спорядити «' + itemName(itemId) + '» зі складу — ' + itemEffect(itemId, s)
+            : '«' + itemName(itemId) + '» немає на складі — замовте в «Кузні»';
         b.onclick = () => {
           try {
             if (on) unequipItem(party.workshop, s, itemId);

@@ -98,8 +98,8 @@ export const SCIENCE_POLICY: PartyBotPolicy = {
   ...DEFAULT_PARTY_POLICY,
   name: 'science',
   scientistsUpTo: 3,
-  projects: ['аптечка', 'оптичний приціл', 'легка броня', 'гарматний модуль', 'осколкова граната', 'розширення лабораторії'],
-  workshopOrders: ['аптечка', 'оптичний приціл', 'легка броня', 'гарматний модуль', 'осколкова граната'],
+  projects: ['medkit', 'optics', 'armor', 'gun-module', 'grenade', 'lab-extension'],
+  workshopOrders: ['medkit', 'optics', 'armor', 'gun-module', 'grenade'],
   equip: true,
 };
 
@@ -211,7 +211,7 @@ function presetPrice(base: number, preset: DifficultyPreset): number {
 // (для гарматного модуля — один на винищувач). Порядок — за ростером
 // (ветерани перші, прецедент missionSquad), жодного RNG.
 function workshopDeficit(party: Party, id: ItemId): number {
-  if (id === 'гарматний модуль') return party.intercept.fighter.gunModule ? 0 : 1;
+  if (id === 'gun-module') return party.intercept.fighter.gunModule ? 0 : 1;
   const key: keyof SoldierEquipment = soldierEquipKey(id);
   const lacking = readySoldiers(party.roster).filter((s) => !party.workshop.equipped[s.id]?.[key]).length;
   const supply = party.workshop.store[id] + party.workshop.queue.filter((o) => o.id === id).length;
@@ -224,16 +224,16 @@ function workshopDeficit(party: Party, id: ItemId): number {
 // (workshopDeficit відсікає його до виклику).
 function soldierEquipKey(id: ItemId): 'armor' | 'optics' | 'medkit' | 'grenade' {
   switch (id) {
-    case 'легка броня':
+    case 'armor':
       return 'armor';
-    case 'оптичний приціл':
+    case 'optics':
       return 'optics';
-    case 'аптечка':
+    case 'medkit':
       return 'medkit';
-    case 'осколкова граната':
+    case 'grenade':
       return 'grenade';
-    case 'гарматний модуль':
-      throw new Error('Гарматний модуль — озброєння винищувача, ключ екіпірування солдата недосяжний');
+    case 'gun-module':
+      throw new Error('Гарматний модуль перехоплювача — озброєння перехоплювача, ключ екіпірування оперативника недосяжний');
   }
 }
 
@@ -282,14 +282,14 @@ export function partyBotScienceStep(party: Party, policy: PartyBotPolicy): void 
   // 4) екіпірування: готові предмети зі складу — боєготовим у порядку ростера
   // (броня/оптика постійні, аптечка/граната — витратники на наступну місію).
   for (const soldier of readySoldiers(party.roster)) {
-    for (const id of ['легка броня', 'оптичний приціл', 'аптечка', 'осколкова граната'] as const) {
+    for (const id of ['armor', 'optics', 'medkit', 'grenade'] as const) {
       if (party.workshop.equipped[soldier.id]?.[soldierEquipKey(id)]) continue;
       if (party.workshop.store[id] <= 0) continue;
       equipItem(party.workshop, soldier, id);
     }
   }
-  // 5) гарматний модуль: зі складу на винищувач, лише на базі (ADR-0058).
-  if (party.intercept.fighter.status === 'на базі' && !party.intercept.fighter.gunModule && party.workshop.store['гарматний модуль'] > 0) {
+  // 5) гарматний модуль: зі складу на перехоплювач, лише у вузлі (ADR-0058).
+  if (party.intercept.fighter.status === 'на базі' && !party.intercept.fighter.gunModule && party.workshop.store['gun-module'] > 0) {
     installGunModule(party.workshop, party.intercept);
   }
 }

@@ -56,17 +56,17 @@ describe('замовлення (ADR-0058: оплата при замовленн
   it('замовлення списує ціну, ставить в кінець черги, подія в журналі', () => {
     const econ = richEcon();
     const workshop = createWorkshop();
-    const order = orderItem(econ, workshop, researchWith('аптечка'), 'аптечка');
-    expect(econ.money).toBe(5000 - WORKSHOP_CATALOG['аптечка'].cost);
-    expect(order).toEqual({ id: 'аптечка', ticksLeft: WORKSHOP_CATALOG['аптечка'].ticks });
+    const order = orderItem(econ, workshop, researchWith('medkit'), 'medkit');
+    expect(econ.money).toBe(5000 - WORKSHOP_CATALOG['medkit'].cost);
+    expect(order).toEqual({ id: 'medkit', ticksLeft: WORKSHOP_CATALOG['medkit'].ticks });
     expect(workshop.queue).toEqual([order]);
-    expect(workshop.log).toEqual([{ type: 'order', id: 'аптечка', ticks: WORKSHOP_CATALOG['аптечка'].ticks }]);
+    expect(workshop.log).toEqual([{ type: 'order', id: 'medkit', ticks: WORKSHOP_CATALOG['medkit'].ticks }]);
   });
 
   it('не досліджений предмет — throw, гроші й черга не змінюються', () => {
     const econ = richEcon();
     const workshop = createWorkshop();
-    expect(() => orderItem(econ, workshop, createResearch(), 'аптечка')).toThrow('Предмет ще не досліджено: аптечка');
+    expect(() => orderItem(econ, workshop, createResearch(), 'medkit')).toThrow('Предмет ще не досліджено: Регенеративний гель');
     expect(econ.money).toBe(5000);
     expect(workshop.queue).toEqual([]);
     expect(workshop.log).toEqual([]);
@@ -81,25 +81,25 @@ describe('замовлення (ADR-0058: оплата при замовленн
   it('недостатньо грошей — throw черги не змінюється (spend, у мінус неможливо)', () => {
     const econ = richEcon(10);
     const workshop = createWorkshop();
-    expect(() => orderItem(econ, workshop, researchWith('аптечка'), 'аптечка')).toThrow('Недостатньо грошей');
+    expect(() => orderItem(econ, workshop, researchWith('medkit'), 'medkit')).toThrow('Недостатньо грошей');
     expect(workshop.queue).toEqual([]);
   });
 
   it('множник пресету діє на ціну, тики — без множників (ADR-0033/0058)', () => {
     const econ = richEcon();
     const workshop = createWorkshop();
-    orderItem(econ, workshop, researchWith('аптечка'), 'аптечка', 'складний');
-    expect(econ.money).toBe(5000 - Math.round(WORKSHOP_CATALOG['аптечка'].cost * 0.9));
-    expect(workshop.queue[0].ticksLeft).toBe(WORKSHOP_CATALOG['аптечка'].ticks);
+    orderItem(econ, workshop, researchWith('medkit'), 'medkit', 'складний');
+    expect(econ.money).toBe(5000 - Math.round(WORKSHOP_CATALOG['medkit'].cost * 0.9));
+    expect(workshop.queue[0].ticksLeft).toBe(WORKSHOP_CATALOG['medkit'].ticks);
   });
 
   it('друге замовлення стає в кінець черги (одне активне — ADR-0058)', () => {
     const econ = richEcon();
     const workshop = createWorkshop();
-    const research = researchWith('аптечка', 'легка броня');
-    orderItem(econ, workshop, research, 'аптечка');
-    orderItem(econ, workshop, research, 'легка броня');
-    expect(workshop.queue.map((o) => o.id)).toEqual(['аптечка', 'легка броня']);
+    const research = researchWith('medkit', 'armor');
+    orderItem(econ, workshop, research, 'medkit');
+    orderItem(econ, workshop, research, 'armor');
+    expect(workshop.queue.map((o) => o.id)).toEqual(['medkit', 'armor']);
   });
 });
 
@@ -115,49 +115,49 @@ describe('тик виробництва (1 виклик = 1 тік геосце�
   it('тик зменшує лічильник активного замовлення', () => {
     const econ = richEcon();
     const workshop = createWorkshop();
-    orderItem(econ, workshop, researchWith('аптечка'), 'аптечка');
+    orderItem(econ, workshop, researchWith('medkit'), 'medkit');
     workshopTick(workshop);
-    expect(workshop.queue[0].ticksLeft).toBe(WORKSHOP_CATALOG['аптечка'].ticks - 1);
-    expect(workshop.store['аптечка']).toBe(0);
+    expect(workshop.queue[0].ticksLeft).toBe(WORKSHOP_CATALOG['medkit'].ticks - 1);
+    expect(workshop.store['medkit']).toBe(0);
   });
 
   it('виготовлення: предмет на склад, подія в журналі, черга порожніє', () => {
     const econ = richEcon();
     const workshop = createWorkshop();
-    orderItem(econ, workshop, researchWith('аптечка'), 'аптечка');
-    for (let i = 0; i < WORKSHOP_CATALOG['аптечка'].ticks; i++) workshopTick(workshop);
+    orderItem(econ, workshop, researchWith('medkit'), 'medkit');
+    for (let i = 0; i < WORKSHOP_CATALOG['medkit'].ticks; i++) workshopTick(workshop);
     expect(workshop.queue).toEqual([]);
-    expect(workshop.store['аптечка']).toBe(1);
-    expect(workshop.log.at(-1)).toEqual({ type: 'produced', id: 'аптечка' });
+    expect(workshop.store['medkit']).toBe(1);
+    expect(workshop.log.at(-1)).toEqual({ type: 'produced', id: 'medkit' });
   });
 
   it('чергу веде лише активне замовлення; наступне стартує з наступного тіку', () => {
     const econ = richEcon();
     const workshop = createWorkshop();
-    const research = researchWith('аптечка', 'легка броня');
-    orderItem(econ, workshop, research, 'аптечка'); // 12 тиків
-    orderItem(econ, workshop, research, 'легка броня'); // 24 тики
-    const total = WORKSHOP_CATALOG['аптечка'].ticks + WORKSHOP_CATALOG['легка броня'].ticks;
+    const research = researchWith('medkit', 'armor');
+    orderItem(econ, workshop, research, 'medkit'); // 12 тиків
+    orderItem(econ, workshop, research, 'armor'); // 24 тики
+    const total = WORKSHOP_CATALOG['medkit'].ticks + WORKSHOP_CATALOG['armor'].ticks;
     for (let i = 0; i < total; i++) workshopTick(workshop);
-    expect(workshop.store).toEqual({ ...emptyStore(), аптечка: 1, 'легка броня': 1 });
+    expect(workshop.store).toEqual({ ...emptyStore(), medkit: 1, armor: 1 });
     // на тік раніше броня ще не готова: активне замовлення стартує після здачі попереднього
     const workshop2 = createWorkshop();
-    orderItem(richEcon(), workshop2, research, 'аптечка');
-    orderItem(richEcon(), workshop2, research, 'легка броня');
+    orderItem(richEcon(), workshop2, research, 'medkit');
+    orderItem(richEcon(), workshop2, research, 'armor');
     for (let i = 0; i < total - 1; i++) workshopTick(workshop2);
-    expect(workshop2.store['аптечка']).toBe(1);
-    expect(workshop2.store['легка броня']).toBe(0);
+    expect(workshop2.store['medkit']).toBe(1);
+    expect(workshop2.store['armor']).toBe(0);
     expect(workshop2.queue[0].ticksLeft).toBe(1);
   });
 
   it('склад накопичує кілька предметів того самого типу', () => {
     const econ = richEcon();
     const workshop = createWorkshop();
-    const research = researchWith('аптечка');
-    orderItem(econ, workshop, research, 'аптечка');
-    orderItem(econ, workshop, research, 'аптечка');
-    for (let i = 0; i < WORKSHOP_CATALOG['аптечка'].ticks * 2; i++) workshopTick(workshop);
-    expect(workshop.store['аптечка']).toBe(2);
+    const research = researchWith('medkit');
+    orderItem(econ, workshop, research, 'medkit');
+    orderItem(econ, workshop, research, 'medkit');
+    for (let i = 0; i < WORKSHOP_CATALOG['medkit'].ticks * 2; i++) workshopTick(workshop);
+    expect(workshop.store['medkit']).toBe(2);
   });
 });
 
@@ -167,7 +167,7 @@ describe('ізоляція від геосцени (критерій П11.3: geo
     const withoutWorkshop = geoNoUfo(42);
     const econ = richEcon();
     const workshop = createWorkshop();
-    orderItem(econ, workshop, researchWith('аптечка'), 'аптечка');
+    orderItem(econ, workshop, researchWith('medkit'), 'medkit');
     for (let i = 0; i < 120; i++) {
       geoTick(withWorkshop);
       geoTick(withoutWorkshop);
@@ -177,7 +177,7 @@ describe('ізоляція від геосцени (критерій П11.3: geo
     expect(withWorkshop.minute).toBe(withoutWorkshop.minute);
     expect((withWorkshop.rng as StatefulRng).state).toBe((withoutWorkshop.rng as StatefulRng).state);
     // 120 тиків: замовлення здано (12 тиків), склад наповнений
-    expect(workshop.store['аптечка']).toBe(1);
+    expect(workshop.store['medkit']).toBe(1);
     expect(workshop.queue).toEqual([]);
   });
 
@@ -193,10 +193,10 @@ describe('ізоляція від геосцени (критерій П11.3: geo
 // Склад, поповнений напряму (тести екіпірування не про виробництво).
 function stockedWorkshop(): WorkshopState {
   const workshop = createWorkshop();
-  workshop.store['легка броня'] = 1;
-  workshop.store['оптичний приціл'] = 1;
-  workshop.store['аптечка'] = 2;
-  workshop.store['осколкова граната'] = 1;
+  workshop.store['armor'] = 1;
+  workshop.store['optics'] = 1;
+  workshop.store['medkit'] = 2;
+  workshop.store['grenade'] = 1;
   return workshop;
 }
 
@@ -204,42 +204,42 @@ describe('екіпірування ростеру (ADR-0058: броня/опти
   it('броня: з складу на солдата, +maxHp і +hp — солдат не стає пораненим', () => {
     const workshop = stockedWorkshop();
     const soldier = makeSoldier('s1', 'Іван');
-    equipItem(workshop, soldier, 'легка броня');
-    expect(workshop.store['легка броня']).toBe(0);
+    equipItem(workshop, soldier, 'armor');
+    expect(workshop.store['armor']).toBe(0);
     expect(soldier.maxHp).toBe(10 + ARMOR_MAX_HP_BONUS);
     expect(soldier.hp).toBe(soldier.maxHp);
     expect(workshop.equipped['s1']).toEqual({ armor: true, optics: false, medkit: false, grenade: false });
-    expect(workshop.log.at(-1)).toEqual({ type: 'equip', soldierId: 's1', id: 'легка броня' });
+    expect(workshop.log.at(-1)).toEqual({ type: 'equip', soldierId: 's1', id: 'armor' });
   });
 
   it('оптика: +0.05 точності з капом 0.95 (ADR-0004)', () => {
     const workshop = stockedWorkshop();
     const soldier = makeSoldier('s1', 'Іван');
-    equipItem(workshop, soldier, 'оптичний приціл');
+    equipItem(workshop, soldier, 'optics');
     expect(soldier.firingAccuracy).toBeCloseTo(0.6 + OPTICS_ACCURACY_BONUS, 10);
-    expect(workshop.store['оптичний приціл']).toBe(0);
+    expect(workshop.store['optics']).toBe(0);
     // кап: снайпер на межі 0.95 вище не піднімається
     const sniperShop = stockedWorkshop();
     const sniper = makeSoldier('s2', 'Олена');
     sniper.firingAccuracy = 0.95;
-    equipItem(sniperShop, sniper, 'оптичний приціл');
+    equipItem(sniperShop, sniper, 'optics');
     expect(sniper.firingAccuracy).toBe(0.95);
   });
 
   it('аптечка і граната: по одній на місію — друга не надягається', () => {
     const workshop = stockedWorkshop();
     const soldier = makeSoldier('s1', 'Іван');
-    equipItem(workshop, soldier, 'аптечка');
-    equipItem(workshop, soldier, 'осколкова граната');
+    equipItem(workshop, soldier, 'medkit');
+    equipItem(workshop, soldier, 'grenade');
     expect(workshop.equipped['s1']).toEqual({ armor: false, optics: false, medkit: true, grenade: true });
-    expect(() => equipItem(workshop, soldier, 'аптечка')).toThrow('Предмет уже при солдатові: аптечка');
-    expect(workshop.store['аптечка']).toBe(1); // невдала спроба нічого не списала
+    expect(() => equipItem(workshop, soldier, 'medkit')).toThrow('Предмет уже при оперативникові: Регенеративний гель');
+    expect(workshop.store['medkit']).toBe(1); // невдала спроба нічого не списала
   });
 
   it('порожній склад — throw, стан солдата не змінюється', () => {
     const workshop = createWorkshop();
     const soldier = makeSoldier('s1', 'Іван');
-    expect(() => equipItem(workshop, soldier, 'аптечка')).toThrow('Предмета немає на складі: аптечка');
+    expect(() => equipItem(workshop, soldier, 'medkit')).toThrow('Предмета немає на складі: Регенеративний гель');
     expect(soldier.maxHp).toBe(10);
     expect(workshop.equipped).toEqual({});
   });
@@ -247,47 +247,47 @@ describe('екіпірування ростеру (ADR-0058: броня/опти
   it('гарматний модуль на солдатові не носиться — throw українською', () => {
     const workshop = stockedWorkshop();
     const soldier = makeSoldier('s1', 'Іван');
-    expect(() => equipItem(workshop, soldier, 'гарматний модуль')).toThrow('озброєння винищувача');
-    expect(() => unequipItem(workshop, soldier, 'гарматний модуль')).toThrow('озброєння винищувача');
+    expect(() => equipItem(workshop, soldier, 'gun-module')).toThrow('озброєння перехоплювача');
+    expect(() => unequipItem(workshop, soldier, 'gun-module')).toThrow('озброєння перехоплювача');
   });
 
   it('зняття броні: предмет на склад, hp клемується новим maxHp', () => {
     const workshop = stockedWorkshop();
     const soldier = makeSoldier('s1', 'Іван');
-    equipItem(workshop, soldier, 'легка броня');
+    equipItem(workshop, soldier, 'armor');
     soldier.hp = 5; // поранений у броні
-    unequipItem(workshop, soldier, 'легка броня');
+    unequipItem(workshop, soldier, 'armor');
     expect(soldier.maxHp).toBe(10);
     expect(soldier.hp).toBe(5);
-    expect(workshop.store['легка броня']).toBe(1);
+    expect(workshop.store['armor']).toBe(1);
     expect(workshop.equipped).toEqual({}); // порожній запис не тримали
-    expect(workshop.log.at(-1)).toEqual({ type: 'unequip', soldierId: 's1', id: 'легка броня' });
+    expect(workshop.log.at(-1)).toEqual({ type: 'unequip', soldierId: 's1', id: 'armor' });
   });
 
   it('зняття оптики: точність повертається', () => {
     const workshop = stockedWorkshop();
     const soldier = makeSoldier('s1', 'Іван');
-    equipItem(workshop, soldier, 'оптичний приціл');
-    unequipItem(workshop, soldier, 'оптичний приціл');
+    equipItem(workshop, soldier, 'optics');
+    unequipItem(workshop, soldier, 'optics');
     expect(soldier.firingAccuracy).toBeCloseTo(0.6, 10);
-    expect(workshop.store['оптичний приціл']).toBe(1);
+    expect(workshop.store['optics']).toBe(1);
   });
 
   it('зняття одного предмету з кількох: запис екіпірування лишається', () => {
     const workshop = stockedWorkshop();
     const soldier = makeSoldier('s1', 'Іван');
-    equipItem(workshop, soldier, 'легка броня');
-    equipItem(workshop, soldier, 'аптечка');
-    unequipItem(workshop, soldier, 'легка броня');
+    equipItem(workshop, soldier, 'armor');
+    equipItem(workshop, soldier, 'medkit');
+    unequipItem(workshop, soldier, 'armor');
     expect(workshop.equipped['s1']).toEqual({ armor: false, optics: false, medkit: true, grenade: false });
-    expect(workshop.store['легка броня']).toBe(1);
-    expect(workshop.store['аптечка']).toBe(1); // аптечина залишилась при солдатові
+    expect(workshop.store['armor']).toBe(1);
+    expect(workshop.store['medkit']).toBe(1); // аптечина залишилась при солдатові
   });
 
   it('зняття того, чого немає на солдатові — throw', () => {
     const workshop = stockedWorkshop();
     const soldier = makeSoldier('s1', 'Іван');
-    expect(() => unequipItem(workshop, soldier, 'аптечка')).toThrow('Предмета немає на солдатові: аптечка');
+    expect(() => unequipItem(workshop, soldier, 'medkit')).toThrow('Предмета немає на оперативникові: Регенеративний гель');
   });
 });
 
@@ -295,8 +295,8 @@ describe('передача ефектів у місію (критерій П11.3
   it('загін місії — ті самі юніти ростеру: броня і оптика з ними (ADR-0058)', () => {
     const workshop = stockedWorkshop();
     const roster: Roster = createRoster(3);
-    equipItem(workshop, roster.soldiers[0], 'легка броня');
-    equipItem(workshop, roster.soldiers[0], 'оптичний приціл');
+    equipItem(workshop, roster.soldiers[0], 'armor');
+    equipItem(workshop, roster.soldiers[0], 'optics');
     const squad = missionSquad(roster);
     expect(squad[0].maxHp).toBe(roster.soldiers[0].maxHp);
     expect(squad[0].maxHp).toBe(10 + ARMOR_MAX_HP_BONUS);
@@ -311,8 +311,8 @@ describe('перма-смерть предметів (критерій П11.3: �
   it('предмети загиблого не повертаються на склад, запис вилучається, подія в журналі', () => {
     const workshop = stockedWorkshop();
     const roster = createRoster(3);
-    equipItem(workshop, roster.soldiers[0], 'легка броня');
-    equipItem(workshop, roster.soldiers[0], 'аптечка');
+    equipItem(workshop, roster.soldiers[0], 'armor');
+    equipItem(workshop, roster.soldiers[0], 'medkit');
     const storeBefore = { ...workshop.store };
     removeLostEquipment(workshop, [roster.soldiers[0]]);
     expect(workshop.equipped).toEqual({});
@@ -333,47 +333,47 @@ describe('перма-смерть предметів (критерій П11.3: �
 describe('гарматний модуль винищувача (ADR-0058: один модуль, екіпірування на геосцені)', () => {
   it('встановлення: з складу на винищувач, подія в журналі', () => {
     const workshop = stockedWorkshop();
-    workshop.store['гарматний модуль'] = 1;
+    workshop.store['gun-module'] = 1;
     const ic = createIntercept(11);
     installGunModule(workshop, ic);
     expect(ic.fighter.gunModule).toBe(true);
-    expect(workshop.store['гарматний модуль']).toBe(0);
+    expect(workshop.store['gun-module']).toBe(0);
     expect(workshop.log.at(-1)).toEqual({ type: 'gun_module_installed' });
   });
 
   it('порожній склад — throw, винищувач без змін', () => {
     const workshop = createWorkshop();
     const ic = createIntercept(11);
-    expect(() => installGunModule(workshop, ic)).toThrow('Предмета немає на складі: гарматний модуль');
+    expect(() => installGunModule(workshop, ic)).toThrow('Предмета немає на складі: Гарматний модуль перехоплювача');
     expect(ic.fighter.gunModule).toBeUndefined();
   });
 
   it('подвійне встановлення — throw', () => {
     const workshop = stockedWorkshop();
-    workshop.store['гарматний модуль'] = 1;
+    workshop.store['gun-module'] = 1;
     const ic = createIntercept(11);
     installGunModule(workshop, ic);
-    workshop.store['гарматний модуль'] = 1;
+    workshop.store['gun-module'] = 1;
     expect(() => installGunModule(workshop, ic)).toThrow('уже встановлено');
   });
 
   it('винищувач у польоті — обслуговування неможливе', () => {
     const workshop = stockedWorkshop();
-    workshop.store['гарматний модуль'] = 1;
+    workshop.store['gun-module'] = 1;
     const ic = createIntercept(11);
     ic.fighter.status = 'погоня';
-    expect(() => installGunModule(workshop, ic)).toThrow('лише на базі');
-    expect(() => removeGunModule(workshop, ic)).toThrow('лише на базі');
+    expect(() => installGunModule(workshop, ic)).toThrow('лише у вузлі «Рубіж»');
+    expect(() => removeGunModule(workshop, ic)).toThrow('лише у вузлі «Рубіж»');
   });
 
   it('зняття: модуль назад на склад, прапорець скинуто', () => {
     const workshop = stockedWorkshop();
-    workshop.store['гарматний модуль'] = 1;
+    workshop.store['gun-module'] = 1;
     const ic = createIntercept(11);
     installGunModule(workshop, ic);
     removeGunModule(workshop, ic);
     expect(ic.fighter.gunModule).toBe(false);
-    expect(workshop.store['гарматний модуль']).toBe(1);
+    expect(workshop.store['gun-module']).toBe(1);
     expect(workshop.log.at(-1)).toEqual({ type: 'gun_module_removed' });
   });
 
@@ -390,9 +390,9 @@ describe('deployConsumables / settleConsumables (П11.4)', () => {
   it('деплой: копія екіпірування в стан бою — лише витратники, лише озброєні', () => {
     const workshop = stockedWorkshop();
     const roster = createRoster(3);
-    equipItem(workshop, roster.soldiers[0], 'аптечка');
-    equipItem(workshop, roster.soldiers[1], 'осколкова граната');
-    equipItem(workshop, roster.soldiers[1], 'оптичний приціл'); // постійний — у витратники не йде
+    equipItem(workshop, roster.soldiers[0], 'medkit');
+    equipItem(workshop, roster.soldiers[1], 'grenade');
+    equipItem(workshop, roster.soldiers[1], 'optics'); // постійний — у витратники не йде
     const items = deployConsumables(workshop, missionSquad(roster));
     expect(items).toEqual({
       [roster.soldiers[0].id]: { medkit: true, grenade: false },
@@ -408,20 +408,20 @@ describe('deployConsumables / settleConsumables (П11.4)', () => {
   it('розрахунок: використана аптечка зникає, невикористана граната лишається', () => {
     const workshop = stockedWorkshop();
     const roster = createRoster(2);
-    equipItem(workshop, roster.soldiers[0], 'аптечка');
-    equipItem(workshop, roster.soldiers[0], 'осколкова граната');
+    equipItem(workshop, roster.soldiers[0], 'medkit');
+    equipItem(workshop, roster.soldiers[0], 'grenade');
     const s = roster.soldiers[0];
     const items = deployConsumables(workshop, [s]);
     items[s.id].medkit = false; // аптечка витрачена в бою
     settleConsumables(workshop, [s], items);
     expect(workshop.equipped[s.id]).toEqual({ armor: false, optics: false, medkit: false, grenade: true });
-    expect(workshop.store['аптечка']).toBe(1); // 2 − 1 екіпірована; використана на склад не повертається
+    expect(workshop.store['medkit']).toBe(1); // 2 − 1 екіпірована; використана на склад не повертається
   });
 
   it('розрахунок: всі витратники використані — порожній запис екіпірування вилучено', () => {
     const workshop = stockedWorkshop();
     const roster = createRoster(1);
-    equipItem(workshop, roster.soldiers[0], 'аптечка');
+    equipItem(workshop, roster.soldiers[0], 'medkit');
     const s = roster.soldiers[0];
     settleConsumables(workshop, [s], { [s.id]: { medkit: false, grenade: false } });
     expect(workshop.equipped).toEqual({}); // чистий стан у сейві
@@ -430,7 +430,7 @@ describe('deployConsumables / settleConsumables (П11.4)', () => {
   it('розрахунок: солдат з аптечкою не ходив у бій — запис не чіпається', () => {
     const workshop = stockedWorkshop();
     const roster = createRoster(2);
-    equipItem(workshop, roster.soldiers[1], 'аптечка'); // не в загоні місії
+    equipItem(workshop, roster.soldiers[1], 'medkit'); // не в загоні місії
     const s = roster.soldiers[0];
     settleConsumables(workshop, [s], {});
     expect(workshop.equipped[roster.soldiers[1].id]).toEqual({ armor: false, optics: false, medkit: true, grenade: false });
@@ -439,7 +439,7 @@ describe('deployConsumables / settleConsumables (П11.4)', () => {
   it('розрахунок без стану бою (бій до П11.4/старий виклик) — витратники втрачаються', () => {
     const workshop = stockedWorkshop();
     const roster = createRoster(1);
-    equipItem(workshop, roster.soldiers[0], 'аптечка');
+    equipItem(workshop, roster.soldiers[0], 'medkit');
     settleConsumables(workshop, [roster.soldiers[0]], undefined);
     expect(workshop.equipped).toEqual({});
   });
@@ -447,9 +447,9 @@ describe('deployConsumables / settleConsumables (П11.4)', () => {
   it('наскрізний цикл: деплой → «використання» в бою → розрахунок (критерій 3)', () => {
     const workshop = stockedWorkshop();
     const roster = createRoster(2);
-    equipItem(workshop, roster.soldiers[0], 'аптечка');
-    equipItem(workshop, roster.soldiers[0], 'осколкова граната');
-    equipItem(workshop, roster.soldiers[1], 'аптечка');
+    equipItem(workshop, roster.soldiers[0], 'medkit');
+    equipItem(workshop, roster.soldiers[0], 'grenade');
+    equipItem(workshop, roster.soldiers[1], 'medkit');
     const squad = missionSquad(roster);
     const items = deployConsumables(workshop, squad);
     // бій: обидва витратники першого солдата використано, другий не чіпав

@@ -22,14 +22,17 @@ export const SCIENTIST_SALARY = 20; // зарплата за добу за вч�
 export const BASE_LAB_SLOTS = 2; // стартові слоти лабораторії (ADR-0058)
 export const MAX_LAB_SLOTS = 3; // після проєкту «Розширення лабораторії»
 
-// Ідентифікатори проєктів — українські рядки (прецедент UfoKind, geo.ts).
-export type ProjectId = 'легка броня' | 'оптичний приціл' | 'аптечка' | 'розширення лабораторії' | 'осколкова граната' | 'гарматний модуль';
+// Ідентифікатори проєктів — стабільні англійські ключі (П12.6, ADR-0064:
+// ключі — не відображувані назви; сейви ≤0.3.0 мігруються при завантаженні,
+// save.ts). Відображувані назви — поле name каталогу.
+export type ProjectId = 'armor' | 'optics' | 'medkit' | 'lab-extension' | 'grenade' | 'gun-module';
 
 export interface ProjectDef {
   id: ProjectId;
-  cost: number; // кошти за старт (кандидат, П11.8)
-  points: number; // наукові точки до завершення (кандидат, П11.8)
-  prerequisite?: ProjectId; // передумова — завершений проєкт
+  name: string; // відображувана назва протоколу (ADR-0064 — мапа перейменувань)
+  cost: number; // кредити за старт (кандидат, П11.8)
+  points: number; // потік до завершення (кандидат, П11.8)
+  prerequisite?: ProjectId; // передумова — завершений протокол
 }
 
 // Стартовий каталог (ADR-0058): Т1 без передумов, Т2 — за передумовами.
@@ -37,21 +40,28 @@ export interface ProjectDef {
 // ×0.75 (вердикт власника 2026-10-18, комбо-B probe-гріду) — за кампанію
 // 30 діб бот-гравець із трьома вченими встигає 1.7–2.4 проєкти замість
 // 1.0–1.4; «легка броня» стає досяжною (до тунінгу — 0% партій).
+// П12.6 (ADR-0064): ключі англійські, назви — за мапою перейменувань.
 export const PROJECTS: ProjectDef[] = [
-  { id: 'легка броня', cost: 120, points: 27 },
-  { id: 'оптичний приціл', cost: 90, points: 23 },
-  { id: 'аптечка', cost: 100, points: 24 },
-  { id: 'розширення лабораторії', cost: 80, points: 33 },
-  { id: 'осколкова граната', cost: 140, points: 30, prerequisite: 'аптечка' },
-  { id: 'гарматний модуль', cost: 160, points: 36, prerequisite: 'оптичний приціл' },
+  { id: 'armor', name: 'Композитна броня', cost: 120, points: 27 },
+  { id: 'optics', name: 'Кібернетичне око', cost: 90, points: 23 },
+  { id: 'medkit', name: 'Регенеративний гель', cost: 100, points: 24 },
+  { id: 'lab-extension', name: 'Розширення лабораторії', cost: 80, points: 33 },
+  { id: 'grenade', name: 'Імпульсна граната', cost: 140, points: 30, prerequisite: 'medkit' },
+  { id: 'gun-module', name: 'Гарматний модуль перехоплювача', cost: 160, points: 36, prerequisite: 'optics' },
 ];
 
-export const LAB_EXTENSION_PROJECT: ProjectId = 'розширення лабораторії';
+export const LAB_EXTENSION_PROJECT: ProjectId = 'lab-extension';
 
 export const PROJECT_CATALOG: Record<ProjectId, ProjectDef> = Object.fromEntries(PROJECTS.map((p) => [p.id, p])) as Record<
   ProjectId,
   ProjectDef
 >;
+
+// Відображувана назва протоколу за ключем (для throw-текстів, журналу і
+// панелей; невідомий ключ — як є, без викиту).
+export function projectName(id: ProjectId): string {
+  return PROJECT_CATALOG[id]?.name ?? id;
+}
 
 // Стартовий пул імен вчених — фіксований, без RNG (детермінізм), циклічно
 // з суфіксом номера за прецедентом ростеру (squad.ts).
@@ -137,7 +147,7 @@ export function hireScientist(econ: EconomyState, research: ResearchState, prese
 // вилучає зі штату за id; вченого з таким id немає → помилка.
 export function fireScientist(research: ResearchState, id: string): Scientist {
   const rec = research.scientists.find((s) => s.id === id);
-  if (!rec) throw new Error('Вченого немає в штаті: ' + id);
+  if (!rec) throw new Error('Техноманта немає в штаті: ' + id);
   research.scientists = research.scientists.filter((s) => s.id !== id);
   research.log.push({ type: 'fire', name: rec.name });
   return rec;
@@ -172,10 +182,10 @@ function distributePool(research: ResearchState): void {
   }
 }
 
-// Старт проєкту (ADR-0058): оплата коштами одразу; перевіри — відома
+// Старт протоколу (ADR-0058): оплата кредитами одразу; перевіри — відома
 // ідентифікація, не завершений, не активний, передумова виконана, є вільний
 // слот. Порушення → throw з українським текстом, стан не змінюється.
-// Накопичений пул одразу розподіляється у новий проєкт (пул спільний).
+// Накопичений пул одразу розподіляється у новий протокол (пул спільний).
 export function startProject(
   econ: EconomyState,
   research: ResearchState,
@@ -183,18 +193,18 @@ export function startProject(
   preset: DifficultyPreset = DEFAULT_PRESET
 ): ActiveProject {
   const def = PROJECT_CATALOG[id];
-  if (!def) throw new Error('Невідомий проєкт: ' + id);
+  if (!def) throw new Error('Невідомий протокол: ' + id);
   if (research.completed.includes(id)) {
-    throw new Error('Проєкт уже завершено: ' + id);
+    throw new Error('Протокол уже завершено: ' + projectName(id));
   }
   if (research.active.some((p) => p.id === id)) {
-    throw new Error('Проєкт уже триває: ' + id);
+    throw new Error('Протокол уже триває: ' + projectName(id));
   }
   if (def.prerequisite !== undefined && !research.completed.includes(def.prerequisite)) {
-    throw new Error('Передумову не завершено: ' + def.prerequisite);
+    throw new Error('Передумову не завершено: ' + projectName(def.prerequisite));
   }
   if (research.active.length >= research.slots) {
-    throw new Error('Немає вільного слота лабораторії (' + research.slots + ')');
+    throw new Error('Немає вільного слота лабораторії техномагії (' + research.slots + ')');
   }
   const multipliers = DIFFICULTY_MULTIPLIERS[preset];
   spend(econ, Math.round(def.cost * multipliers.economyMultiplier));

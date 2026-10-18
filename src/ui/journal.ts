@@ -9,9 +9,9 @@ import type { GeoEvent } from '../core/geo';
 import { missionTargets } from '../core/geo';
 import { FIGHTER_MAX_HP, FIGHTER_REPAIR_COST } from '../core/intercept';
 import type { EconomyEvent } from '../core/economy';
-// П11.6 (ADR-0058): події науки і цеху → журнал (категорія «База»).
-import type { ResearchEvent } from '../core/research';
-import type { WorkshopEvent } from '../core/workshop';
+// П11.6 (ADR-0058): події науки і «Кузні» → журнал (категорія «База»).
+import { projectName, type ResearchEvent } from '../core/research';
+import { itemName, type WorkshopEvent } from '../core/workshop';
 import type { GameEvent, ShotMode } from '../core/combat';
 import { claimHint, type Party } from '../core/save';
 import { el } from './dom';
@@ -279,46 +279,49 @@ export function economyEventText(e: EconomyEvent): { text: string; cls: string }
 }
 
 // П11.6 (ADR-0058): чистий перетворювач події науки → рядок журналу (для
-// юніт-тестів); null — не для гравця. Зарплата й штрафні звільнення — classe
-// 'lose' (гроші й втрати), найм/точки/завершення — 'win'.
+// юніт-тестів); null — не для гравця. Утримання і штрафні звільнення — classe
+// 'lose' (кредити й втрати), вербування/потік/завершення — 'win'.
+// П12.6 (ADR-0064): термінологія Розриву — техноманти, потік, протоколи;
+// назви протоколів — з каталогу ядра (ключі — не відображення).
 export function researchEventText(e: ResearchEvent): { text: string; cls: string } | null {
   switch (e.type) {
     case 'hire':
-      return { text: '⚑ Вченого найнято: ' + e.name, cls: 'win' };
+      return { text: '⚑ Техноманта вербовано: ' + e.name, cls: 'win' };
     case 'fire':
-      return { text: '⚑ Вченого звільнено: ' + e.name, cls: '' };
+      return { text: '⚑ Техноманта звільнено: ' + e.name, cls: '' };
     case 'salary':
-      return { text: '⚑ Зарплата вчених (доба ' + e.day + '): −' + e.amount, cls: 'lose' };
+      return { text: '⚑ Утримання техномантів (доба ' + e.day + '): −' + e.amount, cls: 'lose' };
     case 'salary_shortfall':
-      return { text: '✗ Не вистачило на зарплату (доба ' + e.day + '): звільнено ' + e.fired.join(', '), cls: 'lose' };
+      return { text: '✗ Не вистачило на утримання (доба ' + e.day + '): звільнено ' + e.fired.join(', '), cls: 'lose' };
     case 'points':
-      return { text: '⚑ Наука: +' + e.amount + ' точок (доба ' + e.day + ')', cls: 'win' };
+      return { text: '⚑ Потік: +' + e.amount + ' (доба ' + e.day + ')', cls: 'win' };
     case 'project_started':
-      return { text: '⚑ Проєкт розпочато: ' + e.id, cls: '' };
+      return { text: '⚑ Протокол розпочато: ' + projectName(e.id), cls: '' };
     case 'project_completed':
-      return { text: '⚑ Проєкт завершено: ' + e.id + ' ✓', cls: 'win' };
+      return { text: '⚑ Протокол завершено: ' + projectName(e.id) + ' ✓', cls: 'win' };
   }
 }
 
-// П11.6 (ADR-0058): чистий перетворювач події цеху → рядок журналу (для
-// юніт-тестів); null — не для гравця. Солдат — за id (ростер журналу не
+// П11.6 (ADR-0058): чистий перетворювач події «Кузні» → рядок журналу (для
+// юніт-тестів); null — не для гравця. Оперативник — за id (ростер журналу не
 // відображає; ім'я видно в панелі ростеру). Виготовлення — 'win', втрата
 // екіпірування загиблого — 'lose' (перма-смерть).
+// П12.6 (ADR-0064): «Кузня»; назви предметів — з каталогу ядра.
 export function workshopEventText(e: WorkshopEvent): { text: string; cls: string } | null {
   switch (e.type) {
     case 'order':
-      return { text: '⚑ Цех: замовлено «' + e.id + '» — ' + e.ticks + ' тік(и)', cls: '' };
+      return { text: '⚑ Кузня: замовлено «' + itemName(e.id) + '» — ' + e.ticks + ' тік(и)', cls: '' };
     case 'produced':
-      return { text: '⚑ Цех: виготовлено «' + e.id + '» → склад ✓', cls: 'win' };
+      return { text: '⚑ Кузня: виготовлено «' + itemName(e.id) + '» → склад ✓', cls: 'win' };
     case 'equip':
-      return { text: '⚑ Цех: ' + e.soldierId + ' споряджено «' + e.id + '»', cls: '' };
+      return { text: '⚑ Кузня: ' + e.soldierId + ' споряджено «' + itemName(e.id) + '»', cls: '' };
     case 'unequip':
-      return { text: '⚑ Цех: з ' + e.soldierId + ' знято «' + e.id + '» → склад', cls: '' };
+      return { text: '⚑ Кузня: з ' + e.soldierId + ' знято «' + itemName(e.id) + '» → склад', cls: '' };
     case 'equipment_lost':
-      return { text: '✗ Екіпірування ' + e.soldierId + ' зникло разом із солдатом (' + e.items.join(', ') + ')', cls: 'lose' };
+      return { text: '✗ Екіпірування ' + e.soldierId + ' зникло разом із оперативником (' + e.items.join(', ') + ')', cls: 'lose' };
     case 'gun_module_installed':
-      return { text: '⚑ Цех: гарматний модуль на винищувачі', cls: '' };
+      return { text: '⚑ Кузня: гарматний модуль перехоплювача на перехоплюачі', cls: '' };
     case 'gun_module_removed':
-      return { text: '⚑ Цех: гарматний модуль знято на склад', cls: '' };
+      return { text: '⚑ Кузня: гарматний модуль перехоплювача знято на склад', cls: '' };
   }
 }

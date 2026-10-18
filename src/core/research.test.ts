@@ -89,7 +89,7 @@ describe('найм і звільнення вчених (ADR-0058)', () => {
     expect(fireScientist(research, 'в1').name).toBe('Зінаїда');
     expect(research.scientists).toEqual([]);
     expect(econ.money).toBe(money);
-    expect(() => fireScientist(research, 'в9')).toThrow('Вченого немає в штаті: в9');
+    expect(() => fireScientist(research, 'в9')).toThrow('Техноманта немає в штаті: в9');
   });
 });
 
@@ -97,49 +97,49 @@ describe('startProject — слоти і правила старту (ADR-0058)'
   it('оплату списано одразу, проєкт активний з нуля вкладених точок', () => {
     const econ = richEcon();
     const research = createResearch();
-    const p = startProject(econ, research, 'оптичний приціл');
-    expect(p).toEqual({ id: 'оптичний приціл', invested: 0 });
-    expect(econ.money).toBe(5000 - PROJECT_CATALOG['оптичний приціл'].cost);
+    const p = startProject(econ, research, 'optics');
+    expect(p).toEqual({ id: 'optics', invested: 0 });
+    expect(econ.money).toBe(5000 - PROJECT_CATALOG['optics'].cost);
     expect(research.active).toEqual([p]);
-    expect(research.log).toEqual([{ type: 'project_started', id: 'оптичний приціл' }]);
+    expect(research.log).toEqual([{ type: 'project_started', id: 'optics' }]);
   });
 
   it('порушення правил → throw українською, стан і гроші не змінюються', () => {
     const econ = richEcon();
     const research = createResearch();
-    startProject(econ, research, 'легка броня');
-    startProject(econ, research, 'аптечка');
+    startProject(econ, research, 'armor');
+    startProject(econ, research, 'medkit');
     const money = econ.money;
-    expect(() => startProject(econ, research, 'оптичний приціл')).toThrow('Немає вільного слота лабораторії (2)');
-    expect(() => startProject(econ, research, 'аптечка')).toThrow('Проєкт уже триває: аптечка');
-    expect(() => startProject(econ, research, 'осколкова граната')).toThrow('Передумову не завершено: аптечка');
-    expect(() => startProject(econ, research, 'гарматний модуль')).toThrow('Передумову не завершено: оптичний приціл');
-    expect(() => startProject(econ, research, 'телепорт' as ProjectId)).toThrow('Невідомий проєкт: телепорт');
-    research.completed.push('легка броня');
-    expect(() => startProject(econ, research, 'легка броня')).toThrow('Проєкт уже завершено: легка броня');
+    expect(() => startProject(econ, research, 'optics')).toThrow('Немає вільного слота лабораторії техномагії (2)');
+    expect(() => startProject(econ, research, 'medkit')).toThrow('Протокол уже триває: Регенеративний гель');
+    expect(() => startProject(econ, research, 'grenade')).toThrow('Передумову не завершено: Регенеративний гель');
+    expect(() => startProject(econ, research, 'gun-module')).toThrow('Передумову не завершено: Кібернетичне око');
+    expect(() => startProject(econ, research, 'телепорт' as ProjectId)).toThrow('Невідомий протокол: телепорт');
+    research.completed.push('armor');
+    expect(() => startProject(econ, research, 'armor')).toThrow('Протокол уже завершено: Композитна броня');
     expect(research.active.length).toBe(2);
     expect(econ.money).toBe(money);
   });
 
   it('недостатньо коштів → throw, слот не зайнято', () => {
-    const econ = richEcon(PROJECT_CATALOG['легка броня'].cost - 1);
+    const econ = richEcon(PROJECT_CATALOG['armor'].cost - 1);
     const research = createResearch();
-    expect(() => startProject(econ, research, 'легка броня')).toThrow('Недостатньо грошей');
+    expect(() => startProject(econ, research, 'armor')).toThrow('Недостатньо грошей');
     expect(research.active).toEqual([]);
   });
 
   it('після завершення передумови Т2 стартує', () => {
     const econ = richEcon();
     const research = createResearch();
-    research.completed.push('аптечка');
-    expect(() => startProject(econ, research, 'осколкова граната')).not.toThrow();
+    research.completed.push('medkit');
+    expect(() => startProject(econ, research, 'grenade')).not.toThrow();
   });
 
   it('пресет множить ціну старту: «складний» ×0.9 → 81 за оптику', () => {
     const econ = richEcon();
     const research = createResearch();
-    startProject(econ, research, 'оптичний приціл', 'складний');
-    expect(econ.money).toBe(5000 - Math.round(PROJECT_CATALOG['оптичний приціл'].cost * 0.9));
+    startProject(econ, research, 'optics', 'складний');
+    expect(econ.money).toBe(5000 - Math.round(PROJECT_CATALOG['optics'].cost * 0.9));
   });
 });
 
@@ -263,8 +263,8 @@ describe('розподіл точок і завершення проєктів (
   it('порівну між активними, остача — першим за порядком запуску', () => {
     const econ = richEcon();
     const research = withActive(createResearch(), [
-      { id: 'легка броня', invested: 0 },
-      { id: 'аптечка', invested: 0 },
+      { id: 'armor', invested: 0 },
+      { id: 'medkit', invested: 0 },
     ]);
     research.pool = 3;
     const geo = geoNoUfo();
@@ -282,35 +282,35 @@ describe('розподіл точок і завершення проєктів (
     advanceTime(geo, 48);
     researchTick(research, econ, geo);
     expect(research.pool).toBe(1);
-    expect(startProject(econ, research, 'оптичний приціл').invested).toBe(1);
+    expect(startProject(econ, research, 'optics').invested).toBe(1);
     expect(research.pool).toBe(0);
   });
 
   it('заповнений проєкт завершується: слот звільнено, лишок лишається в пулі', () => {
     const econ = richEcon();
-    // П11.8: «оптичний приціл» — 23 точки (тунінг ×0.75), бракує однієї
-    const research = withActive(createResearch(), [{ id: 'оптичний приціл', invested: 22 }]);
+    // П11.8: «Кібернетичне око» — 23 точки (тунінг ×0.75), бракує однієї
+    const research = withActive(createResearch(), [{ id: 'optics', invested: 22 }]);
     research.pool = 2;
     const geo = geoNoUfo();
     advanceTime(geo, 48);
     researchTick(research, econ, geo);
     expect(research.active).toEqual([]);
-    expect(research.completed).toEqual(['оптичний приціл']);
+    expect(research.completed).toEqual(['optics']);
     expect(research.pool).toBe(1);
-    expect(research.log).toContainEqual({ type: 'project_completed', id: 'оптичний приціл' });
+    expect(research.log).toContainEqual({ type: 'project_completed', id: 'optics' });
   });
 
   it('кілька проєктів можуть завершитися за одну добу з великого пулу', () => {
     const econ = richEcon();
     const research = withActive(createResearch(), [
-      { id: 'оптичний приціл', invested: 22 },
-      { id: 'легка броня', invested: 26 },
+      { id: 'optics', invested: 22 },
+      { id: 'armor', invested: 26 },
     ]);
     research.pool = 3;
     const geo = geoNoUfo();
     advanceTime(geo, 48);
     researchTick(research, econ, geo);
-    expect(research.completed).toEqual(['оптичний приціл', 'легка броня']);
+    expect(research.completed).toEqual(['optics', 'armor']);
     // обом бракувало по 1 точці — з 3 у пулі одна лишилась (пул спільний)
     expect(research.pool).toBe(1);
   });
@@ -318,15 +318,15 @@ describe('розподіл точок і завершення проєктів (
   it('«Розширення лабораторії» відкриває третій слот — стартує третій проєкт', () => {
     const econ = richEcon();
     const research = withActive(createResearch(), [
-      { id: 'розширення лабораторії', invested: 32 },
-      { id: 'легка броня', invested: 0 },
+      { id: 'lab-extension', invested: 32 },
+      { id: 'armor', invested: 0 },
     ]);
     research.pool = 1;
     const geo = geoNoUfo();
     advanceTime(geo, 48);
     researchTick(research, econ, geo);
     expect(research.slots).toBe(MAX_LAB_SLOTS);
-    expect(() => startProject(econ, research, 'аптечка')).not.toThrow();
+    expect(() => startProject(econ, research, 'medkit')).not.toThrow();
     expect(research.active.length).toBe(2);
   });
 });

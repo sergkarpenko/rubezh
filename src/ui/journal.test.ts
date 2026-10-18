@@ -445,26 +445,26 @@ describe('Journal: підказки по ходу (П9.2, один раз за �
 describe('researchEventText: перетворювач подій науки (П11.6)', () => {
   it('найм/звільнення/точки/завершення — з прапорцем ⚑', () => {
     expect(researchEventText(evResearch({ type: 'hire', name: 'Зінаїда' }))).toEqual({
-      text: '⚑ Вченого найнято: Зінаїда',
+      text: '⚑ Техноманта вербовано: Зінаїда',
       cls: 'win',
     });
     expect(researchEventText(evResearch({ type: 'fire', name: 'Ярослав' }))).toEqual({
-      text: '⚑ Вченого звільнено: Ярослав',
+      text: '⚑ Техноманта звільнено: Ярослав',
       cls: '',
     });
     expect(researchEventText(evResearch({ type: 'points', day: 3, amount: 2 }))).toEqual({
-      text: '⚑ Наука: +2 точок (доба 3)',
+      text: '⚑ Потік: +2 (доба 3)',
       cls: 'win',
     });
-    expect(researchEventText(evResearch({ type: 'project_completed', id: 'аптечка' }))).toEqual({
-      text: '⚑ Проєкт завершено: аптечка ✓',
+    expect(researchEventText(evResearch({ type: 'project_completed', id: 'medkit' }))).toEqual({
+      text: '⚑ Протокол завершено: Регенеративний гель ✓',
       cls: 'win',
     });
   });
 
   it('зарплата і невиплата — клас lose (гроші й втрати)', () => {
     expect(researchEventText(evResearch({ type: 'salary', day: 2, amount: 40 }))).toEqual({
-      text: '⚑ Зарплата вчених (доба 2): −40',
+      text: '⚑ Утримання техномантів (доба 2): −40',
       cls: 'lose',
     });
     expect(researchEventText(evResearch({ type: 'salary_shortfall', day: 4, fired: ['Оксана', 'Левко'] }))?.text).toContain(
@@ -476,13 +476,13 @@ describe('researchEventText: перетворювач подій науки (П1
 describe('drainResearch: seen-трекінг подій науки (П11.6)', () => {
   it('нові події → журнал категорією «base»; повторний дрен — без дублів', () => {
     const p = createParty(42);
-    p.research.log.push(evResearch({ type: 'hire', name: 'Зінаїда' }), evResearch({ type: 'project_started', id: 'аптечка' }));
+    p.research.log.push(evResearch({ type: 'hire', name: 'Зінаїда' }), evResearch({ type: 'project_started', id: 'medkit' }));
     const j = createJournal(makeDeps({ researchLog: () => p.research.log }));
     j.drainResearch();
     const lis = [...document.querySelectorAll('#log li')];
     expect(lis).toHaveLength(2);
     expect(lis.every((li) => li.dataset.cat === 'base')).toBe(true);
-    expect(lis[0].textContent).toContain('Проєкт розпочато');
+    expect(lis[0].textContent).toContain('Протокол розпочато');
     j.drainResearch(); // повторний дрен — нових подій нема
     expect(document.querySelectorAll('#log li')).toHaveLength(2);
   });
@@ -508,7 +508,7 @@ describe('drainResearch: seen-трекінг подій науки (П11.6)', ()
     j.add('Дотація за добу 1: +75', '', 'econ');
     j.setFilter('base');
     const lis = [...document.querySelectorAll('#log li')] as HTMLLIElement[];
-    expect(lis.find((li) => li.textContent?.includes('Наука'))!.style.display).toBe('');
+    expect(lis.find((li) => li.textContent?.includes('Потік'))!.style.display).toBe('');
     expect(lis.find((li) => li.textContent?.includes('Дотація'))!.style.display).toBe('none');
   });
 });
@@ -516,23 +516,25 @@ describe('drainResearch: seen-трекінг подій науки (П11.6)', ()
 // П11.6 (ADR-0058): події цеху → журнал (категорія «База», seen-трекінг).
 describe('workshopEventText: перетворювач подій цеху (П11.6)', () => {
   it('замовлення/виготовлення/екіпірування — з прапорцем ⚑', () => {
-    expect(workshopEventText(evWorkshop({ type: 'order', id: 'аптечка', ticks: 12 }))).toEqual({
-      text: '⚑ Цех: замовлено «аптечка» — 12 тік(и)',
+    expect(workshopEventText(evWorkshop({ type: 'order', id: 'medkit', ticks: 12 }))).toEqual({
+      text: '⚑ Кузня: замовлено «Регенеративний гель» — 12 тік(и)',
       cls: '',
     });
-    expect(workshopEventText(evWorkshop({ type: 'produced', id: 'легка броня' }))).toEqual({
-      text: '⚑ Цех: виготовлено «легка броня» → склад ✓',
+    expect(workshopEventText(evWorkshop({ type: 'produced', id: 'armor' }))).toEqual({
+      text: '⚑ Кузня: виготовлено «Композитна броня» → склад ✓',
       cls: 'win',
     });
-    expect(workshopEventText(evWorkshop({ type: 'equip', soldierId: 'с1', id: 'оптичний приціл' }))?.text).toContain(
-      'с1 споряджено «оптичний приціл»'
+    expect(workshopEventText(evWorkshop({ type: 'equip', soldierId: 'с1', id: 'optics' }))?.text).toContain(
+      'с1 споряджено «Кібернетичне око»'
     );
-    expect(workshopEventText(evWorkshop({ type: 'unequip', soldierId: 'с1', id: 'аптечка' }))?.text).toContain('з с1 знято «аптечка»');
+    expect(workshopEventText(evWorkshop({ type: 'unequip', soldierId: 'с1', id: 'medkit' }))?.text).toContain(
+      'з с1 знято «Регенеративний гель»'
+    );
   });
 
   it('втрата екіпірування загиблого — клас lose (перма-смерть)', () => {
     expect(workshopEventText(evWorkshop({ type: 'equipment_lost', soldierId: 'с2', items: ['armor', 'medkit'] }))).toEqual({
-      text: '✗ Екіпірування с2 зникло разом із солдатом (armor, medkit)',
+      text: '✗ Екіпірування с2 зникло разом із оперативником (armor, medkit)',
       cls: 'lose',
     });
   });
@@ -542,19 +544,19 @@ describe('drainWorkshop: seen-трекінг подій цеху (П11.6)', () =
   it('нові події → журнал категорією «base»; adopt ховає історію', () => {
     const p = createParty(42);
     let current = p; // застосунок перемкнувся на нову партію (як adoptParty в main.ts)
-    p.workshop.log.push(evWorkshop({ type: 'order', id: 'аптечка', ticks: 12 }));
+    p.workshop.log.push(evWorkshop({ type: 'order', id: 'medkit', ticks: 12 }));
     const j = createJournal(makeDeps({ workshopLog: () => current.workshop.log }));
     j.drainWorkshop();
     expect(document.querySelectorAll('#log li[data-cat="base"]')).toHaveLength(1);
-    p.workshop.log.push(evWorkshop({ type: 'produced', id: 'аптечка' }));
+    p.workshop.log.push(evWorkshop({ type: 'produced', id: 'medkit' }));
     j.drainWorkshop();
     expect(document.querySelectorAll('#log li[data-cat="base"]')).toHaveLength(2);
     const fresh = createParty(7);
     current = fresh;
     j.adopt(fresh); // нова партія — seen до кінця її (порожнього) логу
-    fresh.workshop.log.push(evWorkshop({ type: 'order', id: 'легка броня', ticks: 24 }));
+    fresh.workshop.log.push(evWorkshop({ type: 'order', id: 'armor', ticks: 24 }));
     j.drainWorkshop();
     expect(document.querySelectorAll('#log li[data-cat="base"]')).toHaveLength(3);
-    expect(document.querySelector('#log li')!.textContent).toContain('легка броня');
+    expect(document.querySelector('#log li')!.textContent).toContain('Композитна броня');
   });
 });
