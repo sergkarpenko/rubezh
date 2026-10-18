@@ -43,8 +43,13 @@ import { createInput } from './ui/input';
 import { initPixelSprites } from './render';
 import { AnimEngine, makeGeoPulseAnim, makeTracerAnim, type Anim } from './core/render-core';
 // П5.3 (ADR-0026): партія і слоти збереження — із чистого ядра save.ts.
-import { createParty, type Party } from './core/save';
+// П12.2 (ADR-0065): serializeParty — ще й контрольна точка «незбережених
+// змін» для підтвердження виходу (той самий детермінований стан, без дублів).
+import { createParty, serializeParty, type Party } from './core/save';
 import { campaignTick, type DifficultyPreset } from './core/campaign';
+// П12.2 (ADR-0065): каркас екранів і навігації — модуль src/ui/screens.ts;
+// тут — лише зв'язування з партією, панеллю збереження і «Як грати».
+import { createScreens, type Screens } from './ui/screens';
 
 // пR.2 (ADR-0037): масштаб сітки (GCELL/BCELL) — спільний модуль src/ui/grid.ts.
 
@@ -71,11 +76,11 @@ const sound = createSound();
 // перехоплення (П7.5). Створюється ДО newParty(42): adoptParty звідти
 // використовує journal.adopt (урок TDZ — див. docs/workflow.md).
 const journalUI = createJournal({
-  geoLog: () => party.geo.log,
-  econLog: () => party.econ.log,
+  geoLog: () => activeParty().geo.log,
+  econLog: () => activeParty().econ.log,
   battleLog: () => (ui.mission ? ui.mission.state.log : null),
-  researchLog: () => party.research.log, // П11.6: події науки → журнал («База»)
-  workshopLog: () => party.workshop.log, // П11.6: події цеху → журнал («База»)
+  researchLog: () => activeParty().research.log, // П11.6: події науки → журнал («База»)
+  workshopLog: () => activeParty().workshop.log, // П11.6: події цеху → журнал («База»)
   unitName,
   onGeoEvent: (e) => {
     if (hasRaf) geoAnim.push(...interceptAnims(e as InterceptEvent));
@@ -83,13 +88,33 @@ const journalUI = createJournal({
   // П11.7 (ADR-0059): звуки подій бою і геосцени — через drain-контур журналу.
   onBattleSound: (e) => sound.battleEvent(e),
   onGeoSound: (e) => sound.geoEvent(e),
-  party: () => party, // П9.2: прапорці підказок журналу — у Party (сейв-сумісні)
+  party: () => activeParty(), // П9.2: прапорці підказок журналу — у Party (сейв-сумісні)
 });
 const journal = journalUI.add; // виклики journal(text, cls, cat) у шарі застосунку без змін
 
 let gameOver = false; // банкрутство (ADR-0021): боєготових немає і грошей на найм немає
 let victoryDismissed = false; // П8.3a: endless — гравець закрив екран перемоги і продовжує гру
-let party: Party = newParty(42);
+// П12.2 (ADR-0065): партія створюється лише вибором гравця на стартовому
+// екрані — до того її немає (стартовий екран живе без стану партії).
+let party: Party | null = null;
+// Доступ до партії з closures шару відображення: усі виклики відбуваються
+// лише в активній грі (стартовий екран панелі не рендерить); явний захист
+// від розсинхрону — помилка українською, без тихих undefined.
+function activeParty(): Party {
+  if (party === null) throw new Error('Партію не створено — дії доступні лише в активній грі');
+  return party;
+}
+// П12.2 (ADR-0026): контрольна серіалізація на момент останнього створення/
+// збереження/завантаження; розбіжність = незбережені зміни (вихід — з
+// підтвердженням, сейв лише вручну). Детермінований стан (ADR-0003).
+let checkpoint: string | null = null;
+function hasUnsavedChanges(): boolean {
+  if (party === null || checkpoint === null) return false;
+  return serializeParty(party) !== checkpoint;
+}
+// П12.2 (ADR-0065): каркас екранів — створюється лише у браузері (контент
+// будує DOM); твердження про null страхують шари-зв'язки до ініціалізації.
+let screens: Screens | null = null;
 // пR.2 (ADR-0037): стан бою — явний об'єкт замість модульних let (мітигація
 // плану рефакторингу); ним спільно користуються модуль бою (src/ui/battle.ts)
 // і обробники вводу (нижче). Порядок оголошень — TDZ, див. docs/workflow.md.
@@ -110,7 +135,7 @@ const ui: BattleUIState = {
 // і анімаційними рушіями (через адаптер: closures нижче оголошені пізніше,
 // викликаються лише у рантаймі).
 const battle = createBattleUI(ui, {
-  getParty: () => party,
+  getParty: () => activeParty(),
   journal,
   drainBattle: () => journalUI.drainBattle(),
   resetBattleLog: () => journalUI.resetBattle(),
@@ -159,12 +184,19 @@ const demo = new DemoDriver({
 // пR.2 (ADR-0037): панель збереження (П5.3, ADR-0026) — модуль src/ui/save-panel.ts;
 // тут лише зв'язування зі станом застосунку (party/mission/gameOver) і журналом.
 const savePanel = createSavePanel({
-  getParty: () => party,
+  getParty: () => activeParty(),
   adoptLoaded: (p) => {
     party = adoptParty(p);
   },
+  // П12.2 (ADR-0026): вдалий сейв — нова контрольна точка незбережених змін
+  onSaved: () => {
+    checkpoint = party === null ? null : serializeParty(party);
+  },
   inBattle: () => ui.mission !== null,
-  interceptBusy: () => party.intercept.fighter.status === 'погоня' || party.intercept.fighter.status === 'бій',
+  interceptBusy: () => {
+    const f = activeParty().intercept.fighter;
+    return f.status === 'погоня' || f.status === 'бій';
+  },
   isGameOver: () => gameOver,
   journal,
   renderAll,
@@ -175,7 +207,7 @@ const savePanel = createSavePanel({
 // тут — лише зв'язування зі станом застосунку (party/mission/gameOver),
 // журналом (drain*), анімацією геосцени (пульс радара) і запуском місії.
 const panels = createPanels({
-  getParty: () => party,
+  getParty: () => activeParty(),
   inBattle: () => ui.mission !== null,
   isGameOver: () => gameOver,
   journal,
@@ -191,7 +223,7 @@ const panels = createPanels({
 // П11.6 (ADR-0058/0037): панель «Дослідження» — тут лише зв'язування зі
 // станом застосунку (party/mission/gameOver) і журналом (drain).
 const researchPanel = createResearchPanel({
-  getParty: () => party,
+  getParty: () => activeParty(),
   inBattle: () => ui.mission !== null,
   isGameOver: () => gameOver,
   journal,
@@ -202,7 +234,7 @@ const researchPanel = createResearchPanel({
 // П11.6 (ADR-0058/0037): панель «Цех» — тут лише зв'язування зі станом
 // застосунку і журналом (drain). Екіпірування — у модулі panels (картка солдата).
 const workshopPanel = createWorkshopPanel({
-  getParty: () => party,
+  getParty: () => activeParty(),
   inBattle: () => ui.mission !== null,
   isGameOver: () => gameOver,
   journal,
@@ -229,11 +261,13 @@ const geoAnim = new AnimEngine({
 // Прийняти партію у UI-шар: seen-трекінг журналу — у модулі journal (історію
 // не відтворюємо — лише нові події після точки входу, трекінг НЛО з логу —
 // ADR-0006), банкрутство перераховуємо тут (ADR-0021). Спільно для нової
-// і завантаженої партії.
+// і завантаженої партії. П12.2 (ADR-0026): точка прийняття — контрольна
+// серіалізація (незбережених змін на цей момент немає).
 function adoptParty(p: Party): Party {
   journalUI.adopt(p);
   gameOver = isBankrupt(p.econ, p.roster, p.campaign.preset);
   victoryDismissed = false; // П8.3a: нова/завантажена партія — екран перемоги показується знову
+  checkpoint = serializeParty(p);
   return p;
 }
 
@@ -253,10 +287,12 @@ function unitName(id: string): string {
 // між поточними позиціями винищувача і НЛО у клітинках геосцени (GCELL задає drawAnimFrame).
 // Промахи не анімуємо (лише влучання — спалах удару), відступ/ремонт — без анімацій.
 function interceptAnims(e: InterceptEvent): Anim[] {
+  if (party === null) return []; // П12.2: події геосцени — лише в активній грі
   if (e.type !== 'intercept_round' || e.choice === 'відступ') return [];
-  const ufo = party.geo.ufos.find((u) => u.id === party.intercept.activeUfoId);
+  const p = party;
+  const ufo = p.geo.ufos.find((u) => u.id === p.intercept.activeUfoId);
   if (!ufo) return [];
-  const fpos = party.intercept.fighter.pos;
+  const fpos = p.intercept.fighter.pos;
   const anims: Anim[] = [];
   if (e.fighterHit) anims.push(makeTracerAnim('player', { ...fpos }, { ...ufo.pos }, true));
   if (e.ufoHit) anims.push(makeTracerAnim('alien', { ...ufo.pos }, { ...fpos }, true));
@@ -267,32 +303,36 @@ function interceptAnims(e: InterceptEvent): Anim[] {
 
 // П4.5 (ADR-0021): один тік часу партії — геосцена + дотація + лікарня +
 // перевірка банкрутства. Викликати лише поза бою (час геосцени заморожено).
+// П12.2 (ADR-0065): виклик можливий лише в активній грі (стартовий екран
+// партії не має) — захист на вході.
 function partyTick(): void {
-  advanceTime(party.geo, 1);
-  economyTick(party.econ, party.geo, party.campaign.preset);
+  if (party === null) return;
+  const p = party;
+  advanceTime(p.geo, 1);
+  economyTick(p.econ, p.geo, p.campaign.preset);
   // П11.2 (ADR-0058): зарплата і наукові точки — тим самим контуром доби,
   // одразу після дотації; без вчених — no-op (партії без науки не змінюються).
-  researchTick(party.research, party.econ, party.geo, party.campaign.preset);
+  researchTick(p.research, p.econ, p.geo, p.campaign.preset);
   // П11.3 (ADR-0058): виробництво — тіками геосцени (1 виклик = 1 тік);
   // без замовлень — no-op (партії без цеху не змінюються).
-  workshopTick(party.workshop);
-  hospitalTick(party.roster);
+  workshopTick(p.workshop);
+  hospitalTick(p.roster);
   // П7.4 (ADR-0032): погоня й ремонт живуть тіками геосцени разом з партією
-  interceptTick(party.intercept, party.geo);
-  repairTick(party.intercept, party.geo);
+  interceptTick(p.intercept, p.geo);
+  repairTick(p.intercept, p.geo);
   // П6.9 (ADR-0029): пульс радара на тік часу — серія тіків (доба) дає один
   // пульс (coalesce за busy), idle → 0 перерисовок. Лише візуальний ефект.
   if (hasRaf && !geoAnim.busy) {
-    const b = party.geo.base;
+    const b = p.geo.base;
     geoAnim.push(makeGeoPulseAnim(b.x * GCELL + GCELL / 2, b.y * GCELL + GCELL / 2, (RADAR_RANGE + 0.5) * GCELL));
   }
-  if (!gameOver && isBankrupt(party.econ, party.roster, party.campaign.preset)) {
+  if (!gameOver && isBankrupt(p.econ, p.roster, p.campaign.preset)) {
     gameOver = true;
     journal('✗ Банкрутство: немає боєготових солдатів і грошей на найм — партію програно.', 'lose', 'econ');
   }
 
   // П8.3: перевірка кампанії на межі 30-ї доби
-  campaignTick({ geo: party.geo, roster: party.roster, econ: party.econ }, party.campaign);
+  campaignTick({ geo: p.geo, roster: p.roster, econ: p.econ }, p.campaign);
 }
 
 // --- пR.2 (ADR-0037): панелі стану і топбара — модуль src/ui/panels.ts ---
@@ -303,7 +343,10 @@ function partyTick(): void {
 
 // ADR-0027: фокусна зона — геосцена або бій (не «два екрани»); чипи кампанії
 // і панелі — модуль panels, рендер бойовища — модуль battle (пR.2).
+// П12.2 (ADR-0065): без активної партії не рендеримо — стартовий екран
+// показує каркас екранів (screens.ts), панелі лишаються у початковому стані.
 function renderAll(): void {
+  if (party === null) return;
   el('geo-panel').classList.toggle('hidden', ui.mission !== null);
   el('battle-panel').classList.toggle('hidden', ui.mission === null);
   // ADR-0027 (П6.3): у бою колонка стану приглушена й неактивна —
@@ -321,17 +364,27 @@ function renderAll(): void {
   if (ui.mission) battle.renderBattle();
 }
 
-function restart(): void {
+// П12.2 (ADR-0065): старт нової партії — єдиний шлях створення партії:
+// діалог стартового екрана (сід + складність, ADR-0033) або «Грати знов» на
+// екрані перемоги (дефолти 42/«норма», чинний контракт П8.3a). Каркас
+// екранів перемикається до рендеру, журнал — як у чинному рестарті.
+function startNewParty(seed: number, preset: DifficultyPreset = 'норма'): void {
   battle.close();
   geoAnim.cancel(); // П6.9: нова партія — пульс старої бази не відтворюємо
-  const seed = Number(el<HTMLInputElement>('seed').value) || 42;
-  // П8.4a: пресет складності з селектора топбара; невідоме значення — «норма».
-  // П10.3: третій пресет «складний».
-  const raw = el<HTMLSelectElement>('preset').value;
-  const preset: DifficultyPreset = raw === 'легкий' || raw === 'складний' ? raw : 'норма';
   party = newParty(seed, preset);
+  screens?.showGame();
   renderAll();
   journal('Нова партія (сід ' + seed + ', складність «' + party.campaign.preset + '»). Рухайте час — радар шукає НЛО.');
+}
+
+// П12.2 (ADR-0065): «Продовжити» — останній активний слот через API панелі
+// збереження (ADR-0026); завантаження приймає партію (adoptLoaded →
+// adoptParty) і повертає успіх для переходу на ігровий екран.
+function continueGame(): boolean {
+  const slot = savePanel.latestSlot();
+  if (slot === null) return false;
+  savePanel.load(slot); // adoptParty + renderAll + журнал «Завантажено: слот N»
+  return party !== null;
 }
 
 // пR.2 (ADR-0037): у node-середовищі (vitest) DOM відсутній — ініціалізацію
@@ -349,13 +402,15 @@ if (typeof document !== 'undefined') {
       renderAll();
     }
   };
-  el('btn-new').onclick = restart;
   // П8.3: кнопка "Грати знов" для перезапуску кампанії
-  el('btn-play-again').onclick = () => restart();
+  // П12.2 (ADR-0065): інпути сіду/пресету мігрували з топбара в діалог
+  // нової партії; «Грати знов» — рестарт з дефолтами 42/«норма» (контракт П8.3a)
+  el('btn-play-again').onclick = () => startNewParty(42);
   // П8.3a (рішення власника 2026-10-15): endless — «Грати далі» ховає екран
   // перемоги і продовжує партію; зафіксований рахунок не змінюється (campaignTick
   // після «перемога» — no-op), ядро без змін понад П8.2
   el('btn-continue').onclick = () => {
+    if (party === null) return; // екран перемоги живе лише в активній грі
     victoryDismissed = true;
     renderAll();
     journal('Перемогу зафіксовано (рахунок ' + party.campaign.score?.total + '). Партію продовжено.', 'win');
@@ -363,7 +418,8 @@ if (typeof document !== 'undefined') {
   // П4.5 (ADR-0021): найм солдата — списання грошей, новобранець у кінець ростеру
   el('btn-hire').onclick = () => {
     try {
-      const s = hireSoldier(party.econ, party.roster, party.campaign.preset);
+      const p = activeParty();
+      const s = hireSoldier(p.econ, p.roster, p.campaign.preset);
       journal('+ Найм: ' + s.name + ' у ростері', '', 'econ');
       renderAll();
     } catch (e) {
@@ -417,7 +473,26 @@ if (typeof document !== 'undefined') {
   });
   el('btn-help').onclick = help.open;
   help.maybeShowOnFirstVisit();
-  renderAll();
-  journal('Партію розпочато. Рухайте час — радар шукає НЛО.');
+  // П12.2 (ADR-0065): каркас екранів — зв'язування з панеллю збереження
+  // («Продовжити» — останній активний слот, ADR-0026), «Як грати» (help.ts
+  // без змін) і стартом нової партії (сід + складність з діалогу).
+  screens = createScreens({
+    version: __APP_VERSION__, // ADR-0054: версія — константа зборки (урок П9.1)
+    hasSaves: () => savePanel.isStorageOk() && savePanel.latestSlot() !== null,
+    continueDisabledReason: () => {
+      if (!savePanel.isStorageOk()) return 'Сховище недоступне — збереження вимкнено';
+      return savePanel.latestSlot() === null ? 'Немає збережених партій' : '';
+    },
+    onNewGame: startNewParty,
+    onContinue: continueGame,
+    onHelp: help.open,
+    hasUnsavedChanges,
+    onExitToStart: () => screens?.showStart(),
+  });
+  el('btn-menu').onclick = () => screens?.openMenu();
+  // ADR-0065: сторінка → стартовий екран; партія не створюється до вибору
+  // гравця (журнал старту партії — у startNewParty). Перший візит (П9.1)
+  // показує «Як грати» поверх стартового екрана.
+  screens.showStart();
   if (!savePanel.isStorageOk()) journal('✗ Сховище недоступне — збереження вимкнено (приватний режим?).', 'lose');
 }

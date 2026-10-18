@@ -172,3 +172,45 @@ describe('slotsEmpty (П9.1: перший візит)', () => {
     expect(panel.slotsEmpty()).toBe(true);
   });
 });
+
+// П12.2 (ADR-0065): «Продовжити» — останній активний слот; onSaved — сигнал
+// вдалого збереження (шар застосунку фіксує точку без незбережених змін).
+describe('latestSlot / onSaved (П12.2, ADR-0065/0026)', () => {
+  it('без сейвів — null; з сейвами — найпізніший savedAt; рівні мітки — старший слот', () => {
+    const setSavedAt = (slot: number, at: string): void => {
+      const data = JSON.parse(localStorage.getItem('rubezh.save.' + slot)!) as { savedAt: string };
+      localStorage.setItem('rubezh.save.' + slot, JSON.stringify({ ...data, savedAt: at }));
+    };
+    const panel = createSavePanel(makeDeps());
+    expect(panel.latestSlot()).toBeNull();
+    panel.save(2);
+    expect(panel.latestSlot()).toBe(2);
+    panel.save(1);
+    setSavedAt(1, '2026-10-18T23:59:00'); // слот 1 пізніший
+    expect(panel.latestSlot()).toBe(1);
+    setSavedAt(1, '2026-10-18T00:01:00'); // слот 2 пізніший
+    expect(panel.latestSlot()).toBe(2);
+    const at2 = (JSON.parse(localStorage.getItem('rubezh.save.2')!) as { savedAt: string }).savedAt;
+    setSavedAt(1, at2); // рівні мітки — переважає старший номер слота
+    expect(panel.latestSlot()).toBe(2);
+  });
+
+  it('пошкоджений слот пропускається — latestSlot бачить лише читабельні сейви', () => {
+    const panel = createSavePanel(makeDeps());
+    panel.save(1);
+    memoryStorage.setItem('rubezh.save.3', 'не-json{');
+    expect(panel.latestSlot()).toBe(1);
+  });
+
+  it('onSaved спрацьовує лише після вдалого збереження (підтвердження виходу)', () => {
+    const onSaved = vi.fn();
+    const panel = createSavePanel(makeDeps({ onSaved }));
+    panel.save(1);
+    expect(onSaved).toHaveBeenCalledWith(1);
+    vi.spyOn(memoryStorage, 'setItem').mockImplementation(() => {
+      throw new Error('disk full');
+    });
+    panel.save(2);
+    expect(onSaved).toHaveBeenCalledTimes(1); // невдалий сейв — без сигналу
+  });
+});
