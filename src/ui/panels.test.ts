@@ -36,7 +36,7 @@ function setupDom(): void {
     <button id="btn-tick">+1 тік</button>
     <button id="btn-day">+1 доба</button>
     <button id="btn-hire">Найм солдата (100)</button>
-    <section id="geo-panel"><canvas id="geo" width="576" height="288"></canvas></section>
+    <section id="geo-panel"><canvas id="geo" width="704" height="352"></canvas></section>
     <div id="ictx" class="hidden">
       <span><b id="ictx-target">—</b></span>
       <span><b id="ictx-status">—</b></span>

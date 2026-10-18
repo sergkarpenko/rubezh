@@ -40,7 +40,7 @@ export const UFO_CORE = '#ff2e88'; // ядро-пульс зонда-«збир�
 export const UFO_LEG = '#4a1580'; // опори приземленого зонда
 
 // Дані для малювання юніта бойовища: cx/cy — центр клітинки в пікселях buffer'а,
-// r — радіус маркерів (рамка вибору, дозор; у прев'ю 8 при клітинці 26).
+// r — радіус маркерів (рамка вибору, дозор; у прев'ю 8 при клітинці 36 — П13.5).
 // hp — читабельність стану (ADR-0007). frame — кадр ходьби (0 «стій», 1 «крок»):
 // передається лише анімацією руху (П6.12), у статиці малюється кадр «стій».
 export interface UnitSprite {
@@ -81,9 +81,10 @@ export interface PixelSprite {
   palette: Readonly<Record<string, string>>;
 }
 
-// Ціле кратне масштаб у клітинці (ADR-0031): 12×12 → 24px у клітинці BCELL 26
-// (запас 1px з боків — маркери й рамка вибору в межах клітинки, урок П6.6),
-// на 520 і 720px пікселі лишаються рівними квадратами.
+// Ціле кратне масштаб у клітинці (ADR-0031): П13.5 (ADR-0068) — юніти
+// 16×16 → 32px у клітинці BCELL 36 (запас 2px з боків — маркери й рамка
+// вибору в межах клітинки, урок П6.6), на 520 і 880px пікселі лишаються
+// рівними квадратами. Матриці геосцени — 12×12/16×16 (24/32px у GCELL 44).
 export const SPRITE_SCALE = 2;
 
 // Маркер дозору (доробка П6.12b за повторною валідацією власника):
@@ -112,18 +113,22 @@ export const SOLDIER_PALETTE: Readonly<Record<string, string>> = {
 
 export const SOLDIER_STAND: PixelSprite = {
   rows: [
-    '....HHHH....',
-    '...HHHHHH...',
-    '...HVVVVH...',
-    '...HHHHHH...',
-    '...BBBBBB...',
-    '..BBBBBBBB..',
-    '.BBBBBBBBB..',
-    '.GBBBBBBWW..',
-    '.GBBBBWWWWWW',
-    '.GGBBBBBB...',
-    '.GG..GG.....',
-    '..O..O......',
+    '.....HHHH.......',
+    '....HHHHHH......',
+    '....HVVVVH......',
+    '....HVVVVH......',
+    '....HHHHHH......',
+    '.....BBBBBB.....',
+    '....BBBBBBBB....',
+    '...BBBBBBBBB....',
+    '...GBBBBBBBB....',
+    '...GBBBBBBBWW...',
+    '...GBBBBBWWWWWWW',
+    '...GGBBBBBBWW...',
+    '...GGBBBBBB.....',
+    '...GG...GGG.....',
+    '...GG....GG.....',
+    '...OO....OO.....',
   ],
   palette: SOLDIER_PALETTE,
 };
@@ -131,18 +136,22 @@ export const SOLDIER_STAND: PixelSprite = {
 // Кадр ходьби: ноги розставлені (крок) — решта силуету та сама (ADR-0031).
 export const SOLDIER_STEP: PixelSprite = {
   rows: [
-    '....HHHH....',
-    '...HHHHHH...',
-    '...HVVVVH...',
-    '...HHHHHH...',
-    '...BBBBBB...',
-    '..BBBBBBBB..',
-    '.BBBBBBBBB..',
-    '.GBBBBBBWW..',
-    '.GBBBBWWWWWW',
-    '.GGBBBBBB...',
-    '.GG...GG....',
-    '.OO....OO...',
+    '.....HHHH.......',
+    '....HHHHHH......',
+    '....HVVVVH......',
+    '....HVVVVH......',
+    '....HHHHHH......',
+    '.....BBBBBB.....',
+    '....BBBBBBBB....',
+    '...BBBBBBBBB....',
+    '...GBBBBBBBB....',
+    '...GBBBBBBBWW...',
+    '...GBBBBBWWWWWWW',
+    '...GGBBBBBBWW...',
+    '...GGBBBBBB.....',
+    '..GGG...GGG.....',
+    '..GG.....GG.....',
+    '..OO.....OO.....',
   ],
   palette: SOLDIER_PALETTE,
 };
@@ -162,18 +171,22 @@ export const ALIEN_PALETTE: Readonly<Record<string, string>> = {
 
 export const ALIEN_STAND: PixelSprite = {
   rows: [
-    '..Y..Y......',
-    '..Y..Y......',
-    '...YY.......',
-    '...AAAAA....',
-    '..AACACAA...',
-    '.AAACACAAA..',
-    '.RAAAAAAAAR.',
-    '.RAACACAAAR.',
-    '.RAAAAAAAAR.',
-    '..RAAAAAR...',
-    '..L.LL.L....',
-    '..L.LL.L....',
+    '...Y....Y.......',
+    '...Y....Y.......',
+    '....YY..........',
+    '....AAAAAA......',
+    '...AACACAAA.....',
+    '..AAACACAAAAA...',
+    '..AACAAAAACAA...',
+    '.RAAAAAAAAAAR...',
+    '.RAACACAAAAR....',
+    '.RAAAAAAAAAAR...',
+    '..RAAAAAAAAR....',
+    '..RAAAAAAAR.....',
+    '...L.LL.L.......',
+    '...L.LL.L.......',
+    '...L.LL.L.......',
+    '................',
   ],
   palette: ALIEN_PALETTE,
 };
@@ -181,41 +194,49 @@ export const ALIEN_STAND: PixelSprite = {
 // Кадр ходьби: щупальця зсунуті (колиже) — решта силуету та сама (ADR-0031).
 export const ALIEN_STEP: PixelSprite = {
   rows: [
-    '..Y..Y......',
-    '..Y..Y......',
-    '...YY.......',
-    '...AAAAA....',
-    '..AACACAA...',
-    '.AAACACAAA..',
-    '.RAAAAAAAAR.',
-    '.RAACACAAAR.',
-    '.RAAAAAAAAR.',
-    '..RAAAAAR...',
-    '.L.LL.L.....',
-    '.L.LL.L.....',
+    '...Y....Y.......',
+    '...Y....Y.......',
+    '....YY..........',
+    '....AAAAAA......',
+    '...AACACAAA.....',
+    '..AAACACAAAAA...',
+    '..AACAAAAACAA...',
+    '.RAAAAAAAAAAR...',
+    '.RAACACAAAAR....',
+    '.RAAAAAAAAAAR...',
+    '..RAAAAAAAAR....',
+    '..RAAAAAAAR.....',
+    '..L.LL.L........',
+    '..L.LL.L........',
+    '..L.LL.L........',
+    '................',
   ],
   palette: ALIEN_PALETTE,
 };
 
-// ADR-0031 (П12.7, ADR-0064): вузол «Рубіж» геосцени — вежа-маяк: неоновий
-// вогонь на вершині (циан), ґратчаста щогла, широкя підніжна платформа з
-// темним осередком-брамою. Один великий знак замість дрібних деталей
+// ADR-0031 (П12.7, ADR-0064; П13.5 — 16×16): вузол «Рубіж» геосцени — вежа-маяк:
+// неоновий вогонь на вершині (циан), ґратчаста щогла, широкя підніжна платформа
+// з темним осередком-брамою. Один великий знак замість дрібних деталей
 // (урок П6.12: 16×16 «фортеця» читалась як темний блок). Напис «ВУЗОЛ» —
-// ПІД спрайтом, світлим на темному тлі. 12×12 @ 2× = 24px у клітинці GCELL 36.
+// ПІД спрайтом, світлим на темному тлі. 16×16 @ 2× = 32px у клітинці GCELL 44.
 export const BASE_SPRITE: PixelSprite = {
   rows: [
-    '.....PP.....',
-    '.....OO.....',
-    '.....OO.....',
-    '....O..O....',
-    '....O..O....',
-    '....O..O....',
-    '...OOOOOO...',
-    '..FFFFFFFF..',
-    '.FFFFFFFFFF.',
-    '.FFFFDDFFFF.',
-    '.FFFFDDFFFF.',
-    '............',
+    '.......PP.......',
+    '.......OO.......',
+    '.......OO.......',
+    '......O..O......',
+    '......O..O......',
+    '......O..O......',
+    '......O..O......',
+    '.....OOOOOO.....',
+    '....FFFFFFFF....',
+    '...FFFFFFFFFF...',
+    '..FFFFFFFFFFFF..',
+    '..FFFFFDDFFFFF..',
+    '..FFFFFDDFFFFF..',
+    '..FFFFFFFFFFFF..',
+    '................',
+    '................',
   ],
   palette: { P: BASE_BEACON, O: BASE_OUTLINE, F: BASE_FILL, D: BASE_WALL },
 };
@@ -228,67 +249,75 @@ export const BASE_SPRITE: PixelSprite = {
 // у статичній матриці — лише ядро-мітка).
 export const UFO_LANDED_SPRITE: PixelSprite = {
   rows: [
-    '....HH....',
-    '...HKKH...',
-    '..HKHHKK..',
-    '.HKHHHHKH.',
-    'HKKHHHHKKH',
-    'HHKHHHHKHH',
-    '.HKHHHHKH.',
-    '..HKHHKH..',
-    '..G....G..',
-    '..G....G..',
+    '.....HH.....',
+    '....HKKH....',
+    '...HKHHKH...',
+    '..HKHHHHKH..',
+    '.HKHHHHHHKH.',
+    'HKKHHHHHHKKH',
+    'HKHHHHHHHHKH',
+    '.HKHHHHHHKH.',
+    '..HKHHKKKH..',
+    '..G......G..',
+    '..G......G..',
+    '............',
   ],
   palette: { H: UFO_LANDED_FILL, K: UFO_LANDED_EDGE, G: UFO_LEG },
 };
 
 export const UFO_SCOUT_SPRITE: PixelSprite = {
   rows: [
-    '....AA....',
-    '...A..A...',
-    '..A....A..',
-    '.A......A.',
-    'A........A',
-    'A........A',
-    '.A......A.',
-    '..A....A..',
-    '...A..A...',
-    '....AA....',
+    '.....AA.....',
+    '....A..A....',
+    '...A....A...',
+    '..A......A..',
+    '.A........A.',
+    'A..........A',
+    'A..........A',
+    '.A........A.',
+    '..A......A..',
+    '...A....A...',
+    '....A..A....',
+    '.....AA.....',
   ],
   palette: { A: UFO_AIR },
 };
 
 export const UFO_HARVESTER_SPRITE: PixelSprite = {
   rows: [
-    '....AA....',
-    '...AAAA...',
-    '..AAAAAA..',
-    '.AAAKKAAA.',
-    'AAAKKKAAA.',
-    '.AAAKKAAA.',
-    '..AAAAAA..',
-    '...AAAA...',
-    '....AA....',
-    '..........',
+    '.....AA.....',
+    '....AAAA....',
+    '...AAAAAA...',
+    '..AAAKKAAA..',
+    '.AAAKKKKAAA.',
+    'AAAKKKKKKAAA',
+    '.AAAKKKKAAA.',
+    '..AAAKKAAA..',
+    '...AAAAAA...',
+    '....AAAA....',
+    '.....AA.....',
+    '............',
   ],
   palette: { A: UFO_AIR, K: UFO_CORE },
 };
 
-// П7.5 (П12.7, ADR-0031/0032): перехоплювач на геосцені — дельта-силует
-// гравця, неоновий ціан з темним кантом (контраст на будь-якому тлі —
-// урок П6.12b), 10×10 @2× = 20px у клітинці GCELL 36.
+// П7.5 (П12.7, ADR-0031/0032; П13.5 — 12×12): перехоплювач на геосцені —
+// дельта-силует гравця, неоновий ціан з темним кантом (контраст на будь-якому
+// тлі — урок П6.12b), 12×12 @2× = 24px у клітинці GCELL 44.
 export const FIGHTER_SPRITE: PixelSprite = {
   rows: [
-    '....FF....',
-    '....FF....',
-    '...FFFF...',
-    '.FFFFFFFF.',
-    'F.KKFFKK.F',
-    'F..FFFF..F',
-    '....FF....',
-    '...F..F...',
-    '...F..F...',
-    '...F..F...',
+    '.....FF.....',
+    '.....FF.....',
+    '....FFFF....',
+    '...FFFFFF...',
+    '..FFFFFFFF..',
+    '.FFFFFFFFFF.',
+    'FF.KKFFKK.FF',
+    'F...FFFF...F',
+    '.....FF.....',
+    '....F..F....',
+    '....F..F....',
+    '....F..F....',
   ],
   palette: { F: '#00e5ff', K: '#0b0e15' },
 };

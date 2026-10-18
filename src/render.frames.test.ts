@@ -107,13 +107,13 @@ describe('кадри анімаційного шару (П6.8)', () => {
     );
     a.start = 0;
     const { ctx, calls } = animCtx();
-    drawAnimFrame(ctx, a, MOVE_MS_PER_CELL, 26, 8); // t = 0.5 → клітинка (1,0)
+    drawAnimFrame(ctx, a, MOVE_MS_PER_CELL, 36, 8); // t = 0.5 → клітинка (1,0)
     const d = calls.find((c) => c.m === 'drawImage');
     expect(d).toBeDefined();
-    expect((d!.args as number[])[1]).toBe(39 - 12); // центр клітинки (1,0) мінус половина спрайта
-    expect((d!.args as number[])[2]).toBe(13 - 12);
-    expect((d!.args as number[])[3]).toBe(24);
-    expect((d!.args as number[])[4]).toBe(24);
+    expect((d!.args as number[])[1]).toBe(54 - 16); // центр клітинки (1,0) мінус половина спрайта (П13.5: BCELL 36)
+    expect((d!.args as number[])[2]).toBe(18 - 16);
+    expect((d!.args as number[])[3]).toBe(32);
+    expect((d!.args as number[])[4]).toBe(32);
   });
 
   it('хід (П6.12): кадри ходьби чергуються детерміновано — 2 кадри на клітинку шляху', () => {
@@ -128,9 +128,9 @@ describe('кадри анімаційного шару (П6.8)', () => {
     );
     a.start = 0;
     const f0 = animCtx();
-    drawAnimFrame(f0.ctx, a, 0, 26, 8); // t = 0 → кадр «стій»
+    drawAnimFrame(f0.ctx, a, 0, 36, 8); // t = 0 → кадр «стій»
     const f1 = animCtx();
-    drawAnimFrame(f1.ctx, a, MOVE_MS_PER_CELL / 2, 26, 8); // t = 0.25 → кадр «крок»
+    drawAnimFrame(f1.ctx, a, MOVE_MS_PER_CELL / 2, 36, 8); // t = 0.25 → кадр «крок»
     expect(f0.calls.find((c) => c.m === 'drawImage')!.args[0]).not.toBe(f1.calls.find((c) => c.m === 'drawImage')!.args[0]);
   });
 
@@ -139,17 +139,17 @@ describe('кадри анімаційного шару (П6.8)', () => {
     a.start = 0;
     expect(a.dur).toBe(TRACER_MS + IMPACT_MS);
     const fly = animCtx();
-    drawAnimFrame(fly.ctx, a, TRACER_MS / 2, 26, 8); // t* — куля на півдорозі
+    drawAnimFrame(fly.ctx, a, TRACER_MS / 2, 36, 8); // t* — куля на півдорозі
     const head = fly.calls.find((c) => c.m === 'lineTo');
     expect(head).toBeDefined();
-    expect((head!.args as number[])[0]).toBeCloseTo(65, 5); // 39 + 52 * 0.5
+    expect((head!.args as number[])[0]).toBeCloseTo(90, 5); /* 54 + 72 * 0.5 */
     expect(fly.calls.some((c) => c.m === 'arc')).toBe(false); // спалаху ще немає
 
     const boom = animCtx();
-    drawAnimFrame(boom.ctx, a, TRACER_MS + IMPACT_MS / 2, 26, 8); // фаза 2: спалах
+    drawAnimFrame(boom.ctx, a, TRACER_MS + IMPACT_MS / 2, 36, 8); // фаза 2: спалах
     const ring = boom.calls.find((c) => c.m === 'arc');
     expect(ring).toBeDefined();
-    expect((ring!.args as number[])[0]).toBe(91); // центр клітинки цілі (3,1)
+    expect((ring!.args as number[])[0]).toBe(126); /* центр клітинки цілі (3,1): 3*36+18 */
     const alphas = boom.sets.filter((s) => s.p === 'globalAlpha').map((s) => s.v);
     expect(alphas[0]).toBeLessThan(1); // кільце гасне
     expect(alphas[alphas.length - 1]).toBe(1); // альфа відновлена
@@ -160,7 +160,7 @@ describe('кадри анімаційного шару (П6.8)', () => {
     a.start = 0;
     expect(a.dur).toBe(TRACER_MS);
     const { ctx, calls } = animCtx();
-    drawAnimFrame(ctx, a, TRACER_MS - 10, 26, 8);
+    drawAnimFrame(ctx, a, TRACER_MS - 10, 36, 8);
     expect(calls.some((c) => c.m === 'lineTo')).toBe(true);
     expect(calls.some((c) => c.m === 'arc')).toBe(false);
   });
@@ -171,11 +171,11 @@ describe('кадри анімаційного шару (П6.8)', () => {
     expect(a.dur).toBe(DEATH_MS);
     expect(a.at).toEqual({ x: 4, y: 7 });
     const { ctx, calls, sets } = animCtx();
-    drawAnimFrame(ctx, a, DEATH_MS / 2, 26, 8); // t = 0.5
+    drawAnimFrame(ctx, a, DEATH_MS / 2, 36, 8); // t = 0.5
     const d = calls.find((c) => c.m === 'drawImage'); // прибульчик — піксельний спрайт
     expect(d).toBeDefined();
-    expect((d!.args as number[])[1]).toBe(4 * 26 + 13 - 12);
-    expect((d!.args as number[])[2]).toBe(7 * 26 + 13 - 12);
+    expect((d!.args as number[])[1]).toBe(4 * 36 + 18 - 16);
+    expect((d!.args as number[])[2]).toBe(7 * 36 + 18 - 16);
     const alphas = sets.filter((s) => s.p === 'globalAlpha').map((s) => s.v);
     expect(alphas[0]).toBeCloseTo(0.5, 5);
     expect(alphas[alphas.length - 1]).toBe(1);
@@ -185,11 +185,11 @@ describe('кадри анімаційного шару (П6.8)', () => {
     const a = makeOwFlashAnim(unit('s2', 'player', 6, 9));
     a.start = 0;
     const { ctx, calls, sets } = animCtx();
-    drawAnimFrame(ctx, a, OW_FLASH_MS / 2, 26, 8);
+    drawAnimFrame(ctx, a, OW_FLASH_MS / 2, 36, 8);
     const ring = calls.find((c) => c.m === 'arc');
     expect(ring).toBeDefined();
-    expect((ring!.args as number[])[0]).toBe(6 * 26 + 13);
-    expect((ring!.args as number[])[1]).toBe(9 * 26 + 13);
+    expect((ring!.args as number[])[0]).toBe(6 * 36 + 18);
+    expect((ring!.args as number[])[1]).toBe(9 * 36 + 18);
     expect(sets.some((s) => s.p === 'strokeStyle' && s.v === '#ffb347')).toBe(true);
     expect(sets.filter((s) => s.p === 'globalAlpha').map((s) => s.v)[0]).toBeCloseTo(0.5, 5);
   });
@@ -267,7 +267,7 @@ describe('П6.13 (П12.7): неонові трасери/спалахи — ці
     const a = makeTracerAnim('player', { x: 1, y: 1 }, { x: 3, y: 1 }, false);
     a.start = 0;
     const s = animCtx();
-    drawAnimFrame(s.ctx, a, TRACER_MS / 2, 26, 8);
+    drawAnimFrame(s.ctx, a, TRACER_MS / 2, 36, 8);
     expect(s.sets.some((x) => x.p === 'strokeStyle' && x.v === '#00e5ff')).toBe(true);
     const glows = s.sets.filter((x) => x.p === 'shadowBlur').map((x) => x.v);
     expect(glows[0]).toBe(6);
@@ -278,10 +278,10 @@ describe('П6.13 (П12.7): неонові трасери/спалахи — ці
     const a = makeTracerAnim('alien', { x: 5, y: 5 }, { x: 3, y: 5 }, true);
     a.start = 0;
     const fly = animCtx();
-    drawAnimFrame(fly.ctx, a, TRACER_MS / 2, 26, 8);
+    drawAnimFrame(fly.ctx, a, TRACER_MS / 2, 36, 8);
     expect(fly.sets.some((x) => x.p === 'strokeStyle' && x.v === '#ff2e88')).toBe(true);
     const boom = animCtx();
-    drawAnimFrame(boom.ctx, a, TRACER_MS + IMPACT_MS / 2, 26, 8);
+    drawAnimFrame(boom.ctx, a, TRACER_MS + IMPACT_MS / 2, 36, 8);
     expect(boom.sets.some((x) => x.p === 'strokeStyle' && x.v === '#ffb347')).toBe(true);
     expect(boom.sets.some((x) => x.p === 'shadowColor' && x.v === '#ffb347')).toBe(true);
     const glows = boom.sets.filter((x) => x.p === 'shadowBlur').map((x) => x.v);

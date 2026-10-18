@@ -176,8 +176,10 @@
         width: 100%;
         height: auto;
       }
-      /* ADR-0027 (П6.3): бойовище — квадрат на ширину фокусної колонки, кап 720px;
-         П13.2 (ADR-0066): бойовище і тулбар — у спільному гнучкому рядку */
+      /* ADR-0027 (П6.3): бойовище — квадрат на ширину фокусної колонки;
+         П13.2 (ADR-0066): бойовище і тулбар — у спільному гнучкому рядку;
+         П13.5 (ADR-0068): кап 880px — більший масштаб піксель-арту на широких
+         екранах, buffer 720×720 = 1:1 при контейнері 720px */
       #battle-stage {
         display: flex;
         gap: 10px;
@@ -185,7 +187,7 @@
       }
       #battle {
         width: 100%;
-        max-width: 720px;
+        max-width: 880px;
         aspect-ratio: 1;
         height: auto;
         flex: 1 1 auto;
@@ -203,7 +205,7 @@
         flex-direction: column;
         align-items: center;
         gap: 2px;
-        width: 52px;
+        width: 64px; /* П13.5: іконка 36px (12×12 @3×) + відступи */
         min-height: 48px;
         padding: 4px 2px 3px;
         box-sizing: border-box;
@@ -215,7 +217,7 @@
         background: transparent;
       }
       #btoolbar button .tb-cap {
-        font-size: 9px;
+        font-size: 10px; /* П13.5: підпис під більшою іконкою */
         line-height: 1.1;
         color: #9fb0c3;
         white-space: nowrap;
@@ -593,7 +595,7 @@
       <div id="focus">
         <section class="panel" id="geo-panel">
           <h2>Геосцена</h2>
-          <canvas id="geo" width="576" height="288"></canvas>
+          <canvas id="geo" width="704" height="352"></canvas>
           <!-- П7.5 (ADR-0027/0032): контекст-стрічка повітряного бою — ціль, статус, раунд, HP обох сторін -->
           <div id="ictx" class="hidden">
             <span class="chip">Перехоплення: <b id="ictx-target">—</b></span>
@@ -615,7 +617,7 @@
           <div id="bresult"></div>
           <!-- П13.2 (ADR-0066): тулбар дій збоку (генерує src/ui/toolbar.ts); нижня смуга #bcontrols вилучена -->
           <div id="battle-stage">
-            <canvas id="battle" width="520" height="520"></canvas>
+            <canvas id="battle" width="720" height="720"></canvas>
             <div id="btoolbar"></div>
           </div>
           <div id="binfo" style="margin: 8px 0 10px; min-height: 18px">—</div>

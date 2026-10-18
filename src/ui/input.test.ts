@@ -36,7 +36,7 @@ function setupDom(): void {
       <span><b id="bctx-unit">—</b></span>
     </div>
     <div id="bresult"></div>
-    <canvas id="battle" width="520" height="520"></canvas>
+    <canvas id="battle" width="720" height="720"></canvas>
     <div id="binfo">—</div>
     <div id="bcontrols">
       <button id="btn-snap">Швидкий</button>
@@ -123,9 +123,9 @@ function launchMission(f: Fixture): void {
   expect(f.ui.mission).not.toBeNull();
 }
 
-// Клік у клітинку бойовища (канва 520×520, BCELL 26 — як у index.html).
+// Клік у клітинку бойовища (канва 720×720, BCELL 36 — як у index.html; П13.5).
 function clickAt(f: Fixture, x: number, y: number): void {
-  f.input.battleCanvasClick({ clientX: x * 26 + 13, clientY: y * 26 + 13 } as MouseEvent);
+  f.input.battleCanvasClick({ clientX: x * 36 + 18, clientY: y * 36 + 18 } as MouseEvent);
 }
 
 beforeEach(() => {
@@ -138,21 +138,21 @@ beforeEach(() => {
 });
 
 describe('cellFromPoint: клік (CSS-пікселі) → клітинка бойовища', () => {
-  // канва 520×520 buffer (20×20 клітинок по 26px — BCELL), розташована на сторінці
-  const rect = { left: 10, top: 20, width: 520, height: 520 };
-  const canvas = { width: 520, height: 520 };
+  // канва 720×720 buffer (20×20 клітинок по 36px — BCELL, П13.5), розташована на сторінці
+  const rect = { left: 10, top: 20, width: 720, height: 720 };
+  const canvas = { width: 720, height: 720 };
 
   it('центр клітинки (3,2)', () => {
-    expect(cellFromPoint(10 + 3 * 26 + 13, 20 + 2 * 26 + 13, rect, canvas)).toEqual({ x: 3, y: 2 });
+    expect(cellFromPoint(10 + 3 * 36 + 18, 20 + 2 * 36 + 18, rect, canvas)).toEqual({ x: 3, y: 2 });
   });
 
   it('межа клітинки — floor у нижчу', () => {
-    expect(cellFromPoint(10 + 4 * 26, 20 + 5 * 26, rect, canvas)).toEqual({ x: 4, y: 5 });
+    expect(cellFromPoint(10 + 4 * 36, 20 + 5 * 36, rect, canvas)).toEqual({ x: 4, y: 5 });
   });
 
   it('CSS-масштабування канви (2×) не міняє клітинку', () => {
-    const scaled = { left: 0, top: 0, width: 1040, height: 1040 };
-    expect(cellFromPoint(2 * (5 * 26 + 12), 2 * (1 * 26 + 12), scaled, canvas)).toEqual({ x: 5, y: 1 });
+    const scaled = { left: 0, top: 0, width: 1440, height: 1440 };
+    expect(cellFromPoint(2 * (5 * 36 + 18), 2 * (1 * 36 + 18), scaled, canvas)).toEqual({ x: 5, y: 1 });
   });
 
   it('клік поза канвою зліва — від’ємна клітинка (межі перевіряє обробник)', () => {

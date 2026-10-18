@@ -20,9 +20,10 @@ const ICON_CYAN = '#00E5FF';
 const ICON_PINK = '#FF2E88';
 const ICON_PALETTE: Readonly<Record<string, string>> = { W: ICON_WHITE, C: ICON_CYAN, P: ICON_PINK };
 
-// Матриця 12×12 @2× = 24px у плитці (ADR-0031: ціле кратне масштабування).
+// Матриця 12×12 @3× = 36px у плитці (ADR-0031: ціле кратне масштабування;
+// П13.5 ADR-0068 — більші іконки у більших плитках).
 const ICON_PX = 12;
-const ICON_SCALE = 2;
+const ICON_SCALE = 3;
 export const ICON_SIZE = ICON_PX * ICON_SCALE;
 
 // Швидкий постріл: куля з трасером і спалахом (блакитний вихлоп праворуч).
