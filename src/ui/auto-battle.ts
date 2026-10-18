@@ -95,6 +95,18 @@ export class AutoBattleDriver {
     const prevLen = mission.state.log.length;
     const r = this.steps.step(mission.state);
     this.deps.renderBattle();
+    // Фідбек власника (П13.3): результат вирішено ПОСЕРЕД півходу — останній
+    // демон Розриву вбитий (чи загін загинув у хід демонів) — авто-бій
+    // зупиняється одразу, як у ручному бою (checkOutcome після кожної дії):
+    // солдати не добігають залишок AP до кінця ходу. Дзеркало ручного флоу —
+    // анімації фінальної дії відтворюються, банер поверх фінального стану.
+    const mid = missionOutcome(mission.state);
+    if (mid === 'перемога' || mid === 'поразка') {
+      this.stop();
+      if (this.deps.hasRaf) this.deps.pushAnims(animsFromEvents(mission.state.log.slice(prevLen), mission.state.units));
+      this.deps.finishBattle(mid);
+      return;
+    }
     if (r.over) {
       const outcome = missionOutcome(mission.state);
       this.stop();

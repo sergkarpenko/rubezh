@@ -181,6 +181,32 @@ describe('AutoBattleDriver: покроковий цикл', () => {
     expect(deps.finishBattle).toHaveBeenCalledWith('поразка');
   });
 
+  it('фідбек власника (П13.3): останній демон вбитий посеред півходу — зупинка одразу, без добігання AP', async () => {
+    // два оперативники з повним AP: після смерті демона лишається чим бігти
+    // до зони НЛО (демон невидимий → політика рухає загін) — але авто-бій,
+    // як і ручний бій (checkOutcome після дії), фіксує перемогу одразу;
+    // жодних ходів після перемоги в лог потрапити не може.
+    const mission = fakeMission(
+      createGame({
+        map: emptyMap,
+        rng: mulberry32(42),
+        units: [
+          makeUnit({ id: 'p1', side: 'player', pos: { x: 5, y: 5 }, firingAccuracy: 0.95 }),
+          makeUnit({ id: 'p2', side: 'player', pos: { x: 6, y: 5 }, firingAccuracy: 0.95 }),
+          makeUnit({ id: 'a1', side: 'alien', pos: { x: 6, y: 6 }, hp: 1, maxHp: 10 }),
+        ],
+      })
+    );
+    const deps = makeDeps(mission);
+    const d = new AutoBattleDriver(deps);
+    d.start();
+    await driveToEnd(d);
+    expect(deps.finishBattle).toHaveBeenCalledWith('перемога');
+    expect(d.busy).toBe(false);
+    expect(mission.state.log.some((e) => e.type === 'death')).toBe(true); // демон вбитий
+    expect(mission.state.log.filter((e) => e.type === 'move')).toEqual([]); // AP не добігаються
+  });
+
   it('анімації дії — pushAnims і пауза після onIdle', async () => {
     // перша дія — хода (демон за межами зору): move-анімація ставиться в чергу;
     // до onIdle пауза не тікає — далі після відтворення черги.
