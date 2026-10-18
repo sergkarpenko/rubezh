@@ -22,6 +22,7 @@ import {
   drawAlienSprite,
   drawBaseSprite,
   drawChanceLabel,
+  drawGeoTerrain,
   drawNightTerrain,
   drawSoldierSprite,
   drawTargetFrame,
@@ -29,7 +30,7 @@ import {
   initPixelSprites,
   type MakeOffscreen,
 } from './render';
-import { NIGHT_BG, cellHash, type TerrainCell } from './core/render-core';
+import { GEO_GRID_COLOR, NIGHT_BG, cellHash, geoCellTone, type TerrainCell } from './core/render-core';
 import { SPRITE_SCALE, type UnitSprite } from './core/sprites';
 
 // Клітиночка прев'ю: BCELL = 26, центр (13, 13), радіус силуету 8 (як у renderBattle).
@@ -411,16 +412,19 @@ describe('П6.9: м’які позначки НЛО геосцени', () => {
     expect(e.maxY - e.minY).toBeLessThanOrEqual(20);
   });
 });
-// --- П6.13: нічна палітра бойовища — терен, сітка, м'який край туману ---
+// --- П6.13 (П12.7, ADR-0064): неонова палітра бойовища — терен, сітка, туман ---
 
-// Сімейства відтінків терену (двотоновий терен × видимо/туман) — стабільні
-// константи палітри render.ts; варіація в межах сімейства — за хешем клітинки.
-const OPEN = ['#151b28', '#171e2c', '#131926', '#161d2b'];
-const BLOCKED = ['#3d4657', '#414b5d', '#38414f', '#3f4a5c'];
-const OPEN_FOG = ['#0b0e15', '#0c0f17', '#0a0d13', '#0d1018'];
-const BLOCKED_FOG = ['#232936', '#252b39', '#202633', '#242a38'];
-const FOG_EDGE = 'rgba(21,27,40,0.45)';
-const GRID_COLOR = 'rgba(110,168,255,0.07)';
+// --- П6.13 (П12.7, ADR-0064): неонова палітра бойовища — терен, сітка, туман ---
+
+// Сімейства відтінків терену (двотоновий терен × видимо/туман, П12.7 —
+// синьо-чорна гама) — стабільні константи палітри render.ts; варіація в
+// межах сімейства — за хешем клітинки.
+const OPEN = ['#0b1220', '#0d1424', '#0a1120', '#0c1322'];
+const BLOCKED = ['#2b3a55', '#30405e', '#27354e', '#2e3d5a'];
+const OPEN_FOG = ['#05080f', '#060a12', '#04070d', '#050911'];
+const BLOCKED_FOG = ['#1a2233', '#1d2537', '#182030', '#1c2435'];
+const FOG_EDGE = 'rgba(11,18,32,0.4)';
+const GRID_COLOR = 'rgba(0,229,255,0.08)';
 
 // Мок контексту з ЄДИНИМ журналом операцій (присвоєння властивостей і виклики
 // методів у порядку виконання) — колір кожної заливки визначається точно.
@@ -554,6 +558,46 @@ describe('П6.13: м’які краї туману і тонка сітка (к
     expect(lines.some((o) => 'm' in o && o.m === 'fillRect' && o.args.join(',') === [25, 0, 1, 52].join(','))).toBe(true);
     expect(lines.some((o) => 'm' in o && o.m === 'fillRect' && o.args.join(',') === [0, 25, 52, 1].join(','))).toBe(true);
     expect(s.ops.some((o) => 'set' in o && o.set === 'fillStyle' && o.v === GRID_COLOR)).toBe(true);
+  });
+});
+
+// --- П12.7 (ADR-0064): терен геосцени — двотоновий із неоновою сіткою ---
+
+describe('П12.7: терен геосцени (drawGeoTerrain)', () => {
+  const GCELL = 36; // клітинка геосцени (panels.renderGeo)
+
+  it('перший кадр — фон NIGHT_BG на весь buffer; клітинки — два тони за хешем', () => {
+    const s = seqCtx();
+    drawGeoTerrain(s.ctx, 576, 288, GCELL);
+    expect(s.ops[0]).toEqual({ set: 'fillStyle', v: NIGHT_BG });
+    expect(s.ops[1]).toEqual({ m: 'fillRect', args: [0, 0, 576, 288] });
+    // клітинка (2, 1) — тон geoCellTone за детермінованим хешем (без RNG)
+    const tone = s.ops.find((o) => 'm' in o && o.m === 'fillRect' && o.args.join(',') === [2 * GCELL, 1 * GCELL, GCELL, GCELL].join(','));
+    expect(tone).toBeDefined();
+    expect(s.ops[s.ops.indexOf(tone!) - 1]).toEqual({ set: 'fillStyle', v: geoCellTone(2, 1) });
+  });
+
+  it('двотоновий: на сітці 16×8 обидва тони; неонові лінії сітки GEO_GRID_COLOR', () => {
+    const s = seqCtx();
+    drawGeoTerrain(s.ctx, 576, 288, GCELL);
+    const tones = new Set<string>();
+    for (let y = 0; y < 8; y++) for (let x = 0; x < 16; x++) tones.add(geoCellTone(x, y));
+    expect(tones.size).toBe(2);
+    // заливки клітинок — лише фоном і тими двома тонами (стабільні між кадрами)
+    const fills = s.ops.filter((o) => 'set' in o && o.set === 'fillStyle').map((o) => (o as { v: unknown }).v);
+    expect(fills.every((c) => c === NIGHT_BG || tones.has(c as string))).toBe(true);
+    // сітка: стовпці і рядки лініями, колір — неоновий ціан (ADR-0064)
+    expect(s.ops.some((o) => 'set' in o && o.set === 'strokeStyle' && o.v === GEO_GRID_COLOR)).toBe(true);
+    const lines = s.ops.filter((o) => 'm' in o && o.m === 'lineTo');
+    expect(lines.length).toBeGreaterThanOrEqual(16 + 8); // стовпці 0..16 і рядки 0..8
+  });
+
+  it('детермінізм (ADR-0003): той самий вхід → той самий потік операцій', () => {
+    const a = seqCtx();
+    drawGeoTerrain(a.ctx, 576, 288, GCELL);
+    const b = seqCtx();
+    drawGeoTerrain(b.ctx, 576, 288, GCELL);
+    expect(a.ops).toEqual(b.ops);
   });
 });
 

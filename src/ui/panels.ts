@@ -5,7 +5,7 @@
 // застосунку (party/mission/gameOver) модуль знає лише через Deps-інтерфейс;
 // логіка ядра — виклики src/core, DOM — через хелпер el (src/ui/dom.ts).
 
-import { RADAR_RANGE, TICK_MINUTES, WORLD_W, WORLD_H, detectedUfos, geoClock, geoDay, missionTargets } from '../core/geo';
+import { RADAR_RANGE, TICK_MINUTES, detectedUfos, geoClock, geoDay, missionTargets } from '../core/geo';
 import {
   FIGHTER_MAX_HP,
   FIGHTER_REPAIR_COST,
@@ -22,7 +22,7 @@ import { equipItem, unequipItem, itemName, type SoldierEquipment, type SoldierIt
 import { readySoldiers } from '../core/squad';
 import type { Party } from '../core/save';
 import { itemEffect } from './effects';
-import { drawAnimFrame, drawBaseSprite, drawFighterSprite, drawUfoSprite } from '../render';
+import { drawAnimFrame, drawBaseSprite, drawFighterSprite, drawGeoTerrain, drawUfoSprite } from '../render';
 import type { Anim } from '../core/render-core';
 import { el } from './dom';
 import { GCELL } from './grid';
@@ -78,24 +78,13 @@ export function createPanels(deps: PanelsDeps): Panels {
     if (!ctx) return;
     ctx.clearRect(0, 0, cv.width, cv.height);
 
-    ctx.strokeStyle = '#1a2130';
-    ctx.lineWidth = 1;
-    for (let x = 0; x <= WORLD_W; x++) {
-      ctx.beginPath();
-      ctx.moveTo(x * GCELL, 0);
-      ctx.lineTo(x * GCELL, WORLD_H * GCELL);
-      ctx.stroke();
-    }
-    for (let y = 0; y <= WORLD_H; y++) {
-      ctx.beginPath();
-      ctx.moveTo(0, y * GCELL);
-      ctx.lineTo(WORLD_W * GCELL, y * GCELL);
-      ctx.stroke();
-    }
+    // П12.7 (ADR-0064): терен геосцени — двотоновий синьо-чорний з неоновою
+    // сіткою (ціан «Рубіжу»); кадр малюється з нуля (урок П6.6).
+    drawGeoTerrain(ctx, cv.width, cv.height, GCELL);
 
     const b = party.geo.base;
     ctx.setLineDash([5, 4]);
-    ctx.strokeStyle = '#2c3f2f';
+    ctx.strokeStyle = 'rgba(0,229,255,0.25)'; // П12.7: межа сенсорної сітки — приглушений неоновий ціан
     ctx.strokeRect((b.x - RADAR_RANGE) * GCELL, (b.y - RADAR_RANGE) * GCELL, (2 * RADAR_RANGE + 1) * GCELL, (2 * RADAR_RANGE + 1) * GCELL);
     ctx.setLineDash([]);
 

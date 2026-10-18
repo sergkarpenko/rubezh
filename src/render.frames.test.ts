@@ -190,7 +190,7 @@ describe('кадри анімаційного шару (П6.8)', () => {
     expect(ring).toBeDefined();
     expect((ring!.args as number[])[0]).toBe(6 * 26 + 13);
     expect((ring!.args as number[])[1]).toBe(9 * 26 + 13);
-    expect(sets.some((s) => s.p === 'strokeStyle' && s.v === '#d8b25a')).toBe(true);
+    expect(sets.some((s) => s.p === 'strokeStyle' && s.v === '#ffb347')).toBe(true);
     expect(sets.filter((s) => s.p === 'globalAlpha').map((s) => s.v)[0]).toBeCloseTo(0.5, 5);
   });
 });
@@ -262,28 +262,28 @@ describe('П6.9: пульс радара геосцени (критерії: т�
   });
 });
 
-describe('П6.13: яскравіші неонові трасери/спалахи', () => {
-  it('трасер гравця: неоновий блакитний зі свіченням (shadowBlur встановлено і скинуто)', () => {
+describe('П6.13 (П12.7): неонові трасери/спалахи — ціан «Рубіж», пурпур Розриву, бурштин (ADR-0064)', () => {
+  it('трасер гравця: неоновий ціан зі свіченням (shadowBlur встановлено і скинуто)', () => {
     const a = makeTracerAnim('player', { x: 1, y: 1 }, { x: 3, y: 1 }, false);
     a.start = 0;
     const s = animCtx();
     drawAnimFrame(s.ctx, a, TRACER_MS / 2, 26, 8);
-    expect(s.sets.some((x) => x.p === 'strokeStyle' && x.v === '#6fd3ff')).toBe(true);
+    expect(s.sets.some((x) => x.p === 'strokeStyle' && x.v === '#00e5ff')).toBe(true);
     const glows = s.sets.filter((x) => x.p === 'shadowBlur').map((x) => x.v);
     expect(glows[0]).toBe(6);
     expect(glows[glows.length - 1]).toBe(0); // свічення обов'язково скидається
   });
 
-  it('трасер прибульця: розпечений оранж; спалах влучання — яскравий, зі свіченням', () => {
+  it('трасер Розриву: неоновий пурпур; спалах влучання — бурштиновий, зі свіченням', () => {
     const a = makeTracerAnim('alien', { x: 5, y: 5 }, { x: 3, y: 5 }, true);
     a.start = 0;
     const fly = animCtx();
     drawAnimFrame(fly.ctx, a, TRACER_MS / 2, 26, 8);
-    expect(fly.sets.some((x) => x.p === 'strokeStyle' && x.v === '#ff9a52')).toBe(true);
+    expect(fly.sets.some((x) => x.p === 'strokeStyle' && x.v === '#ff2e88')).toBe(true);
     const boom = animCtx();
     drawAnimFrame(boom.ctx, a, TRACER_MS + IMPACT_MS / 2, 26, 8);
-    expect(boom.sets.some((x) => x.p === 'strokeStyle' && x.v === '#ffe38a')).toBe(true);
-    expect(boom.sets.some((x) => x.p === 'shadowColor' && x.v === '#ffe38a')).toBe(true);
+    expect(boom.sets.some((x) => x.p === 'strokeStyle' && x.v === '#ffb347')).toBe(true);
+    expect(boom.sets.some((x) => x.p === 'shadowColor' && x.v === '#ffb347')).toBe(true);
     const glows = boom.sets.filter((x) => x.p === 'shadowBlur').map((x) => x.v);
     expect(glows[0]).toBe(8);
     expect(glows[glows.length - 1]).toBe(0);
