@@ -2,34 +2,42 @@
 // Матриці пікселів, палітри й типи вхідних даних спрайтів — чисті дані ядра:
 // жодного посилання на Canvas/DOM API (ADR-0002). Розгортання матриць в
 // offscreen-канваси і малювання drawImage — шар відображення (src/render.ts).
-// Матриці: солдат з «АР-14 Гарт», прибульчик з «Імпульсним різаком», база,
-// НЛО, винищувач; кадри ходьби — окремі матриці, чергуються в анімації руху.
+// П12.7 (ADR-0064): редизайн за тематикою «кіберпанк/техномагія» — неонові
+// акценти: ціан (гравець/«Рубіж»), пурпур (Розрив), бурштин (спалахи/дозор).
+// Матриці: оперативник у плащі з неоновим візором, демон Розриву з «Фазовим
+// різаком», вузол-маяк, зонд Розриву, перехоплюач; кадри ходьби — окремі
+// матриці, чергуються в анімації руху. Глітч-акценти — лише в подієвих
+// анімаціях (ADR-0064): статичні матриці читабельні, без шуму.
 
 import type { Side } from './combat';
 import type { UfoKind } from './geo';
 
-// Палітра — спадок мінімалізму (ADR-0007): ті самі акценти, що й у кружків.
-export const PLAYER_BODY = '#6ea8ff';
-export const PLAYER_OUTLINE = '#31548c';
-export const PLAYER_GEAR = '#3d5c94';
-export const PLAYER_HELMET = '#d7e4f7';
-export const PLAYER_WEAPON = '#e8eef7';
-export const ALIEN_BODY = '#ff6b6b';
-export const ALIEN_OUTLINE = '#8f2f2f';
-export const ALIEN_EYES = '#5a1f1f';
-export const ALIEN_LIMBS = '#c95454';
-export const ALIEN_WEAPON = '#ffd27a';
-export const OW_MARKER = '#d8b25a';
+// Палітра (П12.7, ADR-0064): неонові акценти на синьо-чорній основі —
+// ціан «Рубіжу», пурпур Розриву, бурштин спалахів.
+export const PLAYER_BODY = '#175d8a'; // бронекостюм оперативника
+export const PLAYER_OUTLINE = '#0a1826'; // темний кант силуета
+export const PLAYER_GEAR = '#0d3a5f'; // плащ і спорядження
+export const PLAYER_HELMET = '#9fd8f2'; // капюшон-шолом
+export const PLAYER_VISOR = '#00e5ff'; // неоновий візор — цяність «Рубіжу»
+export const PLAYER_WEAPON = '#e6f7ff'; // кінематична зброя «АР-14 Гарт»
+export const ALIEN_BODY = '#a32eff'; // пурпурне тіло демона Розриву
+export const ALIEN_OUTLINE = '#2a0a3d'; // темний кант глітч-силуета
+export const ALIEN_CRACKS = '#ffd9f2'; // «тріщини світла» в тілі демона
+export const ALIEN_LIMBS = '#6f1d9e'; // щупальця-відростки
+export const ALIEN_WEAPON = '#ff2e88'; // «Фазовий різак» — неоновий пурпур
+export const OW_MARKER = '#ffb347'; // бурштин знака дозору (спалахова гама)
 export const OW_OUTLINE = '#0b0e15'; // П6.12b: темний кант знака дозору — контраст на будь-якому тлі
-export const BASE_FILL = '#4f8cff';
-export const BASE_OUTLINE = '#9fc3ff';
-// П6.9 (ADR-0029): м'якші позначки НЛО — приглушені кольори (менш кислотні,
-// ніж #e8c545/#e0a24a) і прозорість 0.85 з обов'язковим відновленням alpha.
-export const UFO_LANDED_FILL = '#cbb05a';
-export const UFO_LANDED_EDGE = '#e6d59a';
-export const UFO_AIR = '#c79250';
-export const UFO_LEG = '#a8862f'; // П6.12 (ADR-0031): опори приземленого НЛО
-export const BASE_WALL = '#234083'; // П6.12 (ADR-0031): темні стіни бази геосцени
+export const BASE_FILL = '#123c5e'; // стовп вежі-вузла «Рубіж»
+export const BASE_OUTLINE = '#66d9ff'; // світлі ребра-канти вежі
+export const BASE_BEACON = '#00e5ff'; // неоновий маяк-вогонь вузла
+export const BASE_WALL = '#0a1a2e'; // темний осередок/брама вежі
+// П6.9 (ADR-0029): м'якші позначки зондів — приглушені кольори і прозорість
+// 0.85 з обов'язковим відновленням alpha.
+export const UFO_LANDED_FILL = '#7a1fd9'; // пурпурний осередок приземленого зонда
+export const UFO_LANDED_EDGE = '#e3b8ff'; // світлі «тріщини» глітч-осередку
+export const UFO_AIR = '#c45cff'; // контур зонда в повітрі
+export const UFO_CORE = '#ff2e88'; // ядро-пульс зонда-«збирача»
+export const UFO_LEG = '#4a1580'; // опори приземленого зонда
 
 // Дані для малювання юніта бойовища: cx/cy — центр клітинки в пікселях buffer'а,
 // r — радіус маркерів (рамка вибору, дозор; у прев'ю 8 при клітинці 26).
@@ -80,20 +88,22 @@ export const SPRITE_SCALE = 2;
 
 // Маркер дозору (доробка П6.12b за повторною валідацією власника):
 // піксельна «блискавка» з ТЕМНИМ КАНТОМ у кутку клітинки — гравець верхній
-// лівий, прибульці нижній правий. Урок: золотий знак на пікселях спрайта
-// (світлий шолом / червона мантія) без канту губився; кути матриць спрайтів
-// прозорі, тло клітинки темне — золото з кантом видно на будь-якому тлі,
+// лівий, демони нижній правий. Урок: бурштиновий знак на пікселях спрайта
+// (неоновий візор / пурпурна мантія) без канту губився; кути матриць спрайтів
+// прозорі, тло клітинки темне — бурштин з кантом видно на будь-якому тлі,
 // силует не перекривається, HP-число в центрі не зачіпається. 5×5 @2× = 10×10.
 export const OW_BOLT: PixelSprite = {
   rows: ['.KKK.', 'KKAK.', 'KAAKK', 'KKAAK', '.KKKK'],
   palette: { A: OW_MARKER, K: OW_OUTLINE },
 };
 
-// ADR-0031 (П6.12): солдат зі штурмовою гвинтівкою «АР-14 Гарт» — шолом з
-// темним визиром, броня, рюкзак зліва, ствол вправо (дуло — крайній правий
-// піксель матриці, за межами тіла), магазин темний під стволом.
+// ADR-0031 (П12.7, ADR-0064): оперативник «Рубіжу» — силует у плащі з
+// неоновим візором: капюшон, суцільна смуга візора (циан), плащ ліворуч,
+// «АР-14 Гарт» вправо (дуло — крайній правий піксель матриці, за межами
+// тіла), темний магазин під стволом.
 export const SOLDIER_PALETTE: Readonly<Record<string, string>> = {
   H: PLAYER_HELMET,
+  V: PLAYER_VISOR,
   O: PLAYER_OUTLINE,
   B: PLAYER_BODY,
   G: PLAYER_GEAR,
@@ -104,16 +114,16 @@ export const SOLDIER_STAND: PixelSprite = {
   rows: [
     '....HHHH....',
     '...HHHHHH...',
+    '...HVVVVH...',
     '...HHHHHH...',
-    '...HOOOOH...',
+    '...BBBBBB...',
     '..BBBBBBBB..',
-    '.GBBBBBBBB..',
-    '.GGBBBBBBWW.',
-    '.GGBBBBBWWWW',
-    '..BBBBBBOO..',
-    '..GG..GG....',
-    '..OO..OO....',
-    '............',
+    '.BBBBBBBBB..',
+    '.GBBBBBBWW..',
+    '.GBBBBWWWWWW',
+    '.GGBBBBBB...',
+    '.GG..GG.....',
+    '..O..O......',
   ],
   palette: SOLDIER_PALETTE,
 };
@@ -123,27 +133,28 @@ export const SOLDIER_STEP: PixelSprite = {
   rows: [
     '....HHHH....',
     '...HHHHHH...',
+    '...HVVVVH...',
     '...HHHHHH...',
-    '...HOOOOH...',
+    '...BBBBBB...',
     '..BBBBBBBB..',
-    '.GBBBBBBBB..',
-    '.GGBBBBBBWW.',
-    '.GGBBBBBWWWW',
-    '..BBBBBBOO..',
-    '..GG...GG...',
-    '.OO.....OO..',
-    '............',
+    '.BBBBBBBBB..',
+    '.GBBBBBBWW..',
+    '.GBBBBWWWWWW',
+    '.GGBBBBBB...',
+    '.GG...GG....',
+    '.OO....OO...',
   ],
   palette: SOLDIER_PALETTE,
 };
 
-// ADR-0031 (П6.12): прибульчик з «Імпульсним різаком» — енергетична «вилка»
-// з двома піками над головою, мантія з темними очима, щупальця знизу.
-// Силует і зброя свідомо відмінні від солдата (критерій П6.12: зброя
-// відрізляється — колір, форма і розташування пікселів).
+// ADR-0031 (П12.7, ADR-0064): демон Розриву — гострокутий глітч-силует:
+// шпиляста голова без ока, «тріщини світла» крізь пурпурне тіло, темний кант,
+// щупальця знизу; над головою — дві піки «Фазового різака» (неоновий пурпур).
+// Силует і зброя свідомо відмінні від оперативника (критерій П6.12: зброя
+// відрізняється — колір, форма і розташування пікселів).
 export const ALIEN_PALETTE: Readonly<Record<string, string>> = {
   A: ALIEN_BODY,
-  E: ALIEN_EYES,
+  C: ALIEN_CRACKS,
   L: ALIEN_LIMBS,
   Y: ALIEN_WEAPON,
   R: ALIEN_OUTLINE,
@@ -151,18 +162,18 @@ export const ALIEN_PALETTE: Readonly<Record<string, string>> = {
 
 export const ALIEN_STAND: PixelSprite = {
   rows: [
-    '....Y..Y....',
-    '....Y..Y....',
-    '.....YY.....',
-    '....AAAA....',
-    '...AAAAAA...',
-    '...AEAAEA...',
-    '..RAAAAAAR..',
-    '..RAAAAAAR..',
-    '..RAAAAAAR..',
-    '...RAAAAR...',
-    '...L.LL.L...',
-    '...L.LL.L...',
+    '..Y..Y......',
+    '..Y..Y......',
+    '...YY.......',
+    '...AAAAA....',
+    '..AACACAA...',
+    '.AAACACAAA..',
+    '.RAAAAAAAAR.',
+    '.RAACACAAAR.',
+    '.RAAAAAAAAR.',
+    '..RAAAAAR...',
+    '..L.LL.L....',
+    '..L.LL.L....',
   ],
   palette: ALIEN_PALETTE,
 };
@@ -170,64 +181,65 @@ export const ALIEN_STAND: PixelSprite = {
 // Кадр ходьби: щупальця зсунуті (колиже) — решта силуету та сама (ADR-0031).
 export const ALIEN_STEP: PixelSprite = {
   rows: [
-    '....Y..Y....',
-    '....Y..Y....',
-    '.....YY.....',
-    '....AAAA....',
-    '...AAAAAA...',
-    '...AEAAEA...',
-    '..RAAAAAAR..',
-    '..RAAAAAAR..',
-    '..RAAAAAAR..',
-    '...RAAAAR...',
-    '..L.LL.L....',
-    '..L.LL.L....',
+    '..Y..Y......',
+    '..Y..Y......',
+    '...YY.......',
+    '...AAAAA....',
+    '..AACACAA...',
+    '.AAACACAAA..',
+    '.RAAAAAAAAR.',
+    '.RAACACAAAR.',
+    '.RAAAAAAAAR.',
+    '..RAAAAAR...',
+    '.L.LL.L.....',
+    '.L.LL.L.....',
   ],
   palette: ALIEN_PALETTE,
 };
 
-// ADR-0031 (П6.12, доробка за валідацією власника): база геосцени —
-// «Радарний пост»: велика світла тарілка на темній щоглі, світла хатина
-// з темними воротами. Один великий знак замість дрібних деталей (попередня
-// 16×16 «фортеця» на 32px читалась як темний блок). Напис «БАЗА» — ПІД
-// спрайтом, світлим на темному тлі (раніше текст поверх іконки мав
-// майже нульовий контраст). 12×12 @ 2× = 24px у клітинці GCELL 36.
+// ADR-0031 (П12.7, ADR-0064): вузол «Рубіж» геосцени — вежа-маяк: неоновий
+// вогонь на вершині (циан), ґратчаста щогла, широкя підніжна платформа з
+// темним осередком-брамою. Один великий знак замість дрібних деталей
+// (урок П6.12: 16×16 «фортеця» читалась як темний блок). Напис «ВУЗОЛ» —
+// ПІД спрайтом, світлим на темному тлі. 12×12 @ 2× = 24px у клітинці GCELL 36.
 export const BASE_SPRITE: PixelSprite = {
   rows: [
-    '...OOOOOO...',
-    '....OOOO....',
+    '.....PP.....',
     '.....OO.....',
-    '.....DD.....',
-    '.....DD.....',
-    '..BBBBBBBB..',
-    '.OOOOOOOOOO.',
-    '.OOOODDOOOO.',
-    '.OOOODDOOOO.',
-    '.OOOODDOOOO.',
-    '.OOOOOOOOOO.',
+    '.....OO.....',
+    '....O..O....',
+    '....O..O....',
+    '....O..O....',
+    '...OOOOOO...',
+    '..FFFFFFFF..',
+    '.FFFFFFFFFF.',
+    '.FFFFDDFFFF.',
+    '.FFFFDDFFFF.',
     '............',
   ],
-  palette: { O: BASE_OUTLINE, D: BASE_WALL, B: BASE_FILL },
+  palette: { P: BASE_BEACON, O: BASE_OUTLINE, F: BASE_FILL, D: BASE_WALL },
 };
 
-// Позначка НЛО геосцени (туман: лише виявлені потрапляють у виклик — фільтр у main.ts).
-// П6.9 (ADR-0029): м'якість (alpha 0.85 з відновленням) лишається.
-// П6.12 (ADR-0031): форми — піксельні: приземлений — тарілка з куполом і
-// опорами, «розвідник» — порожній ромб, «збирач» — контур кола з ядром-відсіком.
+// Позначка зонда Розриву геосцени (туман: лише виявлені потрапляють у виклик —
+// фільтр у main.ts). П6.9 (ADR-0029): м'якість (alpha 0.85 з відновленням)
+// лишається. П12.7 (ADR-0064): приземлений зонд — пурпурний глітч-осередок
+// (ромб з «тріщинами» світла й опорами), «розвідник» — порожній ромб,
+// «збирач» — суцільний ромб із ядром-пульсом (пульс — подієвий кадр,
+// у статичній матриці — лише ядро-мітка).
 export const UFO_LANDED_SPRITE: PixelSprite = {
   rows: [
-    '...SSSS...',
-    '..SSSSSS..',
-    '..SSSSSS..',
-    '.HHHHHHHH.',
-    'HHHHHHHHHH',
-    'HHHHHHHHHH',
-    '.HHHHHHHH.',
-    '..HHHHHH..',
+    '....HH....',
+    '...HKKH...',
+    '..HKHHKK..',
+    '.HKHHHHKH.',
+    'HKKHHHHKKH',
+    'HHKHHHHKHH',
+    '.HKHHHHKH.',
+    '..HKHHKH..',
     '..G....G..',
     '..G....G..',
   ],
-  palette: { H: UFO_LANDED_FILL, S: UFO_LANDED_EDGE, G: UFO_LEG },
+  palette: { H: UFO_LANDED_FILL, K: UFO_LANDED_EDGE, G: UFO_LEG },
 };
 
 export const UFO_SCOUT_SPRITE: PixelSprite = {
@@ -248,22 +260,23 @@ export const UFO_SCOUT_SPRITE: PixelSprite = {
 
 export const UFO_HARVESTER_SPRITE: PixelSprite = {
   rows: [
+    '....AA....',
+    '...AAAA...',
     '..AAAAAA..',
-    '.A......A.',
-    'A........A',
-    'A........A',
-    'A...AA...A',
-    'A...AA...A',
-    'A........A',
-    'A........A',
-    '.A......A.',
+    '.AAAKKAAA.',
+    'AAAKKKAAA.',
+    '.AAAKKAAA.',
     '..AAAAAA..',
+    '...AAAA...',
+    '....AA....',
+    '..........',
   ],
-  palette: { A: UFO_AIR },
+  palette: { A: UFO_AIR, K: UFO_CORE },
 };
 
-// П7.5 (ADR-0031/0032): піксель-арт винищувача на геосцені — дельта-крило гравця, холодний
-// блакит з темним кантом (контраст на будь-якому тлі — урок П6.12b), 10×10 @2× = 20px у клітинці GCELL 36.
+// П7.5 (П12.7, ADR-0031/0032): перехоплювач на геосцені — дельта-силует
+// гравця, неоновий ціан з темним кантом (контраст на будь-якому тлі —
+// урок П6.12b), 10×10 @2× = 20px у клітинці GCELL 36.
 export const FIGHTER_SPRITE: PixelSprite = {
   rows: [
     '....FF....',
@@ -277,5 +290,5 @@ export const FIGHTER_SPRITE: PixelSprite = {
     '...F..F...',
     '...F..F...',
   ],
-  palette: { F: '#6fd3ff', K: '#0b0e15' },
+  palette: { F: '#00e5ff', K: '#0b0e15' },
 };
