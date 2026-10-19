@@ -14,6 +14,7 @@ import {
   BOOM_SHAKE_PX,
   DNUM_MS,
   GEO_LAND_ROWS,
+  GEO_COAST_ORDER,
   GEO_TRAIL_MS,
   GEO_TRAIL_POINTS,
   IMPACT_MS,
@@ -26,9 +27,9 @@ import {
   animsFromEvents,
   boomParticleOffset,
   cellHash,
-  geoCityLightDots,
   geoCityLights,
   geoCoastEdges,
+  geoCoastSide,
   geoIsLand,
   geoTrailPoints,
   makeBoomAnim,
@@ -507,21 +508,28 @@ describe('П14.5: розкладка геосцени — суша/океан/у
     expect(geoCityLights(5, 2)).toBe(geoCityLights(5, 2));
   });
 
-  it('geoCityLightDots: 3 вогні, у межах клітинки (0.18..0.85), детерміновано', () => {
-    for (const [x, y] of [
-      [0, 0],
-      [8, 4],
-      [15, 7],
-    ]) {
-      const dots = geoCityLightDots(x, y);
-      expect(dots.length).toBe(3);
-      for (const d of dots) {
-        expect(d.fx).toBeGreaterThanOrEqual(0.18);
-        expect(d.fx).toBeLessThanOrEqual(0.85);
-        expect(d.fy).toBeGreaterThanOrEqual(0.2);
-        expect(d.fy).toBeLessThanOrEqual(0.85);
+  it('geoCoastSide: перший океанний край у фіксованому порядку w→e→n→s; внутрішня суша — null', () => {
+    // (4,4) — океан лише на заході → 'w'
+    expect(geoCoastSide(4, 4)).toBe('w');
+    // (7,4) — внутрішня суша континенту
+    expect(geoCoastSide(7, 4)).toBeNull();
+    // (14,0) — океан на сході (заходу немає: 13,0 — суша) → 'e'
+    expect(geoCoastSide(14, 0)).toBe('e');
+    // океан — не узбережжя
+    expect(geoCoastSide(0, 0)).toBeNull();
+    // узгодженість з geoCoastEdges по всій мапі: обраний край — океанний
+    // і перший за фіксованим порядком (детерміновано, без RNG)
+    for (let y = 0; y < 8; y++) {
+      for (let x = 0; x < 16; x++) {
+        const e = geoCoastEdges(x, y);
+        const side = geoCoastSide(x, y);
+        if (side === null) {
+          expect(e.n || e.e || e.s || e.w).toBe(false);
+        } else {
+          expect(e[side]).toBe(true);
+          expect(GEO_COAST_ORDER.indexOf(side)).toBe(GEO_COAST_ORDER.findIndex((s) => e[s]));
+        }
       }
-      expect(geoCityLightDots(x, y)).toEqual(dots); // стабільно між кадрами
     }
   });
 });

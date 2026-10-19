@@ -27,12 +27,13 @@ import {
   ATLAS_WALK2_COL,
   CHANCE_LABEL_BG,
   CHANCE_LABEL_TEXT,
-  CITY_LIGHT,
-  COAST_RIM,
-  COAST_RIM_CORE,
   GEO_TILE,
-  GEO_TILE_COLS,
-  GEO_TILE_LAND,
+  GEO_TILE_CITY,
+  GEO_TILE_COAST,
+  GEO_TILE_LAND_A,
+  GEO_TILE_LAND_VARIANTS,
+  GEO_TILE_OCEAN,
+  GEO_TILE_TOWER,
   TARGET_FRAME_COLOR,
   TERRAIN_DECOR_COL,
   TERRAIN_TILE,
@@ -41,6 +42,7 @@ import {
   drawAlienSprite,
   drawBaseSprite,
   drawChanceLabel,
+  drawGeoBaseSprite,
   drawGeoTerrain,
   drawNightTerrain,
   drawSoldierSprite,
@@ -64,6 +66,7 @@ import {
   cellHash,
   geoCellTone,
   geoCityLights,
+  geoCoastSide,
   geoIsLand,
   terrainShade,
   type TerrainCell,
@@ -987,10 +990,11 @@ describe('П14.3 (ADR-0072): тайлсет терену — підлога за
 });
 
 // --- П14.5 (ADR-0072/0064): тайли геосцени 2.0 — океан/суша/узбережжя/вогні ---
+// --- П14.5 (ADR-0072/0064): тайли геосцени 2.0 — пер-тайловий атлас ---
 
-describe('П14.5: тайли геосцени (drawGeoTerrain з ассетом; фолбек — два тони)', () => {
-  // Мок-тайлсет: завантажувач кликає onLoad синхронно з фіктивним джерелом.
-  const tilesImg = { width: 384, height: 48 } as unknown as CanvasImageSource;
+describe('П14.5: тайли геосцени (пер-тайловий атлас; фолбек — два тони)', () => {
+  // Мок-атлас: завантажувач кликає onLoad синхронно з фіктивним джерелом.
+  const tilesImg = { width: 768, height: 96 } as unknown as CanvasImageSource;
   const readyTiles = (): void => {
     initGeoTiles((_url, onLoad) => {
       onLoad(tilesImg);
@@ -1000,78 +1004,139 @@ describe('П14.5: тайли геосцени (drawGeoTerrain з ассетом;
   const W = 768; // 16 × 48
   const H = 384; // 8 × 48
 
+  // очікувана комірка атласу клітинки (x, y): океан / суша A–D / узбережжя
+  const wantCol = (x: number, y: number): number => {
+    if (!geoIsLand(x, y)) return GEO_TILE_OCEAN;
+    const side = geoCoastSide(x, y);
+    if (side === null) return GEO_TILE_LAND_A + (cellHash(x, y) % GEO_TILE_LAND_VARIANTS);
+    return GEO_TILE_COAST;
+  };
+
   it('прапорець завантаженості: фолбек до onload, готовий — після', () => {
     expect(isGeoTilesReady()).toBe(false);
     readyTiles();
     expect(isGeoTilesReady()).toBe(true);
   });
 
-  it('розклад тайлів детермінований: 128 клітин 16×8; океан — кол. 0–3, суша — 4–7, варіант за хешем (без RNG)', () => {
+  it('розклад детермінований: 128 клітин 16×8; комірка атласу за чистою функцією (без RNG)', () => {
     readyTiles();
     const s = animCtx();
     drawGeoTerrain(s.ctx, W, H, CELL);
+    // базові тайли: по одному на клітинку (оверлеї вогнів — окремі виклики)
     const imgs = s.calls.filter((c) => c.m === 'drawImage');
-    expect(imgs.length).toBe(16 * 8);
-    for (const d of imgs) {
+    expect(imgs.length).toBe(16 * 8 + cityLightCells());
+    const base = imgs.filter((d) => (d.args as unknown[])[1] !== GEO_TILE_CITY * GEO_TILE);
+    expect(base.length).toBe(16 * 8);
+    const plain = base.filter((d) => ((d.args as unknown[])[5] as number) >= 0); // без трансформацій
+    const turned = base.filter((d) => ((d.args as unknown[])[5] as number) < 0); // повернуті/дзеркалені узбережжя
+    expect(plain.length + turned.length).toBe(16 * 8);
+    for (const d of plain) {
       const a = d.args as unknown[];
-      expect(a[0]).toBe(tilesImg); // джерело — тайлсет
-      expect(a[5]).toBeGreaterThanOrEqual(0); // у межах канви
-      expect(a[6]).toBeGreaterThanOrEqual(0);
-      expect((a[5] as number) + (a[7] as number)).toBeLessThanOrEqual(W);
-      expect((a[6] as number) + (a[8] as number)).toBeLessThanOrEqual(H);
-      // колонка тайла — за розкладкою і хешем координат (чиста функція)
+      expect(a[0]).toBe(tilesImg); // джерело — атлас
       const x = (a[5] as number) / CELL;
       const y = (a[6] as number) / CELL;
-      const want = (geoIsLand(x, y) ? GEO_TILE_LAND : 0) + (cellHash(x, y) % (GEO_TILE_COLS - GEO_TILE_LAND));
-      expect(a[1]).toBe(want * GEO_TILE);
+      expect(Number.isInteger(x) && Number.isInteger(y)).toBe(true);
+      expect(a[1]).toBe(wantCol(x, y) * GEO_TILE); // комірка — чиста функція
+      expect(a[2]).toBe(0);
+      expect(a[3]).toBe(GEO_TILE); // комірка 96×96 атласу
+      expect(a[4]).toBe(GEO_TILE);
+      expect(a[7]).toBe(CELL); // під клітинку 48
+      expect(a[8]).toBe(CELL);
+      // у межах канви
+      expect((a[5] as number) + CELL).toBeLessThanOrEqual(W);
+      expect((a[6] as number) + CELL).toBeLessThanOrEqual(H);
     }
-    // сусідні клітинки відрізняються (мозаїка): не усі океанські колонки однакові
-    const cols = new Set(imgs.map((d) => ((d.args as unknown[])[1] as number) / GEO_TILE));
-    expect(cols.size).toBeGreaterThan(2);
+    // повернуті тайли узбережжя: комірка переходу, центр локальних координат
+    for (const d of turned) {
+      const a = d.args as unknown[];
+      expect(a[1]).toBe(GEO_TILE_COAST * GEO_TILE);
+      expect(a[5]).toBe(-CELL / 2);
+      expect(a[6]).toBe(-CELL / 2);
+      expect(a[7]).toBe(CELL);
+      expect(a[8]).toBe(CELL);
+    }
+    // мозаїка: варіанти суші A–D різняться (не одна колонка на всі клітини)
+    const cols = new Set(base.map((d) => ((d.args as unknown[])[1] as number) / GEO_TILE));
+    expect(cols.size).toBeGreaterThan(3);
     // nearest-neighbor
     expect(s.sets.some((x) => x.p === 'imageSmoothingEnabled' && x.v === false)).toBe(true);
   });
 
-  it('узбережжя: ціанова кромка на краях суші в бік океану (м’яка 3px + ядро 1px)', () => {
+  it('узбережжя: фліп/поворот тайла переходу до першого океанного краю (w→e→n→s)', () => {
     readyTiles();
     const s = animCtx();
     drawGeoTerrain(s.ctx, W, H, CELL);
-    // (4,4) — суша з океаном на заході: кромка на лівому краї клітинки
-    expect(s.calls.some((c) => c.m === 'fillRect' && (c.args as number[]).join(',') === [4 * CELL, 4 * CELL, 3, CELL].join(','))).toBe(
-      true
+    const seq = s.calls.map((c) => c.m).join(',');
+    // (4,4) — океан на заході: тайл як є (океан ліворуч), без трансформацій
+    const west = s.calls.find(
+      (c) =>
+        c.m === 'drawImage' &&
+        (c.args as unknown[])[1] === GEO_TILE_COAST * GEO_TILE &&
+        (c.args as unknown[])[5] === 4 * CELL &&
+        (c.args as unknown[])[6] === 4 * CELL
     );
-    expect(s.calls.some((c) => c.m === 'fillRect' && (c.args as number[]).join(',') === [4 * CELL, 4 * CELL, 1, CELL].join(','))).toBe(
-      true
-    );
-    // внутрішня суша (7,4) — без кромок
+    expect(west).toBeDefined();
+    // (14,0) — океан на сході: дзеркало scale(-1,1) навколо центру клітинки
+    const rot = s.calls.find((c) => c.m === 'rotate');
+    expect(rot).toBeDefined();
+    expect(s.calls.some((c) => c.m === 'scale' && (c.args as number[]).join(',') === '-1,1')).toBe(true);
+    expect(seq).toContain('save');
+    expect(seq).toContain('restore');
+    // повороти: північ +π/2 (клітинка (8,2) — океан згори), південь −π/2 ((5,5))
+    const angles = s.calls.filter((c) => c.m === 'rotate').map((c) => (c.args as number[])[0]);
+    expect(angles).toContain(Math.PI / 2);
+    expect(angles).toContain(-Math.PI / 2);
+    // узбережжя — лише суша з океанним сусідом: внутрішня суша (7,4) — без тайла переходу
     expect(
-      s.calls.some((c) => c.m === 'fillRect' && (c.args as number[]).join(',') === [7 * CELL + CELL - 3, 4 * CELL, 3, CELL].join(','))
+      s.calls.some(
+        (c) =>
+          c.m === 'drawImage' &&
+          (c.args as unknown[])[1] === GEO_TILE_COAST * GEO_TILE &&
+          (c.args as unknown[])[5] === 7 * CELL &&
+          (c.args as unknown[])[6] === 4 * CELL
+      )
     ).toBe(false);
-    // кольори кромки в кадрі (ціан «Рубіжу», ADR-0064)
-    expect(s.sets.some((x) => x.p === 'fillStyle' && x.v === COAST_RIM)).toBe(true);
-    expect(s.sets.some((x) => x.p === 'fillStyle' && x.v === COAST_RIM_CORE)).toBe(true);
   });
 
-  it('вогні міст: бурштинові точки лише на суші за хешем (детермінований рідкий декор)', () => {
+  it('вогні міст: альфа-оверлей лише на суші за хешем (рідкий декор, без RNG)', () => {
     readyTiles();
     const s = animCtx();
     drawGeoTerrain(s.ctx, W, H, CELL);
-    expect(s.sets.some((x) => x.p === 'fillStyle' && x.v === CITY_LIGHT)).toBe(geoCityLightCells() > 0 ? true : false);
-    if (geoCityLightCells() > 0) {
-      // знайти клітинку з вогнями і перевірити 2×2 точки в її межах
-      const dots = s.calls.filter((c) => c.m === 'fillRect' && (c.args as number[])[2] === 2 && (c.args as number[])[3] === 2);
-      expect(dots.length).toBe(geoCityLightCells() * 3); // 3 вогні на місто
-      for (const d of dots) {
-        const [px, py] = d.args as number[];
-        const x = Math.floor(px / CELL);
-        const y = Math.floor(py / CELL);
-        expect(geoCityLights(x, y)).toBe(true); // лише суша з вогнями
-        expect(px).toBeGreaterThanOrEqual(x * CELL);
-        expect(px).toBeLessThan((x + 1) * CELL);
-        expect(py).toBeGreaterThanOrEqual(y * CELL);
-        expect(py).toBeLessThan((y + 1) * CELL);
-      }
+    const dots = s.calls.filter((c) => c.m === 'drawImage' && (c.args as unknown[])[1] === GEO_TILE_CITY * GEO_TILE);
+    expect(dots.length).toBe(cityLightCells());
+    for (const d of dots) {
+      const a = d.args as unknown[];
+      const x = (a[5] as number) / CELL;
+      const y = (a[6] as number) / CELL;
+      expect(geoCityLights(x, y)).toBe(true); // лише клітинки суші з вогнями
+      expect(a[3]).toBe(GEO_TILE); // комірка 96 оверлея
+      expect(a[7]).toBe(CELL); // під клітинку 48
     }
+  });
+
+  it('вежа-радар на базі: кадр з атласу + підпис; фолбек — піксельний спрайт (ADR-0031)', () => {
+    const b = { cx: 8 * CELL + CELL / 2, cy: 4 * CELL + CELL / 2, size: CELL };
+    readyTiles();
+    const s = animCtx();
+    drawGeoBaseSprite(s.ctx, b);
+    const d = s.calls.find((c) => c.m === 'drawImage');
+    expect(d).toBeDefined();
+    const a = d!.args as unknown[];
+    expect(a[0]).toBe(tilesImg);
+    expect(a[1]).toBe(GEO_TILE_TOWER * GEO_TILE); // комірка вежі-радара
+    expect(a[5]).toBe(b.cx - CELL / 2); // центр клітинки бази
+    expect(a[6]).toBe(b.cy - CELL / 2);
+    expect(a[7]).toBe(CELL);
+    expect(a[8]).toBe(CELL);
+    expect(s.calls.some((c) => c.m === 'fillText' && c.args[0] === 'ВУЗОЛ')).toBe(true);
+    // фолбек: без ассета — піксельний спрайт ADR-0031 (джерело — offscreen, не атлас)
+    initGeoTiles(() => {}); // скидання у фолбек (завантажувач не кликається)
+    const f = animCtx();
+    drawGeoBaseSprite(f.ctx, b);
+    const fd = f.calls.find((c) => c.m === 'drawImage');
+    expect(fd).toBeDefined();
+    expect((fd!.args as unknown[])[0]).not.toBe(tilesImg);
+    expect(f.calls.some((c) => c.m === 'fillText' && c.args[0] === 'ВУЗОЛ')).toBe(true);
   });
 
   it('детермінізм (ADR-0003): той самий вхід → той самий потік викликів і присвоєнь', () => {
@@ -1085,7 +1150,7 @@ describe('П14.5: тайли геосцени (drawGeoTerrain з ассетом;
   });
 
   // кількість клітинок суші з вогнями (чиста функція — розклад стабільний)
-  function geoCityLightCells(): number {
+  function cityLightCells(): number {
     let n = 0;
     for (let y = 0; y < 8; y++) for (let x = 0; x < 16; x++) if (geoCityLights(x, y)) n++;
     return n;

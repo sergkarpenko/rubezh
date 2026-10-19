@@ -95,16 +95,18 @@ export function geoCityLights(x: number, y: number): boolean {
   return geoIsLand(x, y) && cellHash(x, y) % 12 === 0;
 }
 
-// Позиції вогнів у клітинці — частки сторони 0.18..0.85, чиста функція від
-// координат (детерміновано, стабільно між кадрами; без RNG).
-export function geoCityLightDots(x: number, y: number): { fx: number; fy: number }[] {
-  const out: { fx: number; fy: number }[] = [];
-  for (let i = 0; i < 3; i++) {
-    const hx = cellHash(x * 13 + i * 5, y * 7 + i * 3);
-    const hy = cellHash(x * 11 - i * 3, y * 17 + i * 5);
-    out.push({ fx: 0.18 + (hx % 64) / 95, fy: 0.2 + (hy % 64) / 95 });
+// Сторона узбережжя клітинки суші: перший океанний край у фіксованому
+// порядку (захід → схід → північ → південь) — чиста функція, детерміновано;
+// шар відображення повертає/дзеркалить тайл переходу до цього краю. null —
+// внутрішня суша (океану поруч немає).
+export type GeoCoastSide = 'n' | 'e' | 's' | 'w';
+export const GEO_COAST_ORDER: readonly GeoCoastSide[] = ['w', 'e', 'n', 's'];
+export function geoCoastSide(x: number, y: number): GeoCoastSide | null {
+  const e = geoCoastEdges(x, y);
+  for (const s of GEO_COAST_ORDER) {
+    if (e[s]) return s;
   }
-  return out;
+  return null;
 }
 
 // Клітинка терену: blocked — завалення (рельєф туману видно і в тумані,
