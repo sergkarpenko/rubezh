@@ -35,7 +35,7 @@ function setupDom(): void {
         <span><b id="bctx-unit">—</b></span>
       </div>
       <div id="bresult"></div>
-      <canvas id="battle" width="720" height="720"></canvas>
+      <canvas id="battle" width="960" height="960"></canvas>
       <div id="binfo">—</div>
       <!-- П13.2 (ADR-0066): плитки дій генерує createToolbar (як в застосунку) -->
       <div id="btoolbar"></div>

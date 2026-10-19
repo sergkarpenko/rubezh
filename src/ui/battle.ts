@@ -118,6 +118,14 @@ export function validHealTargets(state: GameState, healer: Unit): Unit[] {
 }
 
 export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
+  // П14.3 (фідбек П14.2): напрямок погляду юнітів — суто відображення,
+  // детерміновано (без RNG, ADR-0003): напрямок останнього руху/цілі
+  // запам'ятовується на юніт; дефолти — нативні напрямки кадрів атласа
+  // (оперативник — вправо, демон Розриву — вліво; спавни: загін зліва,
+  // Розрив справа). Ядро і розкладка кадрів не зачіпаються — фліп
+  // (scale(-1,1)) робить drawAtlasUnit у render.ts.
+  const facing = new Map<string, 1 | -1>();
+
   function binfo(text: string): void {
     el('binfo').textContent = text;
   }
@@ -262,9 +270,25 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
     // (маркер дозору — строго в межах клітинки, П6.6).
     for (const u of st.units) {
       if (!u.alive) continue;
+      // П14.3: напрямок погляду — детерміновано за останнім рухом/ціллю:
+      // активний рух юніта — за шляхом анімації, постріл — за ціллю трасера,
+      // вибраний солдат — за клітинкою прицілювання (aimCell/tapCell).
+      let dir: 1 | -1 | 0 = 0;
+      if (activeAnim !== null && activeAnim.kind === 'move' && activeAnim.unitId === u.id) {
+        const p0 = activeAnim.path[0] ?? u.pos;
+        const p1 = activeAnim.path[activeAnim.path.length - 1] ?? p0;
+        if (p1.x !== p0.x) dir = p1.x > p0.x ? 1 : -1;
+      } else if (activeAnim !== null && activeAnim.kind === 'tracer' && u.id === firingId) {
+        if (activeAnim.to.x !== activeAnim.from.x) dir = activeAnim.to.x > activeAnim.from.x ? 1 : -1;
+      } else if (u.id === ui.selectedId) {
+        const aim = ui.aimCell ?? ui.tapCell;
+        if (aim !== null && aim.x !== u.pos.x) dir = aim.x > u.pos.x ? 1 : -1;
+      }
+      if (dir !== 0) facing.set(u.id, dir);
       if (u.id === movingId) continue; // П6.8: його малює анімаційний шар у проміжній позиції
       const visible = vis.has(u.pos.x + ',' + u.pos.y);
       if (u.side === 'alien' && !visible) continue;
+      const native: 1 | -1 = u.side === 'player' ? 1 : -1;
       drawUnitSprite(ctx, {
         side: u.side,
         cx: u.pos.x * BCELL + BCELL / 2,
@@ -274,6 +298,7 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
         selected: u.id === ui.selectedId,
         overwatch: u.overwatch,
         pose: u.id === firingId ? 'fire' : undefined, // П14.2 (ADR-0072)
+        flip: (facing.get(u.id) ?? native) !== native, // П14.3: дзеркало за напрямком
       });
     }
 
@@ -365,6 +390,7 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
     ui.aimCell = null; // П6.14
     deps.resetBattleLog();
     el('bresult').innerHTML = '';
+    facing.clear(); // П14.3: бій закрито — напрямки погляду не переносяться
     deps.renderAll();
   }
 
@@ -381,6 +407,7 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
       deps.journal('✗ ' + (e as Error).message, 'lose');
       return;
     }
+    facing.clear(); // П14.3: новий бій — напрямки погляду з нуля (дефолти кадрів)
     ui.battleResult = null;
     ui.selectedId = null;
     ui.fireMode = null;

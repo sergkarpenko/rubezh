@@ -178,8 +178,8 @@
       }
       /* ADR-0027 (П6.3): бойовище — квадрат на ширину фокусної колонки;
          П13.2 (ADR-0066): бойовище і тулбар — у спільному гнучкому рядку;
-         П13.5 (ADR-0068): кап 880px — більший масштаб піксель-арту на широких
-         екранах, buffer 720×720 = 1:1 при контейнері 720px */
+         П14.3 (ADR-0068): кап 960px — 1:1 buffer 960×960 при контейнері 960
+         (замість розтяжки ×1.22; рішення власника по фідбеку П14.2) */
       #battle-stage {
         display: flex;
         gap: 10px;
@@ -187,7 +187,7 @@
       }
       #battle {
         width: 100%;
-        max-width: 880px;
+        max-width: 960px;
         aspect-ratio: 1;
         height: auto;
         flex: 1 1 auto;
@@ -617,7 +617,7 @@
           <div id="bresult"></div>
           <!-- П13.2 (ADR-0066): тулбар дій збоку (генерує src/ui/toolbar.ts); нижня смуга #bcontrols вилучена -->
           <div id="battle-stage">
-            <canvas id="battle" width="720" height="720"></canvas>
+            <canvas id="battle" width="960" height="960"></canvas>
             <div id="btoolbar"></div>
           </div>
           <div id="binfo" style="margin: 8px 0 10px; min-height: 18px">—</div>
