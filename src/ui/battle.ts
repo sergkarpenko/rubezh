@@ -79,6 +79,7 @@ export interface BattleUI {
   playerTurnActive(): boolean;
   selectedUnit(): Unit | undefined;
   visibleCells(): Set<string>;
+  displayedAlienAt(cell: Vec2): Unit | undefined; // П14.4: демон у клітинці за відображуваною позицією
   renderBattle(): void;
   binfo(text: string): void;
   launch(ufoId: string): void;
@@ -147,6 +148,24 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
       if (u.side === 'player' && u.alive) for (const k of computeVisibleCells(ui.mission.state, u.pos)) vis.add(k);
     }
     return vis;
+  }
+
+  // П14.4 (фідбек прев'ю): демон, який ВІДОБРАЖАЄТЬСЯ у клітинці. Під час
+  // відтворення черги ходу ШІ демон стоїть на початку свого шляху
+  // (pendingAlienMoveStarts — фінальна позиція не споїлиться), тож клік по
+  // видимій клітині має шукати саме відображувану позицію. Суто відображення:
+  // бойові гілки вводу (постріл/лікування) працюють із фактичним u.pos —
+  // валідність дій і туман не зачіпаються (ADR-0006).
+  function displayedAlienAt(cell: Vec2): Unit | undefined {
+    const mission = ui.mission;
+    if (!mission) return undefined;
+    const pending = pendingAlienMoveStarts(deps.anim.queued());
+    for (const u of mission.state.units) {
+      if (!u.alive || u.side !== 'alien') continue;
+      const at = pending.get(u.id) ?? u.pos;
+      if (at.x === cell.x && at.y === cell.y) return u;
+    }
+    return undefined;
   }
 
   // П6.8: нові події логу бою → анімації (суто відображення: дії ядра вже
@@ -490,6 +509,7 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
     playerTurnActive,
     selectedUnit,
     visibleCells,
+    displayedAlienAt, // П14.4: клік по демону за відображуваною позицією
     renderBattle,
     binfo,
     launch,

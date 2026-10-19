@@ -107,27 +107,32 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
 
     // П14.4 (фідбек прев'ю): тап по ВИДИМОМУ демону Розриву без зведених
     // режимів — його характеристики в контекст-стрічці (HP — джерело правди
-    // стану; туман не розкривається — невидимий демон характеристик не дає,
-    // ADR-0006). Зведені режими (постріл/аптечка/граната) перехват не чіпає.
-    if (u && u.side === 'alien' && ui.fireMode === null && ui.itemMode === null && battle.visibleCells().has(cell.x + ',' + cell.y)) {
-      battle.binfo(
-        u.name +
-          ': HP ' +
-          u.hp +
-          '/' +
-          u.maxHp +
-          ' · зброя «' +
-          u.weapon.name +
-          '» (пошкодження ' +
-          u.weapon.damage[0] +
-          '–' +
-          u.weapon.damage[1] +
-          ', дальність ' +
-          u.weapon.range +
-          '). Виберіть режим пострілу на тулбарі, щоб атакувати.'
-      );
-      deps.renderAll();
-      return;
+    // стану; туман не розкривається — невидима клітинка характеристик не
+    // дає, ADR-0006). Під час відтворення черги ходу ШІ демон відображається
+    // на початку шляху — клік шукає за відображуваною позицією
+    // (displayedAlienAt), бойові гілки далі працюють із фактичним u.pos.
+    if (ui.fireMode === null && ui.itemMode === null && battle.visibleCells().has(cell.x + ',' + cell.y)) {
+      const a = u !== undefined && u.side === 'alien' ? u : battle.displayedAlienAt(cell);
+      if (a !== undefined) {
+        battle.binfo(
+          a.name +
+            ': HP ' +
+            a.hp +
+            '/' +
+            a.maxHp +
+            ' · зброя «' +
+            a.weapon.name +
+            '» (пошкодження ' +
+            a.weapon.damage[0] +
+            '–' +
+            a.weapon.damage[1] +
+            ', дальність ' +
+            a.weapon.range +
+            '). Виберіть режим пострілу на тулбарі, щоб атакувати.'
+        );
+        deps.renderAll();
+        return;
+      }
     }
 
     const sel = battle.selectedUnit();
