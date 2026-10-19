@@ -345,7 +345,7 @@ describe('UI-флоу прев’ю: геосцена → місія → бій 
 
   it('вибір солдата кліком по бойовищу (клітина 2,2 — зона висадки)', () => {
     const cv = $('battle') as HTMLCanvasElement;
-    cv.dispatchEvent(new MouseEvent('click', { clientX: 2 * 36 + 18, clientY: 2 * 36 + 18 }));
+    cv.dispatchEvent(new MouseEvent('click', { clientX: 2 * 48 + 24, clientY: 2 * 48 + 24 }));
     expect($('binfo').textContent).toContain('HP 10/10');
     expect($('binfo').textContent).toContain('AP 10/10');
   });
@@ -367,7 +367,7 @@ describe('UI-флоу прев’ю: геосцена → місія → бій 
     const cap = (): string => (document.querySelector('#btn-auto-battle .tb-cap') as HTMLElement | null)?.textContent ?? '';
     const cv = $('battle') as HTMLCanvasElement;
     const cellClick = (x: number, y: number): void => {
-      cv.dispatchEvent(new MouseEvent('click', { clientX: x * 36 + 18, clientY: y * 36 + 18 }));
+      cv.dispatchEvent(new MouseEvent('click', { clientX: x * 48 + 24, clientY: y * 48 + 24 }));
     };
     vi.useFakeTimers();
     try {
@@ -617,14 +617,14 @@ describe('панель збереження: 3 слоти, лише на гео�
 });
 
 describe('бойова фокусна зона (П6.3, ADR-0027)', () => {
-  it('розмітка: тулбар дій збоку (П13.2, ADR-0066), бойовище — квадрат (ширина колонки, кап 880px — П13.5)', () => {
+  it('розмітка: тулбар дій збоку (П13.2, ADR-0066), бойовище — квадрат (ширина колонки, кап 960px — П14.3)', () => {
     const panel = htmlRaw.match(/<section class="panel hidden" id="battle-panel">[\s\S]*?<\/section>/)![0];
     expect(panel).not.toContain('id="bcontrols"'); // нижня смуга кнопок вилучена (ADR-0066)
     expect(panel.indexOf('id="bctx"')).toBeLessThan(panel.indexOf('id="battle"')); // контекст-стрічка — над бойовищем
     expect(panel.indexOf('id="battle"')).toBeLessThan(panel.indexOf('id="btoolbar"')); // тулбар — збоку бойовища
     const css = htmlRaw.match(/#battle \{[^}]*\}/)![0];
     expect(css).toContain('width: 100%'); // на ширину фокусної колонки
-    expect(css).toContain('max-width: 880px'); // кап 880px — більший масштаб піксель-арту (П13.5, ADR-0068)
+    expect(css).toContain('max-width: 960px'); // кап 960px — 1:1 buffer 960×960 (П14.3, ADR-0068)
     expect(css).toContain('aspect-ratio: 1'); // квадрат
     // П13.2 (ADR-0066): тулбар вертикальний, плитки — тач-цілі ≥ 44px
     const tb = htmlRaw.match(/#btoolbar \{[^}]*\}/)![0];
@@ -632,7 +632,7 @@ describe('бойова фокусна зона (П6.3, ADR-0027)', () => {
     const tbBtn = htmlRaw.match(/#btoolbar button \{[^}]*\}/)![0];
     expect(tbBtn).toContain('min-height: 48px');
     const cv = $('battle') as HTMLCanvasElement;
-    expect(cv.width).toBe(720); // buffer 720×720: BCELL 36 × 20 клітинок (П13.5, ADR-0068)
+    expect(cv.width).toBe(960); // buffer 960×960: BCELL 48 × 20 клітинок (П14.3, ADR-0068)
   });
 
   it('контекст-стрічка: тип місії, заморожений час, чий хід; колонка стану dimmed; збереження вимкнене', () => {
@@ -660,7 +660,7 @@ describe('бойова фокусна зона (П6.3, ADR-0027)', () => {
 
   it('вибір юніта: стрічка показує активний юніт HP/AP', () => {
     const cv = $('battle') as HTMLCanvasElement;
-    cv.dispatchEvent(new MouseEvent('click', { clientX: 2 * 36 + 18, clientY: 2 * 36 + 18 }));
+    cv.dispatchEvent(new MouseEvent('click', { clientX: 2 * 48 + 24, clientY: 2 * 48 + 24 }));
     expect($('bctx-unit').textContent).toContain('HP 10/10');
     expect($('bctx-unit').textContent).toContain('AP 10/10');
     expect($('binfo').textContent).toContain('HP 10/10');
@@ -683,7 +683,7 @@ describe('керування: гарячі клавіші і тач-патерн
     target.dispatchEvent(new KeyboardEvent('keydown', { key: k, code: code, bubbles: true }));
   };
   const tap = (x: number, y: number): void => {
-    $('battle').dispatchEvent(new MouseEvent('click', { clientX: x * 36 + 18, clientY: y * 36 + 18 }));
+    $('battle').dispatchEvent(new MouseEvent('click', { clientX: x * 48 + 24, clientY: y * 48 + 24 }));
   };
 
   it('підготовка: нова партія (сід 42) → місія → вибір солдата у зоні висадки', () => {
@@ -760,16 +760,16 @@ describe('керування: гарячі клавіші і тач-патерн
 
 describe('П6.14: UX прицілювання — обведення цілей, шанс біля клітинки, кнопки без AP', () => {
   const tap = (x: number, y: number): void => {
-    $('battle').dispatchEvent(new MouseEvent('click', { clientX: x * 36 + 18, clientY: y * 36 + 18 }));
+    $('battle').dispatchEvent(new MouseEvent('click', { clientX: x * 48 + 24, clientY: y * 48 + 24 }));
   };
   const hover = (x: number, y: number): void => {
-    $('battle').dispatchEvent(new MouseEvent('mousemove', { clientX: x * 36 + 18, clientY: y * 36 + 18 }));
+    $('battle').dispatchEvent(new MouseEvent('mousemove', { clientX: x * 48 + 24, clientY: y * 48 + 24 }));
   };
   const keydown = (k: string, code: string): void => {
     document.dispatchEvent(new KeyboardEvent('keydown', { key: k, code: code, bubbles: true }));
   };
-  // Рамка валідної цілі: strokeRect(gx*36+2, gy*36+2, 32, 32) — BCELL 36 (П13.5)
-  const frame = (x: number, y: number): string => 'strokeRect(' + (x * 36 + 2) + ',' + (y * 36 + 2) + ',32,32)';
+  // Рамка валідної цілі: strokeRect(gx*48+2, gy*48+2, 44, 44) — BCELL 48 (П14.3)
+  const frame = (x: number, y: number): string => 'strokeRect(' + (x * 48 + 2) + ',' + (y * 48 + 2) + ',44,44)';
 
   it('підготовка: нова партія (сід 42) → місія → солдат (3,2) крокує на (4,2) — 1 AP', () => {
     startParty();
@@ -1018,7 +1018,7 @@ describe('П11.6: критичний флоу «дослідити → виро�
     document.dispatchEvent(new KeyboardEvent('keydown', { code, bubbles: true }));
   };
   const tap = (x: number, y: number): void => {
-    $('battle').dispatchEvent(new MouseEvent('click', { clientX: x * 36 + 18, clientY: y * 36 + 18 }));
+    $('battle').dispatchEvent(new MouseEvent('click', { clientX: x * 48 + 24, clientY: y * 48 + 24 }));
   };
   const researchDone = (id: string): boolean =>
     [...document.querySelectorAll('#research .ufo')].some((r) => r.textContent!.includes(id) && r.textContent!.includes('завершено'));

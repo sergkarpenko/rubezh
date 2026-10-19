@@ -12,8 +12,9 @@
 // сітка в проміжках, м'який край туману (сенс туману незмінний).
 // П6.14: обведення валідних цілей і шанс попадання (drawTargetFrame/drawChanceLabel).
 // П14.2 (ADR-0072): атлас спрайтів юнітів бою — вибір кадру за станом юніта
-// (idle/walk/fire/death, чиста функція без RNG), nearest-neighbor 32×32 у
-// BCELL 36, обов'язковий фолбек на матриці ADR-0031 при !loaded (тести від
+// (idle/walk/fire/death, чиста функція без RNG), nearest-neighbor 44×44 у
+// BCELL 48 (П14.3: walk2 — окремий кадр, фліп за напрямком), обов'язковий
+// фолбек на матриці ADR-0031 при !loaded (тести від
 // ассета не залежать — завантажувач інжектиться моком).
 // Кадри анімаційного шару (drawAnimFrame) — у src/render.frames.test.ts;
 // чиста логіка рушія — у src/core/render-core.test.ts (ADR-0038).
@@ -23,9 +24,14 @@ import {
   ATLAS_FRAME,
   ATLAS_POSE_COL,
   ATLAS_UNIT,
+  ATLAS_WALK2_COL,
   CHANCE_LABEL_BG,
   CHANCE_LABEL_TEXT,
   TARGET_FRAME_COLOR,
+  TERRAIN_DECOR_COL,
+  TERRAIN_TILE,
+  TERRAIN_WALL_COL,
+  decorCol,
   drawAlienSprite,
   drawBaseSprite,
   drawChanceLabel,
@@ -36,12 +42,14 @@ import {
   drawUfoSprite,
   drawUnitSprite,
   initPixelSprites,
+  initTerrainAtlas,
   initUnitAtlas,
+  isTerrainAtlasReady,
   isUnitAtlasReady,
   unitPose,
   type MakeOffscreen,
 } from './render';
-import { GEO_GRID_COLOR, NIGHT_BG, cellHash, geoCellTone, type TerrainCell } from './core/render-core';
+import { FOG_EDGE, GEO_GRID_COLOR, NIGHT_BG, cellHash, geoCellTone, terrainShade, type TerrainCell } from './core/render-core';
 import {
   ALIEN_STAND,
   BASE_SPRITE,
@@ -55,11 +63,11 @@ import {
 } from './core/sprites';
 import { BCELL, GCELL } from './ui/grid';
 
-// Клітиночка прев'ю: BCELL = 36 (П13.5, ADR-0068), центр (18, 18), радіус силуету 8 (як у renderBattle).
-const CX = 18;
-const CY = 18;
+// Клітиночка прев'ю: BCELL = 48 (П14.3, ADR-0068), центр (24, 24), радіус силуету 8 (як у renderBattle).
+const CX = 24;
+const CY = 24;
 const R = 8;
-const CELL = 36;
+const CELL = 48;
 
 type Call = { m: string; args: unknown[] };
 
@@ -138,12 +146,14 @@ function rasterFactory(): { make: MakeOffscreen; canvases: RasterCanvas[] } {
 }
 
 // Кожен тест малює через свіжий мок-фабрик: initPixelSprites скидає кеш
-// розгорнутих спрайтів (ліниво + кеш — ADR-0031). П14.2 (ADR-0072): атлас
-// юнітів скидається у фолбек — завантажувач, що не кликається (тести від
-// ассета не залежать; свої моки атласний describe ставить локально).
+// розгорнутих спрайтів (ліниво + кеш — ADR-0031). П14.2/П14.3 (ADR-0072):
+// атлас юнітів і тайлсет терену скидаються у фолбек — завантажувачі, що не
+// кликаються (тести від ассетів не залежать; свої моки атласні describe
+// ставлять локально).
 beforeEach(() => {
   initPixelSprites(rasterFactory().make);
   initUnitAtlas(() => {});
+  initTerrainAtlas(() => {});
 });
 
 // Піксельні межі всіх точок, яких торкається малювання: arc — центр ± r,
@@ -208,7 +218,7 @@ describe('П13.5 (ADR-0068): масштаб піксель-арту — матр
     }
   });
 
-  it('ціле кратне масштабування в клітинках: юніт 32px ≤ BCELL 36, гео 24/32px ≤ GCELL 44', () => {
+  it('ціле кратне масштабування в клітинках: юніт 32px ≤ BCELL 48, гео 24/32px ≤ GCELL 44', () => {
     expect(SPRITE_SCALE).toBe(2); // ціле кратне (ADR-0031)
     expect(SOLDIER_STAND.rows.length * SPRITE_SCALE).toBeLessThanOrEqual(BCELL);
     expect(BASE_SPRITE.rows.length * SPRITE_SCALE).toBeLessThanOrEqual(GCELL);
@@ -218,7 +228,7 @@ describe('П13.5 (ADR-0068): масштаб піксель-арту — матр
 });
 
 describe('спрайти юнітів: межі клітинки (урок П6.6)', () => {
-  it('солдат з усіма маркерами не виходить за клітинку 36px (П13.5)', () => {
+  it('солдат з усіма маркерами не виходить за клітинку 48px (П14.3)', () => {
     const { ctx, calls } = mockCtx();
     drawSoldierSprite(ctx, soldier({ selected: true, overwatch: true }));
     const e = extent(calls);
@@ -228,7 +238,7 @@ describe('спрайти юнітів: межі клітинки (урок П6.6
     expect(e.maxY).toBeLessThanOrEqual(CELL);
   });
 
-  it('прибульчик з усіма маркерами не виходить за клітинку 36px (П13.5)', () => {
+  it('прибульчик з усіма маркерами не виходить за клітинку 48px (П14.3)', () => {
     const { ctx, calls } = mockCtx();
     drawAlienSprite(ctx, alien({ selected: true, overwatch: true }));
     const e = extent(calls);
@@ -240,12 +250,12 @@ describe('спрайти юнітів: межі клітинки (урок П6.6
 });
 
 describe('піксель-арт: offscreen-канваси, nearest-neighbor, кеш (П6.12, ADR-0031)', () => {
-  it('drawImage з offscreen-канваса: цілий масштаб 2× (32px у клітинці 36 — П13.5), згладжування вимкнене', () => {
+  it('drawImage з offscreen-канваса: цілий масштаб 2× (32px у клітинці 48 — П14.3), згладжування вимкнене', () => {
     const s = animCtx(); // Proxy: записує і виклики, і присвоєння властивостей
     drawSoldierSprite(s.ctx, soldier());
     const d = s.calls.find((c) => c.m === 'drawImage');
     expect(d).toBeDefined();
-    expect((d!.args as number[])[1]).toBe(CX - (16 * SPRITE_SCALE) / 2); /* Math.round(18 - 16) = 2; матриця 16×16 (П13.5) */
+    expect((d!.args as number[])[1]).toBe(CX - (16 * SPRITE_SCALE) / 2); /* Math.round(24 - 16) = 8; матриця 16×16 (П14.3) */
     expect((d!.args as number[])[2]).toBe(CY - (16 * SPRITE_SCALE) / 2);
     expect((d!.args as number[])[3]).toBe(16 * SPRITE_SCALE);
     expect((d!.args as number[])[4]).toBe(16 * SPRITE_SCALE);
@@ -710,7 +720,7 @@ describe('П6.14: шанс попадання біля клітинки (drawCha
   });
 });
 
-describe('П14.2 (ADR-0072): атлас спрайтів юнітів — кадри за станом, фолбек', () => {
+describe('П14.2/П14.3 (ADR-0072): атлас спрайтів юнітів — кадри за станом, фолбек', () => {
   // Мок-атлас: завантажувач кликає onLoad синхронно з фіктивним джерелом.
   const atlasImg = { width: 480, height: 192 } as unknown as CanvasImageSource;
   const readyAtlas = (): void => {
@@ -725,15 +735,17 @@ describe('П14.2 (ADR-0072): атлас спрайтів юнітів — кад
     expect(isUnitAtlasReady()).toBe(true);
   });
 
-  it('поза за станом юніта — чиста функція (без RNG, ADR-0003): idle/walk за кадром ядра, вогонь і смерть мають пріоритет', () => {
+  it('поза за станом юніта — чиста функція (без RNG, ADR-0003): idle/walk за кадром ядра, двокадрова ходьба (step, П14.3), вогонь і смерть мають пріоритет', () => {
     expect(unitPose({})).toBe('idle');
     expect(unitPose({ frame: 0 })).toBe('idle');
     expect(unitPose({ frame: 1 })).toBe('walk');
-    expect(unitPose({ frame: 1, pose: 'fire' })).toBe('fire');
+    expect(unitPose({ step: 1 })).toBe('walk');
+    expect(unitPose({ step: 2 })).toBe('walk');
+    expect(unitPose({ step: 2, pose: 'fire' })).toBe('fire');
     expect(unitPose({ frame: 1, pose: 'death' })).toBe('death');
   });
 
-  it('атлас готовий: кадр 96×96 → 32×32 у клітинці 36, nearest-neighbor, за позою і стороною', () => {
+  it('атлас готовий: кадр 96×96 → 44×44 у клітинці 48, nearest-neighbor, за позою і стороною', () => {
     readyAtlas();
     const cases = [
       { side: 'player' as const, pose: undefined, col: ATLAS_POSE_COL.idle, row: 0 },
@@ -754,9 +766,9 @@ describe('П14.2 (ADR-0072): атлас спрайтів юнітів — кад
       expect(a[2]).toBe(c.row * ATLAS_FRAME); // рядок: 0 — оперативник, 1 — демон Розриву
       expect(a[3]).toBe(ATLAS_FRAME);
       expect(a[4]).toBe(ATLAS_FRAME);
-      expect(a[5]).toBe(CX - ATLAS_UNIT / 2); // Math.round(18 − 16) = 2
+      expect(a[5]).toBe(CX - ATLAS_UNIT / 2); // Math.round(24 − 22) = 2
       expect(a[6]).toBe(CY - ATLAS_UNIT / 2);
-      expect(a[7]).toBe(ATLAS_UNIT); // 32×32 у клітинці BCELL 36 (П14.2)
+      expect(a[7]).toBe(ATLAS_UNIT); // 44×44 у клітинці BCELL 48 (П14.3)
       expect(a[8]).toBe(ATLAS_UNIT);
       expect(a[5] + a[7]).toBeLessThanOrEqual(CELL); // межі клітинки (урок П6.6)
       expect(a[6] + a[8]).toBeLessThanOrEqual(CELL);
@@ -764,14 +776,35 @@ describe('П14.2 (ADR-0072): атлас спрайтів юнітів — кад
     }
   });
 
-  it('кадр ходьби з атласа: frame 1 ядра → walk1 (кол. 1); стій — idle (кол. 0)', () => {
+  it('двокадрова ходьба (П14.3): step 1 → walk1 (кол. 1), step 2 → walk2 (кол. 2); кадр ядра — walk1', () => {
     readyAtlas();
-    const stand = animCtx();
-    drawUnitSprite(stand.ctx, soldier());
-    const step = animCtx();
-    drawUnitSprite(step.ctx, soldier({ frame: 1 }));
-    expect((stand.calls.find((c) => c.m === 'drawImage')!.args as number[])[1]).toBe(ATLAS_POSE_COL.idle * ATLAS_FRAME);
-    expect((step.calls.find((c) => c.m === 'drawImage')!.args as number[])[1]).toBe(ATLAS_POSE_COL.walk * ATLAS_FRAME);
+    const w1 = animCtx();
+    drawUnitSprite(w1.ctx, soldier({ step: 1 }));
+    const w2 = animCtx();
+    drawUnitSprite(w2.ctx, soldier({ step: 2 }));
+    const core = animCtx();
+    drawUnitSprite(core.ctx, soldier({ frame: 1 }));
+    expect((w1.calls.find((c) => c.m === 'drawImage')!.args as number[])[1]).toBe(ATLAS_POSE_COL.walk * ATLAS_FRAME);
+    expect((w2.calls.find((c) => c.m === 'drawImage')!.args as number[])[1]).toBe(ATLAS_WALK2_COL * ATLAS_FRAME);
+    expect((core.calls.find((c) => c.m === 'drawImage')!.args as number[])[1]).toBe(ATLAS_POSE_COL.walk * ATLAS_FRAME);
+  });
+
+  it('фліп за напрямком (П14.3): flip — дзеркало scale(-1,1) навколо центру кадру; без flip — без дзеркала', () => {
+    readyAtlas();
+    const fl = animCtx();
+    drawUnitSprite(fl.ctx, soldier({ flip: true }));
+    expect(fl.calls.some((c) => c.m === 'scale' && (c.args as number[])[0] === -1)).toBe(true);
+    const first = fl.calls.findIndex((c) => c.m === 'save');
+    const last = fl.calls.findIndex((c) => c.m === 'restore');
+    expect(first).toBeGreaterThanOrEqual(0);
+    expect(last).toBeGreaterThan(first);
+    const trans = fl.calls.filter((c) => c.m === 'translate').map((c) => c.args as number[]);
+    expect(trans).toContainEqual([CX, CY]); // дзеркало навколо центру кадру
+    expect((fl.calls.find((c) => c.m === 'drawImage')!.args as number[])[5]).toBe(CX - ATLAS_UNIT / 2);
+    const plain = animCtx();
+    drawUnitSprite(plain.ctx, soldier());
+    expect(plain.calls.some((c) => c.m === 'scale')).toBe(false);
+    expect(plain.calls.some((c) => c.m === 'save')).toBe(false);
   });
 
   it('фолбек при !loaded: матриці ADR-0031 (drawImage з offscreen-канваса, 5 аргументів), маркери на місці', () => {
@@ -795,5 +828,116 @@ describe('П14.2 (ADR-0072): атлас спрайтів юнітів — кад
     drawUnitSprite(a.ctx, soldier({ frame: 1, pose: 'fire' }));
     drawUnitSprite(b.ctx, soldier({ frame: 1, pose: 'fire' }));
     expect(a.calls).toEqual(b.calls);
+  });
+});
+
+// --- П14.3 (ADR-0072): тайлсет терену бою — розклад за cellHash, фолбек ---
+
+describe('П14.3 (ADR-0072): тайлсет терену — підлога за хешем, стіна, декори', () => {
+  // Мок-тайлсет: завантажувач кликає onLoad синхронно з фіктивним джерелом.
+  const tilesImg = { width: 384, height: 48 } as unknown as CanvasImageSource;
+  const readyTiles = (): void => {
+    initTerrainAtlas((_url, onLoad) => {
+      onLoad(tilesImg);
+    });
+  };
+  // Клітинки сітки 3×2: усі видимі, (1,1) — завалена (стіна).
+  const cells: TerrainCell[] = [
+    { x: 0, y: 0, blocked: false, visible: true },
+    { x: 1, y: 0, blocked: false, visible: true },
+    { x: 2, y: 0, blocked: false, visible: true },
+    { x: 0, y: 1, blocked: false, visible: true },
+    { x: 1, y: 1, blocked: true, visible: true },
+    { x: 2, y: 1, blocked: false, visible: true },
+  ];
+  const tileDraws = (ops: Op[]): Array<{ col: number; x: number; y: number }> =>
+    ops
+      .filter((o): o is { m: string; args: unknown[] } => 'm' in o && o.m === 'drawImage')
+      .map((o) => ({
+        col: (o.args[1] as number) / TERRAIN_TILE,
+        x: o.args[5] as number,
+        y: o.args[6] as number,
+      }));
+
+  it('прапорець завантаженості: фолбек до onload, готовий — після', () => {
+    expect(isTerrainAtlasReady()).toBe(false);
+    readyTiles();
+    expect(isTerrainAtlasReady()).toBe(true);
+  });
+
+  it('підлога — 4 варіанти за cellHash (без RNG), стіна — за мапою (blocked), 1:1 під клітинку', () => {
+    readyTiles();
+    const s = seqCtx();
+    drawNightTerrain(s.ctx, 144, 96, cells, 48);
+    const draws = tileDraws(s.ops);
+    // підлога/стіна кожній + декори за хешем (у сітці 3×2 одна клітинка з декором)
+    const decors = cells.filter((c) => !c.blocked && decorCol(c.x, c.y) !== null).length;
+    expect(draws.length).toBe(cells.length + decors);
+    for (const c of cells) {
+      const d = draws.find((t) => t.x === c.x * 48 && t.y === c.y * 48);
+      expect(d, `клітинка (${c.x},${c.y})`).toBeDefined();
+      expect(d!.col).toBe(c.blocked ? TERRAIN_WALL_COL : cellHash(c.x, c.y) % 4); // розклад за хешем (ADR-0072 п.6)
+    }
+    // nearest-neighbor і розмір 1:1 з клітинкою (48 = BCELL, П14.3)
+    expect(s.ops.some((o) => 'set' in o && o.set === 'imageSmoothingEnabled' && o.v === false)).toBe(true);
+    for (const o of s.ops) {
+      if ('m' in o && o.m === 'drawImage') {
+        expect(o.args[7]).toBe(48); // ширина цільова
+        expect(o.args[8]).toBe(48); // висота цільова
+      }
+    }
+  });
+
+  it('декори — детермінований рідкий розклад decorCol (уламки/труба/вентиляція), лише на відкритих', () => {
+    // чиста функція: знаходимо по одному представнику кожного типу на сітці 60×60
+    const found = new Map<number, TerrainCell>();
+    for (let y = 0; y < 60 && found.size < 3; y++) {
+      for (let x = 0; x < 60 && found.size < 3; x++) {
+        const d = decorCol(x, y);
+        if (d !== null && !found.has(d)) found.set(d, { x, y, blocked: false, visible: true });
+      }
+    }
+    expect([...found.keys()].sort()).toEqual(
+      [TERRAIN_DECOR_COL['уламки'], TERRAIN_DECOR_COL['труба'], TERRAIN_DECOR_COL['вентиляція']].sort()
+    );
+    const list = [...found.values()];
+    for (const c of list) expect(decorCol(c.x, c.y)).toBe(decorCol(c.x, c.y)); // стабільний (без RNG)
+    readyTiles();
+    const s = seqCtx();
+    drawNightTerrain(s.ctx, 60 * 48, 60 * 48, list, 48);
+    const draws = tileDraws(s.ops);
+    expect(draws.length).toBe(list.length * 2); // підлога кожній + декор кожній
+    for (const c of list) {
+      const dcol = decorCol(c.x, c.y)!;
+      expect(draws.some((t) => t.col === dcol && t.x === c.x * 48 && t.y === c.y * 48)).toBe(true);
+    }
+  });
+
+  it('туман: клітинки поза видимістю перекриваються напівпрозорим TILE-шаром (вміст не розкривається)', () => {
+    readyTiles();
+    const fogged = cells.map((c) => ({ ...c, visible: c.x === 0 })); // видимий лише стовпець x=0
+    const s = seqCtx();
+    drawNightTerrain(s.ctx, 144, 96, fogged, 48);
+    const fogFills = s.ops.filter(
+      (o): o is { m: string; args: unknown[] } => 'm' in o && o.m === 'fillRect' && o.args[3] === 48 && o.args[2] === 48
+    );
+    expect(fogFills.length).toBe(4); // 4 клітинки туману (з 6)
+  });
+
+  it('фолбек без ассета — чинні два тони terrainShade (загальний випадок покривають тести П6.13)', () => {
+    expect(isTerrainAtlasReady()).toBe(false); // завантажувач не кликнувся — headless/офлайн
+    const s = seqCtx();
+    drawNightTerrain(s.ctx, 144, 96, cells, 48);
+    expect(s.ops.some((o) => 'm' in o && o.m === 'drawImage')).toBe(false); // тайли не малюються
+    expect(cellFills(s.ops, 0, 0, 48)[0]).toBe(terrainShade(0, 0, false, true)); // двотоновий фолбек
+  });
+
+  it('детермінізм (ADR-0003): той самий терен → той самий потік операцій', () => {
+    readyTiles();
+    const a = seqCtx();
+    drawNightTerrain(a.ctx, 144, 96, cells, 48);
+    const b = seqCtx();
+    drawNightTerrain(b.ctx, 144, 96, cells, 48);
+    expect(a.ops).toEqual(b.ops);
   });
 });

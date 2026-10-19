@@ -21,6 +21,7 @@ import {
   NIGHT_BG,
   TRACER_MS,
   animT,
+  cellHash,
   geoCellTone,
   hasVisibleNeighbor,
   moveAnimPos,
@@ -49,6 +50,7 @@ import {
   type UfoSprite,
 } from './core/sprites';
 import unitAtlasUrl from '../assets/units-atlas.png';
+import terrainTilesUrl from '../assets/terrain-tiles.png';
 
 const HP_TEXT = '#0b0e15';
 const SELECT_RING = '#9adfff'; // П12.7: рамка вибору — гама ціану «Рубіжу» (ADR-0064)
@@ -118,38 +120,45 @@ function drawPixelSprite(ctx: CanvasRenderingContext2D, def: PixelSprite, cx: nu
   ctx.drawImage(s.img, Math.round(cx - w / 2), Math.round(cy - h / 2), w, h);
 }
 
-// --- П14.2 (ADR-0072): атлас спрайтів юнітів бою — згенеровані кадри ---
+// --- П14.2/П14.3 (ADR-0072): атлас спрайтів юнітів бою — згенеровані кадри ---
 // Джерело — assets/units-atlas.png (480×192): сітка 5×2 кадрів 96×96, порядок
 // колонок idle → walk1 → walk2 → fire → death; ряд 0 — оперативник, ряд 1 —
-// демон Розриву. Джерело генерації містило один кадр ходьби — кол. 2 (walk2)
-// — дубль walk1 у ассеті; вибір кадру завжди idle/walk/fire/death (константи
-// підлаштовано під фактичне зображення, план — джерело правди чисел).
-// Відображення 32×32 у BCELL 36, nearest-neighbor (ADR-0068) — той самий
-// слід, що й матриці 16×16 @2× (клік-математика і дужки вибору без змін).
+// демон Розриву. П14.3: walk2 — окремий кадр (фідбек П14.2, константи кадрів
+// 0/1/2/3/4); план — джерело правди чисел (style-references.md, Фаза 14).
+// Відображення 44×44 у BCELL 48, nearest-neighbor (ADR-0068): 92% заповнення
+// клітинки, тач-цілі 48 ≥ 44px.
 export const ATLAS_FRAME = 96; // кадр атласу, px
 export const ATLAS_COLS = 5; // idle, walk1, walk2, fire, death
-export const ATLAS_UNIT = 32; // сторона відображення у клітинці BCELL 36
+export const ATLAS_UNIT = 44; // сторона відображення у клітинці BCELL 48
 
 export type UnitPose = 'idle' | 'walk' | 'fire' | 'death';
 
-// Колонка атласа за позою: walk2 (кол. 2) — дубль walk1, окремо не обирається.
+// Колонка атласа за позою: walk1 — кол. 1; walk2 (крок іншою ногою) — кол. 2
+// (П14.3: окремий кадр, дубль walk1 у П14.2 замінено).
 export const ATLAS_POSE_COL: Readonly<Record<UnitPose, number>> = {
   idle: 0,
   walk: 1,
   fire: 3,
   death: 4,
 };
+export const ATLAS_WALK2_COL = 2;
 
 // Юніт бою з погляду шару відображення: поза вогонь/смерть — надбудова над
-// UnitSprite ядра (ядровий frame 0/1 лишається семантикою стій/крок, ADR-0031).
+// UnitSprite ядра (ядровий frame 0/1 лишається семантикою стій/крок, ADR-0031);
+// step — фаза двокадрової ходьби атласа (walk1/walk2, П14.3); flip — дзеркало
+// за напрямком (детерміновано у battle.ts, без RNG; ядро не зачіпається).
 export interface UnitSpriteView extends UnitSprite {
   pose?: 'fire' | 'death';
+  step?: 1 | 2;
+  flip?: boolean;
 }
 
 // Поза за станом юніта — чиста функція, детермінована (без RNG, ADR-0003):
-// вогонь/смерть мають пріоритет (подієві кадри), інакше кадр ходьби ядра.
-export function unitPose(u: Pick<UnitSpriteView, 'frame' | 'pose'>): UnitPose {
+// вогонь/смерть мають пріоритет (подієві кадри), двокадрова ходьба (step,
+// П14.3) і кадр ходьби ядра — далі, інакше стій.
+export function unitPose(u: Pick<UnitSpriteView, 'frame' | 'pose' | 'step'>): UnitPose {
   if (u.pose === 'fire' || u.pose === 'death') return u.pose;
+  if (u.step === 1 || u.step === 2) return 'walk';
   return (u.frame ?? 0) === 1 ? 'walk' : 'idle';
 }
 
@@ -175,22 +184,70 @@ export function isUnitAtlasReady(): boolean {
   return unitAtlasImg !== null;
 }
 
-// Кадр з атласа: 96×96 → 32×32 у клітинці, цілі пікселі (Math.round),
+// --- П14.3 (ADR-0072): тайлсет терену бою — згенеровані тайли ---
+// Джерело — assets/terrain-tiles.png (384×48): 8 тайлів 48×48 — кол. 0–3
+// варіанти підлоги (темні й ненасичені — дизайн-вимога контрасту: неон
+// юнітів — найяскравіший акцент клітинки), кол. 4 — стіна з неоновим
+// ціановим кантом, кол. 5–7 — декори (уламки, труба, вентиляція зі
+// світінням). Малюються під клітинку 48 (= BCELL, 1:1; П14.3 ADR-0068).
+export const TERRAIN_TILE = 48; // сторона тайла, px
+export const TERRAIN_COLS = 8; // 0–3 підлоги, 4 стіна, 5–7 декори
+export const TERRAIN_WALL_COL = 4;
+export const TERRAIN_DECOR_COL = { уламки: 5, труба: 6, вентиляція: 7 } as const;
+
+// Розклад декорів — чиста функція координат (детермінований хеш, без RNG —
+// ADR-0003/0072): рідкі декори на відкритих клітинках, мозаїка стабільна
+// між кадрами. ~3/37 відкритих клітинок (~8%).
+export function decorCol(x: number, y: number): number | null {
+  const h = cellHash(x, y) % 37;
+  if (h === 0) return TERRAIN_DECOR_COL['уламки'];
+  if (h === 1) return TERRAIN_DECOR_COL['труба'];
+  if (h === 2) return TERRAIN_DECOR_COL['вентиляція'];
+  return null;
+}
+
+// Приглушення тайлів у тумані (рельєф видно, вміст не розкривається —
+// ADR-0006): напівпрозоре перекриття поверх тайла, патерн фолбеку.
+const TILE_FOG = 'rgba(5,8,15,0.55)';
+
+// Ліниве завантаження тайлсету — той самий патерн, що initUnitAtlas
+// (ADR-0072 п.3): фабрика інжектиться, невдача — тихий фолбек на два тони.
+export type LoadTerrainTiles = (url: string, onLoad: (img: CanvasImageSource) => void) => void;
+let terrainTilesImg: CanvasImageSource | null = null;
+
+export function initTerrainAtlas(load: LoadTerrainTiles): void {
+  terrainTilesImg = null;
+  load(terrainTilesUrl, (img) => {
+    terrainTilesImg = img;
+  });
+}
+
+// Прапорець готовності тайлсету (фолбек терену — !isTerrainAtlasReady).
+export function isTerrainAtlasReady(): boolean {
+  return terrainTilesImg !== null;
+}
+
+// Кадр з атласа: 96×96 → 44×44 у клітинці, цілі пікселі (Math.round),
 // згладжування вимкнене — крайові пікселі без розмиття (ADR-0068).
+// П14.3: двокадрова ходьба — step 2 обирає колонку walk2; фліп за напрямком
+// (flip) — дзеркало scale(-1,1) навколо центру кадру, детерміновано (без RNG;
+// напрямок рахує викликач — battle.ts, ядро і розкладка кадрів без змін).
 function drawAtlasUnit(ctx: CanvasRenderingContext2D, u: UnitSpriteView, row: 0 | 1, img: CanvasImageSource): void {
-  const col = ATLAS_POSE_COL[unitPose(u)];
+  const pose = unitPose(u);
+  const col = pose === 'walk' && u.step === 2 ? ATLAS_WALK2_COL : ATLAS_POSE_COL[pose];
+  const x = Math.round(u.cx - ATLAS_UNIT / 2);
+  const y = Math.round(u.cy - ATLAS_UNIT / 2);
   ctx.imageSmoothingEnabled = false;
-  ctx.drawImage(
-    img,
-    col * ATLAS_FRAME,
-    row * ATLAS_FRAME,
-    ATLAS_FRAME,
-    ATLAS_FRAME,
-    Math.round(u.cx - ATLAS_UNIT / 2),
-    Math.round(u.cy - ATLAS_UNIT / 2),
-    ATLAS_UNIT,
-    ATLAS_UNIT
-  );
+  if (u.flip === true) {
+    ctx.save();
+    ctx.translate(u.cx, u.cy);
+    ctx.scale(-1, 1);
+    ctx.translate(-u.cx, -u.cy);
+    ctx.drawImage(img, col * ATLAS_FRAME, row * ATLAS_FRAME, ATLAS_FRAME, ATLAS_FRAME, x, y, ATLAS_UNIT, ATLAS_UNIT);
+    ctx.restore();
+    return;
+  }
+  ctx.drawImage(img, col * ATLAS_FRAME, row * ATLAS_FRAME, ATLAS_FRAME, ATLAS_FRAME, x, y, ATLAS_UNIT, ATLAS_UNIT);
 }
 
 function drawOverwatchMarker(ctx: CanvasRenderingContext2D, u: UnitSprite): void {
@@ -279,20 +336,52 @@ export function drawUfoSprite(ctx: CanvasRenderingContext2D, u: UfoSprite): void
 // Палітра, хеш-варіація і сусідство туману — чиста логіка src/core/render-core.ts
 // (terrainShade/visibleKeys/hasVisibleNeighbor); тут — лише Canvas-виклики.
 
-// Нічний терен: фон → клітинки (двотоновий терен з хеш-варіацією) → м'який
-// край туману → тонка сітка в проміжках. Чиста функція без RNG і DOM-стану;
-// викликається кожен кадр після clearRect (урок П6.6) — кадр еквівалентний
-// малюванню з нуля. w/h — розмір buffer'а канви в пікселях, cell — BCELL.
+// Нічний терен: фон → клітинки → м'який край туману → (фолбек) тонка сітка.
+// П14.3 (ADR-0072): тайлсет готовий — підлога за хешем (4 варіанти, без RNG),
+// стіна — за мапою (blocked), декори — за хешем координат; туман —
+// напівпрозоре приглушення поверх тайла (рельєф видно, ADR-0006), м'який
+// край — як і раніше. Фолбек без ассета — чинні два тони terrainShade
+// (обов'язковий, тести від ассета не залежать). Чиста функція без RNG і
+// DOM-стану; викликається кожен кадр після clearRect (урок П6.6) — кадр
+// еквівалентний малюванню з нуля. w/h — розмір buffer'а канви в пікселях,
+// cell — BCELL.
 export function drawNightTerrain(ctx: CanvasRenderingContext2D, w: number, h: number, cells: readonly TerrainCell[], cell: number): void {
   // фон на весь buffer (при трясці translate оголює край — колір збігається з CSS-тлом)
   ctx.fillStyle = NIGHT_BG;
   ctx.fillRect(0, 0, w, h);
   // мапа видимості для м'якого краю туману (сусідство за 4 напрямками)
   const vis = visibleKeys(cells);
-  // клітинки: два тони (відкритий / завалений) × туман/видимо, відтінок — хеш
-  for (const c of cells) {
-    ctx.fillStyle = terrainShade(c.x, c.y, c.blocked, c.visible);
-    ctx.fillRect(c.x * cell, c.y * cell, cell - 1, cell - 1);
+  if (terrainTilesImg !== null) {
+    // П14.3: тайли — nearest-neighbor, підлога/стіна цілодобово під клітинку
+    ctx.imageSmoothingEnabled = false;
+    for (const c of cells) {
+      const col = c.blocked ? TERRAIN_WALL_COL : cellHash(c.x, c.y) % (TERRAIN_COLS - TERRAIN_WALL_COL);
+      ctx.drawImage(terrainTilesImg, col * TERRAIN_TILE, 0, TERRAIN_TILE, TERRAIN_TILE, c.x * cell, c.y * cell, cell, cell);
+    }
+    // декори поверх підлоги — рідкий детермінований розклад (без RNG)
+    for (const c of cells) {
+      if (c.blocked) continue;
+      const dcol = decorCol(c.x, c.y);
+      if (dcol === null) continue;
+      ctx.drawImage(terrainTilesImg, dcol * TERRAIN_TILE, 0, TERRAIN_TILE, TERRAIN_TILE, c.x * cell, c.y * cell, cell, cell);
+    }
+    // туман: приглушення клітинок поза зоною видимості (вміст не розкривається)
+    ctx.fillStyle = TILE_FOG;
+    for (const c of cells) {
+      if (!c.visible) ctx.fillRect(c.x * cell, c.y * cell, cell, cell);
+    }
+  } else {
+    // фолбек: два тони (відкритий / завалений) × туман/видимо, відтінок — хеш
+    for (const c of cells) {
+      ctx.fillStyle = terrainShade(c.x, c.y, c.blocked, c.visible);
+      ctx.fillRect(c.x * cell, c.y * cell, cell - 1, cell - 1);
+    }
+    // тонка сітка: 1px у проміжках між клітинками (стовпці і рядки)
+    ctx.fillStyle = GRID_COLOR;
+    const cols = Math.floor(w / cell);
+    const rows = Math.floor(h / cell);
+    for (let i = 1; i < cols; i++) ctx.fillRect(i * cell - 1, 0, 1, h);
+    for (let j = 1; j < rows; j++) ctx.fillRect(0, j * cell - 1, w, 1);
   }
   // м'який край туману: напівпрозоре перекриття на клітинках туману біля видимих
   ctx.fillStyle = FOG_EDGE;
@@ -300,12 +389,6 @@ export function drawNightTerrain(ctx: CanvasRenderingContext2D, w: number, h: nu
     if (c.visible) continue;
     if (hasVisibleNeighbor(vis, c.x, c.y)) ctx.fillRect(c.x * cell, c.y * cell, cell - 1, cell - 1);
   }
-  // тонка сітка: 1px у проміжках між клітинками (стовпці і рядки)
-  ctx.fillStyle = GRID_COLOR;
-  const cols = Math.floor(w / cell);
-  const rows = Math.floor(h / cell);
-  for (let i = 1; i < cols; i++) ctx.fillRect(i * cell - 1, 0, 1, h);
-  for (let j = 1; j < rows; j++) ctx.fillRect(0, j * cell - 1, w, 1);
 }
 
 // --- П12.7 (ADR-0064): терен геосцени — двотоновий із неоновою сіткою ---
@@ -432,6 +515,13 @@ export function drawAnimFrame(ctx: CanvasRenderingContext2D, a: Anim, now: numbe
     // П6.12 (ADR-0031): кадри ходьби — з прогресу шляху, детерміновано
     // (2 кадри на клітинку, без RNG); у статиці малюється кадр «стій».
     const frame = Math.floor(t * Math.max(1, a.path.length - 1) * 2) % 2;
+    // П14.3 (фідбек П14.2): фліп за напрямком руху — дзеркало кодом у шарі
+    // відображення (детерміновано, без RNG; ядро і розкладка кадрів без змін);
+    // нативні напрямки кадрів: оперативник — вправо, демон Розриву — вліво.
+    const first = a.path[0] ?? { x: 0, y: 0 };
+    const last = a.path[a.path.length - 1] ?? first;
+    const dir = Math.sign(last.x - first.x);
+    const native = a.side === 'player' ? 1 : -1;
     drawUnitSprite(ctx, {
       side: a.side,
       cx: p.cx,
@@ -441,6 +531,8 @@ export function drawAnimFrame(ctx: CanvasRenderingContext2D, a: Anim, now: numbe
       selected: a.selected,
       overwatch: a.overwatch,
       frame,
+      step: frame === 1 ? 2 : 1, // П14.3: двокадрова ходьба — walk1/walk2 (фолбек — frame)
+      flip: dir !== 0 && dir !== native,
     });
     return;
   }
