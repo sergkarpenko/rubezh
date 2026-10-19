@@ -333,14 +333,14 @@ describe('солдат і прибульчик: різні матриці, зб�
 });
 
 describe('читабельність стану (ADR-0007)', () => {
-  it('HP: смуга у низі клітинки (підкладка + заповнення за часткою) і число на плашці', () => {
+  it('HP: смуга у верхній частині клітинки (підкладка + заповнення за часткою) і число на плашці', () => {
     const s = animCtx(); // Proxy: записує і виклики, і присвоєння властивостей
     drawSoldierSprite(s.ctx, soldier({ hp: 7 }));
     expect(s.calls.some((c) => c.m === 'fillText' && c.args[0] === '7')).toBe(true);
-    // смуга: підкладка на всю ширину і заповнення 7/10 (у межах клітинки)
+    // смуга: підкладка на всю клітинку ВГОРУ і заповнення 7/10
     const rects = s.calls.filter((c) => c.m === 'fillRect') as Array<{ args: number[] }>;
-    expect(rects.some((c) => c.args[2] === 36 && c.args[3] === 4)).toBe(true); // підкладка
-    expect(rects.some((c) => c.args[2] >= 25 && c.args[2] <= 26 && c.args[3] === 4)).toBe(true); // 36×0.7
+    expect(rects.some((c) => c.args[0] === CX - 24 && c.args[1] === CY - 23 && c.args[2] === 48 && c.args[3] === 4)).toBe(true);
+    expect(rects.some((c) => c.args[1] === CY - 23 && c.args[2] >= 33 && c.args[2] <= 34 && c.args[3] === 4)).toBe(true); // 48×0.7
     expect(s.sets.some((x) => x.p === 'fillStyle' && x.v === '#7fe2a0')).toBe(true); // >50% — зелений
 
     const a = animCtx();
