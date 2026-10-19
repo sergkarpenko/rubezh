@@ -124,9 +124,9 @@
         padding: 12px;
       }
       /* П14.6 (ADR-0072): рамка панелей 9-slice — CSS border-image з ассета
-         assets/panel-frame.webp (761×709, конвертація кроку П14.6):
-         slice-лінії — виміряні смуги з запасом сяйва (top 116 / right 123 /
-         bottom 107 / left 121), repeat: stretch, БЕЗ fill — центральна зона
+         assets/panel-frame.webp (1298×684, варіант 2: конвертація кроку П14.6):
+         slice-лінії — виміряні смуги з запасом сяйва (top 104 / right 125 /
+         bottom 101 / left 125), repeat: stretch, БЕЗ fill — центральна зона
          відкидається, фон панелей лишається кодовим (рішення власника:
          рамка — не фон панелі). Застосовується ЛИШЕ після успішного
          завантаження ассета: клас .panel-frame і --panel-frame-url ставить
@@ -135,17 +135,17 @@
          (прецедент лого П13.4), тести від ассета не залежать */
       body.panel-frame section.panel {
         border: 14px solid transparent;
-        border-image: var(--panel-frame-url) 116 123 107 121 / 14px stretch;
+        border-image: var(--panel-frame-url) 104 125 101 125 / 14px stretch;
         border-radius: 0;
       }
       body.panel-frame header#topbar {
         border: 12px solid transparent;
-        border-image: var(--panel-frame-url) 116 123 107 121 / 12px stretch;
+        border-image: var(--panel-frame-url) 104 125 101 125 / 12px stretch;
         border-radius: 0;
       }
       body.panel-frame #status-tabs {
         border: 12px solid transparent;
-        border-image: var(--panel-frame-url) 116 123 107 121 / 12px stretch;
+        border-image: var(--panel-frame-url) 104 125 101 125 / 12px stretch;
         border-radius: 0;
         padding: 8px;
       }
