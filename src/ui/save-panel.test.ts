@@ -184,14 +184,14 @@ describe('latestSlot / onSaved (П12.2, ADR-0065/0026)', () => {
     const panel = createSavePanel(makeDeps());
     expect(panel.latestSlot()).toBeNull();
     panel.save(2);
+    setSavedAt(2, '2026-01-01T00:00:00'); // фіксовані мітки — тест не залежить від реального годинника (time-bomb)
     expect(panel.latestSlot()).toBe(2);
     panel.save(1);
-    setSavedAt(1, '2026-10-18T23:59:00'); // слот 1 пізніший
+    setSavedAt(1, '2026-01-02T00:00:00'); // слот 1 пізніший
     expect(panel.latestSlot()).toBe(1);
-    setSavedAt(1, '2026-10-18T00:01:00'); // слот 2 пізніший
+    setSavedAt(1, '2025-12-31T00:00:00'); // слот 2 пізніший
     expect(panel.latestSlot()).toBe(2);
-    const at2 = (JSON.parse(localStorage.getItem('rubezh.save.2')!) as { savedAt: string }).savedAt;
-    setSavedAt(1, at2); // рівні мітки — переважає старший номер слота
+    setSavedAt(1, '2026-01-01T00:00:00'); // рівні мітки — переважає старший номер слота
     expect(panel.latestSlot()).toBe(2);
   });
 
