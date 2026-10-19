@@ -15,12 +15,14 @@
 // байт-у-байт незмінний, RNG не викликається, туман (видимість) вирішує викликаюч.
 
 import {
+  BOOM_PARTICLES,
   FOG_EDGE,
   GEO_GRID_COLOR,
   GRID_COLOR,
   NIGHT_BG,
   TRACER_MS,
   animT,
+  boomParticleOffset,
   cellHash,
   geoCellTone,
   hasVisibleNeighbor,
@@ -30,6 +32,7 @@ import {
   type Anim,
   type TerrainCell,
 } from './core/render-core';
+import { grenadeZone } from './core/combat';
 import {
   ALIEN_STAND,
   ALIEN_STEP,
@@ -52,7 +55,6 @@ import {
 import unitAtlasUrl from '../assets/units-atlas.png';
 import terrainTilesUrl from '../assets/terrain-tiles.png';
 
-const HP_TEXT = '#0b0e15';
 const SELECT_RING = '#9adfff'; // П12.7: рамка вибору — гама ціану «Рубіжу» (ADR-0064)
 const UFO_SOFT_ALPHA = 0.85;
 const RADAR_PULSE = '#00e5ff'; // П12.7: пульс сенсорної сітки — неоновий ціан «Рубіжу» (ADR-0064)
@@ -151,6 +153,7 @@ export interface UnitSpriteView extends UnitSprite {
   pose?: 'fire' | 'death';
   step?: 1 | 2;
   flip?: boolean;
+  maxHp: number; // П14.4: показник життя — частка hp/maxHp у смузі HP
 }
 
 // Поза за станом юніта — чиста функція, детермінована (без RNG, ADR-0003):
@@ -280,12 +283,49 @@ function drawSelectionBrackets(ctx: CanvasRenderingContext2D, cx: number, cy: nu
   ctx.lineWidth = 1;
 }
 
-function drawHpText(ctx: CanvasRenderingContext2D, text: string, x: number, y: number): void {
-  ctx.font = '11px system-ui'; // П13.5: читабельність при більшому спрайті
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillStyle = HP_TEXT;
-  ctx.fillText(text, x, y);
+// П14.4 (фідбек прев'ю): показники життя юнітів — смуга HP у верхній частині
+// клітинки (заповнення за часткою hp/maxHp; фідбек власника: перенесено
+// з низу на верх) і число HP у кутковій зоні клітини (тло клітинки, не
+// спрайта — урок П6.12: темний текст у центрі силуета був невидимий на
+// атласних спрайтах П14.3). Колір смуги за часткою: зелений → бурштин →
+// червоний; число — кольори сторін (ціан «Рубіжу» / світлий пурпур Розриву,
+// ADR-0064). Ширина числа — оцінка 6px на символ (без measureText —
+// мок-контексти jsdom, урок П6.14).
+const HP_BAR_W = 48; // ширина смуги — вся клітинка (BCELL 48)
+const HP_BAR_H = 4; // висота смуги, px
+const HP_BAR_Y = -23; // зміщення смуги від центру клітинки (верх клітинки)
+const HP_BACKING = 'rgba(5,8,15,0.75)'; // підкладка смуги
+const HP_PLATE_BG = 'rgba(5,8,15,0.8)'; // плашка числа HP
+const HP_NUM_PLAYER = '#9adfff'; // ціан «Рубіжу» (ADR-0064)
+const HP_NUM_ALIEN = '#ff9ecb'; // світлий пурпур Розриву (ADR-0064)
+
+// Колір заповнення смуги HP за часткою (детерміновано, без RNG).
+function hpBarColor(hp: number, maxHp: number): string {
+  const f = maxHp > 0 ? hp / maxHp : 0;
+  return f > 0.5 ? '#7fe2a0' : f > 0.25 ? '#ffcf5c' : '#ff5c7a';
+}
+
+function drawHpBadge(ctx: CanvasRenderingContext2D, u: UnitSpriteView): void {
+  // смуга HP: темна підкладка на всю клітинку + заповнення за часткою (верх)
+  const x = u.cx - HP_BAR_W / 2;
+  const y = u.cy + HP_BAR_Y;
+  ctx.fillStyle = HP_BACKING;
+  ctx.fillRect(x, y, HP_BAR_W, HP_BAR_H);
+  const f = Math.max(0, Math.min(1, u.maxHp > 0 ? u.hp / u.maxHp : 0));
+  ctx.fillStyle = hpBarColor(u.hp, u.maxHp);
+  ctx.fillRect(x, y, u.hp > 0 ? Math.max(2, HP_BAR_W * f) : 0, HP_BAR_H);
+  // число HP: плашка у верхньому правому куті клітинки, одразу ПІД смугою
+  // (фідбек прев'ю: на одній лінії зі смугою плашка перекривала її заповнення);
+  // у межах клітинки (BCELL 48)
+  const text = String(u.hp);
+  const w = text.length * 6 + 3;
+  const px = u.cx + 24 - w - 1;
+  ctx.fillStyle = HP_PLATE_BG;
+  ctx.fillRect(px, u.cy + HP_BAR_Y + HP_BAR_H + 1, w, 11);
+  ctx.fillStyle = u.side === 'player' ? HP_NUM_PLAYER : HP_NUM_ALIEN;
+  ctx.font = '10px monospace';
+  ctx.textBaseline = 'top';
+  ctx.fillText(text, px + 1, u.cy + HP_BAR_Y + HP_BAR_H + 3);
 }
 
 export function drawSoldierSprite(ctx: CanvasRenderingContext2D, u: UnitSpriteView): void {
@@ -293,7 +333,7 @@ export function drawSoldierSprite(ctx: CanvasRenderingContext2D, u: UnitSpriteVi
   if (unitAtlasImg !== null) drawAtlasUnit(ctx, u, 0, unitAtlasImg);
   else drawPixelSprite(ctx, (u.frame ?? 0) === 1 ? SOLDIER_STEP : SOLDIER_STAND, u.cx, u.cy, SPRITE_SCALE);
   if (u.overwatch) drawOverwatchMarker(ctx, u);
-  drawHpText(ctx, String(u.hp), u.cx, u.cy);
+  drawHpBadge(ctx, u); // П14.4: смуга HP + число у кутковій зоні (читабельність)
   if (u.selected) drawSelectionBrackets(ctx, u.cx, u.cy);
 }
 
@@ -301,7 +341,7 @@ export function drawAlienSprite(ctx: CanvasRenderingContext2D, u: UnitSpriteView
   if (unitAtlasImg !== null) drawAtlasUnit(ctx, u, 1, unitAtlasImg);
   else drawPixelSprite(ctx, (u.frame ?? 0) === 1 ? ALIEN_STEP : ALIEN_STAND, u.cx, u.cy, SPRITE_SCALE);
   if (u.overwatch) drawOverwatchMarker(ctx, u);
-  drawHpText(ctx, String(u.hp), u.cx, u.cy);
+  drawHpBadge(ctx, u); // П14.4: смуга HP + число у кутковій зоні (читабельність)
   if (u.selected) drawSelectionBrackets(ctx, u.cx, u.cy);
 }
 
@@ -490,12 +530,33 @@ const IMPACT = '#ffb347';
 const TRACER_GLOW = 6; // радіус свічення трасера
 const IMPACT_GLOW = 8; // радіус свічення спалаху
 const OW_FLASH = '#ffb347';
+// П14.4 (ADR-0064): подієві ефекти 2.0 — вибух гранати і числа пошкоджень.
+// Зона вибуху — дзеркало прев'ю гранати у battle.ts (пунктирні бурштинові
+// рамки); частинки — бурштин/помаранчевий спалах; числа: пошкодження —
+// бурштин, зцілення — зелений (колір крапок шляху, П6.14).
+const BOOM_ZONE = 'rgba(255,159,64,0.8)';
+const BOOM_SPARK_ALT = '#ff7b2e';
+const DMG_NUM = '#ffb347';
+const HEAL_NUM = '#7fe2a0';
+const DNUM_RISE = 16; // підйом числа за тривалість анімації, px
 
 // Один кадр анімаційного шару (малюється поверх статичного стану).
 // move — силует у проміжній позиції; tracer — куля летить від стрільця до цілі,
 // при влучанні друга фаза — спалах-кільце; death — згасання силуета; owflash —
-// пульсуюче кільце дозору. Усі координати — у межах клітинок (урок П6.6).
-export function drawAnimFrame(ctx: CanvasRenderingContext2D, a: Anim, now: number, cell: number, r: number): void {
+// пульсуюче кільце дозору; gpulse — пульс радара геосцени; boom (П14.4) —
+// вибух гранати: зона «епіцентр + хрест», спалах-кільце і розліт частинок;
+// dnum (П14.4) — плаваюче число пошкодження/зцілення над ціллю. Усі
+// координати — у межах клітинок (урок П6.6); cw/ch — розміри buffer'а канви
+// (клімп частинок і тексту у межі; за замовчуванням — без обмеження).
+export function drawAnimFrame(
+  ctx: CanvasRenderingContext2D,
+  a: Anim,
+  now: number,
+  cell: number,
+  r: number,
+  cw = Number.POSITIVE_INFINITY,
+  ch = Number.POSITIVE_INFINITY
+): void {
   const t = animT(a, now);
   // П6.9: пульс радара геосцени — кільце від бази до maxR, що гасне.
   // Клітинка і радіус силуету не потрібні (cell/r — параметри бойовища).
@@ -507,6 +568,59 @@ export function drawAnimFrame(ctx: CanvasRenderingContext2D, a: Anim, now: numbe
     ctx.arc(a.cx, a.cy, 2 + (a.maxR - 2) * t, 0, Math.PI * 2);
     ctx.stroke();
     ctx.lineWidth = 1;
+    ctx.globalAlpha = 1;
+    return;
+  }
+  // П14.4 (ADR-0072/0064): вибух гранати — зона «епіцентр + хрест»
+  // (дзеркало прев'ю гранати у battle.ts), спалах-кільце з епіцентру і
+  // розліт детермінованих частинок (≤ 12, без RNG — ADR-0003) з клімпом
+  // у межі канви.
+  if (a.kind === 'boom') {
+    const cx = a.at.x * cell + cell / 2;
+    const cy = a.at.y * cell + cell / 2;
+    ctx.setLineDash([3, 3]);
+    ctx.strokeStyle = BOOM_ZONE;
+    for (const c of grenadeZone(a.at)) ctx.strokeRect(c.x * cell + 2, c.y * cell + 2, cell - 5, cell - 5);
+    ctx.setLineDash([]);
+    ctx.globalAlpha = 1 - t;
+    ctx.strokeStyle = IMPACT;
+    ctx.lineWidth = 3;
+    ctx.shadowColor = IMPACT; // П6.13: свічення спалаху вибуху
+    ctx.shadowBlur = IMPACT_GLOW;
+    ctx.beginPath();
+    ctx.arc(cx, cy, 4 + 20 * t, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+    ctx.lineWidth = 1;
+    for (let i = 0; i < BOOM_PARTICLES; i++) {
+      const o = boomParticleOffset(a.at, i, t);
+      const px = Math.min(Math.max(cx + o.dx * cell, 0), cw - 2);
+      const py = Math.min(Math.max(cy + o.dy * cell, 0), ch - 2);
+      ctx.fillStyle = i % 2 === 0 ? IMPACT : BOOM_SPARK_ALT;
+      ctx.fillRect(Math.round(px), Math.round(py), 2, 2);
+    }
+    ctx.globalAlpha = 1;
+    return;
+  }
+  // П14.4: плаваюче число над ціллю — підйом (y спадає) і згасання (alpha) за
+  // прогресом кадру; ширина — оцінка N×6px без measureText (урок П6.14 —
+  // мок-контексти jsdom його не реалізують), клімп правого краю як
+  // drawChanceLabel; текст у межах канви.
+  if (a.kind === 'dnum') {
+    const text = (a.heal ? '+' : '-') + a.amount;
+    const w = text.length * 6 + 4;
+    const h = 13;
+    let x = a.at.x * cell + (cell - w) / 2;
+    if (x + w > cw) x = cw - w - 1;
+    const base = a.at.y * cell >= h + 1 ? a.at.y * cell - (h + 1) : (a.at.y + 1) * cell + 1;
+    const y = Math.round(base - DNUM_RISE * t); // підйом над ціллю
+    ctx.globalAlpha = 1 - t; // згасання до кінця кадру
+    ctx.fillStyle = CHANCE_LABEL_BG;
+    ctx.fillRect(x, y, w, h);
+    ctx.fillStyle = a.heal ? HEAL_NUM : DMG_NUM;
+    ctx.font = '11px monospace';
+    ctx.textBaseline = 'top';
+    ctx.fillText(text, x + 2, y + 2);
     ctx.globalAlpha = 1;
     return;
   }
@@ -528,6 +642,7 @@ export function drawAnimFrame(ctx: CanvasRenderingContext2D, a: Anim, now: numbe
       cy: p.cy,
       r,
       hp: a.hp,
+      maxHp: a.hpMax, // П14.4: смуга HP під час руху
       selected: a.selected,
       overwatch: a.overwatch,
       frame,
@@ -581,6 +696,7 @@ export function drawAnimFrame(ctx: CanvasRenderingContext2D, a: Anim, now: numbe
       cy: a.at.y * cell + cell / 2,
       r,
       hp: 0,
+      maxHp: a.hpMax, // П14.4: порожня смуга HP загиблого
       selected: false,
       overwatch: false,
       pose: 'death', // П14.2 (ADR-0072): кадр смерті з атласа; фолбек — матриця

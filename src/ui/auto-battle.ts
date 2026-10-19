@@ -27,6 +27,7 @@ export interface AutoBattleDeps {
   finishBattle(outcome: 'перемога' | 'поразка'): void;
   pushAnims(anims: readonly Anim[]): void; // ставимо анімації дії в чергу AnimEngine
   hasRaf: boolean; // без rAF (тестове середовище) анімації не ставляться (П6.8)
+  visibleCells?: () => ReadonlySet<string>; // П14.4: туман для чисел пошкоджень (без нього — без фільтра)
   maxHalfTurns?: number; // ліміт півходів (прецедент демо 240; тести звужують)
 }
 
@@ -103,7 +104,8 @@ export class AutoBattleDriver {
     const mid = missionOutcome(mission.state);
     if (mid === 'перемога' || mid === 'поразка') {
       this.stop();
-      if (this.deps.hasRaf) this.deps.pushAnims(animsFromEvents(mission.state.log.slice(prevLen), mission.state.units));
+      if (this.deps.hasRaf)
+        this.deps.pushAnims(animsFromEvents(mission.state.log.slice(prevLen), mission.state.units, this.deps.visibleCells?.()));
       this.deps.finishBattle(mid);
       return;
     }
@@ -121,7 +123,9 @@ export class AutoBattleDriver {
     }
     // Патерн enqueueBattleAnims, але тут власний гейт hasRaf: без rAF (тести)
     // анімації не ставляться — авто-бій крокує лише паузами таймера.
-    const anims = this.deps.hasRaf ? animsFromEvents(mission.state.log.slice(prevLen), mission.state.units) : [];
+    const anims = this.deps.hasRaf
+      ? animsFromEvents(mission.state.log.slice(prevLen), mission.state.units, this.deps.visibleCells?.())
+      : [];
     if (anims.length > 0) {
       this.waitIdle = true; // пауза — після відтворення черги (onIdle)
       this.deps.pushAnims(anims);

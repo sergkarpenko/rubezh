@@ -75,6 +75,7 @@ function makeFixture(over: Partial<BattleDeps> = {}): Fixture {
       now: 0,
       push: vi.fn(),
       cancel: vi.fn(),
+      queued: () => [], // П14.4: черга порожня — невідтворених ходів демонів нема
     },
     hasRaf: () => false, // node-середовище: анімації не ставляться в чергу
     stopAuto: vi.fn(),

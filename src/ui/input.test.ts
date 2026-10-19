@@ -7,6 +7,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { advanceTime, missionTargets } from '../core/geo';
 import { distance, hasLineOfSight } from '../core/combat';
+import { makeMoveAnim, type Anim } from '../core/render-core';
 import { createParty, type Party } from '../core/save';
 import { initPixelSprites } from '../render';
 import { createBattleUI, type BattleDeps, type BattleUIState } from './battle';
@@ -78,7 +79,7 @@ interface Fixture {
   binfo(): string;
 }
 
-function makeFixture(autoBusy = false): Fixture {
+function makeFixture(autoBusy = false, queue: Anim[] = []): Fixture {
   const party = createParty(42);
   const ui: BattleUIState = {
     mission: null,
@@ -97,7 +98,7 @@ function makeFixture(autoBusy = false): Fixture {
     drainBattle: vi.fn(),
     resetBattleLog: vi.fn(),
     renderAll: vi.fn(),
-    anim: { active: () => null, now: 0, push: vi.fn(), cancel: vi.fn() },
+    anim: { active: () => queue[0] ?? null, now: 0, push: vi.fn(), cancel: vi.fn(), queued: () => queue }, // П14.4: черга анімацій
     hasRaf: () => false,
     stopAuto: vi.fn(),
     autoBusy: () => false, // П13.3: авто-бій не триває
@@ -397,5 +398,83 @@ describe('input: витратники бою — аптечка і гранат�
     f.input.onKeyDown({ code: 'Escape', key: 'Escape' } as KeyboardEvent);
     expect(f.ui.itemMode).toBeNull();
     expect(f.binfo()).toBe('Режим витратника скасовано.');
+  });
+});
+
+describe('П14.4: характеристики демона Розриву по тапу (фідбек прев’ю)', () => {
+  it('тап по ВИДИМОМУ демону без зведених режимів — HP і зброя у binfo', () => {
+    const f = makeFixture();
+    launchMission(f);
+    const st = f.ui.mission!.state;
+    const alien = st.units.find((u) => u.side === 'alien' && u.alive)!;
+    const soldier = st.units.find((u) => u.side === 'player' && u.alive)!;
+    const home = { ...alien.pos }; // рідна клітинка — далеко у тумані
+    // ставимо демона поруч із солдатом (видима клітинка; детерміновано — без RNG)
+    let placed = false;
+    for (const [dx, dy] of [
+      [1, 0],
+      [-1, 0],
+      [0, 1],
+      [0, -1],
+      [1, 1],
+      [-1, 1],
+      [1, -1],
+      [-1, -1],
+    ]) {
+      const p = { x: soldier.pos.x + dx, y: soldier.pos.y + dy };
+      if (st.units.some((u) => u.alive && u.pos.x === p.x && u.pos.y === p.y)) continue; // не на юніта
+      alien.pos = p;
+      if (f.battle.visibleCells().has(p.x + ',' + p.y)) {
+        placed = true;
+        break;
+      }
+    }
+    expect(placed).toBe(true);
+    clickAt(f, alien.pos.x, alien.pos.y);
+    expect(f.binfo()).toContain('HP ' + alien.hp + '/' + alien.maxHp);
+    expect(f.binfo()).toContain(alien.weapon.name);
+    expect(f.binfo()).toContain('дальність ' + alien.weapon.range);
+    expect(f.binfo()).toContain('режим пострілу'); // підказка атаки лишається
+    // той самий демон у тумані — характеристики не розкриваються (ADR-0006)
+    alien.pos = home;
+    expect(f.battle.visibleCells().has(home.x + ',' + home.y)).toBe(false);
+    clickAt(f, home.x, home.y);
+    expect(f.binfo()).not.toContain('зброя');
+  });
+
+  it('П14.4: під час відтворення ходу ШІ клік у відображувану клітинку демона (старт шляху) — характеристики', () => {
+    const queue: Anim[] = [];
+    const f = makeFixture(false, queue);
+    launchMission(f);
+    const st = f.ui.mission!.state;
+    const alien = st.units.find((u) => u.side === 'alien' && u.alive)!;
+    const soldier = st.units.find((u) => u.side === 'player' && u.alive)!;
+    // видима вільна клітинка біля солдата — «відображувана» позиція демона:
+    // демон фактично стоїть удома (у тумані), але черга анімацій тримає
+    // його на початку шляху (фікс рваного ходу демонів)
+    let spot: { x: number; y: number } | null = null;
+    for (const [dx, dy] of [
+      [1, 0],
+      [-1, 0],
+      [0, 1],
+      [0, -1],
+      [1, 1],
+      [-1, 1],
+      [1, -1],
+      [-1, -1],
+    ]) {
+      const p = { x: soldier.pos.x + dx, y: soldier.pos.y + dy };
+      if (st.units.some((u) => u.alive && u.pos.x === p.x && u.pos.y === p.y)) continue;
+      if (f.battle.visibleCells().has(p.x + ',' + p.y)) {
+        spot = p;
+        break;
+      }
+    }
+    expect(spot).not.toBeNull();
+    queue.push(makeMoveAnim(alien, [spot!, { ...alien.pos }], false));
+    clickAt(f, spot!.x, spot!.y);
+    expect(f.binfo()).toContain('зброя «' + alien.weapon.name + '»'); // клік знаходить відображуваного демона
+    // бойові гілки незмінні: фактична позиція демона — у тумані, постріл у
+    // відображувану клітинку з недієвою зброєю не приводить до дії
   });
 });

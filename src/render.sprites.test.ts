@@ -59,7 +59,7 @@ import {
   SPRITE_SCALE,
   UFO_LANDED_SPRITE,
   UFO_SCOUT_SPRITE,
-  type UnitSprite,
+  type UnitSpriteView,
 } from './core/sprites';
 import { BCELL, GCELL } from './ui/grid';
 
@@ -96,18 +96,19 @@ function mockCtx(): { ctx: CanvasRenderingContext2D; calls: Call[] } {
   return { ctx: ctx as unknown as CanvasRenderingContext2D, calls };
 }
 
-const soldier = (over: Partial<UnitSprite> = {}): UnitSprite => ({
+const soldier = (over: Partial<UnitSpriteView> = {}): UnitSpriteView => ({
   side: 'player',
   cx: CX,
   cy: CY,
   r: R,
   hp: 10,
+  maxHp: 10, // П14.4: показник життя — смуга HP
   selected: false,
   overwatch: false,
   ...over,
 });
 
-const alien = (over: Partial<UnitSprite> = {}): UnitSprite => ({ ...soldier(), side: 'alien', ...over });
+const alien = (over: Partial<UnitSpriteView> = {}): UnitSpriteView => ({ ...soldier(), side: 'alien', ...over });
 
 // П6.12 (ADR-0031): мок-фабрика offscreen-канвасів — розгортання матриці пише
 // по одному fillRect на піксель; сам об'єкт «канваса» стає джерелом drawImage
@@ -332,14 +333,38 @@ describe('солдат і прибульчик: різні матриці, зб�
 });
 
 describe('читабельність стану (ADR-0007)', () => {
-  it('HP малюється числом у центрі силуетів', () => {
-    const s = mockCtx();
+  it('HP: смуга у верхній частині клітинки (підкладка + заповнення за часткою) і число на плашці', () => {
+    const s = animCtx(); // Proxy: записує і виклики, і присвоєння властивостей
     drawSoldierSprite(s.ctx, soldier({ hp: 7 }));
     expect(s.calls.some((c) => c.m === 'fillText' && c.args[0] === '7')).toBe(true);
+    // смуга: підкладка на всю клітинку ВГОРУ і заповнення 7/10
+    const rects = s.calls.filter((c) => c.m === 'fillRect') as Array<{ args: number[] }>;
+    expect(rects.some((c) => c.args[0] === CX - 24 && c.args[1] === CY - 23 && c.args[2] === 48 && c.args[3] === 4)).toBe(true);
+    expect(rects.some((c) => c.args[1] === CY - 23 && c.args[2] >= 33 && c.args[2] <= 34 && c.args[3] === 4)).toBe(true); // 48×0.7
+    expect(s.sets.some((x) => x.p === 'fillStyle' && x.v === '#7fe2a0')).toBe(true); // >50% — зелений
 
-    const a = mockCtx();
+    const a = animCtx();
     drawAlienSprite(a.ctx, alien({ hp: 4 }));
     expect(a.calls.some((c) => c.m === 'fillText' && c.args[0] === '4')).toBe(true);
+    expect(a.sets.some((x) => x.p === 'fillStyle' && x.v === '#ffcf5c')).toBe(true); // 40% — бурштин
+
+    const low = animCtx();
+    drawSoldierSprite(low.ctx, soldier({ hp: 1 }));
+    expect(low.sets.some((x) => x.p === 'fillStyle' && x.v === '#ff5c7a')).toBe(true); // ≤25% — червоний
+    expect(low.calls.some((c) => c.m === 'fillText' && c.args[0] === '1')).toBe(true);
+  });
+
+  it('HP-число: кольори сторін на темній плашці (ціан/пурпур, ADR-0064), під смугою — без перекриття', () => {
+    const s = animCtx();
+    drawSoldierSprite(s.ctx, soldier({ hp: 7 }));
+    expect(s.sets.some((x) => x.p === 'fillStyle' && x.v === '#9adfff')).toBe(true);
+    const plate = s.calls.find((c) => c.m === 'fillRect' && (c.args as number[])[3] === 11)!;
+    const p = plate.args as number[];
+    expect(p[0] + p[2]).toBeLessThanOrEqual(CX + 24); // край клітинки
+    expect(p[1]).toBe(CY - 23 + 4 + 1); // одразу під смугою (верх смуги CY-23, висота 4)
+    const a = animCtx();
+    drawAlienSprite(a.ctx, alien({ hp: 4 }));
+    expect(a.sets.some((x) => x.p === 'fillStyle' && x.v === '#ff9ecb')).toBe(true);
   });
 
   it('рамка вибору — кутові дужки по кутах спрайта лише коли selected (доробка П6.12)', () => {

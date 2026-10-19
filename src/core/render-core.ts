@@ -93,6 +93,13 @@ export const IMPACT_MS = 200; // спалах влучання (лише при 
 export const DEATH_MS = 350; // згасання силуета загиблого
 export const OW_FLASH_MS = 300; // спалах дозору (озброєння реакційного вогню)
 export const RADAR_PULSE_MS = 1200; // П6.9: пульс радара — від бази до краю зони виявлення
+// П14.4 (ADR-0072/0064): подієві ефекти 2.0 — тривалості у чинній шкалі
+// AnimEngine; вибух довший за спалах влучання (орієнтир 400–450 мс,
+// зафіксовано у коміті кроку — затверджує прев'ю), число — як згасання смерті.
+export const BOOM_MS = 430; // вибух гранати: спалах-кільце + розліт частинок
+export const DNUM_MS = 350; // плаваюче число пошкодження/зцілення над ціллю
+export const BOOM_PARTICLES = 12; // ≤ 12 одночасних частинок на вибух (П14.4)
+export const BOOM_SHAKE_PX = 4; // тряска вибуху — ×2 від пострілу (SHAKE_PX 2)
 
 // Один елемент черги анімацій. start — мітка часу початку відтворення
 // (призначає рушій на першому кадрі; null — ще не починалось).
@@ -102,6 +109,7 @@ export interface MoveAnim {
   side: Side;
   path: Vec2[]; // [from, to1, ...] — клітинкові координати
   hp: number; // знімок стану на момент постановки в чергу
+  hpMax: number; // П14.4: показник життя — частка hp/maxHp у смузі HP
   overwatch: boolean;
   selected: boolean;
   dur: number;
@@ -120,6 +128,7 @@ export interface DeathAnim {
   kind: 'death';
   side: Side;
   at: Vec2;
+  hpMax: number; // П14.4: показник життя загиблого — порожня смуга (hp 0)
   dur: number;
   start: number | null;
 }
@@ -141,7 +150,29 @@ export interface GeoPulseAnim {
   dur: number;
   start: number | null;
 }
-export type Anim = MoveAnim | TracerAnim | DeathAnim | OwFlashAnim | GeoPulseAnim;
+export type Anim = MoveAnim | TracerAnim | DeathAnim | OwFlashAnim | GeoPulseAnim | BoomAnim | DNumAnim;
+
+// П14.4 (ADR-0072/0064): подієві ефекти 2.0 — вибух гранати і плаваючі
+// числа. Ефекти — суто відображення над фактичним станом (патерн П6.8):
+// дії ядра вже застосовані, анімація лише відтворює результат. Boom —
+// спалах-кільце і розліт частинок з епіцентру (зона «епіцентр + хрест»
+// малює шар відображення — дзеркало прев'ю гранати у battle.ts); DNum —
+// число над ціллю: підйом і згасання за прогресом кадру (пошкодження —
+// бурштин, зцілення — зелений, ADR-0064).
+export interface BoomAnim {
+  kind: 'boom';
+  at: Vec2; // епіцентр вибуху
+  dur: number;
+  start: number | null;
+}
+export interface DNumAnim {
+  kind: 'dnum';
+  at: Vec2; // клітинка цілі
+  amount: number; // N пошкодження або зцілення
+  heal: boolean; // true — «+N» зцілення, false — «-N» пошкодження
+  dur: number;
+  start: number | null;
+}
 
 // Знімки стану беруться ПІСЛЯ застосування дії ядром (позиція/HP уже фінальні,
 // лог — джерело істини про те, що відбулося).
@@ -152,6 +183,7 @@ export function makeMoveAnim(u: Unit, path: Vec2[], selected: boolean): MoveAnim
     side: u.side,
     path,
     hp: u.hp,
+    hpMax: u.maxHp, // П14.4: смуга HP під час руху
     overwatch: u.overwatch,
     selected,
     dur: Math.max(1, path.length - 1) * MOVE_MS_PER_CELL,
@@ -162,13 +194,21 @@ export function makeTracerAnim(side: Side, from: Vec2, to: Vec2, hit: boolean): 
   return { kind: 'tracer', side, from, to, hit, dur: TRACER_MS + (hit ? IMPACT_MS : 0), start: null };
 }
 export function makeDeathAnim(u: Unit): DeathAnim {
-  return { kind: 'death', side: u.side, at: { ...u.pos }, dur: DEATH_MS, start: null };
+  return { kind: 'death', side: u.side, at: { ...u.pos }, hpMax: u.maxHp, dur: DEATH_MS, start: null };
 }
 export function makeOwFlashAnim(u: Unit): OwFlashAnim {
   return { kind: 'owflash', side: u.side, at: { ...u.pos }, dur: OW_FLASH_MS, start: null };
 }
 export function makeGeoPulseAnim(cx: number, cy: number, maxR: number): GeoPulseAnim {
   return { kind: 'gpulse', cx, cy, maxR, dur: RADAR_PULSE_MS, start: null };
+}
+// П14.4: фабрики подієвих ефектів 2.0 — вибух за епіцентром кидка і число
+// над ціллю (знімок позиції ПІСЛЯ застосування дії ядром, патерн П6.8).
+export function makeBoomAnim(at: Vec2): BoomAnim {
+  return { kind: 'boom', at: { ...at }, dur: BOOM_MS, start: null };
+}
+export function makeDNumAnim(at: Vec2, amount: number, heal: boolean): DNumAnim {
+  return { kind: 'dnum', at: { ...at }, amount, heal, dur: DNUM_MS, start: null };
 }
 
 // Прогрес анімації 0..1 (за межами — клімпиться; start === null → ще не почалась).
@@ -197,11 +237,20 @@ export function moveAnimPos(a: MoveAnim, t: number, cell: number): { cx: number;
 // трасера (той самий AnimEngine: тряска живе лише в кадрах анімації, idle →
 // 0 перерисовок не порушується). Детерміновано, без RNG (ADR-0003): амплітуда
 // спадає до кінця спалаху, коливання — синус/косинус від прогресу фази.
+// П14.4: вибух гранати дає сильнішу тряску (амплітуда ×2 від пострілу,
+// BOOM_SHAKE_PX) на всю тривалість вибуху; ядро тряски не міняється.
 // Викликаюч робить ctx.translate(dx, dy) на весь кадр; фон канви збігається з
 // CSS-тлом — оголений край непомітний. Промах не трясе.
 export const SHAKE_PX = 2; // максимальна амплітуда (легка тряска)
 export function shakeOffset(a: Anim | null, now: number): { dx: number; dy: number } {
-  if (a === null || a.kind !== 'tracer' || !a.hit || a.start === null) return { dx: 0, dy: 0 };
+  if (a === null || a.start === null) return { dx: 0, dy: 0 };
+  if (a.kind === 'boom') {
+    const t = animT(a, now);
+    if (t <= 0 || t >= 1) return { dx: 0, dy: 0 }; // лише кадри вибуху
+    const amp = BOOM_SHAKE_PX * (1 - t); // спадає до нуля до кінця вибуху
+    return { dx: Math.round(amp * Math.sin(t * Math.PI * 4)) + 0, dy: Math.round(amp * Math.cos(t * Math.PI * 4)) + 0 };
+  }
+  if (a.kind !== 'tracer' || !a.hit) return { dx: 0, dy: 0 };
   const t = animT(a, now);
   const share = TRACER_MS / a.dur;
   if (t <= share || t >= 1) return { dx: 0, dy: 0 }; // лише фаза спалаху влучання
@@ -210,6 +259,22 @@ export function shakeOffset(a: Anim | null, now: number): { dx: number; dy: numb
   // + 0 нормалізує -0 від Math.round малих від'ємних значень (0 === -0, але
   // зсув кадру лишається «строго нульовим» і детермінованим у тестах)
   return { dx: Math.round(amp * Math.sin(f * Math.PI * 4)) + 0, dy: Math.round(amp * Math.cos(f * Math.PI * 4)) + 0 };
+}
+
+// П14.4: детерміновані частинки вибуху (ADR-0003) — без Math.random і без
+// geo.rng: напрямок/швидкість частинки №i — чиста функція від (епіцентр, i)
+// за патерном cellHash. Зсув — у клітинках (шар відображення множить на
+// cell і клімпить у межі канви); максимальний розліт ≈ 1 клітинка — у межах
+// зони вибуху, політ сповільнюється (ease-out), t = 0 → епіцентр.
+export function boomParticleOffset(at: Vec2, i: number, t: number): { dx: number; dy: number } {
+  if (t <= 0) return { dx: 0, dy: 0 };
+  const dir = cellHash(at.x * 31 + i, at.y * 17 - i);
+  const spd = cellHash(at.x - i * 13, at.y + i * 7);
+  const ang = ((dir % 360) / 360) * Math.PI * 2;
+  const max = 0.45 + ((spd % 100) / 100) * 0.55; // 0.45..1.0 клітинки
+  const dist = max * (1 - (1 - t) * (1 - t)); // ease-out: швидкий старт, гальмування
+  // + 0 нормалізує -0 (той самий прийом, що shakeOffset)
+  return { dx: Math.cos(ang) * dist + 0, dy: Math.sin(ang) * dist + 0 };
 }
 
 // Рушій: анімації відтворюються послідовно (черга), rAF-цикл живе ЛИШЕ поки
@@ -233,6 +298,12 @@ export class AnimEngine {
   }
   active(): Anim | null {
     return this.queue[0] ?? null;
+  }
+  // П14.4 (фідбек прев'ю): знімок черги (у порядку відтворення, перший елемент —
+  // активний) — шар відображення вирішує, чи не показувати юніт у фінальній
+  // клітинці до відтворення його ходу (спойлер синхронного ходу ШІ).
+  queued(): readonly Anim[] {
+    return this.queue;
   }
   get now(): number {
     return this.lastNow;
@@ -269,15 +340,39 @@ export class AnimEngine {
   };
 }
 
+// П14.4 (фідбек прев'ю): стартові клітинки демонів, чий хід у черзі ще НЕ
+// відтворено. Хід ШІ виконується синхронно (aliensTurn) і стан уже фінальний —
+// статичний прохід, малюючи демонів у фінальних клітинках, споїлить їхні
+// ходи: демон «з'являється» одразу у цілі, анімація ходу не помітна (у
+// туманній ділянці active-ходу — те саме). Правило відображення: до початку
+// відтворення свого ходу демон стоїть на ПАЧАТКУ шляху (перший хід юніта,
+// наступні — заміщаються відтвореними); туман не розкривається (ADR-0006).
+// Чиста функція без RNG: перший хід юніта в черзі — його «теперішня» позиція.
+export function pendingAlienMoveStarts(queue: readonly Anim[]): Map<string, Vec2> {
+  const out = new Map<string, Vec2>();
+  for (const a of queue) {
+    if (a.kind !== 'move' || a.side !== 'alien') continue;
+    const p0 = a.path[0];
+    if (p0 !== undefined && !out.has(a.unitId)) out.set(a.unitId, p0);
+  }
+  return out;
+}
+
 // Чистий перетворювач подій логу бою в анімації (П6.8, ADR-0029: анімація —
 // відображення, лог — джерело істини). Лог і юніти тільки ЧИТАЮТЬСЯ:
 // state.log/стан байт-у-байт не змінюються.
 // Особливості порядку подій ядра: moveUnit пише окрему подію на кожен крок
 // (реакційний вогонь між кроками перериває рух) — послідовні кроки одного
 // юніта об'єднуються в один хід по шляху; fireOnce пише смерть РАНІШЕ за
-// постріл, що її спричинив — відтворюємо спершу трасер, потім смерть.
-export function animsFromEvents(events: readonly GameEvent[], units: readonly Unit[]): Anim[] {
+// постріл, що її спричинив — відтворюємо спершу трасер, потім смерть;
+// throwGrenade пише смерті уражених РАНІШЕ за подію grenade — відтворюємо
+// спершу вибух, потім смерті і числа (переупорядкування лише у черзі кадрів).
+// П14.4: третій параметр — видимість клітинок (туман, ADR-0006): числа
+// пошкоджень/зцілення породжуються лише для видимих цілей; туман вирішує
+// викликаюч (патерн П14.2), без набору — фільтрації нема (усе видиме).
+export function animsFromEvents(events: readonly GameEvent[], units: readonly Unit[], vis?: ReadonlySet<string>): Anim[] {
   const byId = new Map(units.map((u) => [u.id, u]));
+  const seen = (p: Vec2): boolean => vis === undefined || vis.has(p.x + ',' + p.y);
   const anims: Anim[] = [];
   let i = 0;
   while (i < events.length) {
@@ -304,8 +399,29 @@ export function animsFromEvents(events: readonly GameEvent[], units: readonly Un
         if (shooter !== undefined && victim !== undefined) {
           anims.push(makeTracerAnim(shooter.side, { ...shooter.pos }, { ...victim.pos }, next.hit));
           anims.push(makeDeathAnim(victim));
+          // П14.4: число фатального пошкодження — після згасання силуета
+          if (next.hit && next.damage > 0 && seen(victim.pos)) anims.push(makeDNumAnim(victim.pos, next.damage, false));
         }
         i += 2;
+        continue;
+      }
+      // П14.4: смерті уражених вибухом — ядро логує їх РАНІШЕ за grenade
+      // (цикл пошкоджень зони) — відтворюємо вибух, потім смерті і числа
+      if (next !== undefined && next.type === 'grenade' && next.unitId === e.killerId) {
+        anims.push(makeBoomAnim(next.center));
+        let j = i;
+        while (j < events.length) {
+          const d = events[j];
+          if (d.type !== 'death' || d.killerId !== next.unitId) break;
+          const v = byId.get(d.unitId);
+          if (v !== undefined) anims.push(makeDeathAnim(v));
+          j++;
+        }
+        for (const h of next.hits) {
+          const t = byId.get(h.unitId);
+          if (t !== undefined && seen(t.pos)) anims.push(makeDNumAnim(t.pos, h.damage, false));
+        }
+        i = j + 1; // events[j] — подія grenade, її вже відтворено
         continue;
       }
       if (victim !== undefined) anims.push(makeDeathAnim(victim));
@@ -317,7 +433,27 @@ export function animsFromEvents(events: readonly GameEvent[], units: readonly Un
       const target = byId.get(e.targetId);
       if (shooter !== undefined && target !== undefined) {
         anims.push(makeTracerAnim(shooter.side, { ...shooter.pos }, { ...target.pos }, e.hit));
+        // П14.4: число пошкодження над ціллю — лише при влучанні з реальною
+        // шкодою і лише для видимих цілей (туман не розкривається, ADR-0006)
+        if (e.hit && e.damage > 0 && seen(target.pos)) anims.push(makeDNumAnim(target.pos, e.damage, false));
       }
+      i++;
+      continue;
+    }
+    if (e.type === 'grenade') {
+      // П14.4: вибух без попередніх смертей (уражені вижили або зона порожня)
+      anims.push(makeBoomAnim(e.center));
+      for (const h of e.hits) {
+        const t = byId.get(h.unitId);
+        if (t !== undefined && seen(t.pos)) anims.push(makeDNumAnim(t.pos, h.damage, false));
+      }
+      i++;
+      continue;
+    }
+    if (e.type === 'heal') {
+      // П14.4: зцілення — зелене «+N» над ціллю (лише видима ціль)
+      const t = byId.get(e.targetId);
+      if (t !== undefined && e.healed > 0 && seen(t.pos)) anims.push(makeDNumAnim(t.pos, e.healed, true));
       i++;
       continue;
     }
