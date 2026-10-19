@@ -7,6 +7,9 @@
 // (src/render.ts), планувальник кадрів ін'єктується викликачем.
 
 import type { GameEvent, Side, Unit, Vec2 } from './combat';
+// П14.5: розкладка геосцени 16×8 читає розміри світу з geo.ts (лише
+// константи — ядро не змінюється, ADR-0002).
+import { WORLD_H, WORLD_W } from './geo';
 
 // --- П6.13 (П12.7, ADR-0064): неонова палітра — синьо-чорна основа, неонові акценти ---
 // Ціан — гравець/«Рубіж», пурпур — Розрив, бурштин — спалахи (ADR-0064).
@@ -47,6 +50,63 @@ export const GEO_GRID_COLOR = 'rgba(0,229,255,0.10)';
 // Тон геосцени клітинки (x, y) — чисте перетворення координат → колір.
 export function geoCellTone(x: number, y: number): string {
   return cellHash(x, y) % 2 === 0 ? GEO_CELL_A : GEO_CELL_B;
+}
+
+// --- П14.5 (ADR-0072/0064): геосцена 2.0 — розкладка суші/океану/узбережжя ---
+// Терену геосцени НЕ існує в ядрі і сейвах (GeoState без мапи рельєфу,
+// ADR-0026): розклад — суто шар відображення, авторський масив 16×8,
+// узгоджений власником ДО прев'ю з числами (урок iter-13.5). 'L' — суша,
+// '.' — океан; світ циліндричний по X (замикання, як RADAR_RANGE у geo.ts),
+// вертикаль — без замикання. Вигляд: континент по центру + острівна дуга
+// (рішення власника 2026-10-20), ~45% суші, база (8,4) — на континенті.
+export const GEO_LAND_ROWS: readonly string[] = [
+  '...LL........LL.',
+  '..LLLL....LLLL..',
+  '...LLLLLLLLLL...',
+  '....LLLLLLLL....',
+  '....LLLLLLLL....',
+  '...LLLLLLLL.....',
+  '..LLL..LLL..LL..',
+  '...L....L....L..',
+];
+
+// Чи суша в клітинці (x, y) — чиста функція; X замикається (куля по X), y — ні.
+export function geoIsLand(x: number, y: number): boolean {
+  if (y < 0 || y >= WORLD_H) return false;
+  const wx = ((x % WORLD_W) + WORLD_W) % WORLD_W;
+  return (GEO_LAND_ROWS[y] ?? '').charAt(wx) === 'L';
+}
+
+// Узбережжя: клітинка суші, що межує з океаном (4 напрямки, X із замиканням) —
+// шар відображення малює ціанову кромку на тих краях, що дивляться на воду.
+export function geoCoastEdges(x: number, y: number): { n: boolean; e: boolean; s: boolean; w: boolean } {
+  const land = geoIsLand(x, y);
+  return {
+    n: land && !geoIsLand(x, y - 1),
+    e: land && !geoIsLand(x + 1, y),
+    s: land && !geoIsLand(x, y + 1),
+    w: land && !geoIsLand(x - 1, y),
+  };
+}
+
+// Вогні міст (П14.5): рідкий детермінований декор на суші — ~8% клітинок суші
+// за хешем координат (без RNG, ADR-0003; патерн decorCol терену бою П14.3).
+export function geoCityLights(x: number, y: number): boolean {
+  return geoIsLand(x, y) && cellHash(x, y) % 12 === 0;
+}
+
+// Сторона узбережжя клітинки суші: перший океанний край у фіксованому
+// порядку (захід → схід → північ → південь) — чиста функція, детерміновано;
+// шар відображення повертає/дзеркалить тайл переходу до цього краю. null —
+// внутрішня суша (океану поруч немає).
+export type GeoCoastSide = 'n' | 'e' | 's' | 'w';
+export const GEO_COAST_ORDER: readonly GeoCoastSide[] = ['w', 'e', 'n', 's'];
+export function geoCoastSide(x: number, y: number): GeoCoastSide | null {
+  const e = geoCoastEdges(x, y);
+  for (const s of GEO_COAST_ORDER) {
+    if (e[s]) return s;
+  }
+  return null;
 }
 
 // Клітинка терену: blocked — завалення (рельєф туману видно і в тумані,

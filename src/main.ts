@@ -41,7 +41,7 @@ import { createInput } from './ui/input';
 // П6.8 (ADR-0029): анімаційний рушій — черга + rAF лише під час активних анімацій.
 // пR.3 (ADR-0038): рушій і фабрики анімацій — чиста логіка src/core/render-core.ts;
 // фабрика offscreen-канвасів — реєструється в шарі відображення (src/render.ts).
-import { initPixelSprites, initTerrainAtlas, initUnitAtlas } from './render';
+import { initPixelSprites, initGeoTiles, initTerrainAtlas, initUnitAtlas } from './render';
 import { AnimEngine, makeGeoPulseAnim, makeTracerAnim, type Anim } from './core/render-core';
 // П5.3 (ADR-0026): партія і слоти збереження — із чистого ядра save.ts.
 // П12.2 (ADR-0065): serializeParty — ще й контрольна точка «незбережених
@@ -85,6 +85,17 @@ initUnitAtlas((url, onLoad) => {
 // завантаження; фолбек — чинні два тони terrainShade (тести від ассета
 // не залежать, сейви не зачіпаються — ADR-0026).
 initTerrainAtlas((url, onLoad) => {
+  const probe = new Image();
+  probe.onload = () => {
+    onLoad(probe);
+  };
+  probe.src = url;
+});
+
+// П14.5 (ADR-0072): тайли геосцени 2.0 — океан/суша з узбережжям; той самий
+// патерн лінивого завантаження; фолбек — чинні два тони geoCellTone (тести
+// від ассета не залежать, сейви не зачіпаються — ADR-0026).
+initGeoTiles((url, onLoad) => {
   const probe = new Image();
   probe.onload = () => {
     onLoad(probe);

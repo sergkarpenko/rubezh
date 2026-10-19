@@ -203,7 +203,7 @@ describe('кадри анімаційного шару (П6.8)', () => {
 // --- П6.9 (ADR-0029): мінімальний арт геосцени — м'які позначки НЛО, пульс радара ---
 
 describe('П6.9: пульс радара геосцени (критерії: туман і траєкторія незмінні)', () => {
-  const MAXR = 162; // (RADAR_RANGE + 0.5) * GCELL = 4.5 * 36
+  const MAXR = 216; // (RADAR_RANGE + 0.5) * GCELL = 4.5 * 48 (П14.5: міграція 44→48)
 
   it('makeGeoPulseAnim: тривалість RADAR_PULSE_MS, start null', () => {
     const a = makeGeoPulseAnim(18, 18, MAXR);
@@ -216,14 +216,14 @@ describe('П6.9: пульс радара геосцени (критерії: т�
     const a = makeGeoPulseAnim(18, 18, MAXR);
     a.start = 1000;
     const mid = animCtx();
-    drawAnimFrame(mid.ctx, a, 1000 + RADAR_PULSE_MS / 2, 36, 0);
+    drawAnimFrame(mid.ctx, a, 1000 + RADAR_PULSE_MS / 2, 48, 0);
     const midArc = mid.calls.find((c) => c.m === 'arc');
     expect(midArc).toBeDefined();
     const midR = (midArc!.args as number[])[2];
     expect(midR).toBeGreaterThan(2);
     expect(midR).toBeLessThan(MAXR);
     const end = animCtx();
-    drawAnimFrame(end.ctx, a, 1000 + RADAR_PULSE_MS, 36, 0);
+    drawAnimFrame(end.ctx, a, 1000 + RADAR_PULSE_MS, 48, 0);
     const endR = (end.calls.find((c) => c.m === 'arc')!.args as number[])[2];
     expect(endR).toBeCloseTo(MAXR);
     for (const s of [mid, end]) {
@@ -237,7 +237,7 @@ describe('П6.9: пульс радара геосцени (критерії: т�
     expect(endAlpha).toBe(0); // останній кадр — кільце повністю погасло
     // кільце гасне: альфа серединного кадру нижча за початкову
     const a0 = animCtx();
-    drawAnimFrame(a0.ctx, a, 1000, 36, 0);
+    drawAnimFrame(a0.ctx, a, 1000, 48, 0);
     const alpha0 = a0.sets.find((p) => p.p === 'globalAlpha')!.v as number;
     const alphaMid = mid.sets.find((p) => p.p === 'globalAlpha')!.v as number;
     expect(alphaMid).toBeLessThan(alpha0);
@@ -247,7 +247,7 @@ describe('П6.9: пульс радара геосцени (критерії: т�
     const a = makeGeoPulseAnim(18, 18, MAXR);
     a.start = 1000;
     const s = animCtx();
-    drawAnimFrame(s.ctx, a, 1150, 36, 0);
+    drawAnimFrame(s.ctx, a, 1150, 48, 0);
     expect(s.calls.some((c) => c.m === 'arc')).toBe(true);
     expect(s.calls.some((c) => c.m === 'fillText' || c.m === 'ellipse' || c.m === 'fillRect' || c.m === 'fill')).toBe(false);
   });
@@ -259,9 +259,9 @@ describe('П6.9: пульс радара геосцени (критерії: т�
       return a;
     };
     const s1 = animCtx();
-    drawAnimFrame(s1.ctx, mk(), 1150, 36, 0);
+    drawAnimFrame(s1.ctx, mk(), 1150, 48, 0);
     const s2 = animCtx();
-    drawAnimFrame(s2.ctx, mk(), 1150, 36, 0);
+    drawAnimFrame(s2.ctx, mk(), 1150, 48, 0);
     expect(s1.calls).toEqual(s2.calls);
     expect(s1.sets).toEqual(s2.sets);
   });
