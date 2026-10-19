@@ -211,6 +211,7 @@ const autoBattle = new AutoBattleDriver({
   finishBattle: battle.finish,
   pushAnims: (anims) => anim.push(...anims),
   hasRaf,
+  visibleCells: battle.visibleCells, // П14.4: туман для чисел пошкоджень авто-бою
 });
 
 // пR.2 (ADR-0037): панель збереження (П5.3, ADR-0026) — модуль src/ui/save-panel.ts;

@@ -9,6 +9,10 @@
 import { describe, expect, it } from 'vitest';
 import {
   AnimEngine,
+  BOOM_MS,
+  BOOM_PARTICLES,
+  BOOM_SHAKE_PX,
+  DNUM_MS,
   IMPACT_MS,
   MOVE_MS_PER_CELL,
   OW_FLASH_MS,
@@ -16,6 +20,8 @@ import {
   TRACER_MS,
   animT,
   animsFromEvents,
+  boomParticleOffset,
+  makeBoomAnim,
   makeDeathAnim,
   makeMoveAnim,
   makeOwFlashAnim,
@@ -196,7 +202,8 @@ describe('перетворювач подій логу → анімації (к�
     const before = JSON.stringify(events);
     const unitsBefore = JSON.stringify([s1, a1]);
     const anims = animsFromEvents(events, [s1, a1]);
-    expect(anims.map((x) => x.kind)).toEqual(['owflash', 'move', 'tracer', 'death']);
+    // П14.4: фатальне влучання тепер породжує й число пошкодження (після смерті)
+    expect(anims.map((x) => x.kind)).toEqual(['owflash', 'move', 'tracer', 'death', 'dnum']);
     expect(anims[1].kind === 'move' && anims[1].path).toEqual([
       { x: 3, y: 2 },
       { x: 4, y: 2 },
@@ -257,5 +264,132 @@ describe('П6.13: тряска канвасу при влучанні (чере�
     }
     expect(at(0.99)).toEqual({ dx: 0, dy: 0 }); // амплітуда спала до нуля
     expect(at(0.125)).toEqual(first); // той самий вхід → той самий зсув
+  });
+});
+
+describe('П14.4: подієві ефекти 2.0 — тригери подій логу (критерій 1)', () => {
+  it('grenade → boom; смерті уражених (раніші за подію) — після вибуху; числа лише видимих цілей', () => {
+    const s1 = unit('s1', 'player', 2, 2);
+    const a1 = unit('a1', 'alien', 5, 2);
+    const a2 = unit('a2', 'alien', 6, 2);
+    const events: GameEvent[] = [
+      // throwGrenade пише смерті РАНІШЕ за grenade (цикл пошкоджень зони)
+      { type: 'death', unitId: 'a1', killerId: 's1' },
+      {
+        type: 'grenade',
+        unitId: 's1',
+        center: { x: 5, y: 2 },
+        hits: [
+          { unitId: 'a1', damage: 4 },
+          { unitId: 'a2', damage: 4 },
+        ],
+      },
+    ];
+    const before = JSON.stringify(events);
+    const anims = animsFromEvents(events, [s1, a1, a2], new Set(['5,2'])); // a2 — у тумані
+    expect(anims.map((x) => x.kind)).toEqual(['boom', 'death', 'dnum']);
+    expect(anims[0].kind === 'boom' && anims[0].at).toEqual({ x: 5, y: 2 });
+    expect(anims[0].kind === 'boom' && anims[0].dur).toBe(BOOM_MS);
+    expect(anims[1].kind === 'death' && anims[1].at).toEqual({ x: 5, y: 2 });
+    expect(anims[2].kind === 'dnum' && anims[2].amount).toBe(4); // лише видима a1
+    expect(anims[2].kind === 'dnum' && anims[2].heal).toBe(false);
+    expect(JSON.stringify(events)).toBe(before); // лог байт-у-байт не змінюється
+  });
+
+  it('grenade без смертей — boom + числа всіх уражених; без набору видимості — усе видиме (сумісність)', () => {
+    const a1 = unit('a1', 'alien', 5, 2);
+    const events: GameEvent[] = [{ type: 'grenade', unitId: 's1', center: { x: 5, y: 2 }, hits: [{ unitId: 'a1', damage: 5 }] }];
+    expect(animsFromEvents(events, [a1]).map((x) => x.kind)).toEqual(['boom', 'dnum']);
+  });
+
+  it('grenade з порожньою зоною уражень — лише вибух', () => {
+    const s1 = unit('s1', 'player', 2, 2);
+    const events: GameEvent[] = [{ type: 'grenade', unitId: 's1', center: { x: 8, y: 8 }, hits: [] }];
+    expect(animsFromEvents(events, [s1]).map((x) => x.kind)).toEqual(['boom']);
+  });
+
+  it('shot: влучання → трасер + число; промах (damage 0) — лише трасер; невидима ціль — числа немає', () => {
+    const s1 = unit('s1', 'player', 2, 2);
+    const a1 = unit('a1', 'alien', 5, 2);
+    const hit: GameEvent[] = [{ type: 'shot', shooterId: 's1', targetId: 'a1', mode: 'snap', hit: true, damage: 4 }];
+    const anims = animsFromEvents(hit, [s1, a1], new Set(['5,2']));
+    expect(anims.map((x) => x.kind)).toEqual(['tracer', 'dnum']);
+    expect(anims[1].kind === 'dnum' && anims[1].at).toEqual({ x: 5, y: 2 });
+    expect(anims[1].kind === 'dnum' && anims[1].dur).toBe(DNUM_MS);
+    const miss: GameEvent[] = [{ type: 'shot', shooterId: 's1', targetId: 'a1', mode: 'snap', hit: false, damage: 0 }];
+    expect(animsFromEvents(miss, [s1, a1], new Set(['5,2'])).map((x) => x.kind)).toEqual(['tracer']);
+    const fog: GameEvent[] = [{ type: 'shot', shooterId: 's1', targetId: 'a1', mode: 'snap', hit: true, damage: 4 }];
+    expect(animsFromEvents(fog, [s1, a1], new Set()).map((x) => x.kind)).toEqual(['tracer']); // туман
+  });
+
+  it('смерть-перед-пострілом (фатальне влучання): трасер → смерть → число', () => {
+    const s1 = unit('s1', 'player', 2, 2);
+    const a1 = unit('a1', 'alien', 5, 2);
+    const events: GameEvent[] = [
+      { type: 'death', unitId: 'a1', killerId: 's1' },
+      { type: 'shot', shooterId: 's1', targetId: 'a1', mode: 'snap', hit: true, damage: 10 },
+    ];
+    expect(animsFromEvents(events, [s1, a1]).map((x) => x.kind)).toEqual(['tracer', 'death', 'dnum']);
+  });
+
+  it('heal → число «+N» зцілення над ціллю; невидима ціль — числа немає', () => {
+    const s1 = unit('s1', 'player', 2, 2);
+    const events: GameEvent[] = [{ type: 'heal', unitId: 's1', targetId: 's1', healed: 3 }];
+    const anims = animsFromEvents(events, [s1], new Set(['2,2']));
+    expect(anims.map((x) => x.kind)).toEqual(['dnum']);
+    expect(anims[0].kind === 'dnum' && anims[0].amount).toBe(3);
+    expect(anims[0].kind === 'dnum' && anims[0].heal).toBe(true);
+    expect(animsFromEvents(events, [s1], new Set()).map((x) => x.kind)).toEqual([]); // туман
+  });
+});
+
+describe('П14.4: детерміновані частинки вибуху (без RNG — ADR-0003)', () => {
+  it('той самий (епіцентр, i) → той самий зсув; t=0 — епіцентр; зсув у межах однієї клітинки', () => {
+    const at = { x: 5, y: 2 };
+    expect(boomParticleOffset(at, 3, 0.5)).toEqual(boomParticleOffset({ x: 5, y: 2 }, 3, 0.5));
+    expect(boomParticleOffset(at, 3, 0)).toEqual({ dx: 0, dy: 0 }); // без -0
+    let spread = 0;
+    for (let i = 0; i < BOOM_PARTICLES; i++) {
+      for (let k = 0; k <= 10; k++) {
+        const o = boomParticleOffset(at, i, k / 10);
+        expect(Math.abs(o.dx)).toBeLessThanOrEqual(1);
+        expect(Math.abs(o.dy)).toBeLessThanOrEqual(1);
+        expect(o.dx).not.toBe(-0);
+        expect(o.dy).not.toBe(-0);
+      }
+      if (boomParticleOffset(at, i, 1).dx !== boomParticleOffset(at, 0, 1).dx) spread++;
+    }
+    expect(spread).toBeGreaterThan(0); // частинки розлітаються різними курсами
+  });
+
+  it('політ сповільнюється: приріст зсуву на першій половині більш за другу', () => {
+    const at = { x: 3, y: 7 };
+    const d = (t: number): number => {
+      const o = boomParticleOffset(at, 5, t);
+      return Math.hypot(o.dx, o.dy);
+    };
+    expect(d(0.5) - d(0.25)).toBeGreaterThan(d(0.75) - d(0.5));
+  });
+});
+
+describe('П14.4: тряска вибуху — амплітуда ×2 від пострілу', () => {
+  it('boom: у межах BOOM_SHAKE_PX = 2×SHAKE_PX, сягає амплітуди пострілу і гасне; поза вибухом — нуль', () => {
+    expect(BOOM_SHAKE_PX).toBe(2 * SHAKE_PX);
+    const boom = makeBoomAnim({ x: 5, y: 2 });
+    expect(boom.dur).toBe(BOOM_MS);
+    expect(shakeOffset(boom, 100)).toEqual({ dx: 0, dy: 0 }); // start === null
+    boom.start = 0;
+    expect(shakeOffset(boom, BOOM_MS + 10)).toEqual({ dx: 0, dy: 0 }); // завершено
+    let maxAmp = 0;
+    for (let k = 1; k < 100; k++) {
+      const o = shakeOffset(boom, (k / 100) * BOOM_MS);
+      expect(Math.abs(o.dx)).toBeLessThanOrEqual(BOOM_SHAKE_PX);
+      expect(Math.abs(o.dy)).toBeLessThanOrEqual(BOOM_SHAKE_PX);
+      maxAmp = Math.max(maxAmp, Math.abs(o.dx) + Math.abs(o.dy));
+    }
+    expect(maxAmp).toBeGreaterThanOrEqual(SHAKE_PX); // ≥ амплітуда пострілу (критерій)
+    expect(shakeOffset(boom, BOOM_MS / 2)).toEqual(shakeOffset(boom, BOOM_MS / 2)); // детерміновано
+    // інші види анімацій тряску не дають (крім влучання трасера)
+    expect(shakeOffset(makeDeathAnim(unit('a1', 'alien', 1, 1)), 10)).toEqual({ dx: 0, dy: 0 });
   });
 });

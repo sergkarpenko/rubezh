@@ -150,10 +150,12 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
 
   // П6.8: нові події логу бою → анімації (суто відображення: дії ядра вже
   // застосовані миттєво, лог лише читається і не змінюється).
+  // П14.4: видимість (туман, ADR-0006) передається у перетворювач — числа
+  // пошкоджень породжуються лише для видимих цілей.
   function enqueueBattleAnims(prevLen: number): void {
     const mission = ui.mission;
     if (!mission || !deps.hasRaf()) return;
-    deps.anim.push(animsFromEvents(mission.state.log.slice(prevLen), mission.state.units));
+    deps.anim.push(animsFromEvents(mission.state.log.slice(prevLen), mission.state.units, visibleCells()));
   }
 
   function renderBattle(): void {
@@ -305,8 +307,9 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
     // П6.8 (ADR-0029): анімаційний шар поверх статичного стану. Рух прибульця
     // поза туманом не малюємо (movingId null — статика показує його у фінальній
     // клітинці лише якщо вона видима, як і без анімації).
+    // П14.4: розміри buffer'а — клімп частинок вибуху і чисел у межі канви.
     if (activeAnim !== null && (activeAnim.kind !== 'move' || movingId !== null)) {
-      drawAnimFrame(ctx, activeAnim, deps.anim.now, BCELL, 8);
+      drawAnimFrame(ctx, activeAnim, deps.anim.now, BCELL, 8, cv.width, cv.height);
     }
 
     // П6.14: шанс попадання біля клітинки цілі — при наведенні (aimCell) або

@@ -15,12 +15,14 @@
 // байт-у-байт незмінний, RNG не викликається, туман (видимість) вирішує викликаюч.
 
 import {
+  BOOM_PARTICLES,
   FOG_EDGE,
   GEO_GRID_COLOR,
   GRID_COLOR,
   NIGHT_BG,
   TRACER_MS,
   animT,
+  boomParticleOffset,
   cellHash,
   geoCellTone,
   hasVisibleNeighbor,
@@ -30,6 +32,7 @@ import {
   type Anim,
   type TerrainCell,
 } from './core/render-core';
+import { grenadeZone } from './core/combat';
 import {
   ALIEN_STAND,
   ALIEN_STEP,
@@ -490,12 +493,33 @@ const IMPACT = '#ffb347';
 const TRACER_GLOW = 6; // радіус свічення трасера
 const IMPACT_GLOW = 8; // радіус свічення спалаху
 const OW_FLASH = '#ffb347';
+// П14.4 (ADR-0064): подієві ефекти 2.0 — вибух гранати і числа пошкоджень.
+// Зона вибуху — дзеркало прев'ю гранати у battle.ts (пунктирні бурштинові
+// рамки); частинки — бурштин/помаранчевий спалах; числа: пошкодження —
+// бурштин, зцілення — зелений (колір крапок шляху, П6.14).
+const BOOM_ZONE = 'rgba(255,159,64,0.8)';
+const BOOM_SPARK_ALT = '#ff7b2e';
+const DMG_NUM = '#ffb347';
+const HEAL_NUM = '#7fe2a0';
+const DNUM_RISE = 16; // підйом числа за тривалість анімації, px
 
 // Один кадр анімаційного шару (малюється поверх статичного стану).
 // move — силует у проміжній позиції; tracer — куля летить від стрільця до цілі,
 // при влучанні друга фаза — спалах-кільце; death — згасання силуета; owflash —
-// пульсуюче кільце дозору. Усі координати — у межах клітинок (урок П6.6).
-export function drawAnimFrame(ctx: CanvasRenderingContext2D, a: Anim, now: number, cell: number, r: number): void {
+// пульсуюче кільце дозору; gpulse — пульс радара геосцени; boom (П14.4) —
+// вибух гранати: зона «епіцентр + хрест», спалах-кільце і розліт частинок;
+// dnum (П14.4) — плаваюче число пошкодження/зцілення над ціллю. Усі
+// координати — у межах клітинок (урок П6.6); cw/ch — розміри buffer'а канви
+// (клімп частинок і тексту у межі; за замовчуванням — без обмеження).
+export function drawAnimFrame(
+  ctx: CanvasRenderingContext2D,
+  a: Anim,
+  now: number,
+  cell: number,
+  r: number,
+  cw = Number.POSITIVE_INFINITY,
+  ch = Number.POSITIVE_INFINITY
+): void {
   const t = animT(a, now);
   // П6.9: пульс радара геосцени — кільце від бази до maxR, що гасне.
   // Клітинка і радіус силуету не потрібні (cell/r — параметри бойовища).
@@ -507,6 +531,59 @@ export function drawAnimFrame(ctx: CanvasRenderingContext2D, a: Anim, now: numbe
     ctx.arc(a.cx, a.cy, 2 + (a.maxR - 2) * t, 0, Math.PI * 2);
     ctx.stroke();
     ctx.lineWidth = 1;
+    ctx.globalAlpha = 1;
+    return;
+  }
+  // П14.4 (ADR-0072/0064): вибух гранати — зона «епіцентр + хрест»
+  // (дзеркало прев'ю гранати у battle.ts), спалах-кільце з епіцентру і
+  // розліт детермінованих частинок (≤ 12, без RNG — ADR-0003) з клімпом
+  // у межі канви.
+  if (a.kind === 'boom') {
+    const cx = a.at.x * cell + cell / 2;
+    const cy = a.at.y * cell + cell / 2;
+    ctx.setLineDash([3, 3]);
+    ctx.strokeStyle = BOOM_ZONE;
+    for (const c of grenadeZone(a.at)) ctx.strokeRect(c.x * cell + 2, c.y * cell + 2, cell - 5, cell - 5);
+    ctx.setLineDash([]);
+    ctx.globalAlpha = 1 - t;
+    ctx.strokeStyle = IMPACT;
+    ctx.lineWidth = 3;
+    ctx.shadowColor = IMPACT; // П6.13: свічення спалаху вибуху
+    ctx.shadowBlur = IMPACT_GLOW;
+    ctx.beginPath();
+    ctx.arc(cx, cy, 4 + 20 * t, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+    ctx.lineWidth = 1;
+    for (let i = 0; i < BOOM_PARTICLES; i++) {
+      const o = boomParticleOffset(a.at, i, t);
+      const px = Math.min(Math.max(cx + o.dx * cell, 0), cw - 2);
+      const py = Math.min(Math.max(cy + o.dy * cell, 0), ch - 2);
+      ctx.fillStyle = i % 2 === 0 ? IMPACT : BOOM_SPARK_ALT;
+      ctx.fillRect(Math.round(px), Math.round(py), 2, 2);
+    }
+    ctx.globalAlpha = 1;
+    return;
+  }
+  // П14.4: плаваюче число над ціллю — підйом (y спадає) і згасання (alpha) за
+  // прогресом кадру; ширина — оцінка N×6px без measureText (урок П6.14 —
+  // мок-контексти jsdom його не реалізують), клімп правого краю як
+  // drawChanceLabel; текст у межах канви.
+  if (a.kind === 'dnum') {
+    const text = (a.heal ? '+' : '-') + a.amount;
+    const w = text.length * 6 + 4;
+    const h = 13;
+    let x = a.at.x * cell + (cell - w) / 2;
+    if (x + w > cw) x = cw - w - 1;
+    const base = a.at.y * cell >= h + 1 ? a.at.y * cell - (h + 1) : (a.at.y + 1) * cell + 1;
+    const y = Math.round(base - DNUM_RISE * t); // підйом над ціллю
+    ctx.globalAlpha = 1 - t; // згасання до кінця кадру
+    ctx.fillStyle = CHANCE_LABEL_BG;
+    ctx.fillRect(x, y, w, h);
+    ctx.fillStyle = a.heal ? HEAL_NUM : DMG_NUM;
+    ctx.font = '11px monospace';
+    ctx.textBaseline = 'top';
+    ctx.fillText(text, x + 2, y + 2);
     ctx.globalAlpha = 1;
     return;
   }
