@@ -13,7 +13,7 @@ import {
   BOOM_PARTICLES,
   BOOM_SHAKE_PX,
   DNUM_MS,
-  GEO_LAND_ROWS,
+  type GeoLayout,
   GEO_COAST_ORDER,
   GEO_TRAIL_MS,
   GEO_TRAIL_POINTS,
@@ -31,6 +31,7 @@ import {
   geoCoastEdges,
   geoCoastSide,
   geoIsLand,
+  makeGeoLayout,
   geoTrailPoints,
   makeBoomAnim,
   makeDeathAnim,
@@ -45,7 +46,7 @@ import {
   type Anim,
 } from './render-core';
 import { makeUnit, type GameEvent, type Unit } from './combat';
-import type { GeoEvent } from './geo';
+import { createGeoGame, type GeoEvent } from './geo';
 
 const unit = (id: string, side: 'player' | 'alien', x: number, y: number): Unit => makeUnit({ id, side, pos: { x, y } });
 
@@ -463,74 +464,117 @@ describe('П14.4: тряска вибуху — амплітуда ×2 від п
   });
 });
 
-describe('П14.5: розкладка геосцени — суша/океан/узбережжя (без RNG, ADR-0003)', () => {
-  it('geoIsLand: авторський масив 16×8, циліндр по X; база (8,4) — на континенті', () => {
-    expect(GEO_LAND_ROWS.length).toBe(8);
-    expect(GEO_LAND_ROWS.every((r) => r.length === 16)).toBe(true);
-    expect(geoIsLand(8, 4)).toBe(true); // ВУЗОЛ — суша
-    expect(geoIsLand(0, 0)).toBe(false); // океан
-    expect(geoIsLand(3, 0)).toBe(true); // острівна дуга
-    // замикання по X: x = 16 → 0, x = -13 → 3, x = 19 → 3
-    expect(geoIsLand(16, 0)).toBe(geoIsLand(0, 0));
-    expect(geoIsLand(19, 0)).toBe(geoIsLand(3, 0));
-    expect(geoIsLand(-13, 0)).toBe(geoIsLand(3, 0));
-    // вертикаль без замикання
-    expect(geoIsLand(8, -1)).toBe(false);
-    expect(geoIsLand(8, 8)).toBe(false);
-    // пропорції: ~45% суші (57 з 128; узгоджено власником ДО прев'ю)
-    let land = 0;
-    for (let y = 0; y < 8; y++) for (let x = 0; x < 16; x++) if (geoIsLand(x, y)) land++;
-    expect(land).toBe(57);
-  });
+describe('П14.5 (ітерація 3): континенти-блоби геосцени — детерміновано за сідом, без geo.rng', () => {
+  const BASE = { x: 8, y: 4 };
+  const layout = makeGeoLayout(42, BASE);
 
-  it('geoCoastEdges: кромка лише на суші в бік океану (4 напрямки, X із замиканням)', () => {
-    // (4,4) — суша з океаном на заході (край континенту)
-    expect(geoCoastEdges(4, 4)).toEqual({ n: false, e: false, s: false, w: true });
-    // (7,4) — внутрішня клітинка континенту: океану поруч немає
-    expect(geoCoastEdges(7, 4)).toEqual({ n: false, e: false, s: false, w: false });
-    // океан — не узбережжя (кромка тільки на суші)
-    expect(geoCoastEdges(0, 0)).toEqual({ n: false, e: false, s: false, w: false });
-    // (14,0) — суша в куті: океан на півночі (край світу), сході та півдні
-    expect(geoCoastEdges(14, 0)).toEqual({ n: true, e: true, s: true, w: false });
-  });
-
-  it('вогні міст: лише на суші, рідкий детермінований розклад (без RNG)', () => {
-    let lights = 0;
+  // кількість суші в розкладі
+  const landCount = (l: GeoLayout): number => {
+    let n = 0;
+    for (let y = 0; y < 8; y++) for (let x = 0; x < 16; x++) if (geoIsLand(l, x, y)) n++;
+    return n;
+  };
+  // розміри компонентів зв'язності суші (4-напр., wrap по X)
+  const components = (l: GeoLayout): number[] => {
+    const seen = new Set<string>();
+    const out: number[] = [];
     for (let y = 0; y < 8; y++)
       for (let x = 0; x < 16; x++) {
-        const l = geoCityLights(x, y);
-        expect(l).toBe(geoIsLand(x, y) && cellHash(x, y) % 12 === 0); // чиста функція хеша
-        if (l) lights++;
+        if (!geoIsLand(l, x, y) || seen.has(x + ',' + y)) continue;
+        const stack: Array<[number, number]> = [[x, y]];
+        let size = 0;
+        while (stack.length > 0) {
+          const [cx, cy] = stack.pop()!;
+          const k = cx + ',' + cy;
+          if (seen.has(k) || !geoIsLand(l, cx, cy)) continue;
+          seen.add(k);
+          size++;
+          stack.push([(cx + 1) % 16, cy], [(cx + 15) % 16, cy], [cx, cy - 1], [cx, cy + 1]);
+        }
+        out.push(size);
       }
-    expect(lights).toBeGreaterThan(0); // принаймні одне місто у світі
-    expect(lights).toBeLessThan(57 * 0.2); // рідкий декор, не «новий рік»
-    // стабільність між кадрами: той самий вхід → той самий результат
-    expect(geoCityLights(5, 2)).toBe(geoCityLights(5, 2));
+    return out;
+  };
+
+  it('детермінізм (ADR-0003): той самий сід → та сама мапа; інший сід → інша', () => {
+    expect(makeGeoLayout(42, BASE)).toEqual(makeGeoLayout(42, BASE));
+    expect(makeGeoLayout(42, BASE)).not.toEqual(makeGeoLayout(43, BASE)); // сід міняє світ
   });
 
-  it('geoCoastSide: перший океанний край у фіксованому порядку w→e→n→s; внутрішня суша — null', () => {
-    // (4,4) — океан лише на заході → 'w'
-    expect(geoCoastSide(4, 4)).toBe('w');
-    // (7,4) — внутрішня суша континенту
-    expect(geoCoastSide(7, 4)).toBeNull();
-    // (14,0) — океан на сході (заходу немає: 13,0 — суша) → 'e'
-    expect(geoCoastSide(14, 0)).toBe('e');
-    // океан — не узбережжя
-    expect(geoCoastSide(0, 0)).toBeNull();
-    // узгодженість з geoCoastEdges по всій мапі: обраний край — океанний
-    // і перший за фіксованим порядком (детерміновано, без RNG)
-    for (let y = 0; y < 8; y++) {
+  it('geo.rng не витягується: розклад — від сіда, потік ядра не зсувається', () => {
+    let calls = 0;
+    const rng = (): number => {
+      calls++;
+      return 0.5;
+    };
+    createGeoGame({ rng }); // стан ядра з підміненим rng
+    const before = calls;
+    makeGeoLayout(42, BASE);
+    makeGeoLayout(1234, { x: 2, y: 1 });
+    expect(calls).toBe(before); // 0 викликів geo.rng (критерій фідбеку)
+  });
+
+  it("пропорції (сід 42): ~30–35% суші, великі зв'язні масиви, без поодиноких плит", () => {
+    expect(landCount(layout)).toBe(41); // 32.0% — сід прев'ю
+    const comps = components(layout);
+    expect(comps.length).toBeGreaterThanOrEqual(2); // кілька континентів
+    expect(comps.length).toBeLessThanOrEqual(6);
+    for (const c of comps) expect(c).toBeGreaterThanOrEqual(6); // масиви 6–15+ (зшивання дозволене)
+    // жодна клітинка суші не самотня (4-напр., wrap по X)
+    for (let y = 0; y < 8; y++)
       for (let x = 0; x < 16; x++) {
-        const e = geoCoastEdges(x, y);
-        const side = geoCoastSide(x, y);
-        if (side === null) {
-          expect(e.n || e.e || e.s || e.w).toBe(false);
-        } else {
-          expect(e[side]).toBe(true);
-          expect(GEO_COAST_ORDER.indexOf(side)).toBe(GEO_COAST_ORDER.findIndex((s) => e[s]));
-        }
+        if (!geoIsLand(layout, x, y)) continue;
+        expect(
+          geoIsLand(layout, x + 1, y) || geoIsLand(layout, x - 1, y) || geoIsLand(layout, x, y - 1) || geoIsLand(layout, x, y + 1)
+        ).toBe(true);
       }
+  });
+
+  it('острів вузла: база — завжди суша; у океані — штучний острів 1–2 клітинки', () => {
+    for (let seed = 0; seed < 30; seed++) {
+      const l = makeGeoLayout(seed, BASE);
+      expect(geoIsLand(l, 8, 4)).toBe(true); // вузол — суша на будь-якому сиді
+      // сусід суші: або частина масиву, або додана клітинка острова
+      expect(geoIsLand(l, 9, 4) || geoIsLand(l, 7, 4) || geoIsLand(l, 8, 3) || geoIsLand(l, 8, 5)).toBe(true);
     }
+  });
+
+  it('geoCoastSide/geoCoastEdges: узбережжя лише на межі масивів; порядок w→e→n→s; wrap по X', () => {
+    for (let y = 0; y < 8; y++)
+      for (let x = 0; x < 16; x++) {
+        const e = geoCoastEdges(layout, x, y);
+        const s = geoCoastSide(layout, x, y);
+        if (s === null) {
+          expect(e.n || e.e || e.s || e.w).toBe(false); // внутрішня суша — без узбережжя
+        } else {
+          expect(e[s]).toBe(true); // обраний край — океанний
+          expect(GEO_COAST_ORDER.indexOf(s)).toBe(GEO_COAST_ORDER.findIndex((k) => e[k])); // перший за порядком
+        }
+        expect(geoIsLand(layout, x + 16, y)).toBe(geoIsLand(layout, x, y)); // циліндр по X
+      }
+    // сід 42: усі чотири сторони узбережжя присутні (для фліпів/поворотів тайла)
+    const present = new Set<string>();
+    for (let y = 0; y < 8; y++)
+      for (let x = 0; x < 16; x++) {
+        const s = geoCoastSide(layout, x, y);
+        if (s !== null) present.add(s);
+      }
+    expect(present).toEqual(new Set(['w', 'e', 'n', 's']));
+  });
+
+  it('вогні міст: лише на суші за хешем (~8% суші, без RNG)', () => {
+    let lights = 0;
+    let land = 0;
+    for (let y = 0; y < 8; y++)
+      for (let x = 0; x < 16; x++) {
+        const l = geoCityLights(layout, x, y);
+        expect(l).toBe(geoIsLand(layout, x, y) && cellHash(x, y) % 12 === 0); // чиста функція
+        if (geoIsLand(layout, x, y)) land++;
+        if (l) lights++;
+      }
+    expect(land).toBe(41);
+    expect(lights).toBe(4); // ~8% суші — рідкий декор
+    expect(geoCityLights(layout, 5, 2)).toBe(geoCityLights(layout, 5, 2)); // стабільно
   });
 });
 

@@ -80,7 +80,7 @@ export function createPanels(deps: PanelsDeps): Panels {
 
     // П12.7 (ADR-0064): терен геосцени — двотоновий синьо-чорний з неоновою
     // сіткою (ціан «Рубіжу»); кадр малюється з нуля (урок П6.6).
-    drawGeoTerrain(ctx, cv.width, cv.height, GCELL);
+    drawGeoTerrain(ctx, cv.width, cv.height, GCELL, party.seed, party.geo.base);
 
     const b = party.geo.base;
     ctx.setLineDash([5, 4]);

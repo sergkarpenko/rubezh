@@ -17,6 +17,8 @@
 import {
   BOOM_PARTICLES,
   FOG_EDGE,
+  GEO_CELL_A,
+  GEO_CELL_B,
   GEO_GRID_COLOR,
   GRID_COLOR,
   NIGHT_BG,
@@ -24,11 +26,11 @@ import {
   animT,
   boomParticleOffset,
   cellHash,
-  geoCellTone,
   geoCityLights,
   geoCoastSide,
   geoIsLand,
   hasVisibleNeighbor,
+  makeGeoLayout,
   moveAnimPos,
   terrainShade,
   visibleKeys,
@@ -37,7 +39,7 @@ import {
 } from './core/render-core';
 // П14.5: розмір світу для замикання скан-зони по X (куля; як RADAR_RANGE у geo.ts).
 import { WORLD_W } from './core/geo';
-import { grenadeZone } from './core/combat';
+import { grenadeZone, type Vec2 } from './core/combat';
 import {
   ALIEN_STAND,
   ALIEN_STEP,
@@ -501,19 +503,23 @@ export function drawNightTerrain(ctx: CanvasRenderingContext2D, w: number, h: nu
 }
 
 // --- П12.7 (ADR-0064): терен геосцени — двотоновий із неоновою сіткою ---
-// П14.5 (ADR-0072): геосцена 2.0 — тайли з ассета (розкладка GEO_LAND_ROWS
-// у render-core: суша/океан за авторським масивом, варіант суші A–D — хеш
-// клітинки, без RNG; узбережжя — тайл переходу з фліпом/поворотом за маскою
-// сусідства суша/океан (geoCoastSide, детерміновано); вогні міст — рідкий
-// альфа-оверлей за хешем). Фолбек без ассета — чинні два тони geoCellTone
-// (обов'язковий; тести від ассета не залежать).
-// Палітра і тон — чиста логіка src/core/render-core.ts; тут — лише
+// П14.5 (ADR-0072, ітерація 3): геосцена 2.0 — тайли з ассета над розкладом
+// континентів-блобів (makeGeoLayout у render-core: суша/океан за сідом
+// партії + острів вузла, без geo.rng; варіант суші A–D — хеш клітинки;
+// узбережжя — тайл переходу з фліпом/поворотом за маскою сусідства
+// суша/океан (geoCoastSide, детерміновано); вогні міст — рідкий
+// альфа-оверлей за хешем). Фолбек без ассета — ТОЙ САМИЙ розклад блобів
+// двома тонами (суша/океан; поведінка не залежає від ассета, тести від
+// ассета не залежать).
+// Палітра і розклад — чиста логіка src/core/render-core.ts; тут — лише
 // Canvas-виклики. Кадр еквівалентний малюванню з нуля (патерн renderGeo,
 // урок П6.6). Чиста функція без DOM-стану; викликається з src/ui/panels.ts.
-export function drawGeoTerrain(ctx: CanvasRenderingContext2D, w: number, h: number, cell: number): void {
+export function drawGeoTerrain(ctx: CanvasRenderingContext2D, w: number, h: number, cell: number, seed: number, base: Vec2): void {
   // фон на весь buffer — краї канви не блимають
   ctx.fillStyle = NIGHT_BG;
   ctx.fillRect(0, 0, w, h);
+  // розклад континентів — один на кадр (чиста функція від сіда і бази)
+  const layout = makeGeoLayout(seed, base);
   const cols = Math.ceil(w / cell);
   const rows = Math.ceil(h / cell);
   if (geoTilesImg !== null) {
@@ -524,11 +530,11 @@ export function drawGeoTerrain(ctx: CanvasRenderingContext2D, w: number, h: numb
       for (let x = 0; x < cols; x++) {
         const px = x * cell;
         const py = y * cell;
-        if (!geoIsLand(x, y)) {
+        if (!geoIsLand(layout, x, y)) {
           ctx.drawImage(geoTilesImg, GEO_TILE_OCEAN * GEO_TILE, 0, GEO_TILE, GEO_TILE, px, py, cell, cell);
           continue;
         }
-        const side = geoCoastSide(x, y);
+        const side = geoCoastSide(layout, x, y);
         if (side === null) {
           // внутрішня суша: варіант A–D за хешем координат (без RNG)
           const col = GEO_TILE_LAND_A + (cellHash(x, y) % GEO_TILE_LAND_VARIANTS);
@@ -555,15 +561,16 @@ export function drawGeoTerrain(ctx: CanvasRenderingContext2D, w: number, h: numb
     // вогні міст: альфа-оверлей на суші за хешем (рідкий декор, без RNG)
     for (let y = 0; y < rows; y++) {
       for (let x = 0; x < cols; x++) {
-        if (!geoCityLights(x, y)) continue;
+        if (!geoCityLights(layout, x, y)) continue;
         ctx.drawImage(geoTilesImg, GEO_TILE_CITY * GEO_TILE, 0, GEO_TILE, GEO_TILE, x * cell, y * cell, cell, cell);
       }
     }
   } else {
-    // фолбек: два тони за хешем координат, мозаїка стабільна між кадрами
+    // фолбек: ТОЙ САМИЙ розклад блобів двома тонами — суша GEO_CELL_B,
+    // океан GEO_CELL_A (мапа читається і без ассета; behavior не залежить від нього)
     for (let y = 0; y < rows; y++) {
       for (let x = 0; x < cols; x++) {
-        ctx.fillStyle = geoCellTone(x, y);
+        ctx.fillStyle = geoIsLand(layout, x, y) ? GEO_CELL_B : GEO_CELL_A;
         ctx.fillRect(x * cell, y * cell, cell, cell);
       }
     }
