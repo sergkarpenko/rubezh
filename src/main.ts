@@ -176,6 +176,7 @@ const battle = createBattleUI(ui, {
     },
     push: (a) => anim.push(...a),
     cancel: () => anim.cancel(),
+    queued: () => anim.queued(), // П14.4: хід ШІ відтворюється поверх фінального стану
   },
   hasRaf: () => hasRaf,
   stopAuto: () => autoBattle.stop(),

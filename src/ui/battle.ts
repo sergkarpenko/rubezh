@@ -30,7 +30,7 @@ import { computeVisibleCells } from '../core/map';
 import { geoClock } from '../core/geo';
 import type { Party } from '../core/save';
 import { drawAnimFrame, drawChanceLabel, drawNightTerrain, drawTargetFrame, drawUnitSprite } from '../render';
-import { animT, animsFromEvents, moveAnimPos, shakeOffset, type Anim, type TerrainCell } from '../core/render-core';
+import { animT, animsFromEvents, moveAnimPos, pendingAlienMoveStarts, shakeOffset, type Anim, type TerrainCell } from '../core/render-core';
 import { el } from './dom';
 import { BCELL } from './grid';
 import { type LogCat } from './journal';
@@ -58,6 +58,7 @@ export interface BattleAnimAdapter {
   now: number;
   push(anims: Anim[]): void;
   cancel(): void;
+  queued(): readonly Anim[]; // П14.4: знімок черги — хід ШІ відтворюється поверх фінального стану
 }
 
 // Залежності від шару застосунку (main.ts).
@@ -207,6 +208,14 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
       if (shooter !== undefined) firingId = shooter.id;
     }
 
+    // П14.4 (фідбек прев'ю): ходи демонів у черзі ще не відтворені —
+    // статичний прохід не малює їх у фінальних клітинках до початку їхньої
+    // анімації (синхронний хід ШІ вже застосований — інакше демон
+    // «з'являється» одразу у цілі і хід не анімується). До відтворення
+    // свого ходу демон стоїть на початку шляху; туманна ділянка не
+    // показується (туман не розкривається, ADR-0006).
+    const pendingMove = pendingAlienMoveStarts(deps.anim.queued());
+
     // П6.13: нічна палітра. Легка тряска канвасу при влучанні — зсув усього кадру
     // на фазі спалаху трасера (через AnimEngine — лише в кадрах анімації); фон
     // канви збігається з CSS-тлом, оголений край непомітний. Туман: зсув
@@ -288,13 +297,18 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
       }
       if (dir !== 0) facing.set(u.id, dir);
       if (u.id === movingId) continue; // П6.8: його малює анімаційний шар у проміжній позиції
-      const visible = vis.has(u.pos.x + ',' + u.pos.y);
+      // П14.4 (фідбек прев'ю): хід демона ще не відтворено (чергу/туманна
+      // ділянка активного ходу) — стоїть на початку свого шляху, не у цілі;
+      // початок у тумані — не малюється зовсім (до ходу з туману).
+      const pend = u.side === 'alien' ? pendingMove.get(u.id) : undefined;
+      const at = pend ?? u.pos;
+      const visible = vis.has(at.x + ',' + at.y);
       if (u.side === 'alien' && !visible) continue;
       const native: 1 | -1 = u.side === 'player' ? 1 : -1;
       drawUnitSprite(ctx, {
         side: u.side,
-        cx: u.pos.x * BCELL + BCELL / 2,
-        cy: u.pos.y * BCELL + BCELL / 2,
+        cx: at.x * BCELL + BCELL / 2,
+        cy: at.y * BCELL + BCELL / 2,
         r: 8,
         hp: u.hp,
         selected: u.id === ui.selectedId,
@@ -305,8 +319,8 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
     }
 
     // П6.8 (ADR-0029): анімаційний шар поверх статичного стану. Рух прибульця
-    // поза туманом не малюємо (movingId null — статика показує його у фінальній
-    // клітинці лише якщо вона видима, як і без анімації).
+    // поза туманом не малюємо (movingId null — П14.4: до входу у зону видимості
+    // демон прихований, а не стоїть у фінальній клітинці).
     // П14.4: розміри buffer'а — клімп частинок вибуху і чисел у межі канви.
     if (activeAnim !== null && (activeAnim.kind !== 'move' || movingId !== null)) {
       drawAnimFrame(ctx, activeAnim, deps.anim.now, BCELL, 8, cv.width, cv.height);

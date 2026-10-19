@@ -97,7 +97,7 @@ function makeFixture(autoBusy = false): Fixture {
     drainBattle: vi.fn(),
     resetBattleLog: vi.fn(),
     renderAll: vi.fn(),
-    anim: { active: () => null, now: 0, push: vi.fn(), cancel: vi.fn() },
+    anim: { active: () => null, now: 0, push: vi.fn(), cancel: vi.fn(), queued: () => [] }, // П14.4: черга порожня
     hasRaf: () => false,
     stopAuto: vi.fn(),
     autoBusy: () => false, // П13.3: авто-бій не триває

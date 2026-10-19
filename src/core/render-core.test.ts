@@ -27,6 +27,7 @@ import {
   makeOwFlashAnim,
   makeTracerAnim,
   moveAnimPos,
+  pendingAlienMoveStarts,
   shakeOffset,
   type Anim,
 } from './render-core';
@@ -155,8 +156,24 @@ describe('черга анімацій: rAF лише під час активни
     expect(eng.busy).toBe(false);
     expect(st.canceled).toBe(1);
     expect(st.draws).toBe(0);
+    expect(eng.queued()).toHaveLength(0); // П14.4: знімок порожній після cancel
     eng.cancel(); // повторний cancel — безпомилковий (handle null)
     expect(st.canceled).toBe(1);
+  });
+
+  it('П14.4: queued — знімок черги у порядку відтворення, спорожніє по мірі відтворення', () => {
+    const { run, deps } = fakeDeps();
+    const eng = new AnimEngine(deps);
+    expect(eng.queued()).toHaveLength(0); // idle — порожній знімок
+    const a = makeOwFlashAnim(unit('s1', 'player', 0, 0)); // dur 300
+    const b = makeDeathAnim(unit('a1', 'alien', 1, 1)); // dur 350
+    eng.push(a, b);
+    expect(eng.queued().map((x) => x.kind)).toEqual(['owflash', 'death']);
+    run(0);
+    run(300); // a завершена
+    expect(eng.queued().map((x) => x.kind)).toEqual(['death']);
+    run(650); // b завершена — idle
+    expect(eng.queued()).toHaveLength(0);
   });
 
   it('П6.16: onIdle — раз на випорожнення черги; без push не викликається', () => {
@@ -369,6 +386,42 @@ describe('П14.4: детерміновані частинки вибуху (бе
       return Math.hypot(o.dx, o.dy);
     };
     expect(d(0.5) - d(0.25)).toBeGreaterThan(d(0.75) - d(0.5));
+  });
+});
+
+describe('П14.4: стартові клітинки невідтворених ходів демонів (фідбек прев’ю)', () => {
+  it('pendingAlienMoveStarts: перший хід демона в черзі — старт шляху; ходи гравця і не-ходи ігноруються', () => {
+    const d1 = makeMoveAnim(
+      unit('a1', 'alien', 0, 0),
+      [
+        { x: 0, y: 0 },
+        { x: 1, y: 0 },
+        { x: 2, y: 0 },
+      ],
+      false
+    );
+    const d1b = makeMoveAnim(
+      unit('a1', 'alien', 2, 0),
+      [
+        { x: 2, y: 0 },
+        { x: 3, y: 0 },
+      ],
+      false
+    ); // другий хід — далі в черзі
+    const s1 = makeMoveAnim(
+      unit('s1', 'player', 5, 5),
+      [
+        { x: 5, y: 5 },
+        { x: 6, y: 5 },
+      ],
+      false
+    );
+    const ow = makeOwFlashAnim(unit('a2', 'alien', 7, 7));
+    const map = pendingAlienMoveStarts([d1, s1, ow, d1b]);
+    expect(map.get('a1')).toEqual({ x: 0, y: 0 }); // «теперішня» позиція — перший невідтворений хід
+    expect(map.has('s1')).toBe(false); // солдати рухаються в реальному часі — не приховується
+    expect(map.has('a2')).toBe(false); // owflash — не хід
+    expect(pendingAlienMoveStarts([])).toEqual(new Map()); // порожня черга
   });
 });
 
