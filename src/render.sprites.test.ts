@@ -354,12 +354,14 @@ describe('читабельність стану (ADR-0007)', () => {
     expect(low.calls.some((c) => c.m === 'fillText' && c.args[0] === '1')).toBe(true);
   });
 
-  it('HP-число: кольори сторін на темній плашці (ціан/пурпур, ADR-0064), у межах клітинки', () => {
+  it('HP-число: кольори сторін на темній плашці (ціан/пурпур, ADR-0064), під смугою — без перекриття', () => {
     const s = animCtx();
     drawSoldierSprite(s.ctx, soldier({ hp: 7 }));
     expect(s.sets.some((x) => x.p === 'fillStyle' && x.v === '#9adfff')).toBe(true);
     const plate = s.calls.find((c) => c.m === 'fillRect' && (c.args as number[])[3] === 11)!;
-    expect((plate.args as number[])[0] + (plate.args as number[])[2]).toBeLessThanOrEqual(CX + 24); // край клітинки
+    const p = plate.args as number[];
+    expect(p[0] + p[2]).toBeLessThanOrEqual(CX + 24); // край клітинки
+    expect(p[1]).toBe(CY - 23 + 4 + 1); // одразу під смугою (верх смуги CY-23, висота 4)
     const a = animCtx();
     drawAlienSprite(a.ctx, alien({ hp: 4 }));
     expect(a.sets.some((x) => x.p === 'fillStyle' && x.v === '#ff9ecb')).toBe(true);

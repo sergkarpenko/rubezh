@@ -314,16 +314,18 @@ function drawHpBadge(ctx: CanvasRenderingContext2D, u: UnitSpriteView): void {
   const f = Math.max(0, Math.min(1, u.maxHp > 0 ? u.hp / u.maxHp : 0));
   ctx.fillStyle = hpBarColor(u.hp, u.maxHp);
   ctx.fillRect(x, y, u.hp > 0 ? Math.max(2, HP_BAR_W * f) : 0, HP_BAR_H);
-  // число HP: плашка у верхньому правому куті клітинки (BCELL 48), у межах канви
+  // число HP: плашка у верхньому правому куті клітинки, одразу ПІД смугою
+  // (фідбек прев'ю: на одній лінії зі смугою плашка перекривала її заповнення);
+  // у межах клітинки (BCELL 48)
   const text = String(u.hp);
   const w = text.length * 6 + 3;
   const px = u.cx + 24 - w - 1;
   ctx.fillStyle = HP_PLATE_BG;
-  ctx.fillRect(px, u.cy - 23, w, 11);
+  ctx.fillRect(px, u.cy + HP_BAR_Y + HP_BAR_H + 1, w, 11);
   ctx.fillStyle = u.side === 'player' ? HP_NUM_PLAYER : HP_NUM_ALIEN;
   ctx.font = '10px monospace';
   ctx.textBaseline = 'top';
-  ctx.fillText(text, px + 1, u.cy - 21);
+  ctx.fillText(text, px + 1, u.cy + HP_BAR_Y + HP_BAR_H + 3);
 }
 
 export function drawSoldierSprite(ctx: CanvasRenderingContext2D, u: UnitSpriteView): void {
