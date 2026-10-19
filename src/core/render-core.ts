@@ -6,10 +6,10 @@
 // Canvas/DOM API (ADR-0002) — Canvas-виклики живуть у шарі відображення
 // (src/render.ts), планувальник кадрів ін'єктується викликачем.
 
-import type { GameEvent, Side, Unit, Vec2 } from './combat';
-// П14.5: розкладка геосцени 16×8 читає розміри світу з geo.ts (лише
-// константи — ядро не змінюється, ADR-0002).
-import { WORLD_H, WORLD_W } from './geo';
+import { mulberry32, type GameEvent, type Side, type Unit, type Vec2 } from './combat';
+// П14.5: розкладка геосцени 16×8 і хвіст перехоплення читають розміри світу та
+// події журналу з geo.ts (лише типи/константи — ядро не змінюється, ADR-0002).
+import { WORLD_H, WORLD_W, type GeoEvent } from './geo';
 
 // --- П6.13 (П12.7, ADR-0064): неонова палітра — синьо-чорна основа, неонові акценти ---
 // Ціан — гравець/«Рубіж», пурпур — Розрив, бурштин — спалахи (ADR-0064).
@@ -52,47 +52,87 @@ export function geoCellTone(x: number, y: number): string {
   return cellHash(x, y) % 2 === 0 ? GEO_CELL_A : GEO_CELL_B;
 }
 
-// --- П14.5 (ADR-0072/0064): геосцена 2.0 — розкладка суші/океану/узбережжя ---
+// --- П14.5 (ADR-0072/0064): геосцена 2.0 — континенти-блоби (ітерація 3) ---
 // Терену геосцени НЕ існує в ядрі і сейвах (GeoState без мапи рельєфу,
-// ADR-0026): розклад — суто шар відображення, авторський масив 16×8,
-// узгоджений власником ДО прев'ю з числами (урок iter-13.5). 'L' — суша,
-// '.' — океан; світ циліндричний по X (замикання, як RADAR_RANGE у geo.ts),
-// вертикаль — без замикання. Вигляд: континент по центру + острівна дуга
-// (рішення власника 2026-10-20), ~45% суші, база (8,4) — на континенті.
-export const GEO_LAND_ROWS: readonly string[] = [
-  '...LL........LL.',
-  '..LLLL....LLLL..',
-  '...LLLLLLLLLL...',
-  '....LLLLLLLL....',
-  '....LLLLLLLL....',
-  '...LLLLLLLL.....',
-  '..LLL..LLL..LL..',
-  '...L....L....L..',
+// ADR-0026): розклад — суто шар відображення. Фідбек власника: масиви суші
+// замість розсипу клітинок — 3–5 континентів-блобів (~30–35% суші, кожен
+// масив 6–15 клітинок, без поодиноких плит). Форми блобів — фіксовані
+// константи (напіввісі еліпсів), центри — похідні від сіда партії через
+// ВЛАСНИЙ mulberry32 (ізольований від geo.rng: потік ядра не зсувається;
+// сейв зберігає сід — мапа та сама після завантаження; той самий сід =
+// та сама мапа, ADR-0003). Світ циліндричний по X — блоби зшиваються
+// через край; вертикаль — без замикання. Острів вузла: база — завжди
+// суша (1–2 клітинки, детерміновано).
+export const GEO_BLOB_SHAPES: ReadonlyArray<{ rx: number; ry: number; chamfer: boolean }> = [
+  { rx: 2, ry: 1, chamfer: true }, // 11 клітинок — великий континент (5×3 зі зрізаними кутами)
+  { rx: 2, ry: 1, chamfer: true }, // 11
+  { rx: 1, ry: 1, chamfer: false }, // 9 — середній масив 3×3
+  { rx: 1, ry: 1, chamfer: false }, // 9
+  { rx: 1, ry: 1, chamfer: false }, // 9
 ];
 
-// Чи суша в клітинці (x, y) — чиста функція; X замикається (куля по X), y — ні.
-export function geoIsLand(x: number, y: number): boolean {
+// Розклад суші 16×8: [y][x] = суша/океан. Чиста функція від (сід, база).
+export type GeoLayout = ReadonlyArray<ReadonlyArray<boolean>>;
+
+export function makeGeoLayout(seed: number, base: Vec2): GeoLayout {
+  const rng = mulberry32(seed); // власний потік від сіда; geo.rng не витягується
+  const land: boolean[][] = [];
+  for (let y = 0; y < WORLD_H; y++) land.push(new Array<boolean>(WORLD_W).fill(false));
+  for (let k = 0; k < GEO_BLOB_SHAPES.length; k++) {
+    const b = GEO_BLOB_SHAPES[k]!;
+    // центр — у своїй зоні X (5 рівних смуг): континенти розкидані по всьому
+    // світу, а не згромождені в одному кутку (стабільні ~30–35% суші)
+    const zone = (WORLD_W * k) / GEO_BLOB_SHAPES.length;
+    const cx = Math.floor(zone + rng() * (WORLD_W / GEO_BLOB_SHAPES.length)) % WORLD_W;
+    const cy = Math.floor(rng() * WORLD_H);
+    for (let dy = -b.ry; dy <= b.ry; dy++) {
+      const yy = cy + dy;
+      if (yy < 0 || yy >= WORLD_H) continue; // вертикаль без замикання
+      for (let dx = -b.rx; dx <= b.rx; dx++) {
+        // зрізані кути (chamfer): масив без «дротяних» виступів
+        if (b.chamfer && Math.abs(dx) === b.rx && Math.abs(dy) === b.ry) continue;
+        const wx = ((((cx + dx) % WORLD_W) + WORLD_W) % WORLD_W) | 0; // куля по X
+        land[yy]![wx] = true;
+      }
+    }
+  }
+  // острів вузла: клітинка бази — суша; якщо суші поруч немає, додаємо
+  // одного сусіда, щоб острів не був самотньою плитою (детерміновано)
+  const bx = (((Math.floor(base.x) % WORLD_W) + WORLD_W) % WORLD_W) | 0;
+  const by = Math.min(WORLD_H - 1, Math.max(0, Math.floor(base.y)));
+  if (!land[by]![bx]) {
+    land[by]![bx] = true;
+    const hasNeighbor =
+      geoIsLand(land, bx + 1, by) || geoIsLand(land, bx - 1, by) || geoIsLand(land, bx, by - 1) || geoIsLand(land, bx, by + 1);
+    if (!hasNeighbor) land[by]![(((bx + 1) % WORLD_W) + WORLD_W) % WORLD_W] = true;
+  }
+  return land;
+}
+
+// Чи суша в клітинці (x, y) розкладу — X замикається (куля по X), y — ні.
+export function geoIsLand(layout: GeoLayout, x: number, y: number): boolean {
   if (y < 0 || y >= WORLD_H) return false;
-  const wx = ((x % WORLD_W) + WORLD_W) % WORLD_W;
-  return (GEO_LAND_ROWS[y] ?? '').charAt(wx) === 'L';
+  const wx = (((x % WORLD_W) + WORLD_W) % WORLD_W) | 0;
+  return layout[y]?.[wx] === true;
 }
 
 // Узбережжя: клітинка суші, що межує з океаном (4 напрямки, X із замиканням) —
-// шар відображення малює ціанову кромку на тих краях, що дивляться на воду.
-export function geoCoastEdges(x: number, y: number): { n: boolean; e: boolean; s: boolean; w: boolean } {
-  const land = geoIsLand(x, y);
+// тайл переходу з ціановим кантом ставиться лише на таких клітинках.
+export function geoCoastEdges(layout: GeoLayout, x: number, y: number): { n: boolean; e: boolean; s: boolean; w: boolean } {
+  const land = geoIsLand(layout, x, y);
   return {
-    n: land && !geoIsLand(x, y - 1),
-    e: land && !geoIsLand(x + 1, y),
-    s: land && !geoIsLand(x, y + 1),
-    w: land && !geoIsLand(x - 1, y),
+    n: land && !geoIsLand(layout, x, y - 1),
+    e: land && !geoIsLand(layout, x + 1, y),
+    s: land && !geoIsLand(layout, x, y + 1),
+    w: land && !geoIsLand(layout, x - 1, y),
   };
 }
 
 // Вогні міст (П14.5): рідкий детермінований декор на суші — ~8% клітинок суші
 // за хешем координат (без RNG, ADR-0003; патерн decorCol терену бою П14.3).
-export function geoCityLights(x: number, y: number): boolean {
-  return geoIsLand(x, y) && cellHash(x, y) % 12 === 0;
+// Розклад блобів не має поодиноких плит — вогні лише всередині масивів суші.
+export function geoCityLights(layout: GeoLayout, x: number, y: number): boolean {
+  return geoIsLand(layout, x, y) && cellHash(x, y) % 12 === 0;
 }
 
 // Сторона узбережжя клітинки суші: перший океанний край у фіксованому
@@ -101,8 +141,8 @@ export function geoCityLights(x: number, y: number): boolean {
 // внутрішня суша (океану поруч немає).
 export type GeoCoastSide = 'n' | 'e' | 's' | 'w';
 export const GEO_COAST_ORDER: readonly GeoCoastSide[] = ['w', 'e', 'n', 's'];
-export function geoCoastSide(x: number, y: number): GeoCoastSide | null {
-  const e = geoCoastEdges(x, y);
+export function geoCoastSide(layout: GeoLayout, x: number, y: number): GeoCoastSide | null {
+  const e = geoCoastEdges(layout, x, y);
   for (const s of GEO_COAST_ORDER) {
     if (e[s]) return s;
   }
@@ -160,6 +200,11 @@ export const BOOM_MS = 430; // вибух гранати: спалах-кіль�
 export const DNUM_MS = 350; // плаваюче число пошкодження/зцілення над ціллю
 export const BOOM_PARTICLES = 12; // ≤ 12 одночасних частинок на вибух (П14.4)
 export const BOOM_SHAKE_PX = 4; // тряска вибуху — ×2 від пострілу (SHAKE_PX 2)
+// П14.5 (ADR-0072/0064): скан-радар і хвіст перехоплення — тривалості у
+// чинній шкалі AnimEngine (числа узгоджені власником ДО прев'ю 2026-10-20,
+// урок iter-13.5): розгортка 1200 мс як у пульсу П6.9, хвіст коротший за крок.
+export const GEO_TRAIL_MS = 600; // хвіст перехоплення: згасання лінії останніх позицій
+export const GEO_TRAIL_POINTS = 8; // останніх позицій польоту винищувача (≈4 тіки)
 
 // Один елемент черги анімацій. start — мітка часу початку відтворення
 // (призначає рушій на першому кадрі; null — ще не починалось).
@@ -210,7 +255,7 @@ export interface GeoPulseAnim {
   dur: number;
   start: number | null;
 }
-export type Anim = MoveAnim | TracerAnim | DeathAnim | OwFlashAnim | GeoPulseAnim | BoomAnim | DNumAnim;
+export type Anim = MoveAnim | TracerAnim | DeathAnim | OwFlashAnim | GeoPulseAnim | BoomAnim | DNumAnim | GeoScanAnim | GeoTrailAnim;
 
 // П14.4 (ADR-0072/0064): подієві ефекти 2.0 — вибух гранати і плаваючі
 // числа. Ефекти — суто відображення над фактичним станом (патерн П6.8):
@@ -230,6 +275,29 @@ export interface DNumAnim {
   at: Vec2; // клітинка цілі
   amount: number; // N пошкодження або зцілення
   heal: boolean; // true — «+N» зцілення, false — «-N» пошкодження
+  dur: number;
+  start: number | null;
+}
+// П14.5 (ADR-0072/0064): скан-радар геосцени 2.0 — розвиток пульсу П6.9:
+// у зоні виявлення (RADAR_RANGE 4, Чебишев із замиканням по X від бази)
+// обертається сектор-розгортка і розходяться кільця, що гаснуть. Подієво
+// (пульс у черзі на тік часу, coalesce за busy — патерн П6.9), без вічного
+// циклу (ADR-0029); невиявлені НЛО не підсвічуються (туман — ADR-0006/0032).
+export interface GeoScanAnim {
+  kind: 'gscan';
+  cx: number; // центр бази в пікселях buffer'а
+  cy: number;
+  maxR: number; // радіус зони виявлення в пікселях
+  dur: number;
+  start: number | null;
+}
+// П14.5: хвіст траєкторії перехоплення — лінія останніх позицій польоту
+// винищувача (джерело — події intercept_move у журналі, лог лише читається),
+// що згасає за прогресом; малюється лише в кадрах анімаційного шару
+// (idle → 0, ADR-0029). points — клітинкові координати, старша → новіша.
+export interface GeoTrailAnim {
+  kind: 'gtrail';
+  points: Vec2[];
   dur: number;
   start: number | null;
 }
@@ -269,6 +337,35 @@ export function makeBoomAnim(at: Vec2): BoomAnim {
 }
 export function makeDNumAnim(at: Vec2, amount: number, heal: boolean): DNumAnim {
   return { kind: 'dnum', at: { ...at }, amount, heal, dur: DNUM_MS, start: null };
+}
+// П14.5: фабрики скан-радара і хвоста перехоплення (знімки позицій — після
+// застосування дій ядром; лог — джерело істини, патерн П6.8).
+export function makeGeoScanAnim(cx: number, cy: number, maxR: number): GeoScanAnim {
+  return { kind: 'gscan', cx, cy, maxR, dur: RADAR_PULSE_MS, start: null };
+}
+export function makeGeoTrailAnim(points: Vec2[]): GeoTrailAnim {
+  return { kind: 'gtrail', points: points.map((p) => ({ ...p })), dur: GEO_TRAIL_MS, start: null };
+}
+
+// П14.5: останні позиції польоту винищувача з журналу геосцени — чиста
+// функція (лог лише читається, байт-у-байт не змінюється). Збирає хвіст
+// послідовних подій intercept_move з кінця журналу: хвіст подій після
+// останнього руху (engage/round тощо) пропускається, будь-яка інша подія
+// обриває ланцюжок (свіжий сегмент польоту). points: [from старшої, to...],
+// максимум max останніх позицій (GEO_TRAIL_POINTS), старша → новіша.
+export function geoTrailPoints(log: readonly GeoEvent[], max = GEO_TRAIL_POINTS): Vec2[] {
+  const moves: { from: Vec2; to: Vec2 }[] = [];
+  let i = log.length - 1;
+  while (i >= 0 && log[i]!.type !== 'intercept_move') i--; // хвіст не-рухів пропускаємо
+  while (i >= 0 && log[i]!.type === 'intercept_move') {
+    const m = log[i]! as { type: 'intercept_move'; from: Vec2; to: Vec2 };
+    moves.unshift({ from: { ...m.from }, to: { ...m.to } });
+    i--;
+  }
+  if (moves.length === 0) return [];
+  const pts: Vec2[] = [{ ...moves[0]!.from }];
+  for (const m of moves) pts.push({ ...m.to });
+  return pts.slice(-max);
 }
 
 // Прогрес анімації 0..1 (за межами — клімпиться; start === null → ще не почалась).

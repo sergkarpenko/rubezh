@@ -13,6 +13,7 @@ import {
   BOOM_PARTICLES,
   DEATH_MS,
   DNUM_MS,
+  GEO_TRAIL_MS,
   IMPACT_MS,
   MOVE_MS_PER_CELL,
   OW_FLASH_MS,
@@ -21,6 +22,8 @@ import {
   makeDeathAnim,
   makeDNumAnim,
   makeGeoPulseAnim,
+  makeGeoScanAnim,
+  makeGeoTrailAnim,
   makeMoveAnim,
   makeOwFlashAnim,
   makeTracerAnim,
@@ -386,5 +389,205 @@ describe('П14.4 (ADR-0072/0064): плаваючі числа пошкоджен
     const [px, , pw] = s.calls.find((c) => c.m === 'fillRect')!.args as number[];
     expect(px).toBe(940 - ('-12'.length * 6 + 4) - 1); // клімп правого краю (3 символи → 22px)
     expect(px + pw).toBeLessThanOrEqual(940);
+  });
+});
+
+// --- П14.5 (ADR-0072/0064): скан-радар 2.0 і хвіст перехоплення ---
+
+describe('П14.5: скан-радар 2.0 (gscan) — сектор-розгортка + кільця, що гаснуть', () => {
+  const MAXR = 216; // (RADAR_RANGE + 0.5) * GCELL = 4.5 * 48
+  const mk = (): ReturnType<typeof makeGeoScanAnim> => {
+    const a = makeGeoScanAnim(384, 192, MAXR); // база (8,4): 8*48+24, 4*48+24
+    a.start = 1000;
+    return a;
+  };
+
+  it('кільця у межах зони радара і ростуть; сектор робить повний оберт', () => {
+    const a = mk();
+    const mid = animCtx();
+    drawAnimFrame(mid.ctx, a, 1000 + RADAR_PULSE_MS / 2, 48, 0, 768, 384);
+    // 2 кільця + клин сектора; усі радіуси — у межах зони (≤ MAXR)
+    const arcs = mid.calls.filter((c) => c.m === 'arc');
+    expect(arcs.length).toBe(3);
+    for (const arc of arcs) {
+      const args = arc.args as number[];
+      expect(args[0]).toBe(384);
+      expect(args[1]).toBe(192);
+      expect(args[2]).toBeGreaterThan(0);
+      expect(args[2]).toBeLessThanOrEqual(MAXR);
+    }
+    // кільце росте: радіус першого кільця на півдорозжі менший за кінцевий
+    const midRing = (arcs[0]!.args as number[])[2];
+    const end = animCtx();
+    drawAnimFrame(end.ctx, a, 1000 + RADAR_PULSE_MS, 48, 0, 768, 384);
+    const endRing = (end.calls.filter((c) => c.m === 'arc')[0]!.args as number[])[2];
+    expect(endRing).toBeCloseTo(MAXR);
+    expect(midRing).toBeLessThan(endRing);
+    // сектор обертається: кут переднього крау (кінцевий аргумент клина) зростає
+    const wedgeMid = (arcs[2]!.args as number[])[4];
+    const early = animCtx();
+    drawAnimFrame(early.ctx, a, 1000 + RADAR_PULSE_MS / 4, 48, 0, 768, 384);
+    const wedgeEarly = (early.calls.filter((c) => c.m === 'arc')[2]!.args as number[])[4];
+    expect(wedgeMid - wedgeEarly).toBeCloseTo(Math.PI / 2, 5); // чверть циклу = 90°
+  });
+
+  it('гасне: alpha спадає за прогресом і завжди відновлюється до 1', () => {
+    const a = mk();
+    const start = animCtx();
+    drawAnimFrame(start.ctx, a, 1000, 48, 0, 768, 384);
+    const mid = animCtx();
+    drawAnimFrame(mid.ctx, a, 1000 + RADAR_PULSE_MS / 2, 48, 0, 768, 384);
+    const end = animCtx();
+    drawAnimFrame(end.ctx, a, 1000 + RADAR_PULSE_MS, 48, 0, 768, 384);
+    for (const s of [start, mid, end]) {
+      const alphas = s.sets.filter((p) => p.p === 'globalAlpha').map((p) => p.v);
+      expect(alphas[alphas.length - 1]).toBe(1);
+      const widths = s.sets.filter((p) => p.p === 'lineWidth').map((p) => p.v);
+      expect(widths[widths.length - 1]).toBe(1); // стан кадру не витікає
+    }
+    const alpha0 = start.sets.find((p) => p.p === 'globalAlpha')!.v as number;
+    const alphaMid = mid.sets.find((p) => p.p === 'globalAlpha')!.v as number;
+    const alphaEnd = mid.sets
+      .filter((p) => p.p === 'globalAlpha')
+      .map((p) => p.v)
+      .at(-2) as number;
+    expect(alphaMid).toBeLessThan(alpha0); // спадає за прогресом
+    expect(alphaEnd).toBeLessThanOrEqual(alphaMid);
+    // останній кадр — повністю погас: усі alpha ≤ 0 (крім скидання до 1)
+    const endAlphas = end.sets.filter((p) => p.p === 'globalAlpha').map((p) => p.v) as number[];
+    expect(endAlphas.every((v) => v === 0 || v === 1)).toBe(true);
+  });
+
+  it('туман (ADR-0006/0032): розгортка не підсвічує НЛО — без спрайтів і тексту', () => {
+    const a = mk();
+    const s = animCtx();
+    drawAnimFrame(s.ctx, a, 1150, 48, 0, 768, 384);
+    expect(s.calls.some((c) => c.m === 'arc')).toBe(true); // скан активний
+    expect(s.calls.some((c) => c.m === 'fillText' || c.m === 'drawImage' || c.m === 'ellipse')).toBe(false);
+  });
+
+  it('замикання по X (куля): база біля краю — зсунута копія зони в кадрі', () => {
+    const a = makeGeoScanAnim(48, 192, MAXR); // база (1,4): cx = 1*48+24
+    a.start = 1000;
+    const s = animCtx();
+    drawAnimFrame(s.ctx, a, 1150, 48, 0, 768, 384);
+    const centers = new Set(s.calls.filter((c) => c.m === 'arc').map((c) => (c.args as number[])[0]));
+    expect(centers.has(48)).toBe(true); // основна копія
+    expect(centers.has(816)).toBe(true); // зсунута на світ вправо (48 + 768)
+    // без розміру канви (cw/ch за замовчуванням) — лише основна копія
+    const s2 = animCtx();
+    drawAnimFrame(s2.ctx, a, 1150, 48, 0);
+    const centers2 = new Set(s2.calls.filter((c) => c.m === 'arc').map((c) => (c.args as number[])[0]));
+    expect(centers2).toEqual(new Set([48]));
+  });
+
+  it('детермінізм (ADR-0003): той самий вхід → той самий потік викликів і присвоєнь', () => {
+    const draw = (): { calls: Call[]; sets: { p: string; v: unknown }[] } => {
+      const s = animCtx();
+      drawAnimFrame(s.ctx, mk(), 1150, 48, 0, 768, 384);
+      return { calls: s.calls, sets: s.sets };
+    };
+    expect(draw()).toEqual(draw());
+  });
+});
+
+describe('П14.5: хвіст перехоплення (gtrail) — згасаюча ламана останніх позицій', () => {
+  it('ламана клітинкових центрів у межах канви; свічення скидається', () => {
+    const a = makeGeoTrailAnim([
+      { x: 0, y: 2 },
+      { x: 1, y: 2 },
+      { x: 2, y: 2 },
+    ]);
+    a.start = 1000;
+    const s = animCtx();
+    drawAnimFrame(s.ctx, a, 1000 + GEO_TRAIL_MS / 2, 48, 0, 768, 384);
+    const mv = s.calls.find((c) => c.m === 'moveTo');
+    expect(mv).toBeDefined();
+    expect(mv!.args).toEqual([24, 120]); // центр (0,2)
+    const lines = s.calls.filter((c) => c.m === 'lineTo').map((c) => c.args);
+    expect(lines).toEqual([
+      [72, 120],
+      [120, 120],
+    ]);
+    // ціан «Рубіжу» (ADR-0064) і свічення: встановлено та скинуто
+    expect(s.sets.some((p) => p.p === 'strokeStyle' && p.v === '#00e5ff')).toBe(true);
+    const blurs = s.sets.filter((p) => p.p === 'shadowBlur').map((p) => p.v);
+    expect(blurs[blurs.length - 1]).toBe(0);
+    const widths = s.sets.filter((p) => p.p === 'lineWidth').map((p) => p.v);
+    expect(widths[widths.length - 1]).toBe(1);
+  });
+
+  it('точки за межами світу клімпляться у межі канви (критерій: у межах канви)', () => {
+    const a = makeGeoTrailAnim([
+      { x: 0, y: 0 },
+      { x: 16, y: 8 },
+    ]);
+    a.start = 1000;
+    const s = animCtx();
+    drawAnimFrame(s.ctx, a, 1100, 48, 0, 768, 384);
+    const lt = s.calls.filter((c) => c.m === 'lineTo').at(-1)!.args as number[];
+    expect(lt[0]).toBe(767); // cw - 1
+    expect(lt[1]).toBe(383); // ch - 1
+  });
+
+  it('згасає за прогресом: alpha на середині вища, ближче до кінця — нижча; завжди скидається', () => {
+    const a = makeGeoTrailAnim([
+      { x: 0, y: 2 },
+      { x: 1, y: 2 },
+    ]);
+    a.start = 1000;
+    const sample = (at: number): number[] => {
+      const s = animCtx();
+      drawAnimFrame(s.ctx, a, at, 48, 0, 768, 384);
+      const alphas = s.sets.filter((p) => p.p === 'globalAlpha').map((p) => p.v) as number[];
+      expect(alphas[alphas.length - 1]).toBe(1);
+      return alphas;
+    };
+    const mid = sample(1000 + GEO_TRAIL_MS / 2);
+    const late = sample(1000 + GEO_TRAIL_MS * 0.9);
+    expect(mid[0]).toBeCloseTo(0.5, 5);
+    expect(late[0]).toBeCloseTo(0.1, 5);
+  });
+
+  it('менше 2 точок — не малюється (порожній хвіст); туман: без спрайтів/тексту', () => {
+    const a = makeGeoTrailAnim([{ x: 1, y: 1 }]);
+    a.start = 1000;
+    const s = animCtx();
+    drawAnimFrame(s.ctx, a, 1100, 48, 0, 768, 384);
+    expect(s.calls.length).toBe(0);
+    // з точками: лише лінія — без позначок НЛО
+    const b = makeGeoTrailAnim([
+      { x: 0, y: 0 },
+      { x: 1, y: 0 },
+    ]);
+    b.start = 1000;
+    const s2 = animCtx();
+    drawAnimFrame(s2.ctx, b, 1100, 48, 0, 768, 384);
+    expect(s2.calls.some((c) => c.m === 'fillText' || c.m === 'drawImage' || c.m === 'ellipse')).toBe(false);
+  });
+
+  it('детермінізм (ADR-0003): той самий вхід → той самий потік викликів і присвоєнь', () => {
+    const draw = (): { calls: Call[]; sets: { p: string; v: unknown }[] } => {
+      const s = animCtx();
+      drawAnimFrame(
+        s.ctx,
+        (() => {
+          const a = makeGeoTrailAnim([
+            { x: 1, y: 1 },
+            { x: 2, y: 2 },
+            { x: 3, y: 1 },
+          ]);
+          a.start = 1000;
+          return a;
+        })(),
+        1100,
+        48,
+        0,
+        768,
+        384
+      );
+      return { calls: s.calls, sets: s.sets };
+    };
+    expect(draw()).toEqual(draw());
   });
 });

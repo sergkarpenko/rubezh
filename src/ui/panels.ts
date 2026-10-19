@@ -80,7 +80,7 @@ export function createPanels(deps: PanelsDeps): Panels {
 
     // П12.7 (ADR-0064): терен геосцени — двотоновий синьо-чорний з неоновою
     // сіткою (ціан «Рубіжу»); кадр малюється з нуля (урок П6.6).
-    drawGeoTerrain(ctx, cv.width, cv.height, GCELL);
+    drawGeoTerrain(ctx, cv.width, cv.height, GCELL, party.seed, party.geo.base);
 
     const b = party.geo.base;
     ctx.setLineDash([5, 4]);
@@ -109,9 +109,10 @@ export function createPanels(deps: PanelsDeps): Panels {
     }
 
     // П6.9 (ADR-0029): анімаційний шар геосцени — пульс радара поверх статичного
-    // кадру (кадр малюється з нуля — clearRect вище; урок П6.6).
+    // кадру (кадр малюється з нуля — clearRect вище; урок П6.6). П14.5: cw/ch —
+    // розміри buffer'а (скан-зона замикається по X — зсунуті копії; клімп хвоста).
     const ga = deps.activeGeoAnim();
-    if (ga !== null) drawAnimFrame(ctx, ga, deps.geoAnimNow(), GCELL, 0);
+    if (ga !== null) drawAnimFrame(ctx, ga, deps.geoAnimNow(), GCELL, 0, cv.width, cv.height);
 
     el('clock').textContent = geoClock(party.geo);
     const busy = deps.inBattle();

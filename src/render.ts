@@ -17,6 +17,8 @@
 import {
   BOOM_PARTICLES,
   FOG_EDGE,
+  GEO_CELL_A,
+  GEO_CELL_B,
   GEO_GRID_COLOR,
   GRID_COLOR,
   NIGHT_BG,
@@ -24,18 +26,20 @@ import {
   animT,
   boomParticleOffset,
   cellHash,
-  geoCellTone,
   geoCityLights,
   geoCoastSide,
   geoIsLand,
   hasVisibleNeighbor,
+  makeGeoLayout,
   moveAnimPos,
   terrainShade,
   visibleKeys,
   type Anim,
   type TerrainCell,
 } from './core/render-core';
-import { grenadeZone } from './core/combat';
+// П14.5: розмір світу для замикання скан-зони по X (куля; як RADAR_RANGE у geo.ts).
+import { WORLD_W } from './core/geo';
+import { grenadeZone, type Vec2 } from './core/combat';
 import {
   ALIEN_STAND,
   ALIEN_STEP,
@@ -499,19 +503,23 @@ export function drawNightTerrain(ctx: CanvasRenderingContext2D, w: number, h: nu
 }
 
 // --- П12.7 (ADR-0064): терен геосцени — двотоновий із неоновою сіткою ---
-// П14.5 (ADR-0072): геосцена 2.0 — тайли з ассета (розкладка GEO_LAND_ROWS
-// у render-core: суша/океан за авторським масивом, варіант суші A–D — хеш
-// клітинки, без RNG; узбережжя — тайл переходу з фліпом/поворотом за маскою
-// сусідства суша/океан (geoCoastSide, детерміновано); вогні міст — рідкий
-// альфа-оверлей за хешем). Фолбек без ассета — чинні два тони geoCellTone
-// (обов'язковий; тести від ассета не залежать).
-// Палітра і тон — чиста логіка src/core/render-core.ts; тут — лише
+// П14.5 (ADR-0072, ітерація 3): геосцена 2.0 — тайли з ассета над розкладом
+// континентів-блобів (makeGeoLayout у render-core: суша/океан за сідом
+// партії + острів вузла, без geo.rng; варіант суші A–D — хеш клітинки;
+// узбережжя — тайл переходу з фліпом/поворотом за маскою сусідства
+// суша/океан (geoCoastSide, детерміновано); вогні міст — рідкий
+// альфа-оверлей за хешем). Фолбек без ассета — ТОЙ САМИЙ розклад блобів
+// двома тонами (суша/океан; поведінка не залежає від ассета, тести від
+// ассета не залежать).
+// Палітра і розклад — чиста логіка src/core/render-core.ts; тут — лише
 // Canvas-виклики. Кадр еквівалентний малюванню з нуля (патерн renderGeo,
 // урок П6.6). Чиста функція без DOM-стану; викликається з src/ui/panels.ts.
-export function drawGeoTerrain(ctx: CanvasRenderingContext2D, w: number, h: number, cell: number): void {
+export function drawGeoTerrain(ctx: CanvasRenderingContext2D, w: number, h: number, cell: number, seed: number, base: Vec2): void {
   // фон на весь buffer — краї канви не блимають
   ctx.fillStyle = NIGHT_BG;
   ctx.fillRect(0, 0, w, h);
+  // розклад континентів — один на кадр (чиста функція від сіда і бази)
+  const layout = makeGeoLayout(seed, base);
   const cols = Math.ceil(w / cell);
   const rows = Math.ceil(h / cell);
   if (geoTilesImg !== null) {
@@ -522,11 +530,11 @@ export function drawGeoTerrain(ctx: CanvasRenderingContext2D, w: number, h: numb
       for (let x = 0; x < cols; x++) {
         const px = x * cell;
         const py = y * cell;
-        if (!geoIsLand(x, y)) {
+        if (!geoIsLand(layout, x, y)) {
           ctx.drawImage(geoTilesImg, GEO_TILE_OCEAN * GEO_TILE, 0, GEO_TILE, GEO_TILE, px, py, cell, cell);
           continue;
         }
-        const side = geoCoastSide(x, y);
+        const side = geoCoastSide(layout, x, y);
         if (side === null) {
           // внутрішня суша: варіант A–D за хешем координат (без RNG)
           const col = GEO_TILE_LAND_A + (cellHash(x, y) % GEO_TILE_LAND_VARIANTS);
@@ -553,15 +561,16 @@ export function drawGeoTerrain(ctx: CanvasRenderingContext2D, w: number, h: numb
     // вогні міст: альфа-оверлей на суші за хешем (рідкий декор, без RNG)
     for (let y = 0; y < rows; y++) {
       for (let x = 0; x < cols; x++) {
-        if (!geoCityLights(x, y)) continue;
+        if (!geoCityLights(layout, x, y)) continue;
         ctx.drawImage(geoTilesImg, GEO_TILE_CITY * GEO_TILE, 0, GEO_TILE, GEO_TILE, x * cell, y * cell, cell, cell);
       }
     }
   } else {
-    // фолбек: два тони за хешем координат, мозаїка стабільна між кадрами
+    // фолбек: ТОЙ САМИЙ розклад блобів двома тонами — суша GEO_CELL_B,
+    // океан GEO_CELL_A (мапа читається і без ассета; behavior не залежить від нього)
     for (let y = 0; y < rows; y++) {
       for (let x = 0; x < cols; x++) {
-        ctx.fillStyle = geoCellTone(x, y);
+        ctx.fillStyle = geoIsLand(layout, x, y) ? GEO_CELL_B : GEO_CELL_A;
         ctx.fillRect(x * cell, y * cell, cell, cell);
       }
     }
@@ -660,7 +669,9 @@ const DNUM_RISE = 16; // підйом числа за тривалість ан�
 // при влучанні друга фаза — спалах-кільце; death — згасання силуета; owflash —
 // пульсуюче кільце дозору; gpulse — пульс радара геосцени; boom (П14.4) —
 // вибух гранати: зона «епіцентр + хрест», спалах-кільце і розліт частинок;
-// dnum (П14.4) — плаваюче число пошкодження/зцілення над ціллю. Усі
+// dnum (П14.4) — плаваюче число пошкодження/зцілення над ціллю; gscan (П14.5)
+// — скан-радар 2.0: сектор-розгортка + кільця, що гаснуть; gtrail (П14.5) —
+// хвіст перехоплення, що згасає. Усі
 // координати — у межах клітинок (урок П6.6); cw/ch — розміри buffer'а канви
 // (клімп частинок і тексту у межі; за замовчуванням — без обмеження).
 export function drawAnimFrame(
@@ -682,6 +693,75 @@ export function drawAnimFrame(
     ctx.beginPath();
     ctx.arc(a.cx, a.cy, 2 + (a.maxR - 2) * t, 0, Math.PI * 2);
     ctx.stroke();
+    ctx.lineWidth = 1;
+    ctx.globalAlpha = 1;
+    return;
+  }
+  // П14.5 (ADR-0072/0064): скан-радар 2.0 — розвиток пульсу П6.9. У зоні
+  // виявлення (замикання по X — світ циліндричний): сектор-розгортка робить
+  // повний оберт за тривалість і гасне; два кільця розходяться від бази до
+  // краю зони і гаснуть. Свічення скидається; невиявлені НЛО не підсвічуються
+  // (туман — ADR-0006/0032). Копії зони за межами канви з'являються з краю
+  // (куля по X): малюємо зсунуті копії, що перетинають канву (cw — ширина).
+  if (a.kind === 'gscan') {
+    const fade = 1 - t;
+    const offsets = [0, -WORLD_W * cell, WORLD_W * cell].filter(
+      (o) => o === 0 || (cw !== Number.POSITIVE_INFINITY && a.cx + o - a.maxR < cw && a.cx + o + a.maxR > 0)
+    );
+    for (const o of offsets) {
+      const cx = a.cx + o;
+      // кільце, що розходиться (спадкоємець пульсу П6.9)
+      ctx.globalAlpha = 0.6 * fade;
+      ctx.strokeStyle = RADAR_PULSE;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(cx, a.cy, 2 + (a.maxR - 2) * t, 0, Math.PI * 2);
+      ctx.stroke();
+      // друге кільце — ближче до бази, слабше (глибина розгортки)
+      ctx.globalAlpha = 0.35 * fade;
+      ctx.beginPath();
+      ctx.arc(cx, a.cy, 2 + (a.maxR - 2) * t * 0.55, 0, Math.PI * 2);
+      ctx.stroke();
+      // сектор-розгортка: клин ~30°, що обертається на повний оберт за тривалість
+      const ang = -Math.PI / 2 + t * Math.PI * 2;
+      ctx.globalAlpha = 0.12 * fade;
+      ctx.fillStyle = RADAR_PULSE;
+      ctx.beginPath();
+      ctx.moveTo(cx, a.cy);
+      ctx.arc(cx, a.cy, a.maxR, ang - Math.PI / 6, ang);
+      ctx.closePath();
+      ctx.fill();
+      // передній край розгортки — неоновий промінь (циан «Рубіжу», ADR-0064)
+      ctx.globalAlpha = 0.5 * fade;
+      ctx.beginPath();
+      ctx.moveTo(cx, a.cy);
+      ctx.lineTo(cx + Math.cos(ang) * a.maxR, a.cy + Math.sin(ang) * a.maxR);
+      ctx.stroke();
+    }
+    ctx.lineWidth = 1;
+    ctx.globalAlpha = 1;
+    return;
+  }
+  // П14.5: хвіст траєкторії перехоплення — лінія останніх позицій винищувача
+  // (клітинки → px), згасає за прогресом; ціан «Рубіжу» з неоновим свіченням
+  // (свічення скидається); точки клімпляться у межі канви. Лише ≥ 2 точки.
+  if (a.kind === 'gtrail') {
+    if (a.points.length < 2) return;
+    ctx.globalAlpha = 1 - t;
+    ctx.strokeStyle = TRACER_PLAYER;
+    ctx.lineWidth = 2;
+    ctx.shadowColor = TRACER_PLAYER; // П6.13: неонове свічення хвоста
+    ctx.shadowBlur = TRACER_GLOW;
+    ctx.beginPath();
+    for (let i = 0; i < a.points.length; i++) {
+      const p = a.points[i]!;
+      const px = Math.min(Math.max(p.x * cell + cell / 2, 0), cw - 1);
+      const py = Math.min(Math.max(p.y * cell + cell / 2, 0), ch - 1);
+      if (i === 0) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    }
+    ctx.stroke();
+    ctx.shadowBlur = 0;
     ctx.lineWidth = 1;
     ctx.globalAlpha = 1;
     return;
