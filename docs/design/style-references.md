@@ -93,4 +93,17 @@ Sci-fi UI panel frame ornament, 3D beveled metal edges with neon cyan (#00E5FF) 
 **5. Favicon (опційно, ігровий трек — плоский для читабельності в 32×32):**
 Simple game favicon: angular dark shield with a neon cyan rift crack, flat vector style, minimal, readable at 32×32 pixels, no text.
 
+## Фаза 14 — ігровий шар: промпти генерації (ADR-0072, П14.1)
 
+**Формат спрайт-атласів:** прозоре тло, PNG; кадр ≥ 96×96 (≥ 3× від чинного 32px — читабельність після nearest-neighbor масштабування); сітка атласу рівна, без проміжків між кадрами; малювання — nearest-neighbor. Робочий цикл — той самий, що й для ассетів оформлення (вище): генерація у Work-сесії → вибір власника → бінарний коміт Vibe Code → прев’ю гілки ДО мержу (ADR-0060). Числа (розмір кадру, крок сітки, масштаб) узгоджуються ДО прев’ю (урок iter-13.5).
+
+**6. Атлас юнітів бою (ігровий трек, плоский піксель-арт):**
+Sprite sheet, flat pixel art, two rows of five frames each on a fully transparent background. Row 1: a hooded human operative with a glowing neon cyan (#00E5FF) visor and a white plasma rifle — frames: idle stance, two-frame walk cycle (left foot, right foot), firing pose with muzzle flash, death collapse. Row 2: a purple (#A32EFF) rift demon with glowing pink (#FFD9F2) energy cracks and magenta (#FF2E88) blade arms — the same five frames: idle, two-frame walk cycle, attack pose with energy flash, death dissolve. Consistent scale and perspective across all frames, top-down three-quarter view, limited palette, crisp pixel edges, grid-aligned frames, no text, no watermark.
+
+**7. Тайли терену бою (ігровий трек):**
+Tileset for a top-down tactical grid, flat pixel art on a dark floor: four variants of dark techno-floor tiles with subtle circuit traces, one wall block with neon cyan (#00E5FF) edge highlights, and three small decor sprites (rubble, cracked pipe, glowing vent). Seamless tileable edges, consistent lighting, limited palette matching the game units, crisp pixel edges, no text, no watermark.
+
+**8. Тайли геосцени (ігровий трек):**
+Tileset for a top-down tactical world map, flat pixel art: a dark ocean tile (#0A0A12) with subtle wave pixels, land plate tiles with angular continent plates, a coastline tile with neon cyan (#00E5FF) glow, small amber (#FFB347) city lights dots, and a radar tower sprite with a cyan blinking beacon. Seamless tiling, limited palette, crisp pixel edges, no text, no watermark.
+
+**Примітка (П14.7).** Фон стартового екрана — два кандидати: генерація за промптом 3 (вище, трек оформлення) або суцільний неон кодом; вибір — за прев’ю разом із композицією редизайну.
