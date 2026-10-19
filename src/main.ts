@@ -41,7 +41,7 @@ import { createInput } from './ui/input';
 // П6.8 (ADR-0029): анімаційний рушій — черга + rAF лише під час активних анімацій.
 // пR.3 (ADR-0038): рушій і фабрики анімацій — чиста логіка src/core/render-core.ts;
 // фабрика offscreen-канвасів — реєструється в шарі відображення (src/render.ts).
-import { initPixelSprites } from './render';
+import { initPixelSprites, initUnitAtlas } from './render';
 import { AnimEngine, makeGeoPulseAnim, makeTracerAnim, type Anim } from './core/render-core';
 // П5.3 (ADR-0026): партія і слоти збереження — із чистого ядра save.ts.
 // П12.2 (ADR-0065): serializeParty — ще й контрольна точка «незбережених
@@ -66,6 +66,19 @@ initPixelSprites((w: number, h: number) => {
   c.width = w;
   c.height = h;
   return c;
+});
+
+// П14.2 (ADR-0072): атлас спрайтів юнітів бою — ліниве завантаження (Image +
+// onload → прапорець завантаженості в render.ts). До завантаження і при
+// недоступності ассета (headless/офлайн) юніти малюються матрицями ADR-0031 —
+// обов'язковий фолбек, тести від ассета не залежать; без rAF-анімацій
+// (idle → 0 перерисовок, ADR-0029): наступний природний рендер підхопить атлас.
+initUnitAtlas((url, onLoad) => {
+  const probe = new Image();
+  probe.onload = () => {
+    onLoad(probe);
+  };
+  probe.src = url;
 });
 
 // П11.7 (ADR-0059): звуковий шар — суто відображення: не чіпає стан і

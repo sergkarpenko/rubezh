@@ -185,6 +185,18 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
       if (activeAnim.side === 'player' || vis.has(cellK)) movingId = activeAnim.unitId;
     }
 
+    // П14.2 (ADR-0072): поза «вогонь» — стрілець активного трасера (кадр з
+    // атласа за станом юніта, без RNG; атлас не готовий — матриці, та сама
+    // логіка вибору). Туман: невидимий стрілець у статичному проході й так
+    // пропускається — поза на нього нічого не розкриває (ADR-0006).
+    let firingId: string | null = null;
+    if (activeAnim !== null && activeAnim.kind === 'tracer') {
+      const shooter = st.units.find(
+        (u) => u.alive && u.side === activeAnim.side && u.pos.x === activeAnim.from.x && u.pos.y === activeAnim.from.y
+      );
+      if (shooter !== undefined) firingId = shooter.id;
+    }
+
     // П6.13: нічна палітра. Легка тряска канвасу при влучанні — зсув усього кадру
     // на фазі спалаху трасера (через AnimEngine — лише в кадрах анімації); фон
     // канви збігається з CSS-тлом, оголений край непомітний. Туман: зсув
@@ -261,6 +273,7 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
         hp: u.hp,
         selected: u.id === ui.selectedId,
         overwatch: u.overwatch,
+        pose: u.id === firingId ? 'fire' : undefined, // П14.2 (ADR-0072)
       });
     }
 
