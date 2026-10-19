@@ -11,11 +11,18 @@
 // П6.13: нічна палітра — терен (двотоновий, хеш-варіація, без RNG), тонка
 // сітка в проміжках, м'який край туману (сенс туману незмінний).
 // П6.14: обведення валідних цілей і шанс попадання (drawTargetFrame/drawChanceLabel).
+// П14.2 (ADR-0072): атлас спрайтів юнітів бою — вибір кадру за станом юніта
+// (idle/walk/fire/death, чиста функція без RNG), nearest-neighbor 32×32 у
+// BCELL 36, обов'язковий фолбек на матриці ADR-0031 при !loaded (тести від
+// ассета не залежать — завантажувач інжектиться моком).
 // Кадри анімаційного шару (drawAnimFrame) — у src/render.frames.test.ts;
 // чиста логіка рушія — у src/core/render-core.test.ts (ADR-0038).
 
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
+  ATLAS_FRAME,
+  ATLAS_POSE_COL,
+  ATLAS_UNIT,
   CHANCE_LABEL_BG,
   CHANCE_LABEL_TEXT,
   TARGET_FRAME_COLOR,
@@ -27,7 +34,11 @@ import {
   drawSoldierSprite,
   drawTargetFrame,
   drawUfoSprite,
+  drawUnitSprite,
   initPixelSprites,
+  initUnitAtlas,
+  isUnitAtlasReady,
+  unitPose,
   type MakeOffscreen,
 } from './render';
 import { GEO_GRID_COLOR, NIGHT_BG, cellHash, geoCellTone, type TerrainCell } from './core/render-core';
@@ -127,9 +138,12 @@ function rasterFactory(): { make: MakeOffscreen; canvases: RasterCanvas[] } {
 }
 
 // Кожен тест малює через свіжий мок-фабрик: initPixelSprites скидає кеш
-// розгорнутих спрайтів (ліниво + кеш — ADR-0031).
+// розгорнутих спрайтів (ліниво + кеш — ADR-0031). П14.2 (ADR-0072): атлас
+// юнітів скидається у фолбек — завантажувач, що не кликається (тести від
+// ассета не залежать; свої моки атласний describe ставить локально).
 beforeEach(() => {
   initPixelSprites(rasterFactory().make);
+  initUnitAtlas(() => {});
 });
 
 // Піксельні межі всіх точок, яких торкається малювання: arc — центр ± r,
@@ -693,5 +707,93 @@ describe('П6.14: шанс попадання біля клітинки (drawCha
     const x = Math.min(19 * 26 + 1, 520 - w - 1);
     expect(s.ops).toContainEqual({ m: 'fillRect', args: [x, 26 + 1, w, 13] }); // під клітинкою (y=0)
     expect(x + w).toBeLessThanOrEqual(520);
+  });
+});
+
+describe('П14.2 (ADR-0072): атлас спрайтів юнітів — кадри за станом, фолбек', () => {
+  // Мок-атлас: завантажувач кликає onLoad синхронно з фіктивним джерелом.
+  const atlasImg = { width: 480, height: 192 } as unknown as CanvasImageSource;
+  const readyAtlas = (): void => {
+    initUnitAtlas((_url, onLoad) => {
+      onLoad(atlasImg);
+    });
+  };
+
+  it('прапорець завантаженості: фолбек до onload, готовий — після', () => {
+    expect(isUnitAtlasReady()).toBe(false);
+    readyAtlas();
+    expect(isUnitAtlasReady()).toBe(true);
+  });
+
+  it('поза за станом юніта — чиста функція (без RNG, ADR-0003): idle/walk за кадром ядра, вогонь і смерть мають пріоритет', () => {
+    expect(unitPose({})).toBe('idle');
+    expect(unitPose({ frame: 0 })).toBe('idle');
+    expect(unitPose({ frame: 1 })).toBe('walk');
+    expect(unitPose({ frame: 1, pose: 'fire' })).toBe('fire');
+    expect(unitPose({ frame: 1, pose: 'death' })).toBe('death');
+  });
+
+  it('атлас готовий: кадр 96×96 → 32×32 у клітинці 36, nearest-neighbor, за позою і стороною', () => {
+    readyAtlas();
+    const cases = [
+      { side: 'player' as const, pose: undefined, col: ATLAS_POSE_COL.idle, row: 0 },
+      { side: 'player' as const, pose: 'fire' as const, col: ATLAS_POSE_COL.fire, row: 0 },
+      { side: 'player' as const, pose: 'death' as const, col: ATLAS_POSE_COL.death, row: 0 },
+      { side: 'alien' as const, pose: undefined, col: ATLAS_POSE_COL.idle, row: 1 },
+      { side: 'alien' as const, pose: 'fire' as const, col: ATLAS_POSE_COL.fire, row: 1 },
+      { side: 'alien' as const, pose: 'death' as const, col: ATLAS_POSE_COL.death, row: 1 },
+    ];
+    for (const c of cases) {
+      const s = animCtx();
+      drawUnitSprite(s.ctx, { ...soldier(), side: c.side, pose: c.pose });
+      const d = s.calls.find((call) => call.m === 'drawImage');
+      expect(d, `side=${c.side} pose=${c.pose ?? 'idle'}`).toBeDefined();
+      const a = d!.args as number[];
+      expect(a[0]).toBe(atlasImg); // джерело — атлас
+      expect(a[1]).toBe(c.col * ATLAS_FRAME); // колонка кадру
+      expect(a[2]).toBe(c.row * ATLAS_FRAME); // рядок: 0 — оперативник, 1 — демон Розриву
+      expect(a[3]).toBe(ATLAS_FRAME);
+      expect(a[4]).toBe(ATLAS_FRAME);
+      expect(a[5]).toBe(CX - ATLAS_UNIT / 2); // Math.round(18 − 16) = 2
+      expect(a[6]).toBe(CY - ATLAS_UNIT / 2);
+      expect(a[7]).toBe(ATLAS_UNIT); // 32×32 у клітинці BCELL 36 (П14.2)
+      expect(a[8]).toBe(ATLAS_UNIT);
+      expect(a[5] + a[7]).toBeLessThanOrEqual(CELL); // межі клітинки (урок П6.6)
+      expect(a[6] + a[8]).toBeLessThanOrEqual(CELL);
+      expect(s.sets.some((x) => x.p === 'imageSmoothingEnabled' && x.v === false)).toBe(true);
+    }
+  });
+
+  it('кадр ходьби з атласа: frame 1 ядра → walk1 (кол. 1); стій — idle (кол. 0)', () => {
+    readyAtlas();
+    const stand = animCtx();
+    drawUnitSprite(stand.ctx, soldier());
+    const step = animCtx();
+    drawUnitSprite(step.ctx, soldier({ frame: 1 }));
+    expect((stand.calls.find((c) => c.m === 'drawImage')!.args as number[])[1]).toBe(ATLAS_POSE_COL.idle * ATLAS_FRAME);
+    expect((step.calls.find((c) => c.m === 'drawImage')!.args as number[])[1]).toBe(ATLAS_POSE_COL.walk * ATLAS_FRAME);
+  });
+
+  it('фолбек при !loaded: матриці ADR-0031 (drawImage з offscreen-канваса, 5 аргументів), маркери на місці', () => {
+    const rf = rasterFactory();
+    initPixelSprites(rf.make);
+    expect(isUnitAtlasReady()).toBe(false); // атлас не завантажився — headless/офлайн
+    const { ctx, calls } = mockCtx();
+    drawUnitSprite(ctx, soldier({ hp: 7, selected: true, overwatch: true }));
+    const d = calls.find((c) => c.m === 'drawImage');
+    expect(d).toBeDefined();
+    expect(d!.args[0]).toBe(rf.canvases[0]); // розгорнута матриця, не атлас
+    expect(d!.args).toHaveLength(5); // (img, x, y, w, h) — растрова гілка
+    expect(calls.some((c) => c.m === 'fillText' && c.args[0] === '7')).toBe(true); // HP читається
+    expect(rf.canvases.length).toBeGreaterThan(0);
+  });
+
+  it('детермінізм: той самий вхід → той самий кадр атласа (без RNG)', () => {
+    readyAtlas();
+    const a = animCtx();
+    const b = animCtx();
+    drawUnitSprite(a.ctx, soldier({ frame: 1, pose: 'fire' }));
+    drawUnitSprite(b.ctx, soldier({ frame: 1, pose: 'fire' }));
+    expect(a.calls).toEqual(b.calls);
   });
 });

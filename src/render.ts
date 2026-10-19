@@ -48,6 +48,7 @@ import {
   type UnitSprite,
   type UfoSprite,
 } from './core/sprites';
+import unitAtlasUrl from '../assets/units-atlas.png';
 
 const HP_TEXT = '#0b0e15';
 const SELECT_RING = '#9adfff'; // П12.7: рамка вибору — гама ціану «Рубіжу» (ADR-0064)
@@ -117,6 +118,81 @@ function drawPixelSprite(ctx: CanvasRenderingContext2D, def: PixelSprite, cx: nu
   ctx.drawImage(s.img, Math.round(cx - w / 2), Math.round(cy - h / 2), w, h);
 }
 
+// --- П14.2 (ADR-0072): атлас спрайтів юнітів бою — згенеровані кадри ---
+// Джерело — assets/units-atlas.png (480×192): сітка 5×2 кадрів 96×96, порядок
+// колонок idle → walk1 → walk2 → fire → death; ряд 0 — оперативник, ряд 1 —
+// демон Розриву. Джерело генерації містило один кадр ходьби — кол. 2 (walk2)
+// — дубль walk1 у ассеті; вибір кадру завжди idle/walk/fire/death (константи
+// підлаштовано під фактичне зображення, план — джерело правди чисел).
+// Відображення 32×32 у BCELL 36, nearest-neighbor (ADR-0068) — той самий
+// слід, що й матриці 16×16 @2× (клік-математика і дужки вибору без змін).
+export const ATLAS_FRAME = 96; // кадр атласу, px
+export const ATLAS_COLS = 5; // idle, walk1, walk2, fire, death
+export const ATLAS_UNIT = 32; // сторона відображення у клітинці BCELL 36
+
+export type UnitPose = 'idle' | 'walk' | 'fire' | 'death';
+
+// Колонка атласа за позою: walk2 (кол. 2) — дубль walk1, окремо не обирається.
+export const ATLAS_POSE_COL: Readonly<Record<UnitPose, number>> = {
+  idle: 0,
+  walk: 1,
+  fire: 3,
+  death: 4,
+};
+
+// Юніт бою з погляду шару відображення: поза вогонь/смерть — надбудова над
+// UnitSprite ядра (ядровий frame 0/1 лишається семантикою стій/крок, ADR-0031).
+export interface UnitSpriteView extends UnitSprite {
+  pose?: 'fire' | 'death';
+}
+
+// Поза за станом юніта — чиста функція, детермінована (без RNG, ADR-0003):
+// вогонь/смерть мають пріоритет (подієві кадри), інакше кадр ходьби ядра.
+export function unitPose(u: Pick<UnitSpriteView, 'frame' | 'pose'>): UnitPose {
+  if (u.pose === 'fire' || u.pose === 'death') return u.pose;
+  return (u.frame ?? 0) === 1 ? 'walk' : 'idle';
+}
+
+// Ліниве завантаження атласа (ADR-0072 п.3): фабрика-завантажувач інжектиться
+// (браузер: Image + onload; тести: мок, синхронний або «ніколи») — render.ts
+// не знає DOM-глобалів (той самий патерн, що initPixelSprites). Невдача
+// завантаження — тихий перехід на матриці ADR-0031 (onload не кликнувся —
+// прапорець лишається зайнятим матрицями, тести від ассета не залежать).
+export type LoadUnitAtlas = (url: string, onLoad: (img: CanvasImageSource) => void) => void;
+let unitAtlasImg: CanvasImageSource | null = null;
+
+// Реєстрація завантажувача (і скидання стану — як initPixelSprites: кожен
+// тест ставить свій мок перед першим рендером).
+export function initUnitAtlas(load: LoadUnitAtlas): void {
+  unitAtlasImg = null;
+  load(unitAtlasUrl, (img) => {
+    unitAtlasImg = img;
+  });
+}
+
+// Прапорець завантаженості (готовність атласа; фолбек — !isUnitAtlasReady).
+export function isUnitAtlasReady(): boolean {
+  return unitAtlasImg !== null;
+}
+
+// Кадр з атласа: 96×96 → 32×32 у клітинці, цілі пікселі (Math.round),
+// згладжування вимкнене — крайові пікселі без розмиття (ADR-0068).
+function drawAtlasUnit(ctx: CanvasRenderingContext2D, u: UnitSpriteView, row: 0 | 1, img: CanvasImageSource): void {
+  const col = ATLAS_POSE_COL[unitPose(u)];
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(
+    img,
+    col * ATLAS_FRAME,
+    row * ATLAS_FRAME,
+    ATLAS_FRAME,
+    ATLAS_FRAME,
+    Math.round(u.cx - ATLAS_UNIT / 2),
+    Math.round(u.cy - ATLAS_UNIT / 2),
+    ATLAS_UNIT,
+    ATLAS_UNIT
+  );
+}
+
 function drawOverwatchMarker(ctx: CanvasRenderingContext2D, u: UnitSprite): void {
   const off = u.side === 'player' ? -12 : 12; // кути клітинки: згори-ліворуч / знизу-праворуч (П13.5: BCELL 36)
   drawPixelSprite(ctx, OW_BOLT, u.cx + off, u.cy + off, SPRITE_SCALE);
@@ -155,22 +231,25 @@ function drawHpText(ctx: CanvasRenderingContext2D, text: string, x: number, y: n
   ctx.fillText(text, x, y);
 }
 
-export function drawSoldierSprite(ctx: CanvasRenderingContext2D, u: UnitSprite): void {
-  drawPixelSprite(ctx, (u.frame ?? 0) === 1 ? SOLDIER_STEP : SOLDIER_STAND, u.cx, u.cy, SPRITE_SCALE);
+export function drawSoldierSprite(ctx: CanvasRenderingContext2D, u: UnitSpriteView): void {
+  // П14.2 (ADR-0072): атлас готовий — кадр з нього; інакше матриці ADR-0031.
+  if (unitAtlasImg !== null) drawAtlasUnit(ctx, u, 0, unitAtlasImg);
+  else drawPixelSprite(ctx, (u.frame ?? 0) === 1 ? SOLDIER_STEP : SOLDIER_STAND, u.cx, u.cy, SPRITE_SCALE);
   if (u.overwatch) drawOverwatchMarker(ctx, u);
   drawHpText(ctx, String(u.hp), u.cx, u.cy);
   if (u.selected) drawSelectionBrackets(ctx, u.cx, u.cy);
 }
 
-export function drawAlienSprite(ctx: CanvasRenderingContext2D, u: UnitSprite): void {
-  drawPixelSprite(ctx, (u.frame ?? 0) === 1 ? ALIEN_STEP : ALIEN_STAND, u.cx, u.cy, SPRITE_SCALE);
+export function drawAlienSprite(ctx: CanvasRenderingContext2D, u: UnitSpriteView): void {
+  if (unitAtlasImg !== null) drawAtlasUnit(ctx, u, 1, unitAtlasImg);
+  else drawPixelSprite(ctx, (u.frame ?? 0) === 1 ? ALIEN_STEP : ALIEN_STAND, u.cx, u.cy, SPRITE_SCALE);
   if (u.overwatch) drawOverwatchMarker(ctx, u);
   drawHpText(ctx, String(u.hp), u.cx, u.cy);
   if (u.selected) drawSelectionBrackets(ctx, u.cx, u.cy);
 }
 
 // Диспетчер за стороною — єдина точка виклику з renderBattle.
-export function drawUnitSprite(ctx: CanvasRenderingContext2D, u: UnitSprite): void {
+export function drawUnitSprite(ctx: CanvasRenderingContext2D, u: UnitSpriteView): void {
   if (u.side === 'player') drawSoldierSprite(ctx, u);
   else drawAlienSprite(ctx, u);
 }
@@ -412,6 +491,7 @@ export function drawAnimFrame(ctx: CanvasRenderingContext2D, a: Anim, now: numbe
       hp: 0,
       selected: false,
       overwatch: false,
+      pose: 'death', // П14.2 (ADR-0072): кадр смерті з атласа; фолбек — матриця
     });
     ctx.globalAlpha = 1;
     return;
