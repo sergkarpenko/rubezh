@@ -42,7 +42,7 @@ import { createInput } from './ui/input';
 // пR.3 (ADR-0038): рушій і фабрики анімацій — чиста логіка src/core/render-core.ts;
 // фабрика offscreen-канвасів — реєструється в шарі відображення (src/render.ts).
 import { initPixelSprites, initGeoTiles, initTerrainAtlas, initUnitAtlas } from './render';
-import { AnimEngine, makeGeoPulseAnim, makeTracerAnim, type Anim } from './core/render-core';
+import { AnimEngine, geoTrailPoints, makeGeoScanAnim, makeGeoTrailAnim, makeTracerAnim, type Anim } from './core/render-core';
 // П5.3 (ADR-0026): партія і слоти збереження — із чистого ядра save.ts.
 // П12.2 (ADR-0065): serializeParty — ще й контрольна точка «незбережених
 // змін» для підтвердження виходу (той самий детермінований стан, без дублів).
@@ -331,8 +331,23 @@ function unitName(id: string): string {
 // блакит (колір гравця), трасер НЛО — розпечений оранж (колір прибульців); куля летить
 // між поточними позиціями винищувача і НЛО у клітинках геосцени (GCELL задає drawAnimFrame).
 // Промахи не анімуємо (лише влучання — спалах удару), відступ/ремонт — без анімацій.
+// П14.5: intercept_move → хвіст траєкторії винищувача (лінія останніх позицій
+// з подій intercept_move у логу — лог лише читається, geo.rng не витягується);
+// дублікат хвоста в черзі (кроки одного тіку дають однакові точки) — coalesce.
 function interceptAnims(e: InterceptEvent): Anim[] {
   if (party === null) return []; // П12.2: події геосцени — лише в активній грі
+  if (e.type === 'intercept_move') {
+    const points = geoTrailPoints(party.geo.log);
+    const queued = geoAnim.queued();
+    const last = queued[queued.length - 1];
+    const same =
+      last !== undefined &&
+      last.kind === 'gtrail' &&
+      last.points.length === points.length &&
+      last.points.every((p, i) => p.x === points[i]?.x && p.y === points[i]?.y);
+    if (same) return [];
+    return [makeGeoTrailAnim(points)];
+  }
   if (e.type !== 'intercept_round' || e.choice === 'відступ') return [];
   const p = party;
   const ufo = p.geo.ufos.find((u) => u.id === p.intercept.activeUfoId);
@@ -365,11 +380,12 @@ function partyTick(): void {
   // П7.4 (ADR-0032): погоня й ремонт живуть тіками геосцени разом з партією
   interceptTick(p.intercept, p.geo);
   repairTick(p.intercept, p.geo);
-  // П6.9 (ADR-0029): пульс радара на тік часу — серія тіків (доба) дає один
-  // пульс (coalesce за busy), idle → 0 перерисовок. Лише візуальний ефект.
+  // П6.9 (ADR-0029): скан-радар на тік часу — серія тіків (доба) дає один
+  // цикл розгортки (coalesce за busy), idle → 0 перерисовок. Лише візуальний
+  // ефект (П14.5: сектор + кільця замість кільця П6.9; туман не розкривається).
   if (hasRaf && !geoAnim.busy) {
     const b = p.geo.base;
-    geoAnim.push(makeGeoPulseAnim(b.x * GCELL + GCELL / 2, b.y * GCELL + GCELL / 2, (RADAR_RANGE + 0.5) * GCELL));
+    geoAnim.push(makeGeoScanAnim(b.x * GCELL + GCELL / 2, b.y * GCELL + GCELL / 2, (RADAR_RANGE + 0.5) * GCELL));
   }
   if (!gameOver && isBankrupt(p.econ, p.roster, p.campaign.preset)) {
     gameOver = true;

@@ -7,9 +7,9 @@
 // (src/render.ts), планувальник кадрів ін'єктується викликачем.
 
 import type { GameEvent, Side, Unit, Vec2 } from './combat';
-// П14.5: розкладка геосцени 16×8 читає розміри світу з geo.ts (лише
-// константи — ядро не змінюється, ADR-0002).
-import { WORLD_H, WORLD_W } from './geo';
+// П14.5: розкладка геосцени 16×8 і хвіст перехоплення читають розміри світу та
+// події журналу з geo.ts (лише типи/константи — ядро не змінюється, ADR-0002).
+import { WORLD_H, WORLD_W, type GeoEvent } from './geo';
 
 // --- П6.13 (П12.7, ADR-0064): неонова палітра — синьо-чорна основа, неонові акценти ---
 // Ціан — гравець/«Рубіж», пурпур — Розрив, бурштин — спалахи (ADR-0064).
@@ -158,6 +158,11 @@ export const BOOM_MS = 430; // вибух гранати: спалах-кіль�
 export const DNUM_MS = 350; // плаваюче число пошкодження/зцілення над ціллю
 export const BOOM_PARTICLES = 12; // ≤ 12 одночасних частинок на вибух (П14.4)
 export const BOOM_SHAKE_PX = 4; // тряска вибуху — ×2 від пострілу (SHAKE_PX 2)
+// П14.5 (ADR-0072/0064): скан-радар і хвіст перехоплення — тривалості у
+// чинній шкалі AnimEngine (числа узгоджені власником ДО прев'ю 2026-10-20,
+// урок iter-13.5): розгортка 1200 мс як у пульсу П6.9, хвіст коротший за крок.
+export const GEO_TRAIL_MS = 600; // хвіст перехоплення: згасання лінії останніх позицій
+export const GEO_TRAIL_POINTS = 8; // останніх позицій польоту винищувача (≈4 тіки)
 
 // Один елемент черги анімацій. start — мітка часу початку відтворення
 // (призначає рушій на першому кадрі; null — ще не починалось).
@@ -208,7 +213,7 @@ export interface GeoPulseAnim {
   dur: number;
   start: number | null;
 }
-export type Anim = MoveAnim | TracerAnim | DeathAnim | OwFlashAnim | GeoPulseAnim | BoomAnim | DNumAnim;
+export type Anim = MoveAnim | TracerAnim | DeathAnim | OwFlashAnim | GeoPulseAnim | BoomAnim | DNumAnim | GeoScanAnim | GeoTrailAnim;
 
 // П14.4 (ADR-0072/0064): подієві ефекти 2.0 — вибух гранати і плаваючі
 // числа. Ефекти — суто відображення над фактичним станом (патерн П6.8):
@@ -228,6 +233,29 @@ export interface DNumAnim {
   at: Vec2; // клітинка цілі
   amount: number; // N пошкодження або зцілення
   heal: boolean; // true — «+N» зцілення, false — «-N» пошкодження
+  dur: number;
+  start: number | null;
+}
+// П14.5 (ADR-0072/0064): скан-радар геосцени 2.0 — розвиток пульсу П6.9:
+// у зоні виявлення (RADAR_RANGE 4, Чебишев із замиканням по X від бази)
+// обертається сектор-розгортка і розходяться кільця, що гаснуть. Подієво
+// (пульс у черзі на тік часу, coalesce за busy — патерн П6.9), без вічного
+// циклу (ADR-0029); невиявлені НЛО не підсвічуються (туман — ADR-0006/0032).
+export interface GeoScanAnim {
+  kind: 'gscan';
+  cx: number; // центр бази в пікселях buffer'а
+  cy: number;
+  maxR: number; // радіус зони виявлення в пікселях
+  dur: number;
+  start: number | null;
+}
+// П14.5: хвіст траєкторії перехоплення — лінія останніх позицій польоту
+// винищувача (джерело — події intercept_move у журналі, лог лише читається),
+// що згасає за прогресом; малюється лише в кадрах анімаційного шару
+// (idle → 0, ADR-0029). points — клітинкові координати, старша → новіша.
+export interface GeoTrailAnim {
+  kind: 'gtrail';
+  points: Vec2[];
   dur: number;
   start: number | null;
 }
@@ -267,6 +295,35 @@ export function makeBoomAnim(at: Vec2): BoomAnim {
 }
 export function makeDNumAnim(at: Vec2, amount: number, heal: boolean): DNumAnim {
   return { kind: 'dnum', at: { ...at }, amount, heal, dur: DNUM_MS, start: null };
+}
+// П14.5: фабрики скан-радара і хвоста перехоплення (знімки позицій — після
+// застосування дій ядром; лог — джерело істини, патерн П6.8).
+export function makeGeoScanAnim(cx: number, cy: number, maxR: number): GeoScanAnim {
+  return { kind: 'gscan', cx, cy, maxR, dur: RADAR_PULSE_MS, start: null };
+}
+export function makeGeoTrailAnim(points: Vec2[]): GeoTrailAnim {
+  return { kind: 'gtrail', points: points.map((p) => ({ ...p })), dur: GEO_TRAIL_MS, start: null };
+}
+
+// П14.5: останні позиції польоту винищувача з журналу геосцени — чиста
+// функція (лог лише читається, байт-у-байт не змінюється). Збирає хвіст
+// послідовних подій intercept_move з кінця журналу: хвіст подій після
+// останнього руху (engage/round тощо) пропускається, будь-яка інша подія
+// обриває ланцюжок (свіжий сегмент польоту). points: [from старшої, to...],
+// максимум max останніх позицій (GEO_TRAIL_POINTS), старша → новіша.
+export function geoTrailPoints(log: readonly GeoEvent[], max = GEO_TRAIL_POINTS): Vec2[] {
+  const moves: { from: Vec2; to: Vec2 }[] = [];
+  let i = log.length - 1;
+  while (i >= 0 && log[i]!.type !== 'intercept_move') i--; // хвіст не-рухів пропускаємо
+  while (i >= 0 && log[i]!.type === 'intercept_move') {
+    const m = log[i]! as { type: 'intercept_move'; from: Vec2; to: Vec2 };
+    moves.unshift({ from: { ...m.from }, to: { ...m.to } });
+    i--;
+  }
+  if (moves.length === 0) return [];
+  const pts: Vec2[] = [{ ...moves[0]!.from }];
+  for (const m of moves) pts.push({ ...m.to });
+  return pts.slice(-max);
 }
 
 // Прогрес анімації 0..1 (за межами — клімпиться; start === null → ще не почалась).

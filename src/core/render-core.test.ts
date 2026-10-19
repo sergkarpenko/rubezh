@@ -14,9 +14,12 @@ import {
   BOOM_SHAKE_PX,
   DNUM_MS,
   GEO_LAND_ROWS,
+  GEO_TRAIL_MS,
+  GEO_TRAIL_POINTS,
   IMPACT_MS,
   MOVE_MS_PER_CELL,
   OW_FLASH_MS,
+  RADAR_PULSE_MS,
   SHAKE_PX,
   TRACER_MS,
   animT,
@@ -27,8 +30,11 @@ import {
   geoCityLights,
   geoCoastEdges,
   geoIsLand,
+  geoTrailPoints,
   makeBoomAnim,
   makeDeathAnim,
+  makeGeoScanAnim,
+  makeGeoTrailAnim,
   makeMoveAnim,
   makeOwFlashAnim,
   makeTracerAnim,
@@ -38,6 +44,7 @@ import {
   type Anim,
 } from './render-core';
 import { makeUnit, type GameEvent, type Unit } from './combat';
+import type { GeoEvent } from './geo';
 
 const unit = (id: string, side: 'player' | 'alien', x: number, y: number): Unit => makeUnit({ id, side, pos: { x, y } });
 
@@ -516,5 +523,77 @@ describe('П14.5: розкладка геосцени — суша/океан/у
       }
       expect(geoCityLightDots(x, y)).toEqual(dots); // стабільно між кадрами
     }
+  });
+});
+
+describe('П14.5: хвіст перехоплення — точки з подій intercept_move у логу', () => {
+  const mv = (fx: number, fy: number, tx: number, ty: number): GeoEvent => ({
+    type: 'intercept_move',
+    from: { x: fx, y: fy },
+    to: { x: tx, y: ty },
+    minute: 30,
+  });
+
+  it('послідовні кроки → ламана [from, to…]; хвіст не-рухів після — пропускається', () => {
+    const log: GeoEvent[] = [mv(0, 0, 1, 0), mv(1, 0, 2, 0), { type: 'intercept_engage', ufoId: 'u1', pos: { x: 2, y: 0 }, minute: 30 }];
+    expect(geoTrailPoints(log)).toEqual([
+      { x: 0, y: 0 },
+      { x: 1, y: 0 },
+      { x: 2, y: 0 },
+    ]);
+  });
+
+  it('будь-яка інша подія обриває ланцюжок — лишається свіжий сегмент польоту', () => {
+    const log: GeoEvent[] = [
+      mv(0, 0, 1, 0),
+      { type: 'intercept_round', round: 1, choice: 'далека', fighterHit: true, fighterDamage: 1, ufoHit: false, ufoDamage: 0, minute: 30 },
+      mv(1, 0, 2, 0),
+    ];
+    expect(geoTrailPoints(log)).toEqual([
+      { x: 1, y: 0 },
+      { x: 2, y: 0 },
+    ]);
+  });
+
+  it('капа GEO_TRAIL_POINTS: довший політ — лише останні позиції (новіші)', () => {
+    const log: GeoEvent[] = [];
+    for (let i = 0; i < 10; i++) log.push(mv(i, 0, i + 1, 0));
+    const pts = geoTrailPoints(log);
+    expect(pts.length).toBe(GEO_TRAIL_POINTS); // 8
+    expect(pts[0]).toEqual({ x: 3, y: 0 }); // старша з вікон 10-крокового польоту
+    expect(pts[pts.length - 1]).toEqual({ x: 10, y: 0 }); // новіша — поточна позиція
+  });
+
+  it('без рухів — порожній хвіст; лог читається, не змінюється', () => {
+    expect(geoTrailPoints([])).toEqual([]);
+    const log: GeoEvent[] = [
+      { type: 'ufo_spawned', ufoId: 'u1', kind: 'розвідник', pos: { x: 3, y: 3 }, minute: 30 },
+      { type: 'day', day: 1, minute: 1440 },
+    ];
+    expect(geoTrailPoints(log)).toEqual([]);
+    expect(log.length).toBe(2); // байт-у-байт: події на місці
+    expect(geoTrailPoints(log)).toEqual(geoTrailPoints(log)); // детермінізм
+  });
+
+  it('фабрика makeGeoTrailAnim: GEO_TRAIL_MS, start null, точки — копії (вхід незалежний)', () => {
+    const pts = [
+      { x: 1, y: 2 },
+      { x: 3, y: 4 },
+    ];
+    const a = makeGeoTrailAnim(pts);
+    expect(a.kind).toBe('gtrail');
+    expect(a.dur).toBe(GEO_TRAIL_MS);
+    expect(a.start).toBeNull();
+    expect(a.points).toEqual(pts);
+    pts[0]!.x = 99; // мутація входу не тягне анімацію
+    expect(a.points[0]).toEqual({ x: 1, y: 2 });
+  });
+
+  it('фабрика makeGeoScanAnim: тривалість пульсу RADAR_PULSE_MS, start null', () => {
+    const a = makeGeoScanAnim(384, 192, 216);
+    expect(a.kind).toBe('gscan');
+    expect(a.dur).toBe(RADAR_PULSE_MS);
+    expect(a.maxR).toBe(216);
+    expect(a.start).toBeNull();
   });
 });
