@@ -57,6 +57,7 @@ describe('анімаційний рушій: прогрес і позиція (�
       false
     );
     expect(a.dur).toBe(2 * MOVE_MS_PER_CELL);
+    expect(a.hpMax).toBe(u.maxHp); // П14.4: знімок для смуги HP у русі
   });
 
   it('moveAnimPos: t=0 → центр першої клітинки, t=1 → останньої, середина — на ламаній', () => {
@@ -203,6 +204,7 @@ describe('перетворювач подій логу → анімації (к�
     const anims = animsFromEvents([{ type: 'death', unitId: 'a1', killerId: 's1' }], [a1]);
     expect(anims.map((x) => x.kind)).toEqual(['death']);
     expect(anims[0].kind === 'death' && anims[0].at).toEqual({ x: 5, y: 2 });
+    expect(anims[0].kind === 'death' && anims[0].hpMax).toBe(a1.maxHp); // П14.4: знімок для смуги HP
     expect(animsFromEvents([{ type: 'death', unitId: 'ghost', killerId: 's1' }], [a1])).toEqual([]);
   });
   it("кроки руху об'єднуються в один хід; смерть-перед-пострілом → трасер потім смерть", () => {

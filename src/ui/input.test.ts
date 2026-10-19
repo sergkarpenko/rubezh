@@ -399,3 +399,45 @@ describe('input: витратники бою — аптечка і гранат�
     expect(f.binfo()).toBe('Режим витратника скасовано.');
   });
 });
+
+describe('П14.4: характеристики демона Розриву по тапу (фідбек прев’ю)', () => {
+  it('тап по ВИДИМОМУ демону без зведених режимів — HP і зброя у binfo', () => {
+    const f = makeFixture();
+    launchMission(f);
+    const st = f.ui.mission!.state;
+    const alien = st.units.find((u) => u.side === 'alien' && u.alive)!;
+    const soldier = st.units.find((u) => u.side === 'player' && u.alive)!;
+    const home = { ...alien.pos }; // рідна клітинка — далеко у тумані
+    // ставимо демона поруч із солдатом (видима клітинка; детерміновано — без RNG)
+    let placed = false;
+    for (const [dx, dy] of [
+      [1, 0],
+      [-1, 0],
+      [0, 1],
+      [0, -1],
+      [1, 1],
+      [-1, 1],
+      [1, -1],
+      [-1, -1],
+    ]) {
+      const p = { x: soldier.pos.x + dx, y: soldier.pos.y + dy };
+      if (st.units.some((u) => u.alive && u.pos.x === p.x && u.pos.y === p.y)) continue; // не на юніта
+      alien.pos = p;
+      if (f.battle.visibleCells().has(p.x + ',' + p.y)) {
+        placed = true;
+        break;
+      }
+    }
+    expect(placed).toBe(true);
+    clickAt(f, alien.pos.x, alien.pos.y);
+    expect(f.binfo()).toContain('HP ' + alien.hp + '/' + alien.maxHp);
+    expect(f.binfo()).toContain(alien.weapon.name);
+    expect(f.binfo()).toContain('дальність ' + alien.weapon.range);
+    expect(f.binfo()).toContain('режим пострілу'); // підказка атаки лишається
+    // той самий демон у тумані — характеристики не розкриваються (ADR-0006)
+    alien.pos = home;
+    expect(f.battle.visibleCells().has(home.x + ',' + home.y)).toBe(false);
+    clickAt(f, home.x, home.y);
+    expect(f.binfo()).not.toContain('зброя');
+  });
+});

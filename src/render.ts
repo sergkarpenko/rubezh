@@ -55,7 +55,6 @@ import {
 import unitAtlasUrl from '../assets/units-atlas.png';
 import terrainTilesUrl from '../assets/terrain-tiles.png';
 
-const HP_TEXT = '#0b0e15';
 const SELECT_RING = '#9adfff'; // П12.7: рамка вибору — гама ціану «Рубіжу» (ADR-0064)
 const UFO_SOFT_ALPHA = 0.85;
 const RADAR_PULSE = '#00e5ff'; // П12.7: пульс сенсорної сітки — неоновий ціан «Рубіжу» (ADR-0064)
@@ -154,6 +153,7 @@ export interface UnitSpriteView extends UnitSprite {
   pose?: 'fire' | 'death';
   step?: 1 | 2;
   flip?: boolean;
+  maxHp: number; // П14.4: показник життя — частка hp/maxHp у смузі HP
 }
 
 // Поза за станом юніта — чиста функція, детермінована (без RNG, ADR-0003):
@@ -283,12 +283,46 @@ function drawSelectionBrackets(ctx: CanvasRenderingContext2D, cx: number, cy: nu
   ctx.lineWidth = 1;
 }
 
-function drawHpText(ctx: CanvasRenderingContext2D, text: string, x: number, y: number): void {
-  ctx.font = '11px system-ui'; // П13.5: читабельність при більшому спрайті
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillStyle = HP_TEXT;
-  ctx.fillText(text, x, y);
+// П14.4 (фідбек прев'ю): показники життя юнітів — смуга HP у нижній частині
+// клітинки (заповнення за часткою hp/maxHp) і число HP у кутковій зоні
+// клітини (тло клітинки, не спрайта — урок П6.12: темний текст у центрі
+// силуета був невидимий на атласних спрайтах П14.3). Колір смуги за часткою:
+// зелений → бурштин → червоний; число — кольори сторін (ціан «Рубіжу» /
+// світлий пурпур Розриву, ADR-0064). Ширина числа — оцінка 6px на символ
+// (без measureText — мок-контексти jsdom, урок П6.14).
+const HP_BAR_W = 36; // ширина смуги, px (клітинка BCELL 48)
+const HP_BAR_H = 4; // висота смуги, px
+const HP_BAR_Y = 18; // зміщення смуги від центру клітинки (низ клітинки)
+const HP_BACKING = 'rgba(5,8,15,0.75)'; // підкладка смуги
+const HP_PLATE_BG = 'rgba(5,8,15,0.8)'; // плашка числа HP
+const HP_NUM_PLAYER = '#9adfff'; // ціан «Рубіжу» (ADR-0064)
+const HP_NUM_ALIEN = '#ff9ecb'; // світлий пурпур Розриву (ADR-0064)
+
+// Колір заповнення смуги HP за часткою (детерміновано, без RNG).
+function hpBarColor(hp: number, maxHp: number): string {
+  const f = maxHp > 0 ? hp / maxHp : 0;
+  return f > 0.5 ? '#7fe2a0' : f > 0.25 ? '#ffcf5c' : '#ff5c7a';
+}
+
+function drawHpBadge(ctx: CanvasRenderingContext2D, u: UnitSpriteView): void {
+  // смуга HP: темна підкладка на всю ширину + заповнення за часткою
+  const x = u.cx - HP_BAR_W / 2;
+  const y = u.cy + HP_BAR_Y;
+  ctx.fillStyle = HP_BACKING;
+  ctx.fillRect(x, y, HP_BAR_W, HP_BAR_H);
+  const f = Math.max(0, Math.min(1, u.maxHp > 0 ? u.hp / u.maxHp : 0));
+  ctx.fillStyle = hpBarColor(u.hp, u.maxHp);
+  ctx.fillRect(x, y, u.hp > 0 ? Math.max(2, HP_BAR_W * f) : 0, HP_BAR_H);
+  // число HP: плашка у верхньому правому куті клітинки (BCELL 48), у межах канви
+  const text = String(u.hp);
+  const w = text.length * 6 + 3;
+  const px = u.cx + 24 - w - 1;
+  ctx.fillStyle = HP_PLATE_BG;
+  ctx.fillRect(px, u.cy - 23, w, 11);
+  ctx.fillStyle = u.side === 'player' ? HP_NUM_PLAYER : HP_NUM_ALIEN;
+  ctx.font = '10px monospace';
+  ctx.textBaseline = 'top';
+  ctx.fillText(text, px + 1, u.cy - 21);
 }
 
 export function drawSoldierSprite(ctx: CanvasRenderingContext2D, u: UnitSpriteView): void {
@@ -296,7 +330,7 @@ export function drawSoldierSprite(ctx: CanvasRenderingContext2D, u: UnitSpriteVi
   if (unitAtlasImg !== null) drawAtlasUnit(ctx, u, 0, unitAtlasImg);
   else drawPixelSprite(ctx, (u.frame ?? 0) === 1 ? SOLDIER_STEP : SOLDIER_STAND, u.cx, u.cy, SPRITE_SCALE);
   if (u.overwatch) drawOverwatchMarker(ctx, u);
-  drawHpText(ctx, String(u.hp), u.cx, u.cy);
+  drawHpBadge(ctx, u); // П14.4: смуга HP + число у кутковій зоні (читабельність)
   if (u.selected) drawSelectionBrackets(ctx, u.cx, u.cy);
 }
 
@@ -304,7 +338,7 @@ export function drawAlienSprite(ctx: CanvasRenderingContext2D, u: UnitSpriteView
   if (unitAtlasImg !== null) drawAtlasUnit(ctx, u, 1, unitAtlasImg);
   else drawPixelSprite(ctx, (u.frame ?? 0) === 1 ? ALIEN_STEP : ALIEN_STAND, u.cx, u.cy, SPRITE_SCALE);
   if (u.overwatch) drawOverwatchMarker(ctx, u);
-  drawHpText(ctx, String(u.hp), u.cx, u.cy);
+  drawHpBadge(ctx, u); // П14.4: смуга HP + число у кутковій зоні (читабельність)
   if (u.selected) drawSelectionBrackets(ctx, u.cx, u.cy);
 }
 
@@ -605,6 +639,7 @@ export function drawAnimFrame(
       cy: p.cy,
       r,
       hp: a.hp,
+      maxHp: a.hpMax, // П14.4: смуга HP під час руху
       selected: a.selected,
       overwatch: a.overwatch,
       frame,
@@ -658,6 +693,7 @@ export function drawAnimFrame(
       cy: a.at.y * cell + cell / 2,
       r,
       hp: 0,
+      maxHp: a.hpMax, // П14.4: порожня смуга HP загиблого
       selected: false,
       overwatch: false,
       pose: 'death', // П14.2 (ADR-0072): кадр смерті з атласа; фолбек — матриця

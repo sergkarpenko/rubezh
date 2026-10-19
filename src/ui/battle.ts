@@ -311,6 +311,7 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
         cy: at.y * BCELL + BCELL / 2,
         r: 8,
         hp: u.hp,
+        maxHp: u.maxHp, // П14.4: смуга HP + число
         selected: u.id === ui.selectedId,
         overwatch: u.overwatch,
         pose: u.id === firingId ? 'fire' : undefined, // П14.2 (ADR-0072)

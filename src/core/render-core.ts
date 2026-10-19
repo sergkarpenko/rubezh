@@ -109,6 +109,7 @@ export interface MoveAnim {
   side: Side;
   path: Vec2[]; // [from, to1, ...] — клітинкові координати
   hp: number; // знімок стану на момент постановки в чергу
+  hpMax: number; // П14.4: показник життя — частка hp/maxHp у смузі HP
   overwatch: boolean;
   selected: boolean;
   dur: number;
@@ -127,6 +128,7 @@ export interface DeathAnim {
   kind: 'death';
   side: Side;
   at: Vec2;
+  hpMax: number; // П14.4: показник життя загиблого — порожня смуга (hp 0)
   dur: number;
   start: number | null;
 }
@@ -181,6 +183,7 @@ export function makeMoveAnim(u: Unit, path: Vec2[], selected: boolean): MoveAnim
     side: u.side,
     path,
     hp: u.hp,
+    hpMax: u.maxHp, // П14.4: смуга HP під час руху
     overwatch: u.overwatch,
     selected,
     dur: Math.max(1, path.length - 1) * MOVE_MS_PER_CELL,
@@ -191,7 +194,7 @@ export function makeTracerAnim(side: Side, from: Vec2, to: Vec2, hit: boolean): 
   return { kind: 'tracer', side, from, to, hit, dur: TRACER_MS + (hit ? IMPACT_MS : 0), start: null };
 }
 export function makeDeathAnim(u: Unit): DeathAnim {
-  return { kind: 'death', side: u.side, at: { ...u.pos }, dur: DEATH_MS, start: null };
+  return { kind: 'death', side: u.side, at: { ...u.pos }, hpMax: u.maxHp, dur: DEATH_MS, start: null };
 }
 export function makeOwFlashAnim(u: Unit): OwFlashAnim {
   return { kind: 'owflash', side: u.side, at: { ...u.pos }, dur: OW_FLASH_MS, start: null };
