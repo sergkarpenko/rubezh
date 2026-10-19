@@ -27,6 +27,12 @@ import {
   ATLAS_WALK2_COL,
   CHANCE_LABEL_BG,
   CHANCE_LABEL_TEXT,
+  CITY_LIGHT,
+  COAST_RIM,
+  COAST_RIM_CORE,
+  GEO_TILE,
+  GEO_TILE_COLS,
+  GEO_TILE_LAND,
   TARGET_FRAME_COLOR,
   TERRAIN_DECOR_COL,
   TERRAIN_TILE,
@@ -41,15 +47,27 @@ import {
   drawTargetFrame,
   drawUfoSprite,
   drawUnitSprite,
+  initGeoTiles,
   initPixelSprites,
   initTerrainAtlas,
   initUnitAtlas,
+  isGeoTilesReady,
   isTerrainAtlasReady,
   isUnitAtlasReady,
   unitPose,
   type MakeOffscreen,
 } from './render';
-import { FOG_EDGE, GEO_GRID_COLOR, NIGHT_BG, cellHash, geoCellTone, terrainShade, type TerrainCell } from './core/render-core';
+import {
+  FOG_EDGE,
+  GEO_GRID_COLOR,
+  NIGHT_BG,
+  cellHash,
+  geoCellTone,
+  geoCityLights,
+  geoIsLand,
+  terrainShade,
+  type TerrainCell,
+} from './core/render-core';
 import {
   ALIEN_STAND,
   BASE_SPRITE,
@@ -155,6 +173,7 @@ beforeEach(() => {
   initPixelSprites(rasterFactory().make);
   initUnitAtlas(() => {});
   initTerrainAtlas(() => {});
+  initGeoTiles(() => {}); // П14.5: тайли геосцени — фолбек за замовчуванням
 });
 
 // Піксельні межі всіх точок, яких торкається малювання: arc — центр ± r,
@@ -965,4 +984,110 @@ describe('П14.3 (ADR-0072): тайлсет терену — підлога за
     drawNightTerrain(b.ctx, 144, 96, cells, 48);
     expect(a.ops).toEqual(b.ops);
   });
+});
+
+// --- П14.5 (ADR-0072/0064): тайли геосцени 2.0 — океан/суша/узбережжя/вогні ---
+
+describe('П14.5: тайли геосцени (drawGeoTerrain з ассетом; фолбек — два тони)', () => {
+  // Мок-тайлсет: завантажувач кликає onLoad синхронно з фіктивним джерелом.
+  const tilesImg = { width: 384, height: 48 } as unknown as CanvasImageSource;
+  const readyTiles = (): void => {
+    initGeoTiles((_url, onLoad) => {
+      onLoad(tilesImg);
+    });
+  };
+  const CELL = 48; // GCELL (П14.5: міграція 44→48)
+  const W = 768; // 16 × 48
+  const H = 384; // 8 × 48
+
+  it('прапорець завантаженості: фолбек до onload, готовий — після', () => {
+    expect(isGeoTilesReady()).toBe(false);
+    readyTiles();
+    expect(isGeoTilesReady()).toBe(true);
+  });
+
+  it('розклад тайлів детермінований: 128 клітин 16×8; океан — кол. 0–3, суша — 4–7, варіант за хешем (без RNG)', () => {
+    readyTiles();
+    const s = animCtx();
+    drawGeoTerrain(s.ctx, W, H, CELL);
+    const imgs = s.calls.filter((c) => c.m === 'drawImage');
+    expect(imgs.length).toBe(16 * 8);
+    for (const d of imgs) {
+      const a = d.args as unknown[];
+      expect(a[0]).toBe(tilesImg); // джерело — тайлсет
+      expect(a[5]).toBeGreaterThanOrEqual(0); // у межах канви
+      expect(a[6]).toBeGreaterThanOrEqual(0);
+      expect((a[5] as number) + (a[7] as number)).toBeLessThanOrEqual(W);
+      expect((a[6] as number) + (a[8] as number)).toBeLessThanOrEqual(H);
+      // колонка тайла — за розкладкою і хешем координат (чиста функція)
+      const x = (a[5] as number) / CELL;
+      const y = (a[6] as number) / CELL;
+      const want = (geoIsLand(x, y) ? GEO_TILE_LAND : 0) + (cellHash(x, y) % (GEO_TILE_COLS - GEO_TILE_LAND));
+      expect(a[1]).toBe(want * GEO_TILE);
+    }
+    // сусідні клітинки відрізняються (мозаїка): не усі океанські колонки однакові
+    const cols = new Set(imgs.map((d) => ((d.args as unknown[])[1] as number) / GEO_TILE));
+    expect(cols.size).toBeGreaterThan(2);
+    // nearest-neighbor
+    expect(s.sets.some((x) => x.p === 'imageSmoothingEnabled' && x.v === false)).toBe(true);
+  });
+
+  it('узбережжя: ціанова кромка на краях суші в бік океану (м’яка 3px + ядро 1px)', () => {
+    readyTiles();
+    const s = animCtx();
+    drawGeoTerrain(s.ctx, W, H, CELL);
+    // (4,4) — суша з океаном на заході: кромка на лівому краї клітинки
+    expect(s.calls.some((c) => c.m === 'fillRect' && (c.args as number[]).join(',') === [4 * CELL, 4 * CELL, 3, CELL].join(','))).toBe(
+      true
+    );
+    expect(s.calls.some((c) => c.m === 'fillRect' && (c.args as number[]).join(',') === [4 * CELL, 4 * CELL, 1, CELL].join(','))).toBe(
+      true
+    );
+    // внутрішня суша (7,4) — без кромок
+    expect(
+      s.calls.some((c) => c.m === 'fillRect' && (c.args as number[]).join(',') === [7 * CELL + CELL - 3, 4 * CELL, 3, CELL].join(','))
+    ).toBe(false);
+    // кольори кромки в кадрі (ціан «Рубіжу», ADR-0064)
+    expect(s.sets.some((x) => x.p === 'fillStyle' && x.v === COAST_RIM)).toBe(true);
+    expect(s.sets.some((x) => x.p === 'fillStyle' && x.v === COAST_RIM_CORE)).toBe(true);
+  });
+
+  it('вогні міст: бурштинові точки лише на суші за хешем (детермінований рідкий декор)', () => {
+    readyTiles();
+    const s = animCtx();
+    drawGeoTerrain(s.ctx, W, H, CELL);
+    expect(s.sets.some((x) => x.p === 'fillStyle' && x.v === CITY_LIGHT)).toBe(geoCityLightCells() > 0 ? true : false);
+    if (geoCityLightCells() > 0) {
+      // знайти клітинку з вогнями і перевірити 2×2 точки в її межах
+      const dots = s.calls.filter((c) => c.m === 'fillRect' && (c.args as number[])[2] === 2 && (c.args as number[])[3] === 2);
+      expect(dots.length).toBe(geoCityLightCells() * 3); // 3 вогні на місто
+      for (const d of dots) {
+        const [px, py] = d.args as number[];
+        const x = Math.floor(px / CELL);
+        const y = Math.floor(py / CELL);
+        expect(geoCityLights(x, y)).toBe(true); // лише суша з вогнями
+        expect(px).toBeGreaterThanOrEqual(x * CELL);
+        expect(px).toBeLessThan((x + 1) * CELL);
+        expect(py).toBeGreaterThanOrEqual(y * CELL);
+        expect(py).toBeLessThan((y + 1) * CELL);
+      }
+    }
+  });
+
+  it('детермінізм (ADR-0003): той самий вхід → той самий потік викликів і присвоєнь', () => {
+    readyTiles();
+    const draw = (): { calls: Call[]; sets: { p: string; v: unknown }[] } => {
+      const s = animCtx();
+      drawGeoTerrain(s.ctx, W, H, CELL);
+      return { calls: s.calls, sets: s.sets };
+    };
+    expect(draw()).toEqual(draw());
+  });
+
+  // кількість клітинок суші з вогнями (чиста функція — розклад стабільний)
+  function geoCityLightCells(): number {
+    let n = 0;
+    for (let y = 0; y < 8; y++) for (let x = 0; x < 16; x++) if (geoCityLights(x, y)) n++;
+    return n;
+  }
 });

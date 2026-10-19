@@ -13,6 +13,7 @@ import {
   BOOM_PARTICLES,
   BOOM_SHAKE_PX,
   DNUM_MS,
+  GEO_LAND_ROWS,
   IMPACT_MS,
   MOVE_MS_PER_CELL,
   OW_FLASH_MS,
@@ -21,6 +22,11 @@ import {
   animT,
   animsFromEvents,
   boomParticleOffset,
+  cellHash,
+  geoCityLightDots,
+  geoCityLights,
+  geoCoastEdges,
+  geoIsLand,
   makeBoomAnim,
   makeDeathAnim,
   makeMoveAnim,
@@ -446,5 +452,69 @@ describe('П14.4: тряска вибуху — амплітуда ×2 від п
     expect(shakeOffset(boom, BOOM_MS / 2)).toEqual(shakeOffset(boom, BOOM_MS / 2)); // детерміновано
     // інші види анімацій тряску не дають (крім влучання трасера)
     expect(shakeOffset(makeDeathAnim(unit('a1', 'alien', 1, 1)), 10)).toEqual({ dx: 0, dy: 0 });
+  });
+});
+
+describe('П14.5: розкладка геосцени — суша/океан/узбережжя (без RNG, ADR-0003)', () => {
+  it('geoIsLand: авторський масив 16×8, циліндр по X; база (8,4) — на континенті', () => {
+    expect(GEO_LAND_ROWS.length).toBe(8);
+    expect(GEO_LAND_ROWS.every((r) => r.length === 16)).toBe(true);
+    expect(geoIsLand(8, 4)).toBe(true); // ВУЗОЛ — суша
+    expect(geoIsLand(0, 0)).toBe(false); // океан
+    expect(geoIsLand(3, 0)).toBe(true); // острівна дуга
+    // замикання по X: x = 16 → 0, x = -13 → 3, x = 19 → 3
+    expect(geoIsLand(16, 0)).toBe(geoIsLand(0, 0));
+    expect(geoIsLand(19, 0)).toBe(geoIsLand(3, 0));
+    expect(geoIsLand(-13, 0)).toBe(geoIsLand(3, 0));
+    // вертикаль без замикання
+    expect(geoIsLand(8, -1)).toBe(false);
+    expect(geoIsLand(8, 8)).toBe(false);
+    // пропорції: ~45% суші (57 з 128; узгоджено власником ДО прев'ю)
+    let land = 0;
+    for (let y = 0; y < 8; y++) for (let x = 0; x < 16; x++) if (geoIsLand(x, y)) land++;
+    expect(land).toBe(57);
+  });
+
+  it('geoCoastEdges: кромка лише на суші в бік океану (4 напрямки, X із замиканням)', () => {
+    // (4,4) — суша з океаном на заході (край континенту)
+    expect(geoCoastEdges(4, 4)).toEqual({ n: false, e: false, s: false, w: true });
+    // (7,4) — внутрішня клітинка континенту: океану поруч немає
+    expect(geoCoastEdges(7, 4)).toEqual({ n: false, e: false, s: false, w: false });
+    // океан — не узбережжя (кромка тільки на суші)
+    expect(geoCoastEdges(0, 0)).toEqual({ n: false, e: false, s: false, w: false });
+    // (14,0) — суша в куті: океан на півночі (край світу), сході та півдні
+    expect(geoCoastEdges(14, 0)).toEqual({ n: true, e: true, s: true, w: false });
+  });
+
+  it('вогні міст: лише на суші, рідкий детермінований розклад (без RNG)', () => {
+    let lights = 0;
+    for (let y = 0; y < 8; y++)
+      for (let x = 0; x < 16; x++) {
+        const l = geoCityLights(x, y);
+        expect(l).toBe(geoIsLand(x, y) && cellHash(x, y) % 12 === 0); // чиста функція хеша
+        if (l) lights++;
+      }
+    expect(lights).toBeGreaterThan(0); // принаймні одне місто у світі
+    expect(lights).toBeLessThan(57 * 0.2); // рідкий декор, не «новий рік»
+    // стабільність між кадрами: той самий вхід → той самий результат
+    expect(geoCityLights(5, 2)).toBe(geoCityLights(5, 2));
+  });
+
+  it('geoCityLightDots: 3 вогні, у межах клітинки (0.18..0.85), детерміновано', () => {
+    for (const [x, y] of [
+      [0, 0],
+      [8, 4],
+      [15, 7],
+    ]) {
+      const dots = geoCityLightDots(x, y);
+      expect(dots.length).toBe(3);
+      for (const d of dots) {
+        expect(d.fx).toBeGreaterThanOrEqual(0.18);
+        expect(d.fx).toBeLessThanOrEqual(0.85);
+        expect(d.fy).toBeGreaterThanOrEqual(0.2);
+        expect(d.fy).toBeLessThanOrEqual(0.85);
+      }
+      expect(geoCityLightDots(x, y)).toEqual(dots); // стабільно між кадрами
+    }
   });
 });

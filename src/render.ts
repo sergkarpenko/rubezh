@@ -25,6 +25,10 @@ import {
   boomParticleOffset,
   cellHash,
   geoCellTone,
+  geoCityLightDots,
+  geoCityLights,
+  geoCoastEdges,
+  geoIsLand,
   hasVisibleNeighbor,
   moveAnimPos,
   terrainShade,
@@ -54,6 +58,7 @@ import {
 } from './core/sprites';
 import unitAtlasUrl from '../assets/units-atlas.png';
 import terrainTilesUrl from '../assets/terrain-tiles.png';
+import geoTilesUrl from '../assets/geo-tiles.png';
 
 const SELECT_RING = '#9adfff'; // П12.7: рамка вибору — гама ціану «Рубіжу» (ADR-0064)
 const UFO_SOFT_ALPHA = 0.85;
@@ -228,6 +233,39 @@ export function initTerrainAtlas(load: LoadTerrainTiles): void {
 // Прапорець готовності тайлсету (фолбек терену — !isTerrainAtlasReady).
 export function isTerrainAtlasReady(): boolean {
   return terrainTilesImg !== null;
+}
+
+// --- П14.5 (ADR-0072): тайли геосцени 2.0 — океан/суша з узбережжям ---
+// Джерело — assets/geo-tiles.png (384×48): 8 тайлів 48×48 — кол. 0–3 темний
+// океан, кол. 4–7 плити суші з тріщинами Розриву (кропи 96×96 із арту
+// власника 1024×768, nearest-децимація ×2; числа узгоджені ДО прев'ю).
+// Розкладка суші/океану — авторський масив у render-core (GEO_LAND_ROWS);
+// узбережжя — ціанова кромка кодом на краях суші, що дивляться на воду;
+// вогні міст — рідкий детермінований декор (geoCityLights, без RNG).
+export const GEO_TILE = 48; // сторона тайла, px (= GCELL 48, 1:1)
+export const GEO_TILE_COLS = 8; // 0–3 океан, 4–7 суша
+export const GEO_TILE_LAND = 4; // перша колонка суші
+// Кромка узбережжя (ADR-0064: ціан «Рубіжу»): м'яке свічення 3px + ядро 1px.
+export const COAST_RIM = 'rgba(0,229,255,0.16)';
+export const COAST_RIM_CORE = 'rgba(0,229,255,0.5)';
+export const CITY_LIGHT = '#ffb347'; // вогні міст — бурштин (ADR-0064)
+
+// Ліниве завантаження тайлів геосцени — той самий патерн, що initTerrainAtlas
+// (ADR-0072 п.3): фабрика інжектиться, невдача — тихий фолбек на два тони
+// geoCellTone (тести від ассета не залежать, сейви не зачіпаються — ADR-0026).
+export type LoadGeoTiles = (url: string, onLoad: (img: CanvasImageSource) => void) => void;
+let geoTilesImg: CanvasImageSource | null = null;
+
+export function initGeoTiles(load: LoadGeoTiles): void {
+  geoTilesImg = null;
+  load(geoTilesUrl, (img) => {
+    geoTilesImg = img;
+  });
+}
+
+// Прапорець готовності тайлів геосцени (фолбек — !isGeoTilesReady).
+export function isGeoTilesReady(): boolean {
+  return geoTilesImg !== null;
 }
 
 // Кадр з атласа: 96×96 → 44×44 у клітинці, цілі пікселі (Math.round),
@@ -432,23 +470,80 @@ export function drawNightTerrain(ctx: CanvasRenderingContext2D, w: number, h: nu
 }
 
 // --- П12.7 (ADR-0064): терен геосцени — двотоновий із неоновою сіткою ---
-// Палітра і тон — чиста логіка src/core/render-core.ts (geoCellTone —
-// детермінований хеш, без RNG, ADR-0003); тут — лише Canvas-виклики.
-// Кадр еквівалентний малюванню з нуля (патерн renderGeo, урок П6.6):
-// повна заливка фону → двотонові клітинки на всю сторону GCELL → тонкі
-// неонові лінії сітки по межах (у геосцені немає проміжків між клітинками).
-// Чиста функція без DOM-стану; викликається з src/ui/panels.ts (renderGeo).
+// П14.5 (ADR-0072): геосцена 2.0 — тайли океану/суші з ассета (розкладка
+// GEO_LAND_ROWS у render-core: суша/океан за авторським масивом, варіант
+// тайла — хеш клітинки, без RNG; узбережжя — ціанова кромка на краях суші
+// в бік океану; вогні міст — рідкий декор за хешем). Фолбек без ассета —
+// чинні два тони geoCellTone (обов'язковий; тести від ассета не залежать).
+// Палітра і тон — чиста логіка src/core/render-core.ts; тут — лише
+// Canvas-виклики. Кадр еквівалентний малюванню з нуля (патерн renderGeo,
+// урок П6.6). Чиста функція без DOM-стану; викликається з src/ui/panels.ts.
 export function drawGeoTerrain(ctx: CanvasRenderingContext2D, w: number, h: number, cell: number): void {
   // фон на весь buffer — краї канви не блимають
   ctx.fillStyle = NIGHT_BG;
   ctx.fillRect(0, 0, w, h);
   const cols = Math.ceil(w / cell);
   const rows = Math.ceil(h / cell);
-  // двотоновий терен: тон клітинки — хеш координат, мозаїка стабільна між кадрами
-  for (let y = 0; y < rows; y++) {
-    for (let x = 0; x < cols; x++) {
-      ctx.fillStyle = geoCellTone(x, y);
-      ctx.fillRect(x * cell, y * cell, cell, cell);
+  if (geoTilesImg !== null) {
+    // П14.5: тайли — nearest-neighbor, 1:1 під клітинку 48 (= GEO_TILE);
+    // океан — кол. 0–3, суша — 4–7, варіант за хешем координат (без RNG).
+    ctx.imageSmoothingEnabled = false;
+    for (let y = 0; y < rows; y++) {
+      for (let x = 0; x < cols; x++) {
+        const land = geoIsLand(x, y);
+        const col = (land ? GEO_TILE_LAND : 0) + (cellHash(x, y) % (GEO_TILE_COLS - GEO_TILE_LAND));
+        ctx.drawImage(geoTilesImg, col * GEO_TILE, 0, GEO_TILE, GEO_TILE, x * cell, y * cell, cell, cell);
+      }
+    }
+    // узбережжя: м'яка ціанова кромка 3px + ядро 1px на краях суші до океану
+    for (let y = 0; y < rows; y++) {
+      for (let x = 0; x < cols; x++) {
+        const e = geoCoastEdges(x, y);
+        const px = x * cell;
+        const py = y * cell;
+        if (e.n) {
+          ctx.fillStyle = COAST_RIM;
+          ctx.fillRect(px, py, cell, 3);
+          ctx.fillStyle = COAST_RIM_CORE;
+          ctx.fillRect(px, py, cell, 1);
+        }
+        if (e.s) {
+          ctx.fillStyle = COAST_RIM;
+          ctx.fillRect(px, py + cell - 3, cell, 3);
+          ctx.fillStyle = COAST_RIM_CORE;
+          ctx.fillRect(px, py + cell - 1, cell, 1);
+        }
+        if (e.w) {
+          ctx.fillStyle = COAST_RIM;
+          ctx.fillRect(px, py, 3, cell);
+          ctx.fillStyle = COAST_RIM_CORE;
+          ctx.fillRect(px, py, 1, cell);
+        }
+        if (e.e) {
+          ctx.fillStyle = COAST_RIM;
+          ctx.fillRect(px + cell - 3, py, 3, cell);
+          ctx.fillStyle = COAST_RIM_CORE;
+          ctx.fillRect(px + cell - 1, py, 1, cell);
+        }
+      }
+    }
+    // вогні міст: бурштинові точки на суші за хешем (детерміновано, без RNG)
+    ctx.fillStyle = CITY_LIGHT;
+    for (let y = 0; y < rows; y++) {
+      for (let x = 0; x < cols; x++) {
+        if (!geoCityLights(x, y)) continue;
+        for (const d of geoCityLightDots(x, y)) {
+          ctx.fillRect(Math.round(x * cell + d.fx * cell) - 1, Math.round(y * cell + d.fy * cell) - 1, 2, 2);
+        }
+      }
+    }
+  } else {
+    // фолбек: два тони за хешем координат, мозаїка стабільна між кадрами
+    for (let y = 0; y < rows; y++) {
+      for (let x = 0; x < cols; x++) {
+        ctx.fillStyle = geoCellTone(x, y);
+        ctx.fillRect(x * cell, y * cell, cell, cell);
+      }
     }
   }
   // тонка неонова сітка: лінії по межах клітинок наскрізь (ціан «Рубіжу»)
