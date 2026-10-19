@@ -123,6 +123,44 @@
         border-radius: 8px;
         padding: 12px;
       }
+      /* П14.6 (ADR-0072): рамка панелей 9-slice — CSS border-image з ассета
+         assets/panel-frame.webp (761×709, конвертація кроку П14.6):
+         slice-лінії — виміряні смуги з запасом сяйва (top 116 / right 123 /
+         bottom 107 / left 121), repeat: stretch, БЕЗ fill — центральна зона
+         відкидається, фон панелей лишається кодовим (рішення власника:
+         рамка — не фон панелі). Застосовується ЛИШЕ після успішного
+         завантаження ассета: клас .panel-frame і --panel-frame-url ставить
+         src/ui/panel-frame.ts; при !loaded (headless/офлайн/без файла)
+         панелі лишаються з чинною кодовою рамкою вище — фолбек ADR-0072
+         (прецедент лого П13.4), тести від ассета не залежать */
+      body.panel-frame section.panel {
+        border: 14px solid transparent;
+        border-image: var(--panel-frame-url) 116 123 107 121 / 14px stretch;
+        border-radius: 0;
+      }
+      body.panel-frame header#topbar {
+        border: 12px solid transparent;
+        border-image: var(--panel-frame-url) 116 123 107 121 / 12px stretch;
+        border-radius: 0;
+      }
+      body.panel-frame #status-tabs {
+        border: 12px solid transparent;
+        border-image: var(--panel-frame-url) 116 123 107 121 / 12px stretch;
+        border-radius: 0;
+        padding: 8px;
+      }
+      /* П14.6 (ADR-0072): іконки вкладок — піксель-матриці кодом
+         (src/ui/tab-icons.ts, патерн тулбара П13.2): canvas перед текстом,
+         буфер 1:1 12px + pixelated — чітко і на retina; контракти кнопок
+         (id, класи, dataset, текст) не змінюються (урок П11.6) */
+      #status-tabs button canvas.tab-icon,
+      #log-tabs button canvas.tab-icon {
+        width: 12px;
+        height: 12px;
+        image-rendering: pixelated;
+        vertical-align: -2px;
+        margin-right: 4px;
+      }
       h2 {
         font-size: 12px;
         margin: 0 0 8px;

@@ -55,6 +55,8 @@ import { createSettings } from './ui/settings';
 // П12.4 (ADR-0065): вкладки статус-колонки «Загін»/«База»/«Система» —
 // модуль src/ui/status-tabs.ts (панелі в DOM, персист поза сейвом).
 import { createStatusTabs } from './ui/status-tabs';
+import { initPanelFrame } from './ui/panel-frame';
+import { decorateTabButtons } from './ui/tab-icons';
 
 // пR.2 (ADR-0037): масштаб сітки (GCELL/BCELL) — спільний модуль src/ui/grid.ts.
 
@@ -99,6 +101,18 @@ initGeoTiles((url, onLoad) => {
   const probe = new Image();
   probe.onload = () => {
     onLoad(probe);
+  };
+  probe.src = url;
+});
+
+// П14.6 (ADR-0072): рамка панелей 9-slice (assets/panel-frame.webp) — ліниве
+// завантаження, той самий патерн; фолбек при !loaded — чинна кодова рамка
+// (CSS у index.html застосовує border-image лише під класом .panel-frame;
+// тести від ассета не залежать, сейви не зачіпаються — ADR-0026).
+initPanelFrame((url, onLoad) => {
+  const probe = new Image();
+  probe.onload = () => {
+    onLoad();
   };
   probe.src = url;
 });
@@ -493,6 +507,10 @@ if (typeof document !== 'undefined') {
   // rubezh.settings.*), помилки сховища — тихо. Приглушення в бою — чинний
   // механізм #status.dimmed (П6.3): вкладки живуть у колонці.
   createStatusTabs();
+  // П14.6 (ADR-0072): іконки вкладок («Загін»/«Вузол»/«Система» статус-колонки
+  // і фільтри журналу) — піксель-матриці кодом, узгоджені з тулбаром (П13.2);
+  // canvas перед текстом, контракти кнопок не змінюються.
+  decorateTabButtons();
   // П13.2 (ADR-0066): бойові дії — з вертикального тулбара збоку (плитки і
   // іконки будує src/ui/toolbar.ts; стани/причини блокування — renderBattle).
   createToolbar(el('btoolbar'), {
