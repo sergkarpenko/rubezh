@@ -22,7 +22,7 @@ import { equipItem, unequipItem, itemName, type SoldierEquipment, type SoldierIt
 import { readySoldiers } from '../core/squad';
 import type { Party } from '../core/save';
 import { itemEffect } from './effects';
-import { drawAnimFrame, drawBaseSprite, drawFighterSprite, drawGeoTerrain, drawUfoSprite } from '../render';
+import { drawAnimFrame, drawFighterSprite, drawGeoBaseSprite, drawGeoTerrain, drawUfoSprite } from '../render';
 import type { Anim } from '../core/render-core';
 import { el } from './dom';
 import { GCELL } from './grid';
@@ -90,7 +90,8 @@ export function createPanels(deps: PanelsDeps): Panels {
 
     // П6.7 (ADR-0029): статичні спрайти геосцени — база і позначки НЛО (туман:
     // detectedUfos повертає лише виявлені — невиявлені в малювання не потрапляють).
-    drawBaseSprite(ctx, { cx: b.x * GCELL + GCELL / 2, cy: b.y * GCELL + GCELL / 2, size: GCELL });
+    // П14.5: вежа-радар з атласу тайлів (фолбек — піксельний спрайт ВУЗОЛ)
+    drawGeoBaseSprite(ctx, { cx: b.x * GCELL + GCELL / 2, cy: b.y * GCELL + GCELL / 2, size: GCELL });
 
     for (const u of detectedUfos(party.geo)) {
       drawUfoSprite(ctx, {

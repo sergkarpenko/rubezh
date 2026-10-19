@@ -25,9 +25,8 @@ import {
   boomParticleOffset,
   cellHash,
   geoCellTone,
-  geoCityLightDots,
   geoCityLights,
-  geoCoastEdges,
+  geoCoastSide,
   geoIsLand,
   hasVisibleNeighbor,
   moveAnimPos,
@@ -235,20 +234,22 @@ export function isTerrainAtlasReady(): boolean {
   return terrainTilesImg !== null;
 }
 
-// --- П14.5 (ADR-0072): тайли геосцени 2.0 — океан/суша з узбережжям ---
-// Джерело — assets/geo-tiles.png (384×48): 8 тайлів 48×48 — кол. 0–3 темний
-// океан, кол. 4–7 плити суші з тріщинами Розриву (кропи 96×96 із арту
-// власника 1024×768, nearest-децимація ×2; числа узгоджені ДО прев'ю).
-// Розкладка суші/океану — авторський масив у render-core (GEO_LAND_ROWS);
-// узбережжя — ціанова кромка кодом на краях суші, що дивляться на воду;
-// вогні міст — рідкий детермінований декор (geoCityLights, без RNG).
-export const GEO_TILE = 48; // сторона тайла, px (= GCELL 48, 1:1)
-export const GEO_TILE_COLS = 8; // 0–3 океан, 4–7 суша
-export const GEO_TILE_LAND = 4; // перша колонка суші
-// Кромка узбережжя (ADR-0064: ціан «Рубіжу»): м'яке свічення 3px + ядро 1px.
-export const COAST_RIM = 'rgba(0,229,255,0.16)';
-export const COAST_RIM_CORE = 'rgba(0,229,255,0.5)';
-export const CITY_LIGHT = '#ffb347'; // вогні міст — бурштин (ADR-0064)
+// --- П14.5 (ADR-0072): тайли геосцени 2.0 — океан/суша/узбережжя ---
+// Джерело — assets/geo-tiles.png (768×96): 8 комірок 96×96 (2× від GCELL 48),
+// пер-тайлова генерація власника (кожен сирець = цілий тайл/спрайт, патерн
+// юніт-атласу П14.3; кропи-«розбирання» попередньої ітерації відкинуті —
+// власник бачив розтягнуті/зсунуті фрагменти). Порядок комірок — константи:
+// океан → суша A–D → узбережжя (ліва половина океан, права — суша з ціановим
+// кантом; фліп/поворот за маскою сусідства) → вогні міст (альфа-оверлей) →
+// вежа-радар (альфа, позначка бази). Розкладка суші/океану — авторський
+// масив GEO_LAND_ROWS у render-core; варіанти і декори — cellHash (без RNG).
+export const GEO_TILE = 96; // комірка атласу, px (2× від GCELL 48)
+export const GEO_TILE_OCEAN = 0; // океан
+export const GEO_TILE_LAND_A = 1; // суша A–D (4 варіанти плит за хешем)
+export const GEO_TILE_LAND_VARIANTS = 4; // Суша A, B, C, D
+export const GEO_TILE_COAST = 5; // узбережжя: ліворуч океан, праворуч суша
+export const GEO_TILE_CITY = 6; // вогні міст — альфа-оверлей
+export const GEO_TILE_TOWER = 7; // вежа-радар з маяком — позначка бази
 
 // Ліниве завантаження тайлів геосцени — той самий патерн, що initTerrainAtlas
 // (ADR-0072 п.3): фабрика інжектиться, невдача — тихий фолбек на два тони
@@ -399,6 +400,34 @@ export function drawBaseSprite(ctx: CanvasRenderingContext2D, b: BaseSprite): vo
   ctx.fillText('ВУЗОЛ', b.cx, b.cy + 16);
 }
 
+// П14.5 (ADR-0072): позначка бази геосцени 2.0 — вежа-радар з ціановим маяком
+// з атласу тайлів (комірка GEO_TILE_TOWER, nearest-neighbor під клітинку);
+// підпис «ВУЗОЛ» — як у чинного спрайта. Фолбек без ассета — піксельний
+// спрайт ADR-0031 (drawBaseSprite); тести від ассета не залежать.
+export function drawGeoBaseSprite(ctx: CanvasRenderingContext2D, b: BaseSprite): void {
+  if (geoTilesImg === null) {
+    drawBaseSprite(ctx, b);
+    return;
+  }
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(
+    geoTilesImg,
+    GEO_TILE_TOWER * GEO_TILE,
+    0,
+    GEO_TILE,
+    GEO_TILE,
+    Math.round(b.cx - b.size / 2),
+    Math.round(b.cy - b.size / 2),
+    b.size,
+    b.size
+  );
+  ctx.font = '11px system-ui';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = BASE_OUTLINE;
+  ctx.fillText('ВУЗОЛ', b.cx, b.cy + 16);
+}
+
 export function drawFighterSprite(ctx: CanvasRenderingContext2D, f: FighterSprite): void {
   drawPixelSprite(ctx, FIGHTER_SPRITE, f.cx, f.cy, SPRITE_SCALE);
 }
@@ -470,11 +499,12 @@ export function drawNightTerrain(ctx: CanvasRenderingContext2D, w: number, h: nu
 }
 
 // --- П12.7 (ADR-0064): терен геосцени — двотоновий із неоновою сіткою ---
-// П14.5 (ADR-0072): геосцена 2.0 — тайли океану/суші з ассета (розкладка
-// GEO_LAND_ROWS у render-core: суша/океан за авторським масивом, варіант
-// тайла — хеш клітинки, без RNG; узбережжя — ціанова кромка на краях суші
-// в бік океану; вогні міст — рідкий декор за хешем). Фолбек без ассета —
-// чинні два тони geoCellTone (обов'язковий; тести від ассета не залежать).
+// П14.5 (ADR-0072): геосцена 2.0 — тайли з ассета (розкладка GEO_LAND_ROWS
+// у render-core: суша/океан за авторським масивом, варіант суші A–D — хеш
+// клітинки, без RNG; узбережжя — тайл переходу з фліпом/поворотом за маскою
+// сусідства суша/океан (geoCoastSide, детерміновано); вогні міст — рідкий
+// альфа-оверлей за хешем). Фолбек без ассета — чинні два тони geoCellTone
+// (обов'язковий; тести від ассета не залежать).
 // Палітра і тон — чиста логіка src/core/render-core.ts; тут — лише
 // Canvas-виклики. Кадр еквівалентний малюванню з нуля (патерн renderGeo,
 // урок П6.6). Чиста функція без DOM-стану; викликається з src/ui/panels.ts.
@@ -485,56 +515,46 @@ export function drawGeoTerrain(ctx: CanvasRenderingContext2D, w: number, h: numb
   const cols = Math.ceil(w / cell);
   const rows = Math.ceil(h / cell);
   if (geoTilesImg !== null) {
-    // П14.5: тайли — nearest-neighbor, 1:1 під клітинку 48 (= GEO_TILE);
-    // океан — кол. 0–3, суша — 4–7, варіант за хешем координат (без RNG).
+    // П14.5: тайли — nearest-neighbor, комірка 96 малюється під клітинку 48;
+    // океан — базовий тайл, суша — 4 варіанти за хешем, узбережжя — фліп/поворот.
     ctx.imageSmoothingEnabled = false;
     for (let y = 0; y < rows; y++) {
       for (let x = 0; x < cols; x++) {
-        const land = geoIsLand(x, y);
-        const col = (land ? GEO_TILE_LAND : 0) + (cellHash(x, y) % (GEO_TILE_COLS - GEO_TILE_LAND));
-        ctx.drawImage(geoTilesImg, col * GEO_TILE, 0, GEO_TILE, GEO_TILE, x * cell, y * cell, cell, cell);
-      }
-    }
-    // узбережжя: м'яка ціанова кромка 3px + ядро 1px на краях суші до океану
-    for (let y = 0; y < rows; y++) {
-      for (let x = 0; x < cols; x++) {
-        const e = geoCoastEdges(x, y);
         const px = x * cell;
         const py = y * cell;
-        if (e.n) {
-          ctx.fillStyle = COAST_RIM;
-          ctx.fillRect(px, py, cell, 3);
-          ctx.fillStyle = COAST_RIM_CORE;
-          ctx.fillRect(px, py, cell, 1);
+        if (!geoIsLand(x, y)) {
+          ctx.drawImage(geoTilesImg, GEO_TILE_OCEAN * GEO_TILE, 0, GEO_TILE, GEO_TILE, px, py, cell, cell);
+          continue;
         }
-        if (e.s) {
-          ctx.fillStyle = COAST_RIM;
-          ctx.fillRect(px, py + cell - 3, cell, 3);
-          ctx.fillStyle = COAST_RIM_CORE;
-          ctx.fillRect(px, py + cell - 1, cell, 1);
+        const side = geoCoastSide(x, y);
+        if (side === null) {
+          // внутрішня суша: варіант A–D за хешем координат (без RNG)
+          const col = GEO_TILE_LAND_A + (cellHash(x, y) % GEO_TILE_LAND_VARIANTS);
+          ctx.drawImage(geoTilesImg, col * GEO_TILE, 0, GEO_TILE, GEO_TILE, px, py, cell, cell);
+          continue;
         }
-        if (e.w) {
-          ctx.fillStyle = COAST_RIM;
-          ctx.fillRect(px, py, 3, cell);
-          ctx.fillStyle = COAST_RIM_CORE;
-          ctx.fillRect(px, py, 1, cell);
+        // узбережжя: тайл переходу (океан ліворуч) повертаємо/дзеркалимо до
+        // першого океанного краю (geoCoastSide, фіксований порядок — детерміновано)
+        if (side === 'w') {
+          ctx.drawImage(geoTilesImg, GEO_TILE_COAST * GEO_TILE, 0, GEO_TILE, GEO_TILE, px, py, cell, cell);
+          continue;
         }
-        if (e.e) {
-          ctx.fillStyle = COAST_RIM;
-          ctx.fillRect(px + cell - 3, py, 3, cell);
-          ctx.fillStyle = COAST_RIM_CORE;
-          ctx.fillRect(px + cell - 1, py, 1, cell);
-        }
+        ctx.save();
+        ctx.translate(px + cell / 2, py + cell / 2);
+        if (side === 'e')
+          ctx.scale(-1, 1); // океан праворуч — дзеркало
+        else if (side === 'n')
+          ctx.rotate(Math.PI / 2); // океан згори
+        else ctx.rotate(-Math.PI / 2); // океан знизу
+        ctx.drawImage(geoTilesImg, GEO_TILE_COAST * GEO_TILE, 0, GEO_TILE, GEO_TILE, -cell / 2, -cell / 2, cell, cell);
+        ctx.restore();
       }
     }
-    // вогні міст: бурштинові точки на суші за хешем (детерміновано, без RNG)
-    ctx.fillStyle = CITY_LIGHT;
+    // вогні міст: альфа-оверлей на суші за хешем (рідкий декор, без RNG)
     for (let y = 0; y < rows; y++) {
       for (let x = 0; x < cols; x++) {
         if (!geoCityLights(x, y)) continue;
-        for (const d of geoCityLightDots(x, y)) {
-          ctx.fillRect(Math.round(x * cell + d.fx * cell) - 1, Math.round(y * cell + d.fy * cell) - 1, 2, 2);
-        }
+        ctx.drawImage(geoTilesImg, GEO_TILE_CITY * GEO_TILE, 0, GEO_TILE, GEO_TILE, x * cell, y * cell, cell, cell);
       }
     }
   } else {
