@@ -470,6 +470,13 @@
         transform: translate(-50%, -50%);
         width: min(340px, 86vw);
       }
+      /* П14.7: невисокі viewport (iPad-ландшафт тощо) — герой трохи вище
+         центру, щоб tagline не торкався верху меню (menu — lower-center) */
+      @media (max-height: 800px) {
+        .start-hero {
+          top: 46%;
+        }
+      }
       .start-logo {
         width: min(300px, 62vw, 32vh);
         margin: 0 auto;
