@@ -493,12 +493,14 @@
       .start-logo.logo-loaded .start-logo-text {
         display: none;
       }
+      /* П14.7: ассет лого з м'яким фейдером країв (альфа → 0 по периметру,
+         рампа 96 px, sstep) — прямокутні рамки розчиняються у темному
+         просвіті кільця; border-radius не потрібен */
       .start-logo-img {
         display: block;
         width: 100%;
         height: auto;
         margin: 0 auto;
-        border-radius: 10px;
       }
       .start-tagline {
         margin: 14px 0 0;
