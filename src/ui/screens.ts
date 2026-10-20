@@ -48,11 +48,18 @@ export interface Screens {
 // тестів: у headless/офлайн/без файла onload не спрацює — текст лишається.
 // Термінологія Розриву — одразу за мапою перейменувань ADR-0064 (щоб П12.6
 // не перероблював стартовий екран).
+// П14.7 (ADR-0072): вільна повноекранна компоновка — панель-коробку
+// прибрано; .start-box лишається лише координатною сіткою CSS (лого+tagline
+// у центрі — темний просвіт кільця кадру Б1, меню lower-center, версія
+// внизу). Діалоги лишаються панелями .panel.screen-dialog з 9-slice (П14.6)
+// і тут не зачіпаються.
 function startScreenHtml(version: string): string {
   return (
-    '<div class="panel start-box">' +
+    '<div class="start-box">' +
+    '<div class="start-hero">' +
     '<h1 class="start-logo" id="start-logo"><span class="start-logo-text">РУБІЖ</span></h1>' +
     '<p class="start-tagline">Остання лінія оборони людства проти Аномалії «Розрив»</p>' +
+    '</div>' +
     '<div class="start-menu">' +
     '<button id="btn-start-new">Нова партія</button>' +
     '<button id="btn-start-continue">Продовжити</button>' +
@@ -126,12 +133,13 @@ export function createScreens(deps: ScreensDeps): Screens {
   const topbar = el('topbar');
   const layout = el('layout');
   startScreen.innerHTML = startScreenHtml(deps.version);
-  // П13.4 ітерація 4 (ADR-0068/0071): фон стартового екрана — розмите
-  // затемнене саме лого (WebP, похідна кодом від оригіналу власника):
-  // палітра фону за побудовою та сама, що в лого — швів не виникає.
-  // URL — з vite-імпорту (base-аварійний); це CSS-фон, не
-  // Image-завантаження: headless/офлайн/без файла бачать суцільний
-  // колір #0a0a12 з CSS (фолбек, тести від ассета не залежать).
+  // П14.7 (ADR-0072/0071): фон стартового екрана — обраний власником кадр
+  // Б1 «Лінія оборони» (assets/start-bg.webp; конвертація з JPG власника —
+  // один цикл стиснення WebP q92, PSNR 46.5 дБ проти оригіналу, розмір
+  // 1376×768 без звуження). URL — з vite-імпорту (base-аварійний); це
+  // CSS-фон, не Image-завантаження (прецедент П13.4): headless/офлайн/без
+  // файла бачать суцільний колір #060a14 з CSS (фолбек — той самий вигляд
+  // без зображення, тести від ассета не залежать).
   startScreen.style.backgroundImage = `url("${startBgUrl}")`;
   newGameDialog.innerHTML = newGameDialogHtml();
   gameMenu.innerHTML = gameMenuHtml();
