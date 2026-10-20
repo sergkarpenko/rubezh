@@ -125,8 +125,8 @@
       }
       /* П14.6 (ADR-0072): рамка панелей 9-slice — CSS border-image з ассета
          assets/panel-frame.webp (761×709, конвертація кроку П14.6):
-         slice-лінії — виміряні смуги з запасом сяйва (top 116 / right 123 /
-         bottom 107 / left 121), repeat: stretch, БЕЗ fill — центральна зона
+         slice-лінії — виміряні смуги з запасом сяйва top 155 / right 195 /
+         bottom 155 / left 195; фідбек П14.6: у рамки біля кутів орнаментальні «капи» ~180x150 — тонкі slice-лінії різали їх, рештки розтягувалися на довгих панелях), repeat: stretch, БЕЗ fill — центральна зона
          відкидається, фон панелей лишається кодовим (рішення власника:
          рамка — не фон панелі). Застосовується ЛИШЕ після успішного
          завантаження ассета: клас .panel-frame і --panel-frame-url ставить
@@ -134,18 +134,24 @@
          панелі лишаються з чинною кодовою рамкою вище — фолбек ADR-0072
          (прецедент лого П13.4), тести від ассета не залежать */
       body.panel-frame section.panel {
-        border: 14px solid transparent;
-        border-image: var(--panel-frame-url) 116 123 107 121 / 14px stretch;
+        border-width: 17px 21px;
+        border-style: solid;
+        border-color: transparent;
+        border-image: var(--panel-frame-url) 155 195 155 195 / 17px 21px stretch;
         border-radius: 0;
       }
       body.panel-frame header#topbar {
-        border: 12px solid transparent;
-        border-image: var(--panel-frame-url) 116 123 107 121 / 12px stretch;
+        border-width: 14px 17px;
+        border-style: solid;
+        border-color: transparent;
+        border-image: var(--panel-frame-url) 155 195 155 195 / 14px 17px stretch;
         border-radius: 0;
       }
       body.panel-frame #status-tabs {
-        border: 12px solid transparent;
-        border-image: var(--panel-frame-url) 116 123 107 121 / 12px stretch;
+        border-width: 14px 17px;
+        border-style: solid;
+        border-color: transparent;
+        border-image: var(--panel-frame-url) 155 195 155 195 / 14px 17px stretch;
         border-radius: 0;
         padding: 8px;
       }
