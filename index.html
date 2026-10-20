@@ -430,19 +430,18 @@
         color: #7fe2a0;
       }
 
-      /* П12.2 (ADR-0065): стартовий екран і діалоги навігації — контент
-         генерує src/ui/screens.ts; логотип текстовий (фолбек під ассет — П13.4,
-         ADR-0068); неоновий ціан — «Рубіж»/гравець (палітра П12.7, ADR-0064) */
+      /* П12.2/П14.7 (ADR-0065/0072): стартовий екран — вільна повноекранна
+         компоновка без панелі-коробки; фон — обраний власником кадр Б1
+         «Лінія оборони» (assets/start-bg.webp, ставить screens.ts з
+         vite-імпорту), cover + center; фолбек без ассета (headless/офлайн)
+         — суцільний колір #060a14, той самий вигляд без зображення */
       #start-screen {
         position: fixed;
         top: 0;
         left: 0;
         right: 0;
         bottom: 0;
-        /* П13.4 ітерація 4 (ADR-0068/0071): фон — розмите затемнене саме лого
-           (assets/start-bg.webp, ставить screens.ts з vite-імпорту);
-           фолбек без ассета — суцільний колір */
-        background: #0a0a12;
+        background: #060a14;
         background-size: cover;
         background-position: center;
         background-repeat: no-repeat;
@@ -453,17 +452,40 @@
         padding: 16px;
         overflow: auto;
       }
+      /* П14.7: .start-box — не панель, а координатна сітка на весь екран:
+         лого+tagline у центрі (темний просвіт кільця кадру Б1), меню —
+         вертикальний стек у lower-center, версія внизу. Позиціонування
+         абсолютне, без анімацій (ADR-0029/0073). Клас .start-menu також у
+         діалозі «Меню» гри — скоуп позиціонування тільки через .start-box */
       .start-box {
-        max-width: 420px;
+        position: relative;
         width: 100%;
+        height: 100%;
         text-align: center;
       }
+      .start-hero {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: min(340px, 86vw);
+      }
+      /* П14.7: невисокі viewport (iPad-ландшафт тощо) — герой трохи вище
+         центру, щоб tagline не торкався верху меню (menu — lower-center) */
+      @media (max-height: 800px) {
+        .start-hero {
+          top: 46%;
+        }
+      }
       .start-logo {
+        width: min(300px, 62vw, 32vh);
+        margin: 0 auto;
         font-size: 56px;
         letter-spacing: 0.18em;
-        margin: 8px 0 4px;
         color: #00e5ff;
-        text-shadow: 0 0 18px rgba(0, 229, 255, 0.45);
+        text-shadow:
+          0 0 18px rgba(0, 229, 255, 0.45),
+          0 2px 12px rgba(6, 10, 20, 0.55);
       }
       /* П13.4 (ADR-0068/0071): ассет лого (WebP); фолбек — текст. Текст ховається
          лише після onload ассета (клас logo-loaded); у headless/офлайн/без
@@ -471,31 +493,57 @@
       .start-logo.logo-loaded .start-logo-text {
         display: none;
       }
+      /* П14.7: ассет лого з м'яким фейдером країв (альфа → 0 по периметру,
+         рампа 96 px, sstep) — прямокутні рамки розчиняються у темному
+         просвіті кільця; border-radius не потрібен */
       .start-logo-img {
         display: block;
         width: 100%;
         height: auto;
         margin: 0 auto;
-        border-radius: 10px;
       }
       .start-tagline {
-        color: #7d8794;
+        margin: 14px 0 0;
         font-size: 13px;
-        margin: 0 0 24px;
+        text-transform: uppercase;
+        letter-spacing: 0.25em;
+        color: #7d8794;
+        text-shadow: 0 2px 10px rgba(6, 10, 20, 0.8);
       }
       .start-menu {
         display: flex;
         flex-direction: column;
         gap: 10px;
       }
+      /* П14.7: стек кнопок стартового екрана — lower-center; читабельність
+         на будь-якій ділянці фону — напівпрозора темна підкладка і текстова
+         тінь; тач-цілі ≥44px (прецедент тулбара П13.2) */
+      .start-box .start-menu {
+        position: absolute;
+        left: 50%;
+        bottom: 48px;
+        transform: translateX(-50%);
+        width: min(340px, 86vw);
+      }
       .start-menu button {
         padding: 12px 16px;
         font-size: 15px;
       }
+      .start-box .start-menu button {
+        min-height: 44px;
+        background: rgba(6, 10, 20, 0.55);
+        border-color: rgba(49, 67, 95, 0.9);
+        text-shadow: 0 1px 4px rgba(6, 10, 20, 0.75);
+      }
       .start-version {
-        margin: 20px 0 0;
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 12px;
+        margin: 0;
         font-size: 11px;
         color: #6d7d92;
+        text-shadow: 0 1px 6px rgba(6, 10, 20, 0.8);
       }
       /* П12.2 (ADR-0065): модальні вікна навігації — діалог нової партії,
          меню гри, підтвердження виходу (без анімацій — перемикання класів);
