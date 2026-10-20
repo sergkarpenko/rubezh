@@ -125,8 +125,8 @@
       }
       /* П14.6 (ADR-0072): рамка панелей 9-slice — CSS border-image з ассета
          assets/panel-frame.webp (1298×684, варіант 2: конвертація кроку П14.6):
-         slice-лінії — виміряні смуги з запасом сяйва (top 104 / right 125 /
-         bottom 101 / left 125), repeat: stretch, БЕЗ fill — центральна зона
+         slice-лінії — за межі орнаментальних «кап» кутів (top 265 / right 345 /
+         bottom 265 / left 345; фідбек П14.6: капи кутів ~300px — тонкі slice-лінії різали їх, рештки розтягувалися на довгих панелях), repeat: stretch, БЕЗ fill — центральна зона
          відкидається, фон панелей лишається кодовим (рішення власника:
          рамка — не фон панелі). Застосовується ЛИШЕ після успішного
          завантаження ассета: клас .panel-frame і --panel-frame-url ставить
@@ -134,18 +134,24 @@
          панелі лишаються з чинною кодовою рамкою вище — фолбек ADR-0072
          (прецедент лого П13.4), тести від ассета не залежать */
       body.panel-frame section.panel {
-        border: 14px solid transparent;
-        border-image: var(--panel-frame-url) 104 125 101 125 / 14px stretch;
+        border-width: 26px 33px;
+        border-style: solid;
+        border-color: transparent;
+        border-image: var(--panel-frame-url) 265 345 265 345 / 26px 33px stretch;
         border-radius: 0;
       }
       body.panel-frame header#topbar {
-        border: 12px solid transparent;
-        border-image: var(--panel-frame-url) 104 125 101 125 / 12px stretch;
+        border-width: 20px 26px;
+        border-style: solid;
+        border-color: transparent;
+        border-image: var(--panel-frame-url) 265 345 265 345 / 20px 26px stretch;
         border-radius: 0;
       }
       body.panel-frame #status-tabs {
-        border: 12px solid transparent;
-        border-image: var(--panel-frame-url) 104 125 101 125 / 12px stretch;
+        border-width: 20px 26px;
+        border-style: solid;
+        border-color: transparent;
+        border-image: var(--panel-frame-url) 265 345 265 345 / 20px 26px stretch;
         border-radius: 0;
         padding: 8px;
       }
