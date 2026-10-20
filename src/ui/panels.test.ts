@@ -73,6 +73,7 @@ function makeFixture(over: Partial<PanelsDeps> = {}): Fixture {
     activeGeoAnim: () => null,
     geoAnimNow: () => 0,
     victoryDismissed: () => false,
+    ambient: { paintGeo: vi.fn() }, // П14.8: ambient no-op (гейти в модулі)
     ...over,
   };
   return { party, deps, panels: createPanels(deps) };

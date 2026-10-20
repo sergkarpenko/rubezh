@@ -34,6 +34,7 @@ import { animT, animsFromEvents, moveAnimPos, pendingAlienMoveStarts, shakeOffse
 import { el } from './dom';
 import { BCELL } from './grid';
 import { type LogCat } from './journal';
+import type { AmbientBattleScene, AmbientUnitView } from './ambient';
 
 export type BattleOutcome = 'перемога' | 'поразка';
 
@@ -61,6 +62,13 @@ export interface BattleAnimAdapter {
   queued(): readonly Anim[]; // П14.4: знімок черги — хід ШІ відтворюється поверх фінального стану
 }
 
+// П14.8 (ADR-0073): ambient-шар бою — малювальник «живих» ефектів поверх
+// кадру (пульс стін, підсвічування поранених). Гейти — в ambient-модулі
+// (тумблер, typeof-rAF): вимкнено/jsdom — 0 Canvas-викликів.
+export interface BattleAmbient {
+  paintBattle(ctx: CanvasRenderingContext2D, scene: AmbientBattleScene): void;
+}
+
 // Залежності від шару застосунку (main.ts).
 export interface BattleDeps {
   getParty(): Party;
@@ -73,6 +81,7 @@ export interface BattleDeps {
   stopAuto(): void; // П13.3 (ADR-0067): закриття бою зупиняє авто-бій
   autoBusy(): boolean; // П13.3: стан драйвера авто-бою — підпис плитки «Авто»/«Стоп»
   cancelGeoAnim(): void; // П6.9: геосцену сховано — пульс радара скидаємо
+  ambient: BattleAmbient; // П14.8: ефекти поверх кадру (без впливу на клік-математику)
 }
 
 export interface BattleUI {
@@ -242,18 +251,14 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
     const shake = shakeOffset(activeAnim, deps.anim.now);
     ctx.save();
     ctx.translate(shake.dx, shake.dy);
-    drawNightTerrain(
-      ctx,
-      cv.width,
-      cv.height,
-      Array.from({ length: st.map.height }, (_, y) =>
-        Array.from({ length: st.map.width }, (_, x): TerrainCell => {
-          const k2 = x + ',' + y;
-          return { x, y, blocked: st.map.blocked.has(k2), visible: vis.has(k2) };
-        })
-      ).flat(),
-      BCELL
-    );
+    // П14.8: клітинки кадру — спільні для терену і ambient-сцени (стіни wall-pulse)
+    const cells: TerrainCell[] = Array.from({ length: st.map.height }, (_, y) =>
+      Array.from({ length: st.map.width }, (_, x): TerrainCell => {
+        const k2 = x + ',' + y;
+        return { x, y, blocked: st.map.blocked.has(k2), visible: vis.has(k2) };
+      })
+    ).flat();
+    drawNightTerrain(ctx, cv.width, cv.height, cells, BCELL);
 
     ctx.setLineDash([3, 3]);
     ctx.strokeStyle = 'rgba(110,168,255,0.5)';
@@ -298,6 +303,9 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
     // П6.7 (ADR-0029): векторні спрайти юнітів замість геометричних кружків —
     // силует, зброя, HP, рамка вибору і маркер дозору малює render.ts
     // (маркер дозору — строго в межах клітинки, П6.6).
+    // П14.8: намальовані юніти — сцена ambient-шару (туман врахований:
+    // невидимі прибульці сюди не потрапляють — ADR-0006).
+    const ambUnits: AmbientUnitView[] = [];
     for (const u of st.units) {
       if (!u.alive) continue;
       // П14.3: напрямок погляду — детерміновано за останнім рухом/ціллю:
@@ -324,6 +332,7 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
       const visible = vis.has(at.x + ',' + at.y);
       if (u.side === 'alien' && !visible) continue;
       const native: 1 | -1 = u.side === 'player' ? 1 : -1;
+      ambUnits.push({ at: { x: at.x, y: at.y }, hp: u.hp, maxHp: u.maxHp }); // П14.8: сцена ambient
       drawUnitSprite(ctx, {
         side: u.side,
         cx: at.x * BCELL + BCELL / 2,
@@ -345,6 +354,12 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
     if (activeAnim !== null && (activeAnim.kind !== 'move' || movingId !== null)) {
       drawAnimFrame(ctx, activeAnim, deps.anim.now, BCELL, 8, cv.width, cv.height);
     }
+
+    // П14.8 (ADR-0073): ambient-ефекти поверх кадру (пульс ціанових кантів
+    // стін, підсвічування HP-бейджів поранених) — суто відображення: клік-
+    // математика, відображувані позиції і лог не зачіпаються; у кадрі тряски
+    // малюється у тому ж зсуві, що й сцена (без розсинхрону шарів).
+    deps.ambient.paintBattle(ctx, { cell: BCELL, cw: cv.width, ch: cv.height, cells, units: ambUnits });
 
     // П6.14: шанс попадання біля клітинки цілі — при наведенні (aimCell) або
     // першому тапі (tapCell у зведеному режимі — тап-тап, дзеркало руху П6.4).

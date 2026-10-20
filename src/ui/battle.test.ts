@@ -81,6 +81,7 @@ function makeFixture(over: Partial<BattleDeps> = {}): Fixture {
     stopAuto: vi.fn(),
     autoBusy: () => false, // П13.3: авто-бій не триває
     cancelGeoAnim: vi.fn(),
+    ambient: { paintBattle: vi.fn() }, // П14.8: ambient no-op (гейти в модулі)
     ...over,
   };
   return { party, ui, deps, battle: createBattleUI(ui, deps) };
