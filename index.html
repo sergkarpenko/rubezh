@@ -123,6 +123,50 @@
         border-radius: 8px;
         padding: 12px;
       }
+      /* П14.6 (ADR-0072): рамка панелей 9-slice — CSS border-image з ассета
+         assets/panel-frame.webp (1298×684; джерело — успішна генерація Gemini, обрана власником):
+         slice-лінії — за межі орнаментальних «кап» кутів (top 265 / right 345 /
+         bottom 265 / left 345; фідбек П14.6: орнаментальні «капи» кутів ~345x265 — тонкі slice-лінії різали їх, рештки розтягувалися на довгих панелях), repeat: stretch, БЕЗ fill — центральна зона
+         відкидається, фон панелей лишається кодовим (рішення власника:
+         рамка — не фон панелі). Застосовується ЛИШЕ після успішного
+         завантаження ассета: клас .panel-frame і --panel-frame-url ставить
+         src/ui/panel-frame.ts; при !loaded (headless/офлайн/без файла)
+         панелі лишаються з чинною кодовою рамкою вище — фолбек ADR-0072
+         (прецедент лого П13.4), тести від ассета не залежать */
+      body.panel-frame section.panel {
+        border-width: 26px 33px;
+        border-style: solid;
+        border-color: transparent;
+        border-image: var(--panel-frame-url) 265 345 265 345 / 26px 33px stretch;
+        border-radius: 0;
+      }
+      body.panel-frame header#topbar {
+        border-width: 20px 26px;
+        border-style: solid;
+        border-color: transparent;
+        border-image: var(--panel-frame-url) 265 345 265 345 / 20px 26px stretch;
+        border-radius: 0;
+      }
+      body.panel-frame #status-tabs {
+        border-width: 20px 26px;
+        border-style: solid;
+        border-color: transparent;
+        border-image: var(--panel-frame-url) 265 345 265 345 / 20px 26px stretch;
+        border-radius: 0;
+        padding: 8px;
+      }
+      /* П14.6 (ADR-0072): іконки вкладок — піксель-матриці кодом
+         (src/ui/tab-icons.ts, патерн тулбара П13.2): canvas перед текстом,
+         буфер 1:1 12px + pixelated — чітко і на retina; контракти кнопок
+         (id, класи, dataset, текст) не змінюються (урок П11.6) */
+      #status-tabs button canvas.tab-icon,
+      #log-tabs button canvas.tab-icon {
+        width: 12px;
+        height: 12px;
+        image-rendering: pixelated;
+        vertical-align: -2px;
+        margin-right: 4px;
+      }
       h2 {
         font-size: 12px;
         margin: 0 0 8px;
