@@ -20,7 +20,10 @@
 // rubezh.settings.ambient у локальному сховищі, дефолт — увімкнено;
 // зміна тумблера — без перезапуску застосунку.
 
-import { cellHash } from '../core/render-core';
+import { cellHash, geoCityLights, makeGeoLayout, type TerrainCell } from '../core/render-core';
+import { RADAR_RANGE } from '../core/geo';
+import { HP_BAR_H, HP_BAR_W, HP_BAR_Y } from '../render';
+import type { Vec2 } from '../core/combat';
 
 // --- Тумблер: localStorage ПОЗА сейвом (ADR-0073 п.3; патерн audio.ts) ---
 
@@ -86,6 +89,107 @@ export function cityFlickerAlpha(x: number, y: number, t: number): number {
   return 0.35 * Math.max(0, Math.sin((2 * Math.PI * local) / CITY_FLICKER_MS));
 }
 
+// --- Малювальники ефектів: фіксований перелік П14.8 (ADR-0073 п.5) ---
+// Чисті функції: ctx і сцена інжектуються, t — від викликача (facade) —
+// у тестах мок-контекст записує потік викликів (детермінізм від t).
+// Ліміти: не більше AMBIENT_MAX_EFFECTS одночасних ефектів на кадр
+// (стіни — один ефект, розгортка — один, вогник/бейдж — по одному на ціль);
+// порядок детермінований (стіни/розгортка перші, далі цілі в порядку сцени).
+// Усі примітиви — у межах клітинок (урок П6.6); туман вирішує викликач:
+// у сцену потрапляють лише намальовані юніти (battle.ts пропускає
+// невидимих прибульців — ADR-0006), рельєф стін туман показує і так.
+
+// Юніт бою з погляду ambient-шару: відображувана клітинка і HP (туман
+// враховано на боці викликача; окремих знань про стан гри модуль не має).
+export interface AmbientUnitView {
+  at: Vec2;
+  hp: number;
+  maxHp: number;
+}
+
+// Сцена бою: клітинки (стіни — blocked) і намальовані юніти.
+export interface AmbientBattleScene {
+  cell: number; // BCELL
+  cw: number;
+  ch: number;
+  cells: readonly TerrainCell[];
+  units: readonly AmbientUnitView[];
+}
+
+// Сцена геосцени: сід партії (розклад континентів makeGeoLayout — той самий,
+// що й у drawGeoTerrain; без geo.rng) і клітинка бази (центр розгортки).
+export interface AmbientGeoScene {
+  cell: number; // GCELL
+  cw: number;
+  ch: number;
+  seed: number;
+  base: Vec2;
+}
+
+// Бій: wall-pulse (кванти стін) + hp-glow (бейджі поранених).
+export function paintBattleAmbient(ctx: CanvasRenderingContext2D, s: AmbientBattleScene, t: number): void {
+  let fx = 0; // лічильник одночасних ефектів (бюджет ADR-0073 п.4)
+  if (s.cells.some((c) => c.blocked) && fx < AMBIENT_MAX_EFFECTS) {
+    fx++; // wall-pulse — один ефект на всі стіни (пульс ціанового канту)
+    ctx.strokeStyle = 'rgba(0,229,255,' + wallPulseAlpha(t).toFixed(3) + ')';
+    ctx.lineWidth = 1;
+    for (const c of s.cells) {
+      if (c.blocked) ctx.strokeRect(c.x * s.cell + 1.5, c.y * s.cell + 1.5, s.cell - 3, s.cell - 3);
+    }
+  }
+  if (fx >= AMBIENT_MAX_EFFECTS) return;
+  const glow = 'rgba(255,92,122,' + hpGlowAlpha(t).toFixed(3) + ')';
+  for (const u of s.units) {
+    if (fx >= AMBIENT_MAX_EFFECTS) break;
+    if (u.maxHp <= 0 || u.hp / u.maxHp >= AMBIENT_HP_FRACTION) continue; // лише низький HP
+    fx++; // hp-glow — по одному на пораненого юніта
+    // геометрія бейджа — константи render.ts (HP_BAR_*): підсвічування смуги HP
+    ctx.fillStyle = glow;
+    ctx.fillRect(u.at.x * s.cell + (s.cell - HP_BAR_W) / 2, u.at.y * s.cell + s.cell / 2 + HP_BAR_Y, HP_BAR_W, HP_BAR_H);
+  }
+}
+
+// Геосцена: radar-sweep (розгортка у стані спокою) + city-flicker (вогні).
+export function paintGeoAmbient(ctx: CanvasRenderingContext2D, s: AmbientGeoScene, t: number): void {
+  let fx = 0; // лічильник одночасних ефектів (бюджет ADR-0073 п.4)
+  const cx = s.base.x * s.cell + s.cell / 2;
+  const cy = s.base.y * s.cell + s.cell / 2;
+  const maxR = (RADAR_RANGE + 0.5) * s.cell; // зона сенсорної сітки (прецедент gscan П14.5)
+  if (fx < AMBIENT_MAX_EFFECTS) {
+    fx++; // radar-sweep — безперервна розгортка (розвиток подієвого gscan)
+    const ang = radarSweepAngle(t);
+    ctx.strokeStyle = 'rgba(0,229,255,0.3)'; // передній край — приглушений ціан «Рубіжу»
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(cx + Math.cos(ang) * maxR, cy + Math.sin(ang) * maxR);
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(0,229,255,0.05)'; // слід сектора за променем (глибина розгортки)
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.arc(cx, cy, maxR, ang - Math.PI / 6, ang);
+    ctx.closePath();
+    ctx.fill();
+  }
+  if (fx >= AMBIENT_MAX_EFFECTS) return;
+  // city-flicker: вогник у центрі клітинки міста (розклад вогнів П14.5, поріг cellHash)
+  const layout = makeGeoLayout(s.seed, s.base);
+  const cols = Math.ceil(s.cw / s.cell);
+  const rows = Math.ceil(s.ch / s.cell);
+  for (let y = 0; y < rows; y++) {
+    for (let x = 0; x < cols; x++) {
+      if (fx >= AMBIENT_MAX_EFFECTS) break;
+      if (!geoCityLights(layout, x, y)) continue;
+      const a = cityFlickerAlpha(x, y, t);
+      if (a <= 0) continue; // поза фазою мерехтіння — не малюємо (економія бюджету)
+      fx++;
+      ctx.fillStyle = 'rgba(255,207,92,' + a.toFixed(3) + ')';
+      ctx.fillRect(x * s.cell + s.cell / 2 - 3, y * s.cell + s.cell / 2 - 3, 6, 6);
+    }
+    if (fx >= AMBIENT_MAX_EFFECTS) break;
+  }
+}
+
 // --- Рушій ambient-шару: гейти + тротлер + тумблер (ADR-0073 п.2–4) ---
 
 export interface AmbientDeps {
@@ -104,6 +208,10 @@ export interface Ambient {
   start(): void; // партія активна: запустити цикл (гейти всередині; повторний виклик — no-op)
   pause(): void; // документ у фоні: зупинити планування (0 перерисовок)
   resume(): void; // документ знову видимий: поновити цикл, якщо увімкнено
+  // Малювальники ефектів поверх чинного кадру (викликає рендер сцени):
+  // гейти тумблера і typeof-rAF усередині — jsdom (стаб П6.16) — 0 викликів.
+  paintBattle(ctx: CanvasRenderingContext2D, scene: AmbientBattleScene): void;
+  paintGeo(ctx: CanvasRenderingContext2D, scene: AmbientGeoScene): void;
 }
 
 export function createAmbient(deps: AmbientDeps): Ambient {
@@ -165,5 +273,16 @@ export function createAmbient(deps: AmbientDeps): Ambient {
     start,
     pause,
     resume: start, // видимість повернулася — ті самі гейти, що й старт
+    // Гейти малювальників: вимкнений тумблер або середовище без rAF (jsdom,
+    // стаб П6.16) — 0 Canvas-викликів; подієві кадри у браузері малюють
+    // ambient тим самим t (без мерехтіння між циклами кадрів).
+    paintBattle: (ctx, scene) => {
+      if (!on || !deps.hasRaf()) return;
+      paintBattleAmbient(ctx, scene, deps.now());
+    },
+    paintGeo: (ctx, scene) => {
+      if (!on || !deps.hasRaf()) return;
+      paintGeoAmbient(ctx, scene, deps.now());
+    },
   };
 }
