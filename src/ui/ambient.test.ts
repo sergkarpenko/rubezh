@@ -11,15 +11,78 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import {
   AMBIENT_FRAME_MS,
   AMBIENT_FPS_MAX,
+  AMBIENT_HP_FRACTION,
   AMBIENT_KEY,
   AMBIENT_MAX_EFFECTS,
   cityFlickerAlpha,
   createAmbient,
   hpGlowAlpha,
+  paintBattleAmbient,
+  paintGeoAmbient,
   radarSweepAngle,
   wallPulseAlpha,
   type AmbientStore,
+  type AmbientUnitView,
 } from './ambient';
+import { createGame, endTurn, makeUnit, moveUnit, mulberry32, resolveAttack, type GameState, type StatefulRng } from '../core/combat';
+import { advanceTime } from '../core/geo';
+import { createParty, serializeParty } from '../core/save';
+
+// --- Мок-контекст малювання: журнал Canvas-викликів (патерн П6.14) ---
+
+function mockCtx(): { ctx: CanvasRenderingContext2D; ops: string[] } {
+  const ops: string[] = [];
+  const ctx = new Proxy(
+    {},
+    {
+      get:
+        (_t, p) =>
+        (...args: unknown[]) => {
+          ops.push(String(p) + '(' + args.map(String).join(',') + ')');
+          return undefined;
+        },
+      set: (_t, p, v) => {
+        ops.push('set:' + String(p) + '=' + String(v));
+        return true;
+      },
+    }
+  );
+  return { ctx: ctx as unknown as CanvasRenderingContext2D, ops };
+}
+
+// Клітинка сцени бою (стіна/підлога).
+const cell = (x: number, y: number, blocked = false): { x: number; y: number; blocked: boolean; visible: boolean } => ({
+  x,
+  y,
+  blocked,
+  visible: true,
+});
+
+const unit = (x: number, y: number, hp: number, maxHp: number): AmbientUnitView => ({ at: { x, y }, hp, maxHp });
+
+const battleScene = (cells: readonly { x: number; y: number; blocked: boolean }[], units: readonly AmbientUnitView[]) => ({
+  cell: 48,
+  cw: 960,
+  ch: 960,
+  cells: cells.map((c) => ({ ...c, visible: true })),
+  units,
+});
+
+const geoScene = (seed: number, base: { x: number; y: number }) => ({
+  cell: 48,
+  cw: 768,
+  ch: 384,
+  seed,
+  base,
+});
+
+// Поранений бій (сцена з пораненими обох сторін) для тестів hp-glow.
+const wounded = (): AmbientUnitView[] => [
+  unit(2, 2, 1, 10), // 0.1 < 0.35 — світиться
+  unit(3, 2, 3, 10), // 0.3 < 0.35 — світиться
+  unit(4, 2, 4, 10), // 0.4 — ні
+  unit(5, 2, 10, 10), // повний — ні
+];
 
 // --- Харнес: фейковий планувальник rAF + фейковий wall-clock ---
 
@@ -312,5 +375,194 @@ describe('П14.8: бюджет — константи шару відображ�
   it('ліміт ефектів і частота — сталі, перелік фіксовано П14.8', () => {
     expect(AMBIENT_MAX_EFFECTS).toBe(4); // wall-pulse, radar-sweep, city-flicker, hp-glow
     expect(AMBIENT_FPS_MAX).toBe(10); // ≤ 10 fps — бюджет ambient-шару
+  });
+});
+
+describe('П14.8: малювальник бою — wall-pulse + hp-glow (перелік П14.8)', () => {
+  it('стіни: пульс ціанового канту — strokeRect на кожній стіні у межах клітинки', () => {
+    const { ctx, ops } = mockCtx();
+    paintBattleAmbient(ctx, battleScene([cell(0, 0, true), cell(1, 0, true), cell(2, 0, false)], []), 0);
+    const frames = ops.filter((o) => o.startsWith('strokeRect'));
+    expect(frames).toEqual(['strokeRect(1.5,1.5,45,45)', 'strokeRect(49.5,1.5,45,45)']);
+    expect(ops.some((o) => o === 'set:strokeStyle=rgba(0,229,255,' + wallPulseAlpha(0).toFixed(3) + ')')).toBe(true);
+  });
+
+  it('без стін і без поранених — 0 Canvas-викликів (здоровий бій не підсвічений)', () => {
+    const { ctx, ops } = mockCtx();
+    paintBattleAmbient(ctx, battleScene([cell(0, 0)], [unit(1, 1, 10, 10)]), 500);
+    expect(ops).toEqual([]);
+  });
+
+  it('hp-glow: лише hp/maxHp < 0.35; геометрія бейджа — смуга HP зверху клітинки', () => {
+    const { ctx, ops } = mockCtx();
+    paintBattleAmbient(ctx, battleScene([cell(0, 0)], wounded()), 700);
+    const glows = ops.filter((o) => o.startsWith('fillRect'));
+    expect(glows).toEqual(['fillRect(96,97,48,4)', 'fillRect(144,97,48,4)']); // x*48, y*48+1 (HP_BAR_*)
+    expect(ops.some((o) => o.startsWith('set:fillStyle=rgba(255,92,122,'))).toBe(true);
+    expect(AMBIENT_HP_FRACTION).toBe(0.35); // поріг підсвічування — стала шару
+  });
+
+  it('детермінізм від t: той самий t — той самий потік Canvas-викликів', () => {
+    const scene = battleScene([cell(0, 0, true)], wounded());
+    const a = mockCtx();
+    const b = mockCtx();
+    paintBattleAmbient(a.ctx, scene, 1234);
+    paintBattleAmbient(b.ctx, scene, 1234);
+    expect(a.ops).toEqual(b.ops);
+    const c = mockCtx();
+    paintBattleAmbient(c.ctx, scene, 1234 + 2000); // інша фаза — інша альфа
+    expect(c.ops).not.toEqual(a.ops);
+  });
+
+  it('ліміт одночасних ефектів: 10 поранених + стіни — не більше AMBIENT_MAX_EFFECTS', () => {
+    const { ctx, ops } = mockCtx();
+    const many = Array.from({ length: 10 }, (_, i) => unit(i, 2, 1, 10));
+    paintBattleAmbient(ctx, battleScene([cell(0, 0, true)], many), 0);
+    const wall = ops.filter((o) => o.startsWith('strokeRect')).length; // 1 ефект wall-pulse
+    const glows = ops.filter((o) => o.startsWith('fillRect')).length; // решта бюджету — hp-glow
+    expect(wall).toBe(1);
+    expect(wall + glows).toBe(AMBIENT_MAX_EFFECTS); // бюджет кадра вичерпано
+    expect(glows).toBe(3); // перші три юніта в порядку сцени — детерміновано
+  });
+
+  it('без стін: бюджет дозволяє AMBIENT_MAX_EFFECTS підсвічувань', () => {
+    const { ctx, ops } = mockCtx();
+    const many = Array.from({ length: 10 }, (_, i) => unit(i, 2, 1, 10));
+    paintBattleAmbient(ctx, battleScene([cell(0, 0)], many), 0);
+    expect(ops.filter((o) => o.startsWith('fillRect')).length).toBe(AMBIENT_MAX_EFFECTS);
+  });
+
+  it('поранений з maxHp=0 — не світиться (захист від ділення)', () => {
+    const { ctx, ops } = mockCtx();
+    paintBattleAmbient(ctx, battleScene([cell(0, 0)], [unit(1, 1, 0, 0)]), 0);
+    expect(ops).toEqual([]);
+  });
+});
+
+describe('П14.8: малювальник геосцени — radar-sweep + city-flicker', () => {
+  it('розгортка: промінь + слід сектора від бази; кут — від t (детерміновано)', () => {
+    const { ctx, ops } = mockCtx();
+    paintGeoAmbient(ctx, geoScene(42, { x: 8, y: 4 }), 1000);
+    expect(ops).toContain('moveTo(408,216)');
+    expect(ops.filter((o) => o.startsWith('lineTo')).length).toBe(1); // передній край
+    expect(ops.filter((o) => o.startsWith('arc')).length).toBe(1); // слід сектора
+    const other = mockCtx();
+    paintGeoAmbient(other.ctx, geoScene(42, { x: 8, y: 4 }), 1000 + 3000); // пів періоду — інший кут
+    expect(other.ops.filter((o) => o.startsWith('lineTo'))).not.toEqual(ops.filter((o) => o.startsWith('lineTo')));
+  });
+
+  it('мерехтіння міст: вогники лише на клітинках вогнів з альфою > 0; ліміт кадру', () => {
+    // сцена з вогнями: сід/база як у реальній партії; t підбираємо з мерехтінням
+    let t = -1;
+    let flickers: string[] = [];
+    for (let probe = 0; probe < 2600 && flickers.length === 0; probe += 20) {
+      const m = mockCtx();
+      paintGeoAmbient(m.ctx, geoScene(42, { x: 8, y: 4 }), probe);
+      flickers = m.ops.filter((o) => o.startsWith('fillRect'));
+      if (flickers.length > 0) t = probe;
+    }
+    expect(t).toBeGreaterThanOrEqual(0); // мерехтіння існує на розкладі вогнів
+    const m = mockCtx();
+    paintGeoAmbient(m.ctx, geoScene(42, { x: 8, y: 4 }), t);
+    const all = m.ops.filter((o) => o.startsWith('fillRect'));
+    expect(all.length).toBeGreaterThan(0);
+    expect(all.length).toBeLessThanOrEqual(AMBIENT_MAX_EFFECTS - 1); // розгортка вже зайняла 1
+    expect(m.ops.some((o) => o.startsWith('set:fillStyle=rgba(255,207,92,'))).toBe(true); // теплий вогник
+  });
+
+  it('детермінізм від t: той самий (t, сцена) — той самий потік викликів', () => {
+    const a = mockCtx();
+    const b = mockCtx();
+    paintGeoAmbient(a.ctx, geoScene(42, { x: 8, y: 4 }), 777);
+    paintGeoAmbient(b.ctx, geoScene(42, { x: 8, y: 4 }), 777);
+    expect(a.ops).toEqual(b.ops);
+  });
+});
+
+describe('П14.8: facade-методи малювання — гейти тумблера і rAF', () => {
+  it('увімкнено + rAF: малює за now() рушія; вимкнено або без rAF — 0 викликів', () => {
+    const h = makeHarness();
+    const amb = createAmbient({ ...h, store: memStore() });
+    const { ctx, ops } = mockCtx();
+    amb.paintBattle(ctx, battleScene([cell(0, 0, true)], wounded())); // t = now() = 0
+    expect(ops.length).toBeGreaterThan(0);
+    const off = mockCtx();
+    amb.toggle(); // вимк
+    amb.paintBattle(off.ctx, battleScene([cell(0, 0, true)], wounded()));
+    amb.paintGeo(off.ctx, geoScene(42, { x: 8, y: 4 }));
+    expect(off.ops).toEqual([]); // вимкнений тумблер — 0 Canvas-викликів
+    amb.toggle(); // увімк
+    const noRaf = createAmbient({ ...makeHarness(), hasRaf: () => false, store: memStore() });
+    const jsdom = mockCtx();
+    noRaf.paintBattle(jsdom.ctx, battleScene([cell(0, 0, true)], wounded())); // jsdom: стаб П6.16
+    noRaf.paintGeo(jsdom.ctx, geoScene(42, { x: 8, y: 4 }));
+    expect(jsdom.ops).toEqual([]); // typeof-гейт — 0 викликів
+  });
+});
+
+// --- Критерій П14.8: ambient не міняє партію (байт-у-байт, патерн П11.7) ---
+
+// Скриптований бій (сід 42, детерміновано): рух + постріли обох сторін.
+function battleGame(): GameState {
+  const g = createGame({
+    map: { width: 20, height: 20, blocked: new Set<string>() },
+    rng: mulberry32(42),
+    units: [
+      makeUnit({ id: 's1', side: 'player', name: 'Гарт', pos: { x: 2, y: 2 } }),
+      makeUnit({ id: 's2', side: 'player', name: 'Ліс', pos: { x: 3, y: 2 } }),
+      makeUnit({ id: 'a1', side: 'alien', name: 'Морок', pos: { x: 8, y: 2 }, hp: 10, maxHp: 10 }),
+      makeUnit({ id: 'a2', side: 'alien', name: 'Ірж', pos: { x: 8, y: 3 }, hp: 10, maxHp: 10 }),
+    ],
+  });
+  moveUnit(g, 's1', [{ x: 2, y: 3 }]);
+  resolveAttack(g, 's1', 'a1', 'auto');
+  resolveAttack(g, 's1', 'a2', 'snap');
+  endTurn(g);
+  resolveAttack(g, 'a1', 's1', 'aimed');
+  return g;
+}
+
+describe('П14.8 критерій: лог партії байт-у-байт однаковий з ambient і без', () => {
+  it('бой: кадри ambient поверх логу дій — лог бою і rng.state не змінюються', () => {
+    const h = makeHarness();
+    const amb = createAmbient({ ...h, store: memStore() });
+    const g = battleGame();
+    const before = JSON.stringify(g.log) + '|' + (g.rng as StatefulRng).state;
+    // «граємо з ambient»: кадри малювання між діями ядра (сцена з пораненими)
+    const m = mockCtx();
+    for (let i = 0; i < 5; i++) {
+      h.step(AMBIENT_FRAME_MS); // цикл репейнтить (repaint — мок)
+      amb.paintBattle(
+        m.ctx,
+        battleScene(
+          [cell(0, 0, true)],
+          g.units.map((u) => unit(u.pos.x, u.pos.y, u.hp, u.maxHp))
+        )
+      );
+      expect(m.ops.length).toBeGreaterThan(0); // ambient реально малював
+    }
+    expect(JSON.stringify(g.log) + '|' + (g.rng as StatefulRng).state).toBe(before);
+    // той самий бій без ambient — той самий лог і стан rng (байт-у-байт)
+    const g2 = battleGame();
+    expect(JSON.stringify(g2.log) + '|' + (g2.rng as StatefulRng).state).toBe(before);
+  });
+
+  it('партія: доба тіків із запущеним ambient-циклом — serializeParty байт-у-байт той самий', () => {
+    // «з ambient»: цикл тікає і малює між тіками геосцени (repaint → paintGeo)
+    const h = makeHarness();
+    const amb = createAmbient({ ...h, store: memStore() });
+    amb.start();
+    const m = mockCtx();
+    const p1 = createParty(42);
+    for (let i = 0; i < 48; i++) {
+      advanceTime(p1.geo, 1);
+      h.step(AMBIENT_FRAME_MS); // репейнт циклу (repaint — мок) + кадр малювання
+      amb.paintGeo(m.ctx, geoScene(p1.seed, p1.geo.base));
+    }
+    expect(m.ops.length).toBeGreaterThan(0); // ambient реально малював
+    // «без ambient»: та сама послідовність тіків
+    const p2 = createParty(42);
+    for (let i = 0; i < 48; i++) advanceTime(p2.geo, 1);
+    expect(serializeParty(p1)).toBe(serializeParty(p2)); // сейв-контракт (ADR-0026) не зачіпається
   });
 });

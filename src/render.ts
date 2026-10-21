@@ -334,9 +334,11 @@ function drawSelectionBrackets(ctx: CanvasRenderingContext2D, cx: number, cy: nu
 // червоний; число — кольори сторін (ціан «Рубіжу» / світлий пурпур Розриву,
 // ADR-0064). Ширина числа — оцінка 6px на символ (без measureText —
 // мок-контексти jsdom, урок П6.14).
-const HP_BAR_W = 48; // ширина смуги — вся клітинка (BCELL 48)
-const HP_BAR_H = 4; // висота смуги, px
-const HP_BAR_Y = -23; // зміщення смуги від центру клітинки (верх клітинки)
+// П14.8 (ADR-0073): геометрія бейджа експортована — підсвічування ambient-шару
+// (src/ui/ambient.ts) малює по тих самих константах (одне місце правди).
+export const HP_BAR_W = 48; // ширина смуги — вся клітинка (BCELL 48)
+export const HP_BAR_H = 4; // висота смуги, px
+export const HP_BAR_Y = -23; // зміщення смуги від центру клітинки (верх клітинки)
 const HP_BACKING = 'rgba(5,8,15,0.75)'; // підкладка смуги
 const HP_PLATE_BG = 'rgba(5,8,15,0.8)'; // плашка числа HP
 const HP_NUM_PLAYER = '#9adfff'; // ціан «Рубіжу» (ADR-0064)
