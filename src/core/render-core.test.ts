@@ -25,11 +25,9 @@ import {
   animT,
   animsFromEvents,
   boomParticleOffset,
-  cellHash,
-  geoCityLights,
-  geoCoastEdges,
   geoIsLand,
   GEO_LAND_ROWS,
+  GEO_LAYOUT,
   geoTrailPoints,
   makeBoomAnim,
   makeDeathAnim,
@@ -479,18 +477,20 @@ describe('П14.4: тряска вибуху — амплітуда ×2 від п
   });
 });
 
-describe('позафазна лінія «візуальні порівняння» (2026-10-21): фіксована мапа геосцени 9×16 — константа, без geo.rng', () => {
-  // Авторська мапа власника з дизайн-сесії: L — суша, B — острів Вузла (суша).
+describe('позафазна лінія «візуальні порівняння» (кандидат А «нічний супутник», 2026-10-22): розклад 9×16 ВИВЕДЕНО З КАРТИНИ — константа, без geo.rng', () => {
+  // Розклад виведено скриптом scripts/geo-layout.py з assets-src/geo-map2.jpg
+  // (медіани яскравості клітинок 64×64 видимого вікна cover, поріг 14.5).
+  // Байти розкладу фіксуються тут: L — суша, B — клітинка бази (суша).
   const MAP = [
-    '..LLLLLLL.......',
-    '.LLLLLLLLLL.....',
-    '.LLLLLLLLLLL....',
-    '..LLL...LLLL....',
-    '........B.......',
-    '........B.......',
-    '..LL.....LLL....',
-    '...LLL...LLLL...',
-    '.....L....LL....',
+    '..LLLLLLLLLLLL..',
+    '..LLLLLLLLLLLL..',
+    '..LLLLLLLLLLLL..',
+    '....LLLLLL......',
+    '.......LB.......',
+    '................',
+    '...........L....',
+    '................',
+    '........LL......',
   ];
   const layout = GEO_LAND_ROWS;
 
@@ -522,9 +522,14 @@ describe('позафазна лінія «візуальні порівнянн�
     return out;
   };
 
-  it('фіксований розклад (ADR-0003): константа 9×16 = авторська мапа; та сама мапа для будь-якого сіда партії', () => {
-    expect(layout.length).toBe(9); // WORLD_H
-    expect(layout[0]?.length).toBe(16); // WORLD_W
+  it('байти розкладу фіксуються: GEO_LAYOUT = рядки 9×16, похідні GEO_LAND_ROWS збігаються (константа, ADR-0003)', () => {
+    expect(GEO_LAYOUT.length).toBe(9); // WORLD_H
+    expect(GEO_LAYOUT).toEqual(MAP);
+    for (const row of GEO_LAYOUT) expect(row.length).toBe(16); // WORLD_W
+    // рядки — лише три символи; кожен рядок рівно 16
+    for (const row of GEO_LAYOUT) expect([...row].every((c) => c === 'L' || c === 'B' || c === '.')).toBe(true);
+    expect(layout.length).toBe(9);
+    expect(layout[0]?.length).toBe(16);
     for (let y = 0; y < 9; y++) {
       for (let x = 0; x < 16; x++) {
         expect(geoIsLand(layout, x, y)).toBe(MAP[y]?.[x] !== '.'); // L і B — суша
@@ -544,62 +549,31 @@ describe('позафазна лінія «візуальні порівнянн�
     expect(calls).toBe(before); // 0 викликів geo.rng (критерій фідбеку)
   });
 
-  it("пропорції фіксованої мапи: 52 клітинки суші (36.1%), великі зв'язні масиви, без поодиноких плит", () => {
-    expect(landCount(layout)).toBe(52); // 36.1% (WORLD_H 9: 16×9)
+  it('пропорції: суша 47/144 (32.6%) — в орієнтирі 30–40%; материк + південні острови', () => {
+    expect(landCount(layout)).toBe(47); // 32.6% (WORLD_H 9: 16×9)
     const comps = components(layout).sort((a, b) => b - a);
-    expect(comps).toEqual([37, 9, 6]); // головний континент з островом Вузла + два південні масиви
-    // жодна клітинка суші не самотня (4-напр., wrap по X)
-    for (let y = 0; y < 9; y++)
-      for (let x = 0; x < 16; x++) {
-        if (!geoIsLand(layout, x, y)) continue;
-        expect(
-          geoIsLand(layout, x + 1, y) || geoIsLand(layout, x - 1, y) || geoIsLand(layout, x, y - 1) || geoIsLand(layout, x, y + 1)
-        ).toBe(true);
-      }
+    // материк 44 (північний масив + півострів у центрі з островом бази),
+    // південна пара (8,8)+(9,8) і поодинокий острів (11,6) — малі острови
+    // природні для карти світу (розклад виведено з картини, не рукотворний)
+    expect(comps).toEqual([44, 2, 1]);
   });
 
-  it('острів Вузла: (8,4)+(8,5) — суша; клітинка бази (8,4) — суша (геометрія радара без змін)', () => {
+  it('жорстка перевірка (а): клітинка бази (8,4) — суша; острів бази (7,4)+(8,4) у центрі (геометрія радара без змін)', () => {
     expect(geoIsLand(layout, 8, 4)).toBe(true); // база-радар — суша
-    expect(geoIsLand(layout, 8, 5)).toBe(true); // друга клітинка острова Вузла
+    expect(geoIsLand(layout, 7, 4)).toBe(true); // друга клітинка острова бази
   });
 
-  it('geoCoastEdges: узбережжя лише на межі масивів; усі 4 напрямки; wrap по X', () => {
-    for (let y = 0; y < 9; y++)
+  it('жорстка перевірка (б): суша не торкається лівого/правого краю — суцільний океан, wrap без шва', () => {
+    for (let y = 0; y < 9; y++) {
+      expect(geoIsLand(layout, 0, y)).toBe(false); // лівий край — океан
+      expect(geoIsLand(layout, 15, y)).toBe(false); // правий край — океан
+      // циліндр по X: клітинки за краєм (wrap) — океан, шва зшивання нема
+      expect(geoIsLand(layout, -1, y)).toBe(false);
+      expect(geoIsLand(layout, 16, y)).toBe(false);
       for (let x = 0; x < 16; x++) {
-        const e = geoCoastEdges(layout, x, y);
-        // край океанний ⇔ сусід по напрямку — океан (wrap по X, вертикаль без)
-        expect(e.w).toBe(geoIsLand(layout, x, y) && !geoIsLand(layout, x - 1, y));
-        expect(e.e).toBe(geoIsLand(layout, x, y) && !geoIsLand(layout, x + 1, y));
-        expect(e.n).toBe(geoIsLand(layout, x, y) && !geoIsLand(layout, x, y - 1));
-        expect(e.s).toBe(geoIsLand(layout, x, y) && !geoIsLand(layout, x, y + 1));
-        if (!geoIsLand(layout, x, y)) {
-          expect(e.n || e.e || e.s || e.w).toBe(false); // океан — без узбережжя
-        }
-        expect(geoIsLand(layout, x + 16, y)).toBe(geoIsLand(layout, x, y)); // циліндр по X
+        expect(geoIsLand(layout, x + 16, y)).toBe(geoIsLand(layout, x, y)); // wrap-ідентичність
       }
-    // фіксована мапа: усі чотири напрямки узбережжя присутні (для оверлеїв канта)
-    const present = new Set<string>();
-    for (let y = 0; y < 9; y++)
-      for (let x = 0; x < 16; x++) {
-        const e = geoCoastEdges(layout, x, y);
-        for (const k of ['w', 'e', 'n', 's'] as const) if (e[k]) present.add(k);
-      }
-    expect(present).toEqual(new Set(['w', 'e', 'n', 's']));
-  });
-
-  it('вогні міст: лише на суші за хешем (~8% суші, без RNG)', () => {
-    let lights = 0;
-    let land = 0;
-    for (let y = 0; y < 9; y++)
-      for (let x = 0; x < 16; x++) {
-        const l = geoCityLights(layout, x, y);
-        expect(l).toBe(geoIsLand(layout, x, y) && cellHash(x, y) % 12 === 0); // чиста функція
-        if (geoIsLand(layout, x, y)) land++;
-        if (l) lights++;
-      }
-    expect(land).toBe(52);
-    expect(lights).toBe(3); // ~6% суші — рідкий декор (фіксована мапа: (7,1), (9,2), (4,3))
-    expect(geoCityLights(layout, 5, 2)).toBe(geoCityLights(layout, 5, 2)); // стабільно
+    }
   });
 });
 

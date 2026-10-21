@@ -14,7 +14,6 @@ import {
   AMBIENT_HP_FRACTION,
   AMBIENT_KEY,
   AMBIENT_MAX_EFFECTS,
-  cityFlickerAlpha,
   createAmbient,
   hpGlowAlpha,
   paintBattleAmbient,
@@ -348,31 +347,15 @@ describe('П14.8: детермінізм ефектів — чисті функ�
     expect(radarSweepAngle(1234)).toBeLessThan(radarSweepAngle(1300)); // монотонний рух
   });
 
-  it('cityFlickerAlpha: той самий (x,y,t) — та сама альфа; поріг за cellHash', () => {
-    expect(cityFlickerAlpha(3, 5, 700)).toBe(cityFlickerAlpha(3, 5, 700));
-    let dense = 0;
-    let sparse = 0;
-    for (let y = 0; y < 8; y++) {
-      for (let x = 0; x < 16; x++) {
-        let any = 0;
-        for (let t = 0; t < 2600; t += 100) any = Math.max(any, cityFlickerAlpha(x, y, t));
-        if (any > 0) dense++;
-        else sparse++;
-      }
-    }
-    expect(dense).toBeGreaterThan(0); // кандидати мерехтять
-    expect(sparse).toBeGreaterThan(dense); // більшість клітинок — поза порогом (рідкість)
-  });
-
   it('негативний wall-clock не ламає прогрес (фаза нормована)', () => {
     expect(wallPulseAlpha(-500)).toBe(wallPulseAlpha(-500 + 4000));
-    expect(cityFlickerAlpha(1, 2, -100)).toBe(cityFlickerAlpha(1, 2, -100 + 2600));
+    expect(radarSweepAngle(-100)).toBe(radarSweepAngle(-100 + 6000));
   });
 });
 
 describe('П14.8: бюджет — константи шару відображення (ADR-0073 п.4–5)', () => {
   it('ліміт ефектів і частота — сталі, перелік фіксовано П14.8', () => {
-    expect(AMBIENT_MAX_EFFECTS).toBe(4); // wall-pulse, radar-sweep, city-flicker, hp-glow
+    expect(AMBIENT_MAX_EFFECTS).toBe(4); // wall-pulse, radar-sweep, hp-glow + резерв (city-flicker вимкнено)
     expect(AMBIENT_FPS_MAX).toBe(10); // ≤ 10 fps — бюджет ambient-шару
   });
 });
@@ -438,7 +421,7 @@ describe('П14.8: малювальник бою — wall-pulse + hp-glow (пер
   });
 });
 
-describe('П14.8: малювальник геосцени — radar-sweep + city-flicker', () => {
+describe('П14.8: малювальник геосцени — radar-sweep (city-flicker вимкнено: кандидат А)', () => {
   it('розгортка: промінь + слід сектора від бази; кут — від t (детерміновано)', () => {
     const { ctx, ops } = mockCtx();
     paintGeoAmbient(ctx, geoScene({ x: 8, y: 4 }), 1000);
@@ -450,23 +433,17 @@ describe('П14.8: малювальник геосцени — radar-sweep + city
     expect(other.ops.filter((o) => o.startsWith('lineTo'))).not.toEqual(ops.filter((o) => o.startsWith('lineTo')));
   });
 
-  it('мерехтіння міст: вогники лише на клітинках вогнів з альфою > 0; ліміт кадру', () => {
-    // сцена з вогнями: сід/база як у реальній партії; t підбираємо з мерехтінням
-    let t = -1;
-    let flickers: string[] = [];
-    for (let probe = 0; probe < 2600 && flickers.length === 0; probe += 20) {
+  it('city-flicker вимкнено: вогні міст намальовані на карті — 0 fillRect за будь-якого t', () => {
+    // кандидат А «нічний супутник»: картина світу має власні вогні міст;
+    // хеш-мерехтіння по клітинках суші дублювало б їх не на своїх місцях
+    for (let probe = 0; probe < 2600; probe += 20) {
       const m = mockCtx();
       paintGeoAmbient(m.ctx, geoScene({ x: 8, y: 4 }), probe);
-      flickers = m.ops.filter((o) => o.startsWith('fillRect'));
-      if (flickers.length > 0) t = probe;
+      expect(
+        m.ops.filter((o) => o.startsWith('fillRect')),
+        `t=${probe}`
+      ).toEqual([]);
     }
-    expect(t).toBeGreaterThanOrEqual(0); // мерехтіння існує на розкладі вогнів
-    const m = mockCtx();
-    paintGeoAmbient(m.ctx, geoScene({ x: 8, y: 4 }), t);
-    const all = m.ops.filter((o) => o.startsWith('fillRect'));
-    expect(all.length).toBeGreaterThan(0);
-    expect(all.length).toBeLessThanOrEqual(AMBIENT_MAX_EFFECTS - 1); // розгортка вже зайняла 1
-    expect(m.ops.some((o) => o.startsWith('set:fillStyle=rgba(255,207,92,'))).toBe(true); // теплий вогник
   });
 
   it('детермінізм від t: той самий (t, сцена) — той самий потік викликів', () => {

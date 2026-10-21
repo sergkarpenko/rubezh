@@ -4,23 +4,25 @@
 // відображення (ADR-0002/0037): стан ядра, лог і rng не чіпаються, подій
 // логу не породжує (критерій П14.8: лог партії байт-у-байт однаковий з
 // ambient і без). Детермінізм (ADR-0003): ефекти — чисті функції від
-// wall-clock (performance.now) і позицій, жодного Math.random/geo.rng
-// (поріг мерехтіння — патерн cellHash П14.4). Бюджет (ADR-0073 п.4):
+// wall-clock (performance.now) і позицій, жодного Math.random/geo.rng.
+// Бюджет (ADR-0073 п.4):
 // тротлер ≤ 10 fps, одночасних ефектів — не більше AMBIENT_MAX_EFFECTS
 // (стала шару відображення). Фіксований перелік ефектів затверджено П14.8
 // (ADR-0073 п.5); нові постійні цикли — лише через новий ADR:
 //   wall-pulse   — пульсація ціанових кантів стін бою (повільна синусоїда);
 //   radar-sweep  — безперервне повільне обертання радар-сектора геосцени
 //                  у стані спокою (розвиток gscan П14.5);
-//   city-flicker — легке мерехтіння вогнів міст (поріг за cellHash);
 //   hp-glow      — легке підсвічування HP-бейджів (П14.4) при частці
 //                  hp/maxHp < AMBIENT_HP_FRACTION.
+// city-flicker (мерехтіння вогнів міст) вимкнено у позафазній лінії
+// «візуальні порівняння» (кандидат А «нічний супутник», 2026-10-22):
+// вогні міст намальовані на карті світу — рендер-хеш дублював би їх.
 // Стартовий екран не анімується (П14.7: 0 нових анімацій лишається чинним).
 // Тумблер — патерн звуку (ADR-0059; персист поза сейвом ADR-0026): ключ
 // rubezh.settings.ambient у локальному сховищі, дефолт — увімкнено;
 // зміна тумблера — без перезапуску застосунку.
 
-import { cellHash, geoCityLights, GEO_LAND_ROWS, type TerrainCell } from '../core/render-core';
+import { type TerrainCell } from '../core/render-core';
 import { RADAR_RANGE } from '../core/geo';
 import { HP_BAR_H, HP_BAR_W, HP_BAR_Y } from '../render';
 import type { Vec2 } from '../core/combat';
@@ -53,8 +55,6 @@ export const AMBIENT_HP_FRACTION = 0.35; // hp-glow: підсвічування 
 const WALL_PULSE_MS = 4000; // wall-pulse: повільна пульсація кантів стін
 const HP_GLOW_MS = 1000; // hp-glow: подих підсвічування бейджів
 const SWEEP_MS = 6000; // radar-sweep: повний оберт сектора
-const CITY_FLICKER_MS = 2600; // city-flicker: період мерехтіння вогню
-const CITY_FLICKER_SPARSE = 8; // city-flicker: поріг cellHash % 8 — рідкі кандидати
 
 // Фаза у межах періоду (негативний wall-clock не ламає прогрес).
 function phase(t: number, period: number): number {
@@ -77,16 +77,6 @@ export function hpGlowAlpha(t: number): number {
 // подієвого gscan П14.5, який видно лише між сканами на тік).
 export function radarSweepAngle(t: number): number {
   return -Math.PI / 2 + (2 * Math.PI * phase(t, SWEEP_MS)) / SWEEP_MS;
-}
-
-// city-flicker: альфа мерехтіння вогню міста у клітинці (0 — клітинка не
-// мерехтить). Кандидати — рідкі за cellHash (детерміновано, без RNG);
-// фаза мерехтіння зсунута хешем клітинки (вогні не блимають синхронно).
-export function cityFlickerAlpha(x: number, y: number, t: number): number {
-  const h = cellHash(x, y);
-  if (h % CITY_FLICKER_SPARSE !== 0) return 0;
-  const local = phase(t + (h % CITY_FLICKER_MS), CITY_FLICKER_MS);
-  return 0.35 * Math.max(0, Math.sin((2 * Math.PI * local) / CITY_FLICKER_MS));
 }
 
 // --- Малювальники ефектів: фіксований перелік П14.8 (ADR-0073 п.5) ---
@@ -116,10 +106,9 @@ export interface AmbientBattleScene {
   units: readonly AmbientUnitView[];
 }
 
-// Сцена геосцени: розклад суші — фіксована константа GEO_LAND_ROWS
-// (позафазна лінія «візуальні порівняння», 2026-10-21: мапа не залежить
-// від сіда; той самий розклад, що й у drawGeoTerrain) і клітинка бази
-// (центр розгортки).
+// Сцена геосцени: клітинка бази (центр розгортки). Терен — цілісна
+// картина світу (кандидат А «нічний супутник»): ambient-шар про розклад
+// не знає — вогні міст намальовані на самій карті.
 // scanActive (фікс фідбеку валідації): подієвий скан-радар П14.5 грає —
 // ambient-розгортку не малюємо (один сектор на кадр, без «другого радара»
 // на тік/добу; між сканами сектор спокою знову видно).
@@ -154,7 +143,8 @@ export function paintBattleAmbient(ctx: CanvasRenderingContext2D, s: AmbientBatt
   }
 }
 
-// Геосцена: radar-sweep (розгортка у стані спокою) + city-flicker (вогні).
+// Геосцена: radar-sweep (розгортка у стані спокою; city-flicker вимкнено —
+// вогні міст намальовані на карті світу, кандидат А «нічний супутник»).
 export function paintGeoAmbient(ctx: CanvasRenderingContext2D, s: AmbientGeoScene, t: number): void {
   let fx = 0; // лічильник одночасних ефектів (бюджет ADR-0073 п.4)
   const cx = s.base.x * s.cell + s.cell / 2;
@@ -185,22 +175,8 @@ export function paintGeoAmbient(ctx: CanvasRenderingContext2D, s: AmbientGeoScen
     ctx.fill();
   }
   if (fx >= AMBIENT_MAX_EFFECTS) return;
-  // city-flicker: вогник у центрі клітинки міста (розклад вогнів П14.5, поріг cellHash)
-  const layout = GEO_LAND_ROWS;
-  const cols = Math.ceil(s.cw / s.cell);
-  const rows = Math.ceil(s.ch / s.cell);
-  for (let y = 0; y < rows; y++) {
-    for (let x = 0; x < cols; x++) {
-      if (fx >= AMBIENT_MAX_EFFECTS) break;
-      if (!geoCityLights(layout, x, y)) continue;
-      const a = cityFlickerAlpha(x, y, t);
-      if (a <= 0) continue; // поза фазою мерехтіння — не малюємо (економія бюджету)
-      fx++;
-      ctx.fillStyle = 'rgba(255,207,92,' + a.toFixed(3) + ')';
-      ctx.fillRect(x * s.cell + s.cell / 2 - 3, y * s.cell + s.cell / 2 - 3, 6, 6);
-    }
-    if (fx >= AMBIENT_MAX_EFFECTS) break;
-  }
+  // city-flicker вимкнено (кандидат А «нічний супутник»): вогні міст
+  // намальовані на самій карті — рендер-хеш дублював би їх не на своїх місцях
 }
 
 // --- Рушій ambient-шару: гейти + тротлер + тумблер (ADR-0073 п.2–4) ---
