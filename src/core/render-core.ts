@@ -88,7 +88,8 @@ export function geoIsLand(layout: GeoLayout, x: number, y: number): boolean {
 }
 
 // Узбережжя: клітинка суші, що межує з океаном (4 напрямки, X із замиканням) —
-// тайл переходу з ціановим кантом ставиться лише на таких клітинках.
+// шар відображення кладе оверлей океанної смуги з кантом на КОЖЕН океанний
+// край такої клітинки (фідбек власника 2026-10-21: лінія берега суцільна).
 export function geoCoastEdges(layout: GeoLayout, x: number, y: number): { n: boolean; e: boolean; s: boolean; w: boolean } {
   const land = geoIsLand(layout, x, y);
   return {
@@ -104,20 +105,6 @@ export function geoCoastEdges(layout: GeoLayout, x: number, y: number): { n: boo
 // Розклад блобів не має поодиноких плит — вогні лише всередині масивів суші.
 export function geoCityLights(layout: GeoLayout, x: number, y: number): boolean {
   return geoIsLand(layout, x, y) && cellHash(x, y) % 12 === 0;
-}
-
-// Сторона узбережжя клітинки суші: перший океанний край у фіксованому
-// порядку (захід → схід → північ → південь) — чиста функція, детерміновано;
-// шар відображення повертає/дзеркалить тайл переходу до цього краю. null —
-// внутрішня суша (океану поруч немає).
-export type GeoCoastSide = 'n' | 'e' | 's' | 'w';
-export const GEO_COAST_ORDER: readonly GeoCoastSide[] = ['w', 'e', 'n', 's'];
-export function geoCoastSide(layout: GeoLayout, x: number, y: number): GeoCoastSide | null {
-  const e = geoCoastEdges(layout, x, y);
-  for (const s of GEO_COAST_ORDER) {
-    if (e[s]) return s;
-  }
-  return null;
 }
 
 // Клітинка терену: blocked — завалення (рельєф туману видно і в тумані,

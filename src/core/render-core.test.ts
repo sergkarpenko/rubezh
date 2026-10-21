@@ -14,7 +14,6 @@ import {
   BOOM_SHAKE_PX,
   DNUM_MS,
   type GeoLayout,
-  GEO_COAST_ORDER,
   GEO_TRAIL_MS,
   GEO_TRAIL_POINTS,
   IMPACT_MS,
@@ -29,7 +28,6 @@ import {
   cellHash,
   geoCityLights,
   geoCoastEdges,
-  geoCoastSide,
   geoIsLand,
   GEO_LAND_ROWS,
   geoTrailPoints,
@@ -565,25 +563,26 @@ describe('позафазна лінія «візуальні порівнянн�
     expect(geoIsLand(layout, 8, 5)).toBe(true); // друга клітинка острова Вузла
   });
 
-  it('geoCoastSide/geoCoastEdges: узбережжя лише на межі масивів; порядок w→e→n→s; wrap по X', () => {
+  it('geoCoastEdges: узбережжя лише на межі масивів; усі 4 напрямки; wrap по X', () => {
     for (let y = 0; y < 9; y++)
       for (let x = 0; x < 16; x++) {
         const e = geoCoastEdges(layout, x, y);
-        const s = geoCoastSide(layout, x, y);
-        if (s === null) {
-          expect(e.n || e.e || e.s || e.w).toBe(false); // внутрішня суша — без узбережжя
-        } else {
-          expect(e[s]).toBe(true); // обраний край — океанний
-          expect(GEO_COAST_ORDER.indexOf(s)).toBe(GEO_COAST_ORDER.findIndex((k) => e[k])); // перший за порядком
+        // край океанний ⇔ сусід по напрямку — океан (wrap по X, вертикаль без)
+        expect(e.w).toBe(geoIsLand(layout, x, y) && !geoIsLand(layout, x - 1, y));
+        expect(e.e).toBe(geoIsLand(layout, x, y) && !geoIsLand(layout, x + 1, y));
+        expect(e.n).toBe(geoIsLand(layout, x, y) && !geoIsLand(layout, x, y - 1));
+        expect(e.s).toBe(geoIsLand(layout, x, y) && !geoIsLand(layout, x, y + 1));
+        if (!geoIsLand(layout, x, y)) {
+          expect(e.n || e.e || e.s || e.w).toBe(false); // океан — без узбережжя
         }
         expect(geoIsLand(layout, x + 16, y)).toBe(geoIsLand(layout, x, y)); // циліндр по X
       }
-    // фіксована мапа: усі чотири сторони узбережжя присутні (для фліпів/поворотів тайла)
+    // фіксована мапа: усі чотири напрямки узбережжя присутні (для оверлеїв канта)
     const present = new Set<string>();
     for (let y = 0; y < 9; y++)
       for (let x = 0; x < 16; x++) {
-        const s = geoCoastSide(layout, x, y);
-        if (s !== null) present.add(s);
+        const e = geoCoastEdges(layout, x, y);
+        for (const k of ['w', 'e', 'n', 's'] as const) if (e[k]) present.add(k);
       }
     expect(present).toEqual(new Set(['w', 'e', 'n', 's']));
   });
