@@ -23,7 +23,11 @@ import { type DifficultyPreset, DEFAULT_PRESET, DIFFICULTY_MULTIPLIERS } from '.
 
 export const TICK_MINUTES = 30; // 1 тік = 30 хвилин; доба = 48 тіків
 export const WORLD_W = 16;
-export const WORLD_H = 8;
+// 9 рядків (рішення власника за фідбеком валідації П14.8): зона радара
+// (RADAR_RANGE 4 від бази y=4) вписується у світ точно — візуальна розгортка
+// радара на повному радіусі не обрізається нижнім краєм; сейви сумісні
+// (позиції НЛО y≤7 валідні, формат — ADR-0026).
+export const WORLD_H = 9;
 export const RADAR_RANGE = 4; // Чебишев, із замиканням по X
 export const DEFAULT_SPAWN_CHANCE = 0.03; // за тік ≈ 1.5 НЛО/добу (за симуляціями 20 сідів × 10 днів)
 export const DEFAULT_MAX_UFOS = 3;

@@ -488,14 +488,14 @@ describe('П14.5 (ітерація 3): континенти-блоби геос�
   // кількість суші в розкладі
   const landCount = (l: GeoLayout): number => {
     let n = 0;
-    for (let y = 0; y < 8; y++) for (let x = 0; x < 16; x++) if (geoIsLand(l, x, y)) n++;
+    for (let y = 0; y < 9; y++) for (let x = 0; x < 16; x++) if (geoIsLand(l, x, y)) n++;
     return n;
   };
   // розміри компонентів зв'язності суші (4-напр., wrap по X)
   const components = (l: GeoLayout): number[] => {
     const seen = new Set<string>();
     const out: number[] = [];
-    for (let y = 0; y < 8; y++)
+    for (let y = 0; y < 9; y++)
       for (let x = 0; x < 16; x++) {
         if (!geoIsLand(l, x, y) || seen.has(x + ',' + y)) continue;
         const stack: Array<[number, number]> = [[x, y]];
@@ -532,13 +532,13 @@ describe('П14.5 (ітерація 3): континенти-блоби геос�
   });
 
   it("пропорції (сід 42): ~30–35% суші, великі зв'язні масиви, без поодиноких плит", () => {
-    expect(landCount(layout)).toBe(41); // 32.0% — сід прев'ю
+    expect(landCount(layout)).toBe(44); // 30.6% — сід прев'ю (WORLD_H 9: 16×9)
     const comps = components(layout);
     expect(comps.length).toBeGreaterThanOrEqual(2); // кілька континентів
     expect(comps.length).toBeLessThanOrEqual(6);
     for (const c of comps) expect(c).toBeGreaterThanOrEqual(6); // масиви 6–15+ (зшивання дозволене)
     // жодна клітинка суші не самотня (4-напр., wrap по X)
-    for (let y = 0; y < 8; y++)
+    for (let y = 0; y < 9; y++)
       for (let x = 0; x < 16; x++) {
         if (!geoIsLand(layout, x, y)) continue;
         expect(
@@ -557,7 +557,7 @@ describe('П14.5 (ітерація 3): континенти-блоби геос�
   });
 
   it('geoCoastSide/geoCoastEdges: узбережжя лише на межі масивів; порядок w→e→n→s; wrap по X', () => {
-    for (let y = 0; y < 8; y++)
+    for (let y = 0; y < 9; y++)
       for (let x = 0; x < 16; x++) {
         const e = geoCoastEdges(layout, x, y);
         const s = geoCoastSide(layout, x, y);
@@ -571,7 +571,7 @@ describe('П14.5 (ітерація 3): континенти-блоби геос�
       }
     // сід 42: усі чотири сторони узбережжя присутні (для фліпів/поворотів тайла)
     const present = new Set<string>();
-    for (let y = 0; y < 8; y++)
+    for (let y = 0; y < 9; y++)
       for (let x = 0; x < 16; x++) {
         const s = geoCoastSide(layout, x, y);
         if (s !== null) present.add(s);
@@ -582,15 +582,15 @@ describe('П14.5 (ітерація 3): континенти-блоби геос�
   it('вогні міст: лише на суші за хешем (~8% суші, без RNG)', () => {
     let lights = 0;
     let land = 0;
-    for (let y = 0; y < 8; y++)
+    for (let y = 0; y < 9; y++)
       for (let x = 0; x < 16; x++) {
         const l = geoCityLights(layout, x, y);
         expect(l).toBe(geoIsLand(layout, x, y) && cellHash(x, y) % 12 === 0); // чиста функція
         if (geoIsLand(layout, x, y)) land++;
         if (l) lights++;
       }
-    expect(land).toBe(41);
-    expect(lights).toBe(4); // ~8% суші — рідкий декор
+    expect(land).toBe(44);
+    expect(lights).toBe(3); // ~7% суші — рідкий декор (WORLD_H 9)
     expect(geoCityLights(layout, 5, 2)).toBe(geoCityLights(layout, 5, 2)); // стабільно
   });
 });
