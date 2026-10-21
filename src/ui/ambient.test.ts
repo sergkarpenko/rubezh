@@ -489,6 +489,27 @@ describe('П14.8: малювальник геосцени — radar-sweep + city
     paintGeoAmbient(rest.ctx, geoScene(42, { x: 8, y: 4 }), 777);
     expect(rest.ops.filter((o) => o.startsWith('lineTo')).length).toBe(1);
   });
+
+  it('фікс фідбеку («сектор знизу обрізається»): радіус розгортки вписано у канву — промінь не перетинає країв', () => {
+    // база в центрі (8,4), канва 768×384: зона (RADAR_RANGE 4 → 216px)
+    // виходить за нижній край (216+216=432 > 384) — радіус уписується до 168
+    const m = mockCtx();
+    paintGeoAmbient(m.ctx, geoScene(42, { x: 8, y: 4 }), 0); // кут -π/2 (вгору)
+    expect(m.ops).toContain('lineTo(408,48)'); // центр (408,216) − вписаний радіус 168
+    // промінь у кожному куті оберту лишається у межах канви (без обрізів)
+    for (const probe of [0, 500, 1000, 1500, 2000, 2500, 3000, 3500]) {
+      const mm = mockCtx();
+      paintGeoAmbient(mm.ctx, geoScene(42, { x: 8, y: 4 }), probe);
+      const beam = mm.ops.find((o) => o.startsWith('lineTo('));
+      expect(beam).toBeDefined();
+      const n = beam!.match(/-?\d+(?:\.\d+)?/g)!.map(Number);
+      const [x, y] = [n[n.length - 2], n[n.length - 1]];
+      expect(x).toBeGreaterThanOrEqual(0);
+      expect(x).toBeLessThanOrEqual(768);
+      expect(y).toBeGreaterThanOrEqual(0);
+      expect(y).toBeLessThanOrEqual(384);
+    }
+  });
 });
 
 describe('П14.8: facade-методи малювання — гейти тумблера і rAF', () => {
