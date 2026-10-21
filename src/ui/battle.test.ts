@@ -8,6 +8,7 @@ import { advanceTime, missionTargets } from '../core/geo';
 import { createGame, makeUnit, type GameState, type Unit } from '../core/combat';
 import { createParty, type Party } from '../core/save';
 import { initPixelSprites } from '../render';
+import { makeDeathAnim, makeTracerAnim } from '../core/render-core';
 import { createBattleUI, validFireTargets, validHealTargets, type BattleDeps, type BattleUIState } from './battle';
 import { createToolbar } from './toolbar';
 
@@ -337,5 +338,68 @@ describe('тулбар: причини блокування дій (П13.2, кр
     f.battle.renderBattle(); // стан плиток — DOM, іконки не чіпаються
     f.battle.renderBattle();
     expect(iconCtxCalls).toBe(0);
+  });
+});
+
+describe('Фікс П14.8 (фідбек валідації): смерть у черзі ще не відтворена', () => {
+  // «старий баг» блимання: ядро застосовує смерть миттєво (alive=false), а
+  // кадр згасання відтворюється лише після трасера — загиблий має лишатися
+  // на полі до свого кадру (поза «зник → з'явився → зник»).
+  const recCtx = (ops: string[]): CanvasRenderingContext2D =>
+    new Proxy(
+      {},
+      {
+        get:
+          (_t, p) =>
+          (...args: unknown[]) => {
+            ops.push(String(p) + '(' + args.map(String).join(',') + ')');
+            return undefined;
+          },
+        set: (_t, p) => {
+          ops.push('set:' + String(p));
+          return true;
+        },
+      }
+    ) as unknown as CanvasRenderingContext2D;
+
+  const withRecCtx = (render: () => void): string[] => {
+    const ops: string[] = [];
+    const proto = HTMLCanvasElement.prototype as unknown as { getContext: () => CanvasRenderingContext2D };
+    const prev = proto.getContext;
+    proto.getContext = () => recCtx(ops);
+    try {
+      render();
+    } finally {
+      proto.getContext = prev;
+    }
+    return ops;
+  };
+
+  it('загиблий з невідтвореною смертю в черзі малюється статично; без смерті в черзі — ні', () => {
+    const f = makeFixture();
+    f.battle.launch(firstTarget(f));
+    // керований бій: сусіди, смерть застосована, черга — активний трасер + смерть
+    const g = createGame({
+      map: { width: 20, height: 20, blocked: new Set<string>() },
+      units: [
+        makeUnit({ id: 's1', side: 'player', name: 'Гарт', pos: { x: 2, y: 2 }, hp: 10, maxHp: 10 }),
+        makeUnit({ id: 'a1', side: 'alien', name: 'Морок', pos: { x: 3, y: 2 }, hp: 10, maxHp: 10 }),
+      ],
+    });
+    const victim = g.units[1]!;
+    victim.alive = false; // стан ядра фінальний
+    f.ui.mission!.state = g;
+    const tracer = makeTracerAnim('player', { x: 2, y: 2 }, { x: 3, y: 2 }, true);
+    const death = makeDeathAnim(victim);
+    f.deps.anim.active = () => tracer;
+    f.deps.anim.queued = () => [tracer, death];
+    const ops = withRecCtx(() => f.battle.renderBattle());
+    // силует загиблого на полі: його плашка HP малює число 0 (живий солдат — «10»)
+    expect(ops.some((o) => o.startsWith('fillText(0,'))).toBe(true);
+    expect(ops.some((o) => o.startsWith('fillText(10,'))).toBe(true);
+    // смерті в черзі нема (кадр відтворено/скасовано) — загиблий зникає одразу
+    f.deps.anim.queued = () => [tracer];
+    const ops2 = withRecCtx(() => f.battle.renderBattle());
+    expect(ops2.some((o) => o.startsWith('fillText(0,'))).toBe(false);
   });
 });

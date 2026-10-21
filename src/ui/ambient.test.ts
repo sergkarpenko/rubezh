@@ -477,6 +477,18 @@ describe('П14.8: малювальник геосцени — radar-sweep + city
     paintGeoAmbient(b.ctx, geoScene(42, { x: 8, y: 4 }), 777);
     expect(a.ops).toEqual(b.ops);
   });
+
+  it('фікс фідбеку валідації: подієвий gscan грає (scanActive) — ambient-розгортки немає', () => {
+    const m = mockCtx();
+    paintGeoAmbient(m.ctx, { ...geoScene(42, { x: 8, y: 4 }), scanActive: true }, 777);
+    // один сектор на кадр: промінь/слід не малюється, доки грає подієвий gscan
+    expect(m.ops.filter((o) => o.startsWith('lineTo')).length).toBe(0);
+    expect(m.ops.filter((o) => o.startsWith('arc')).length).toBe(0);
+    // а в стані спокою (без scanActive) розгортка є
+    const rest = mockCtx();
+    paintGeoAmbient(rest.ctx, geoScene(42, { x: 8, y: 4 }), 777);
+    expect(rest.ops.filter((o) => o.startsWith('lineTo')).length).toBe(1);
+  });
 });
 
 describe('П14.8: facade-методи малювання — гейти тумблера і rAF', () => {

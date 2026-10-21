@@ -175,45 +175,47 @@ function noise(c: SoundContext, t0: number, dur: number, vol: number): void {
 // Рецепти звуків (ADR-0059): сигнатури режимів пострілу різні — короткий
 // (щільний шумовий спалах + квадрат), прицільний (довгий свист вниз), черга
 // (коротші нижчі кулі-імпульси; зсув кулі черги — у play, стакато-циклом).
+// Фікс фідбеку валідації П14.8 («звука не чутно»): гучності підняті —
+// колишні 0.04–0.18 були нижче порогу чутності на колонках/iPad.
 function playRecipe(c: SoundContext, name: SoundName, t: number): void {
   switch (name) {
     case 'click':
-      note(c, t, 'square', 660, 440, 0.05, 0.04);
+      note(c, t, 'square', 660, 440, 0.05, 0.1);
       break;
     case 'move': // крок: короткий стук (подія move = одна клітинка шляху; серія
       // клітинок одного дрену звучить тупотінням — стакато-зсув у play)
-      noise(c, t, 0.05, 0.07);
-      note(c, t, 'triangle', 95, 65, 0.05, 0.05);
+      noise(c, t, 0.05, 0.14);
+      note(c, t, 'triangle', 95, 65, 0.05, 0.1);
       break;
     case 'shot-snap':
-      noise(c, t, 0.12, 0.18);
-      note(c, t, 'square', 220, 90, 0.12, 0.1);
+      noise(c, t, 0.12, 0.34);
+      note(c, t, 'square', 220, 90, 0.12, 0.2);
       break;
     case 'shot-aimed':
-      note(c, t, 'sawtooth', 900, 240, 0.18, 0.08);
+      note(c, t, 'sawtooth', 900, 240, 0.18, 0.18);
       break;
     case 'shot-auto':
-      noise(c, t, 0.05, 0.16);
-      note(c, t, 'square', 150, 80, 0.05, 0.09);
+      noise(c, t, 0.05, 0.3);
+      note(c, t, 'square', 150, 80, 0.05, 0.18);
       break;
     case 'hit':
-      note(c, t, 'triangle', 150, 55, 0.12, 0.16);
+      note(c, t, 'triangle', 150, 55, 0.12, 0.3);
       break;
     case 'death':
-      note(c, t, 'sawtooth', 300, 45, 0.35, 0.1);
+      note(c, t, 'sawtooth', 300, 45, 0.35, 0.22);
       break;
     case 'detect': // дві висхідні ноти — «пінг» радара
-      note(c, t, 'sine', 440, undefined, 0.09, 0.1);
-      note(c, t + 0.1, 'sine', 660, undefined, 0.12, 0.1);
+      note(c, t, 'sine', 440, undefined, 0.09, 0.2);
+      note(c, t + 0.1, 'sine', 660, undefined, 0.12, 0.2);
       break;
     case 'win': // трьохноття вгору
-      note(c, t, 'triangle', 523.25, undefined, 0.14, 0.1);
-      note(c, t + 0.12, 'triangle', 659.25, undefined, 0.14, 0.1);
-      note(c, t + 0.24, 'triangle', 783.99, undefined, 0.18, 0.1);
+      note(c, t, 'triangle', 523.25, undefined, 0.14, 0.2);
+      note(c, t + 0.12, 'triangle', 659.25, undefined, 0.14, 0.2);
+      note(c, t + 0.24, 'triangle', 783.99, undefined, 0.18, 0.2);
       break;
     case 'lose': // дві ноти вниз
-      note(c, t, 'sine', 392, undefined, 0.18, 0.1);
-      note(c, t + 0.18, 'sine', 261.63, undefined, 0.24, 0.1);
+      note(c, t, 'sine', 392, undefined, 0.18, 0.2);
+      note(c, t + 0.18, 'sine', 261.63, undefined, 0.24, 0.2);
       break;
   }
 }
@@ -254,15 +256,19 @@ export function createSound(deps: Partial<SoundDeps> = {}): Sound {
   let on = readState() !== '0'; // дефолт — увімкнено (ADR-0059)
   let ctx: SoundContext | null = null;
   let noApi = false; // WebAudio відсутній — далі не пробуємо (один гейт)
-  // Черга (auto): три кулі атаки дренуються журналом одразу — без зсуву вони
-  // зливаються в один імпульс. Кулі черги граються стакато-циклом 0/0.09/0.18с
-  // («тр-р-р»). Детерміновано: зсув залежить лише від порядку викликів.
-  let autoTap = 0;
-  // Тупотіння (move): подія move — одна на клітинку шляху (combat.ts), усі
-  // події ходу дренуються одним батчем з однаковим currentTime — без зсуву
-  // кроки теж зливаються в один стук. Кроки серії зсуваються по 0.14с.
-  let moveTap = 0;
-  let moveAt = -1;
+  // Серія дрену (фікс фідбеку валідації П14.8 — «звуки накладаються»): усі
+  // події одного батчу журалу мають той самий currentTime — без розводки
+  // постріли кількох стрільців, смерті і кроки зливаються в одночасну купу.
+  // Кожен звук бою резервує слот серії (постріл/смерть/крок 0.12с; кулі
+  // черги — щільніше, 0.09с, темп «тр-р-р»); влучання — в парі з пострілом,
+  // свого слота не займає. Точкові звуки (клік UI, геосцена) — одразу, без
+  // серії. Детерміновано: зсув залежить лише від порядку викликів дрену.
+  let batchAt = -1; // currentTime серії — новий дрен починає зсув з нуля
+  let batchNext = 0; // наступний вільний зсув серії, с
+  let lastShot = 0; // база останнього пострілу (hit грає з ним в парі)
+  const SHOT_SLOT = 0.12;
+  const AUTO_SLOT = 0.09; // кулі черги — щільніший темп «тр-р-р»
+  const SERIES_CAP = 64; // довгі серії — без нескінченного дрейфу зсуву
 
   function context(): SoundContext | null {
     if (ctx) return ctx;
@@ -288,22 +294,25 @@ export function createSound(deps: Partial<SoundDeps> = {}): Sound {
         /* тихо */
       }
     }
-    // Черга — стакато-зсув кулі; кроки одного дрену — стакато-серія «тупотіння»
-    // (подія move = одна клітинка шляху, усі події дрену мають той самий
-    // currentTime; серія замикається новим дреном — новим currentTime).
-    if (name === 'shot-auto') {
-      playRecipe(c, name, c.currentTime + autoTap * 0.09);
-      autoTap = (autoTap + 1) % 3; // три кулі черги — цикл починається знову
-    } else if (name === 'move') {
-      if (moveAt !== c.currentTime) {
-        moveAt = c.currentTime;
-        moveTap = 0; // нова серія кроків — новий хід
-      }
-      playRecipe(c, name, c.currentTime + moveTap * 0.14);
-      moveTap = Math.min(moveTap + 1, 16); // кап довгих батчів (авто-бій)
-    } else {
+    // Точкові звуки поза боєм — без серії (клік UI, виявлення, результат місії)
+    if (name === 'click' || name === 'detect' || name === 'win' || name === 'lose') {
       playRecipe(c, name, c.currentTime);
+      return;
     }
+    if (batchAt !== c.currentTime) {
+      batchAt = c.currentTime; // новий дрен — нова серія
+      batchNext = 0;
+    }
+    let base = batchNext;
+    if (name === 'hit') {
+      base = lastShot; // влучання — одночасно з пострілом, слот не займає
+    } else if (name === 'shot-snap' || name === 'shot-aimed' || name === 'shot-auto') {
+      lastShot = base;
+    }
+    playRecipe(c, name, c.currentTime + base);
+    if (name === 'hit') return; // пара постріл→влучання — один слот серії
+    const stride = name === 'shot-auto' ? AUTO_SLOT : SHOT_SLOT;
+    batchNext = Math.min(SERIES_CAP, base + stride);
   }
 
   return {

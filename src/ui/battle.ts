@@ -30,7 +30,16 @@ import { computeVisibleCells } from '../core/map';
 import { geoClock } from '../core/geo';
 import type { Party } from '../core/save';
 import { drawAnimFrame, drawChanceLabel, drawNightTerrain, drawTargetFrame, drawUnitSprite } from '../render';
-import { animT, animsFromEvents, moveAnimPos, pendingAlienMoveStarts, shakeOffset, type Anim, type TerrainCell } from '../core/render-core';
+import {
+  animT,
+  animsFromEvents,
+  moveAnimPos,
+  pendingAlienMoveStarts,
+  pendingDeathStarts,
+  shakeOffset,
+  type Anim,
+  type TerrainCell,
+} from '../core/render-core';
 import { el } from './dom';
 import { BCELL } from './grid';
 import { type LogCat } from './journal';
@@ -243,6 +252,10 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
     // свого ходу демон стоїть на початку шляху; туманна ділянка не
     // показується (туман не розкривається, ADR-0006).
     const pendingMove = pendingAlienMoveStarts(deps.anim.queued());
+    // Фікс фідбеку валідації П14.8 («старий баг» блимання): смерть застосована
+    // миттєво, кадр згасання ще в черзі — загиблий лишається на полі до свого
+    // кадру (поза «зник → з'явився → зник»); туман — як для живих (ADR-0006).
+    const pendingDeath = pendingDeathStarts(deps.anim.queued());
 
     // П6.13: нічна палітра. Легка тряска канвасу при влучанні — зсув усього кадру
     // на фазі спалаху трасера (через AnimEngine — лише в кадрах анімації); фон
@@ -307,7 +320,25 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
     // невидимі прибульці сюди не потрапляють — ADR-0006).
     const ambUnits: AmbientUnitView[] = [];
     for (const u of st.units) {
-      if (!u.alive) continue;
+      if (!u.alive) {
+        // Фікс фідбеку валідації П14.8: смерть у черзі ще не відтворена —
+        // силует стоїть до свого кадру згасання (анімаційний шар далі
+        // відтворить смерть); позиція — з кадру смерті (стан вже фінальний).
+        const at = pendingDeath.get(u.id);
+        if (at === undefined) continue;
+        if (u.side === 'alien' && !vis.has(at.x + ',' + at.y)) continue; // туман не розкривається
+        drawUnitSprite(ctx, {
+          side: u.side,
+          cx: at.x * BCELL + BCELL / 2,
+          cy: at.y * BCELL + BCELL / 2,
+          r: 8,
+          hp: 0,
+          maxHp: u.maxHp, // смерть уже застосована — порожня смуга (П14.4)
+          selected: false,
+          overwatch: false,
+        });
+        continue;
+      }
       // П14.3: напрямок погляду — детерміновано за останнім рухом/ціллю:
       // активний рух юніта — за шляхом анімації, постріл — за ціллю трасера,
       // вибраний солдат — за клітинкою прицілювання (aimCell/tapCell).
