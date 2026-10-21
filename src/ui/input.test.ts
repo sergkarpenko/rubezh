@@ -103,6 +103,7 @@ function makeFixture(autoBusy = false, queue: Anim[] = []): Fixture {
     stopAuto: vi.fn(),
     autoBusy: () => false, // П13.3: авто-бій не триває
     cancelGeoAnim: vi.fn(),
+    ambient: { paintBattle: vi.fn() }, // П14.8: ambient no-op (гейти в модулі)
   };
   const battle = createBattleUI(ui, battleDeps);
   const busy = vi.fn(() => autoBusy);

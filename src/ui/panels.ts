@@ -27,6 +27,7 @@ import type { Anim } from '../core/render-core';
 import { el } from './dom';
 import { GCELL } from './grid';
 import type { LogCat } from './journal';
+import type { AmbientGeoScene } from './ambient';
 
 // П7: колір HP (чиста функція): повне — зелений, понад половину — жовтий, інакше — червоний.
 export function hpColor(hp: number, maxHp: number): string {
@@ -57,6 +58,14 @@ export interface PanelsDeps {
   activeGeoAnim(): Anim | null; // активна анімація геосцени (пульс радара, П6.9)
   geoAnimNow(): number; // час активної анімації геосцени
   victoryDismissed(): boolean; // П8.3a: гравець закрив екран перемоги і продовжує гру (endless)
+  ambient: GeoAmbient; // П14.8: ефекти поверх кадру геосцени (ADR-0073)
+}
+
+// П14.8 (ADR-0073): ambient-шар геосцени — малювальник «живих» ефектів
+// (розгортка радара у стані спокою, мерехтіння вогнів міст). Гейти — в
+// ambient-модулі (тумблер, typeof-rAF): вимкнено/jsdom — 0 Canvas-викликів.
+export interface GeoAmbient {
+  paintGeo(ctx: CanvasRenderingContext2D, scene: AmbientGeoScene): void;
 }
 
 export interface Panels {
@@ -111,6 +120,9 @@ export function createPanels(deps: PanelsDeps): Panels {
     // П6.9 (ADR-0029): анімаційний шар геосцени — пульс радара поверх статичного
     // кадру (кадр малюється з нуля — clearRect вище; урок П6.6). П14.5: cw/ch —
     // розміри buffer'а (скан-зона замикається по X — зсунуті копії; клімп хвоста).
+    // П14.8 (ADR-0073): ambient-ефекти поверх кадру (розгортка радара у стані
+    // спокою, мерехтіння вогнів міст) — до подієвого шару; суто відображення.
+    deps.ambient.paintGeo(ctx, { cell: GCELL, cw: cv.width, ch: cv.height, seed: party.seed, base: { x: b.x, y: b.y } });
     const ga = deps.activeGeoAnim();
     if (ga !== null) drawAnimFrame(ctx, ga, deps.geoAnimNow(), GCELL, 0, cv.width, cv.height);
 

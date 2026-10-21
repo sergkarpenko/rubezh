@@ -29,6 +29,8 @@ import { createHelp } from './ui/help';
 import { createJournal, type LogFilter } from './ui/journal';
 // П11.7 (ADR-0059): звуковий шар — WebAudio синтезом кодом, модуль src/ui/audio.ts.
 import { createSound } from './ui/audio';
+// П14.8 (ADR-0073): ambient-шар — модуль src/ui/ambient.ts.
+import { createAmbient } from './ui/ambient';
 // пR.2 (ADR-0037): панелі стану і топбара — модуль src/ui/panels.ts; масштаб сітки — src/ui/grid.ts.
 import { createPanels } from './ui/panels';
 import { GCELL } from './ui/grid';
@@ -122,6 +124,28 @@ initPanelFrame((url, onLoad) => {
 // виклики — кліки UI. Створюється ДО журналу: хуки звуку йдуть у його deps.
 const sound = createSound();
 
+// П14.8 (ADR-0073): ambient-шар — обмежені «живі» ефекти відображення
+// (пульс стін бою, розгортка радара, мерехтіння вогнів міст, підсвічування
+// поранених) з гейтами: тумблер «Анімація» (rubezh.settings.ambient поза
+// сейвом, патерн звуку ADR-0059), видимість документа, typeof-rAF (jsdom —
+// 0 кадрів, прецедент П6.16), тротлер ≤ 10 fps. Репейнт — активна сцена
+// (бій або геосцена); стартовий екран не анімується (П14.7). Створюється
+// ДО модулів бою/панелей (deps-об'єкти беруть його за значенням — TDZ),
+// сам читає стан лише через ліниві замикання.
+const ambient = createAmbient({
+  hasRaf: () => hasRaf,
+  schedule: (cb) => requestAnimationFrame(cb),
+  cancel: (h) => cancelAnimationFrame(h as number),
+  now: () => performance.now(),
+  visible: () => (typeof document === 'undefined' ? false : document.visibilityState === 'visible'),
+  repaint: () => {
+    if (party === null) return; // партії немає — 0 перерисовок (стартовий екран П12.2)
+    if (!el('start-screen').classList.contains('hidden')) return; // П14.7: стартовий екран — 0 нових анімацій
+    if (ui.mission !== null) battle.renderBattle();
+    else panels.renderGeo();
+  },
+});
+
 // Порядок оголошень важливий (TDZ — див. docs/workflow.md): усі змінні стану,
 // які newParty() чи обробники пишуть, оголошуються ДО першого виклику newParty().
 // пR.2 (ADR-0037): журнал подій (категорії і фільтри-вкладки — ADR-0027,
@@ -207,6 +231,7 @@ const battle = createBattleUI(ui, {
   stopAuto: () => autoBattle.stop(),
   autoBusy: () => autoBattle.busy, // П13.3: підпис плитки «Авто»/«Стоп»
   cancelGeoAnim: () => geoAnim.cancel(),
+  ambient, // П14.8: ефекти поверх кадру (гейти — в ambient-модулі)
 });
 
 // пR.2 (ADR-0037): ввід тактичного бою (клік/hover/клавіші, зведення режимів,
@@ -277,6 +302,7 @@ const panels = createPanels({
   activeGeoAnim: () => geoAnim.active(),
   geoAnimNow: () => geoAnim.now,
   victoryDismissed: () => victoryDismissed,
+  ambient, // П14.8: ефекти поверх кадру геосцени (ADR-0073)
 });
 
 // П11.6 (ADR-0058/0037): панель «Дослідження» — тут лише зв'язування зі
@@ -327,6 +353,7 @@ function adoptParty(p: Party): Party {
   gameOver = isBankrupt(p.econ, p.roster, p.campaign.preset);
   victoryDismissed = false; // П8.3a: нова/завантажена партія — екран перемоги показується знову
   checkpoint = serializeParty(p);
+  ambient.start(); // П14.8: партія активна — ambient-цикл (гейти всередині; стартовий екран репейнт пропускає)
   return p;
 }
 
@@ -543,6 +570,13 @@ if (typeof document !== 'undefined') {
   document.addEventListener('click', (ev) => {
     if ((ev.target as HTMLElement | null)?.closest('button')) sound.play('click');
   });
+  // П14.8 (ADR-0073): гейт видимості — у фоні 0 перерисовок: планування
+  // знімаємо самі (не сподіваємось на тротлинг rAF браузера); повернення
+  // видимості поновлює цикл, якщо тумблер увімкнено.
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) ambient.pause();
+    else ambient.resume();
+  });
   // П12.3 (ADR-0065/0059): тумблер звуку мігрував з топбара у вікно
   // «Налаштування» (settings.ts) — єдине джерело стану залишається
   // аудіо-модуль; підпис «Звук: увімк/вимк» тепер у вікні.
@@ -557,7 +591,9 @@ if (typeof document !== 'undefined') {
   help.maybeShowOnFirstVisit();
   // П12.3 (ADR-0065): вікно «Налаштування» — тумблер звуку мігрував з топбара;
   // стан — аудіо-модуль (ADR-0059), персист поза сейвом (ADR-0026).
-  const settings = createSettings({ sound });
+  // П14.8 (ADR-0073): секція «Анімація» — тумблер ambient (ambient-модуль —
+  // єдине джерело стану; перемикання зупиняє/поновлює цикл без перезапуску).
+  const settings = createSettings({ sound, ambient });
   // П12.2 (ADR-0065): каркас екранів — зв'язування з панеллю збереження
   // («Продовжити» — останній активний слот, ADR-0026), «Як грати» (help.ts
   // без змін) і стартом нової партії (сід + складність з діалогу).
