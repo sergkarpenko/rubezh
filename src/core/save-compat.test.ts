@@ -109,12 +109,13 @@ describe('П12.6: продовження сіда 42 — види подій і 
     };
     for (let i = 0; i < 96; i++) tickAll(p);
     // послідовність видів подій геосцени — байт-у-байт golden (код до серії)
+    // WORLD_H 9 (фідбек П14.8): траєкторії НЛО у вищому світі — на один
+    // ufo_move менше до приземлення в обох серіях; rng/гроші — ті самі.
     expect(kinds(p.geo.log.slice(before.geo))).toEqual([
       'day',
       'ufo_spawned',
       'ufo_move',
       'ufo_detected',
-      'ufo_move',
       'ufo_move',
       'ufo_move',
       'ufo_move',

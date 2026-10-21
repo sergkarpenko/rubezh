@@ -79,28 +79,28 @@ describe('П8.5: оркестратор — повна партія (фіксо�
     expect(r.ticks).toBe(30 * TICKS_PER_DAY);
     expect(r.moneyByDay).toHaveLength(30);
     expect(r.readyByDay).toHaveLength(30);
-    // П8.6: числа нової лінії тунінгу (probe-перед-тестами, урок П8.5): премії/дотація
-    // нижчі → залишок 2510; ваги рахунку (ветерани 50, гроші 0.25) → тотал 4128.
-    expect(r.score).toEqual({ ufosShotDown: 0, missionsWon: 22, veteransAlive: 4, moneyLeft: 2510, total: 4128 });
-    expect(r.missionsLaunched).toBe(27);
+    // П8.6/П14.8: числа лінії тунінгу (probe-перед-тестами, урок П8.5); WORLD_H 9
+    // (фідбек П14.8) зсунув траєкторії: залишок 2210, ваги рахунку
+    // (ветерани 50, гроші 0.25) → тотал 4053.
+    expect(r.score).toEqual({ ufosShotDown: 0, missionsWon: 22, veteransAlive: 4, moneyLeft: 2210, total: 4053 });
+    expect(r.missionsLaunched).toBe(28);
     expect(r.missionsWon).toBe(22);
-    expect(r.missionsLost).toBe(5);
-    expect(r.soldiersLost).toBe(32);
-    expect(r.soldiersWounded).toBe(19);
-    expect(r.hiredTotal).toBe(30);
-    expect(r.hireSpent).toBe(30 * hirePrice('норма')); // П11.8: hirePrice «норми» = 100
+    expect(r.missionsLost).toBe(6);
+    expect(r.soldiersLost).toBe(35);
+    expect(r.soldiersWounded).toBe(20);
+    expect(r.hiredTotal).toBe(33);
+    expect(r.hireSpent).toBe(33 * hirePrice('норма')); // П11.8: hirePrice «норми» = 100
   });
 
-  // П8.6: банкрутний сід нової лінії — сід 45 зі старої лінії тепер переможний
-  // (probe-перед-тестами, урок П8.5); сід 35 банкрутує на Д11 — серія невдач
-  // у середині гри (медіана банкрутств «норми» Д9.5, docs/reports/p8.6-tuning.md).
+  // П8.6: банкрутний сід нової лінії; WORLD_H 9 (фідбек П14.8) віддаляє
+  // банкрутство сіда 35 з Д11 на Д27 (probe-перед-тестами, урок П8.5).
   it('банкрутство (ADR-0021): сід 35 «норма» — боєготових немає і грошей немає', () => {
     const r = simulateParty(35, 'норма');
     expect(r.outcome).toBe('банкрутство');
-    expect(r.endDay).toBe(11);
-    expect(r.ticks).toBe(498);
-    expect(r.soldiersLost).toBe(27);
-    expect(r.moneyByDay.length).toBeLessThan(30); // обірвана крива — доба 11 незавершена
+    expect(r.endDay).toBe(27);
+    expect(r.ticks).toBe(1252);
+    expect(r.soldiersLost).toBe(76);
+    expect(r.moneyByDay.length).toBeLessThan(30); // обірвана крива — доба 27 незавершена
   });
 
   it('смоук: 4 доби × 2 сіди × 2 пресети — без винятків, криви заповнені', () => {
@@ -168,32 +168,36 @@ describe('П11.8: політика науки — ізоляція (критер
     expect(r.workshopProduced).toBe(0);
     expect(r.equippedItems).toBe(0);
     expect(r.scientistsByDay.every((n) => n === 0)).toBe(true);
-    // золоті числа сіда 42 пинить тест вище (score 4128) — траєкторія
+    // золоті числа сіда 42 пинить тест вище (score 4053 при WORLD_H 9) — траєкторія
     // геосцени/бою не змінена додаванням науки в оркестратор
   });
 });
 
 describe('П11.8: політика науки — повний флоу (фіксовані сіди фіксують баланс)', () => {
-  it('SCIENCE_POLICY: сід 42 «норма» — вчені, проєкти, цех, екіпірування; байт-у-байт', () => {
-    const a = simulateParty(42, 'норма', { policy: SCIENCE_POLICY });
-    const b = simulateParty(42, 'норма', { policy: SCIENCE_POLICY });
+  // WORLD_H 9 (фідбек П14.8) зсунув траєкторії: на сіді 42 наука тепер
+  // банкрутує — переможний сід флоу науки перемірено probe-сканом (урок П8.5):
+  // сід 49 дає той самий візерунок (3 вчені, 3 проєкти у порядку комбо-B,
+  // цех, екіпірування, без звільнень).
+  it('SCIENCE_POLICY: сід 49 «норма» — вчені, проєкти, цех, екіпірування; байт-у-байт', () => {
+    const a = simulateParty(49, 'норма', { policy: SCIENCE_POLICY });
+    const b = simulateParty(49, 'норма', { policy: SCIENCE_POLICY });
     expect(JSON.stringify(b)).toBe(JSON.stringify(a));
     expect(a.outcome).toBe('перемога');
     expect(a.scientistsHired).toBe(3);
-    // П11.8 (тунінг ×0.75 точок, комбо-B): за 30 діб — 3 проєкти (до тунінгу — 2)
+    // П11.8 (тунінг ×0.75 точок, комбо-B): за 30 діб — 3 проєкти
     expect(a.completedProjects).toEqual(['medkit', 'lab-extension', 'optics']);
-    expect(a.workshopProduced).toBe(15);
-    expect(a.equippedItems).toBe(15);
+    expect(a.workshopProduced).toBe(3);
+    expect(a.equippedItems).toBe(3);
     expect(a.salarySpent).toBe(1800);
     expect(a.projectSpent).toBe(270);
-    expect(a.workshopSpent).toBe(640);
+    expect(a.workshopSpent).toBe(130);
     expect(a.scientistsFired).toBe(0);
     expect(a.scientistsByDay[a.scientistsByDay.length - 1]).toBe(3);
   });
 
   it('спіраль зарплата→звільнення (урок П11.2): бідна партія звільняє вчених з кінця штату', () => {
     const heavy = { ...SCIENCE_POLICY, name: 'sci-heavy', scientistsUpTo: 5 };
-    const r = simulateParty(45, 'норма', { policy: heavy });
+    const r = simulateParty(44, 'норма', { policy: heavy }); // сід 44: спіраль при WORLD_H 9 (probe)
     expect(r.salaryShortfallDays).toBe(2);
     expect(r.scientistsFired).toBe(2);
     // штат просідає 5 → 3 (наймані поверх звільнених) — метрики бачать спіраль
