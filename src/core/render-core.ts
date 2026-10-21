@@ -6,7 +6,7 @@
 // Canvas/DOM API (ADR-0002) — Canvas-виклики живуть у шарі відображення
 // (src/render.ts), планувальник кадрів ін'єктується викликачем.
 
-import { mulberry32, type GameEvent, type Side, type Unit, type Vec2 } from './combat';
+import { type GameEvent, type Side, type Unit, type Vec2 } from './combat';
 // П14.5: розкладка геосцени 16×8 і хвіст перехоплення читають розміри світу та
 // події журналу з geo.ts (лише типи/константи — ядро не змінюється, ADR-0002).
 import { WORLD_H, WORLD_W, type GeoEvent } from './geo';
@@ -52,62 +52,33 @@ export function geoCellTone(x: number, y: number): string {
   return cellHash(x, y) % 2 === 0 ? GEO_CELL_A : GEO_CELL_B;
 }
 
-// --- П14.5 (ADR-0072/0064): геосцена 2.0 — континенти-блоби (ітерація 3) ---
+// --- Позафазна лінія «візуальні порівняння» (дизайн-сесія Work 2026-10-21):
+// фіксована мапа світу геосцени — константа 9×16 ---
 // Терену геосцени НЕ існує в ядрі і сейвах (GeoState без мапи рельєфу,
-// ADR-0026): розклад — суто шар відображення. Фідбек власника: масиви суші
-// замість розсипу клітинок — 3–5 континентів-блобів (~30–35% суші, кожен
-// масив 6–15 клітинок, без поодиноких плит). Форми блобів — фіксовані
-// константи (напіввісі еліпсів), центри — похідні від сіда партії через
-// ВЛАСНИЙ mulberry32 (ізольований від geo.rng: потік ядра не зсувається;
-// сейв зберігає сід — мапа та сама після завантаження; той самий сід =
-// та сама мапа, ADR-0003). Світ циліндричний по X — блоби зшиваються
-// через край; вертикаль — без замикання. Острів вузла: база — завжди
-// суша (1–2 клітинки, детерміновано).
-export const GEO_BLOB_SHAPES: ReadonlyArray<{ rx: number; ry: number; chamfer: boolean }> = [
-  { rx: 2, ry: 1, chamfer: true }, // 11 клітинок — великий континент (5×3 зі зрізаними кутами)
-  { rx: 2, ry: 1, chamfer: true }, // 11
-  { rx: 1, ry: 1, chamfer: false }, // 9 — середній масив 3×3
-  { rx: 1, ry: 1, chamfer: false }, // 9
-  { rx: 1, ry: 1, chamfer: false }, // 9
+// ADR-0026): розклад — суто шар відображення. Мапу затвердив власник:
+// розклад більше не залежить від сіда партії — одна геосцена для всіх
+// партій (детермінована константа, ADR-0003; geo.rng не витягується,
+// потік ядра не зсувається, сейви сумісні). Світ циліндричний по X
+// (wrap у geoIsLand); вертикаль — без замикання. Острів Вузла
+// (8,4)+(8,5) — у центрі світу; клітинка бази (8,4) — суша завжди
+// (геометрія радара geo.ts без змін, ADR-0032). B у карті — клітинка
+// острова Вузла (суша, як L).
+const GEO_LAND_MAP: ReadonlyArray<string> = [
+  '..LLLLLLL.......',
+  '.LLLLLLLLLL.....',
+  '.LLLLLLLLLLL....',
+  '..LLL...LLLL....',
+  '........B.......',
+  '........B.......',
+  '..LL.....LLL....',
+  '...LLL...LLLL...',
+  '.....L....LL....',
 ];
 
-// Розклад суші 16×8: [y][x] = суша/океан. Чиста функція від (сід, база).
+// Розклад суші WORLD_H×WORLD_W (9×16): [y][x] = суша/океан. Константа.
 export type GeoLayout = ReadonlyArray<ReadonlyArray<boolean>>;
 
-export function makeGeoLayout(seed: number, base: Vec2): GeoLayout {
-  const rng = mulberry32(seed); // власний потік від сіда; geo.rng не витягується
-  const land: boolean[][] = [];
-  for (let y = 0; y < WORLD_H; y++) land.push(new Array<boolean>(WORLD_W).fill(false));
-  for (let k = 0; k < GEO_BLOB_SHAPES.length; k++) {
-    const b = GEO_BLOB_SHAPES[k]!;
-    // центр — у своїй зоні X (5 рівних смуг): континенти розкидані по всьому
-    // світу, а не згромождені в одному кутку (стабільні ~30–35% суші)
-    const zone = (WORLD_W * k) / GEO_BLOB_SHAPES.length;
-    const cx = Math.floor(zone + rng() * (WORLD_W / GEO_BLOB_SHAPES.length)) % WORLD_W;
-    const cy = Math.floor(rng() * WORLD_H);
-    for (let dy = -b.ry; dy <= b.ry; dy++) {
-      const yy = cy + dy;
-      if (yy < 0 || yy >= WORLD_H) continue; // вертикаль без замикання
-      for (let dx = -b.rx; dx <= b.rx; dx++) {
-        // зрізані кути (chamfer): масив без «дротяних» виступів
-        if (b.chamfer && Math.abs(dx) === b.rx && Math.abs(dy) === b.ry) continue;
-        const wx = ((((cx + dx) % WORLD_W) + WORLD_W) % WORLD_W) | 0; // куля по X
-        land[yy]![wx] = true;
-      }
-    }
-  }
-  // острів вузла: клітинка бази — суша; якщо суші поруч немає, додаємо
-  // одного сусіда, щоб острів не був самотньою плитою (детерміновано)
-  const bx = (((Math.floor(base.x) % WORLD_W) + WORLD_W) % WORLD_W) | 0;
-  const by = Math.min(WORLD_H - 1, Math.max(0, Math.floor(base.y)));
-  if (!land[by]![bx]) {
-    land[by]![bx] = true;
-    const hasNeighbor =
-      geoIsLand(land, bx + 1, by) || geoIsLand(land, bx - 1, by) || geoIsLand(land, bx, by - 1) || geoIsLand(land, bx, by + 1);
-    if (!hasNeighbor) land[by]![(((bx + 1) % WORLD_W) + WORLD_W) % WORLD_W] = true;
-  }
-  return land;
-}
+export const GEO_LAND_ROWS: GeoLayout = GEO_LAND_MAP.map((r) => [...r].map((c) => c === 'L' || c === 'B'));
 
 // Чи суша в клітинці (x, y) розкладу — X замикається (куля по X), y — ні.
 export function geoIsLand(layout: GeoLayout, x: number, y: number): boolean {
@@ -117,7 +88,8 @@ export function geoIsLand(layout: GeoLayout, x: number, y: number): boolean {
 }
 
 // Узбережжя: клітинка суші, що межує з океаном (4 напрямки, X із замиканням) —
-// тайл переходу з ціановим кантом ставиться лише на таких клітинках.
+// шар відображення кладе оверлей океанної смуги з кантом на КОЖЕН океанний
+// край такої клітинки (фідбек власника 2026-10-21: лінія берега суцільна).
 export function geoCoastEdges(layout: GeoLayout, x: number, y: number): { n: boolean; e: boolean; s: boolean; w: boolean } {
   const land = geoIsLand(layout, x, y);
   return {
@@ -133,20 +105,6 @@ export function geoCoastEdges(layout: GeoLayout, x: number, y: number): { n: boo
 // Розклад блобів не має поодиноких плит — вогні лише всередині масивів суші.
 export function geoCityLights(layout: GeoLayout, x: number, y: number): boolean {
   return geoIsLand(layout, x, y) && cellHash(x, y) % 12 === 0;
-}
-
-// Сторона узбережжя клітинки суші: перший океанний край у фіксованому
-// порядку (захід → схід → північ → південь) — чиста функція, детерміновано;
-// шар відображення повертає/дзеркалить тайл переходу до цього краю. null —
-// внутрішня суша (океану поруч немає).
-export type GeoCoastSide = 'n' | 'e' | 's' | 'w';
-export const GEO_COAST_ORDER: readonly GeoCoastSide[] = ['w', 'e', 'n', 's'];
-export function geoCoastSide(layout: GeoLayout, x: number, y: number): GeoCoastSide | null {
-  const e = geoCoastEdges(layout, x, y);
-  for (const s of GEO_COAST_ORDER) {
-    if (e[s]) return s;
-  }
-  return null;
 }
 
 // Клітинка терену: blocked — завалення (рельєф туману видно і в тумані,

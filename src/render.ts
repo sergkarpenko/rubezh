@@ -27,10 +27,10 @@ import {
   boomParticleOffset,
   cellHash,
   geoCityLights,
-  geoCoastSide,
+  geoCoastEdges,
   geoIsLand,
+  GEO_LAND_ROWS,
   hasVisibleNeighbor,
-  makeGeoLayout,
   moveAnimPos,
   terrainShade,
   visibleKeys,
@@ -39,7 +39,7 @@ import {
 } from './core/render-core';
 // П14.5: розмір світу для замикання скан-зони по X (куля; як RADAR_RANGE у geo.ts).
 import { WORLD_W } from './core/geo';
-import { grenadeZone, type Vec2 } from './core/combat';
+import { grenadeZone } from './core/combat';
 import {
   ALIEN_STAND,
   ALIEN_STEP,
@@ -240,20 +240,36 @@ export function isTerrainAtlasReady(): boolean {
 
 // --- П14.5 (ADR-0072): тайли геосцени 2.0 — океан/суша/узбережжя ---
 // Джерело — assets/geo-tiles.png (768×96): 8 комірок 96×96 (2× від GCELL 48),
-// пер-тайлова генерація власника (кожен сирець = цілий тайл/спрайт, патерн
-// юніт-атласу П14.3; кропи-«розбирання» попередньої ітерації відкинуті —
-// власник бачив розтягнуті/зсунуті фрагменти). Порядок комірок — константи:
-// океан → суша A–D → узбережжя (ліва половина океан, права — суша з ціановим
-// кантом; фліп/поворот за маскою сусідства) → вогні міст (альфа-оверлей) →
-// вежа-радар (альфа, позначка бази). Розкладка суші/океану — авторський
-// масив GEO_LAND_ROWS у render-core; варіанти і декори — cellHash (без RNG).
+// пер-тайлова генерація власника. Ітерація фідбеку 2026-10-21: сирці суші
+// A–D — зображення островів, тому кадри суші — інтер'єрні кропи (текстури);
+// кадр узбережжя рекомпоновано з owner-арту: [0..44) — ПІКСЕЛІ тайлу океану
+// (вода берега зливається з океаном), [44..58) — кант з coast.jpg, решта —
+// текстура суші. Порядок комірок — константи: океан → суша A–D → узбережжя
+// (оверлей океанної половини з кантом на КОЖЕН океанний край клітинки —
+// фідбек власника: лінія берега суцільна, кути зшиваються) → вогні міст
+// (альфа-оверлей) → вежа-радар (альфа, позначка бази). Розкладка суші/океану
+// — авторський масив GEO_LAND_ROWS у render-core; варіанти і декори —
+// cellHash (без RNG).
 export const GEO_TILE = 96; // комірка атласу, px (2× від GCELL 48)
 export const GEO_TILE_OCEAN = 0; // океан
 export const GEO_TILE_LAND_A = 1; // суша A–D (4 варіанти плит за хешем)
 export const GEO_TILE_LAND_VARIANTS = 4; // Суша A, B, C, D
-export const GEO_TILE_COAST = 5; // узбережжя: ліворуч океан, праворуч суша
+export const GEO_TILE_COAST = 5; // узбережжя: [0..44) океан, [44..58) кант-лінія, [58..96) суша
 export const GEO_TILE_CITY = 6; // вогні міст — альфа-оверлей
 export const GEO_TILE_TOWER = 7; // вежа-радар з маяком — позначка бази
+// Оверлей узбережжя — два шари (фідбек власника: суцільна лінія берега):
+// 1) океанне заповнення [0..GEO_COAST_FILL) кадру → зовнішня половина
+//    клітинки: пікселі тайлу океану — берег зливається з океаном;
+// 2) кант-лінія [GEO_COAST_FILL..GEO_COAST_FILL+GEO_COAST_LINE) кадру поверх
+//    заповнення: усі лінії малюються ПІСЛЯ усіх заповнень — сусідні
+//    оверлеї не затирають кант одне одного на кутах (порядок w→e→n→s).
+export const GEO_COAST_FILL = 44; // океанна половина кадру узбережжя (без канту)
+export const GEO_COAST_FILL_CELL = 22; // та сама половина під клітинку 48
+export const GEO_COAST_LINE = 14; // смуга кант-лінії у кадрі (44..58)
+export const GEO_COAST_LINE_CELL = 7; // та сама смуга під клітинку 48
+// Порядок оверлеїв — фіксований (детерміновано, без RNG): захід → схід →
+// північ → південь; перетини заповнень — океан поверх океану (консистентно).
+const GEO_COAST_SIDES: ReadonlyArray<'w' | 'e' | 'n' | 's'> = ['w', 'e', 'n', 's'];
 
 // Ліниве завантаження тайлів геосцени — той самий патерн, що initTerrainAtlas
 // (ADR-0072 п.3): фабрика інжектиться, невдача — тихий фолбек на два тони
@@ -505,23 +521,23 @@ export function drawNightTerrain(ctx: CanvasRenderingContext2D, w: number, h: nu
 }
 
 // --- П12.7 (ADR-0064): терен геосцени — двотоновий із неоновою сіткою ---
-// П14.5 (ADR-0072, ітерація 3): геосцена 2.0 — тайли з ассета над розкладом
-// континентів-блобів (makeGeoLayout у render-core: суша/океан за сідом
-// партії + острів вузла, без geo.rng; варіант суші A–D — хеш клітинки;
-// узбережжя — тайл переходу з фліпом/поворотом за маскою сусідства
-// суша/океан (geoCoastSide, детерміновано); вогні міст — рідкий
-// альфа-оверлей за хешем). Фолбек без ассета — ТОЙ САМИЙ розклад блобів
-// двома тонами (суша/океан; поведінка не залежає від ассета, тести від
-// ассета не залежать).
+// П14.5 (ADR-0072): геосцена 2.0 — тайли з ассета над розкладом суші
+// (позафазна лінія «візуальні порівняння», 2026-10-21: фіксована константа
+// GEO_LAND_ROWS у render-core — мапа затверджена власником, більше не
+// залежить від сіда партії; варіант суші A–D — хеш клітинки; узбережжя —
+// тайл переходу з фліпом/поворотом за маскою сусідства суша/океан
+// (geoCoastSide, детерміновано); вогні міст — рідкий альфа-оверлей за
+// хешем). Фолбек без ассета — ТОЙ САМИЙ розклад двома тонами (суша/океан;
+// поведінка не залежає від ассета, тести від ассета не залежать).
 // Палітра і розклад — чиста логіка src/core/render-core.ts; тут — лише
 // Canvas-виклики. Кадр еквівалентний малюванню з нуля (патерн renderGeo,
 // урок П6.6). Чиста функція без DOM-стану; викликається з src/ui/panels.ts.
-export function drawGeoTerrain(ctx: CanvasRenderingContext2D, w: number, h: number, cell: number, seed: number, base: Vec2): void {
+export function drawGeoTerrain(ctx: CanvasRenderingContext2D, w: number, h: number, cell: number): void {
   // фон на весь buffer — краї канви не блимають
   ctx.fillStyle = NIGHT_BG;
   ctx.fillRect(0, 0, w, h);
-  // розклад континентів — один на кадр (чиста функція від сіда і бази)
-  const layout = makeGeoLayout(seed, base);
+  // розклад суші — фіксована константа (одна мапа для всіх партій)
+  const layout = GEO_LAND_ROWS;
   const cols = Math.ceil(w / cell);
   const rows = Math.ceil(h / cell);
   if (geoTilesImg !== null) {
@@ -536,28 +552,23 @@ export function drawGeoTerrain(ctx: CanvasRenderingContext2D, w: number, h: numb
           ctx.drawImage(geoTilesImg, GEO_TILE_OCEAN * GEO_TILE, 0, GEO_TILE, GEO_TILE, px, py, cell, cell);
           continue;
         }
-        const side = geoCoastSide(layout, x, y);
-        if (side === null) {
-          // внутрішня суша: варіант A–D за хешем координат (без RNG)
-          const col = GEO_TILE_LAND_A + (cellHash(x, y) % GEO_TILE_LAND_VARIANTS);
-          ctx.drawImage(geoTilesImg, col * GEO_TILE, 0, GEO_TILE, GEO_TILE, px, py, cell, cell);
-          continue;
+        // суша (внутрішня і узбережжя): базовий тайл — варіант A–D за хешем
+        const col = GEO_TILE_LAND_A + (cellHash(x, y) % GEO_TILE_LAND_VARIANTS);
+        ctx.drawImage(geoTilesImg, col * GEO_TILE, 0, GEO_TILE, GEO_TILE, px, py, cell, cell);
+        // узбережжя: два шари на КОЖЕН океанний край (фідбек власника:
+        // суцільна лінія берега; кути і півострови зшиваються) — спочатку
+        // всі океанні заповнення, потім усі кант-лінії поверх (без затірання)
+        const edges = geoCoastEdges(layout, x, y);
+        if (edges.w || edges.e || edges.n || edges.s) {
+          for (const side of GEO_COAST_SIDES) {
+            if (!edges[side]) continue;
+            drawCoastStrip(ctx, geoTilesImg, side, px, py, cell, 0, GEO_COAST_FILL, 0, GEO_COAST_FILL_CELL);
+          }
+          for (const side of GEO_COAST_SIDES) {
+            if (!edges[side]) continue;
+            drawCoastStrip(ctx, geoTilesImg, side, px, py, cell, GEO_COAST_FILL, GEO_COAST_LINE, GEO_COAST_FILL_CELL, GEO_COAST_LINE_CELL);
+          }
         }
-        // узбережжя: тайл переходу (океан ліворуч) повертаємо/дзеркалимо до
-        // першого океанного краю (geoCoastSide, фіксований порядок — детерміновано)
-        if (side === 'w') {
-          ctx.drawImage(geoTilesImg, GEO_TILE_COAST * GEO_TILE, 0, GEO_TILE, GEO_TILE, px, py, cell, cell);
-          continue;
-        }
-        ctx.save();
-        ctx.translate(px + cell / 2, py + cell / 2);
-        if (side === 'e')
-          ctx.scale(-1, 1); // океан праворуч — дзеркало
-        else if (side === 'n')
-          ctx.rotate(Math.PI / 2); // океан згори
-        else ctx.rotate(-Math.PI / 2); // океан знизу
-        ctx.drawImage(geoTilesImg, GEO_TILE_COAST * GEO_TILE, 0, GEO_TILE, GEO_TILE, -cell / 2, -cell / 2, cell, cell);
-        ctx.restore();
       }
     }
     // вогні міст: альфа-оверлей на суші за хешем (рідкий декор, без RNG)
@@ -592,6 +603,40 @@ export function drawGeoTerrain(ctx: CanvasRenderingContext2D, w: number, h: numb
     ctx.lineTo(cols * cell, y * cell);
     ctx.stroke();
   }
+}
+
+// Смуга кадру узбережжя для одного океанного краю клітинки суші: стовпці
+// [sx..sx+sw) кадру GEO_TILE_COAST прикладаються на [dx..dx+dw) клітинки —
+// 'w' — як є, 'e' — дзеркало, 'n'/'s' — повороти ±π/2 навколо центру
+// клітинки (патерн поворотів тайлів П14.5). Вода заповнення — пікселі
+// тайлу океану (рекомпозит кадру), тому берег зливається з океаном,
+// а кант-лінія дає суцільний неоновий берег (фідбек власника 2026-10-21).
+function drawCoastStrip(
+  ctx: CanvasRenderingContext2D,
+  img: CanvasImageSource,
+  side: 'w' | 'e' | 'n' | 's',
+  px: number,
+  py: number,
+  cell: number,
+  sx: number,
+  sw: number,
+  dx: number,
+  dw: number
+): void {
+  const srcX = GEO_TILE_COAST * GEO_TILE + sx;
+  if (side === 'w') {
+    ctx.drawImage(img, srcX, 0, sw, GEO_TILE, px + dx, py, dw, cell);
+    return;
+  }
+  ctx.save();
+  ctx.translate(px + cell / 2, py + cell / 2);
+  if (side === 'e')
+    ctx.scale(-1, 1); // океан праворуч — дзеркало
+  else if (side === 'n')
+    ctx.rotate(Math.PI / 2); // океан згори
+  else ctx.rotate(-Math.PI / 2); // океан знизу
+  ctx.drawImage(img, srcX, 0, sw, GEO_TILE, -cell / 2 + dx, -cell / 2, dw, cell);
+  ctx.restore();
 }
 
 // --- П6.14: UX прицілювання — обведення валідних цілей і шанс попадання ---
