@@ -118,12 +118,16 @@ export interface AmbientBattleScene {
 
 // Сцена геосцени: сід партії (розклад континентів makeGeoLayout — той самий,
 // що й у drawGeoTerrain; без geo.rng) і клітинка бази (центр розгортки).
+// scanActive (фікс фідбеку валідації): подієвий скан-радар П14.5 грає —
+// ambient-розгортку не малюємо (один сектор на кадр, без «другого радара»
+// на тік/добу; між сканами сектор спокою знову видно).
 export interface AmbientGeoScene {
   cell: number; // GCELL
   cw: number;
   ch: number;
   seed: number;
   base: Vec2;
+  scanActive?: boolean;
 }
 
 // Бій: wall-pulse (кванти стін) + hp-glow (бейджі поранених).
@@ -154,8 +158,16 @@ export function paintGeoAmbient(ctx: CanvasRenderingContext2D, s: AmbientGeoScen
   let fx = 0; // лічильник одночасних ефектів (бюджет ADR-0073 п.4)
   const cx = s.base.x * s.cell + s.cell / 2;
   const cy = s.base.y * s.cell + s.cell / 2;
-  const maxR = (RADAR_RANGE + 0.5) * s.cell; // зона сенсорної сітки (прецедент gscan П14.5)
-  if (fx < AMBIENT_MAX_EFFECTS) {
+  // Фікс фідбеку валідації («сектор знизу обрізається»): зона сенсорної сітки
+  // (RADAR_RANGE 4 від бази в центрі світу 16×8) виходить за нижню межу
+  // світу — розгортка на повний радіус зоны різко обрізалась краєм канви і
+  // промінь «зникав» на нижній дузі оберту. Радіус вписано у канву: коло
+  // розгортки завжди повністю видиме, обертання без розривів. Суто
+  // відображення (ADR-0073): зона виявлення у ядрі не змінюється; подієвий
+  // gscan (короткий, 1200 мс) лишається на повному радіусі — там обріз
+  // непомітний, а ambient-сектор обертається безперервно.
+  const maxR = Math.max(1, Math.min((RADAR_RANGE + 0.5) * s.cell, cx, cy, s.cw - cx, s.ch - cy));
+  if (!s.scanActive && fx < AMBIENT_MAX_EFFECTS) {
     fx++; // radar-sweep — безперервна розгортка (розвиток подієвого gscan)
     const ang = radarSweepAngle(t);
     ctx.strokeStyle = 'rgba(0,229,255,0.3)'; // передній край — приглушений ціан «Рубіжу»

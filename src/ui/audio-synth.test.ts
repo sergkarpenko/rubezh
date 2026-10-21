@@ -117,22 +117,22 @@ describe('Синтез: рецепти за моком SoundContext', () => {
     ]);
     expect(m.rec.osc[0]).toMatchObject({ start: 0, stop: 0.07 });
     expect(m.rec.gain[0]).toEqual([
-      { v: 0.04, t: 0 },
+      { v: 0.1, t: 0 }, // фікс П14.8: гучності підняті (колишні 0.04 не чутно)
       { v: 0.0001, t: 0.05 },
     ]);
   });
 
-  it('move: подія = крок; серія одного дрену — тупотіння зі зсувом 0.14с', () => {
+  it('move: подія = крок; серія одного дрену — тупотіння зі зсувом 0.12с', () => {
     const m = mockContext();
     const s = createSound({ makeContext: () => m.ctx, store: memStore() });
     s.battleEvent({ type: 'move', unitId: 's1', from: { x: 2, y: 2 }, to: { x: 3, y: 2 } } as never);
     expect(m.rec.src).toHaveLength(1); // одна подія move = одна клітинка = один крок
-    expect(m.rec.gain[1][0].v).toBe(0.05); // тихо: рухи часті
+    expect(m.rec.gain[1][0].v).toBe(0.1);
     // хід на кілька клітинок: події одного дрену — стакато, не зливаються
     s.battleEvent({ type: 'move', unitId: 's1', from: { x: 3, y: 2 }, to: { x: 4, y: 2 } } as never);
     s.battleEvent({ type: 'move', unitId: 's1', from: { x: 4, y: 2 }, to: { x: 5, y: 2 } } as never);
     const starts = m.rec.osc.map((o) => o.start);
-    expect(starts).toEqual([0, 0.14, 0.28]);
+    expect(starts).toEqual([0, 0.12, 0.24]);
   });
 
   it('сигнатури режимів різні: snap — шум+квадрат, aimed — свист sawtooth, auto — коротший', () => {
@@ -158,19 +158,39 @@ describe('Синтез: рецепти за моком SoundContext', () => {
     expect(auto.osc[0].stop).toBeCloseTo(0.07); // коротша нижча куля за snap
   });
 
-  it('черга: три кулі — стакато-зсув 0/0.09/0.18с, цикл замикається; hit між кулями цикл не збиває', () => {
+  it('черга: кулі — щільний темп 0/0.09/0.18с; hit між кулями серію не збиває', () => {
     const m = mockContext();
     const s = createSound({ makeContext: () => m.ctx, store: memStore() });
     for (let i = 0; i < 3; i++) s.play('shot-auto');
     expect(m.rec.osc.map((o) => o.start)).toEqual([0, 0.09, 0.18]);
-    s.play('shot-auto'); // четверта куля — цикл з початку
-    expect(m.rec.osc[3].start).toBe(0);
+    s.play('shot-auto'); // четверта куля (новий вибух у тому ж дрені) — далі по серії
+    expect(m.rec.osc[3].start).toBe(0.27);
     const m2 = mockContext();
     const s2 = createSound({ makeContext: () => m2.ctx, store: memStore() });
     for (let i = 0; i < 3; i++) {
       s2.battleEvent({ type: 'shot', shooterId: 's1', targetId: 'a1', mode: 'auto', hit: true, damage: 2 } as never);
     }
     expect(m2.rec.osc.filter((o) => o.type === 'square').map((o) => o.start)).toEqual([0, 0.09, 0.18]);
+  });
+
+  it('фікс П14.8 («накладаються»): різні події одного дрену — по слотах 0.12с, hit — в парі з пострілом', () => {
+    const m = mockContext();
+    const s = createSound({ makeContext: () => m.ctx, store: memStore() });
+    // хід двох стрільців того ж дрену: постріл+влучання, постріл+влучання, смерть
+    s.battleEvent({ type: 'shot', shooterId: 's1', targetId: 'a1', mode: 'snap', hit: true, damage: 4 } as never);
+    s.battleEvent({ type: 'shot', shooterId: 's2', targetId: 'a2', mode: 'aimed', hit: true, damage: 5 } as never);
+    s.battleEvent({ type: 'death', unitId: 'a2', killerId: 's2' } as never);
+    // перший постріл (шум) — слот 0; влучання — одночасно з ним (без свого слота)
+    expect(m.rec.src[0].start).toBe(0);
+    // другий постріл — слот 0.12; його влучання — з ним
+    const osc = m.rec.osc;
+    expect(osc.filter((o) => o.type === 'sawtooth')[0].start).toBe(0.12); // aimed другого стрільця
+    expect(osc.filter((o) => o.type === 'triangle')[1].start).toBe(0.12); // його влучання
+    // смерть — наступний слот 0.24 (не одночасна купа)
+    expect(osc.filter((o) => o.type === 'sawtooth')[1].start).toBe(0.24);
+    // точкові звуки серії не займають: клік — одразу
+    s.play('click');
+    expect(osc.filter((o) => o.type === 'square' && o.start === 0)).toHaveLength(2); // click + перший постріл
   });
 
   it('багатонотні: detect — 2 ноти, win — 3 висхідні; події мапляться у рецепти', () => {

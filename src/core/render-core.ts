@@ -231,6 +231,7 @@ export interface TracerAnim {
 }
 export interface DeathAnim {
   kind: 'death';
+  unitId: string; // фікс фідбеку валідації: юніт очікує відтворення — статичний прохід тримає його на полі
   side: Side;
   at: Vec2;
   hpMax: number; // П14.4: показник життя загиблого — порожня смуга (hp 0)
@@ -322,7 +323,7 @@ export function makeTracerAnim(side: Side, from: Vec2, to: Vec2, hit: boolean): 
   return { kind: 'tracer', side, from, to, hit, dur: TRACER_MS + (hit ? IMPACT_MS : 0), start: null };
 }
 export function makeDeathAnim(u: Unit): DeathAnim {
-  return { kind: 'death', side: u.side, at: { ...u.pos }, hpMax: u.maxHp, dur: DEATH_MS, start: null };
+  return { kind: 'death', unitId: u.id, side: u.side, at: { ...u.pos }, hpMax: u.maxHp, dur: DEATH_MS, start: null };
 }
 export function makeOwFlashAnim(u: Unit): OwFlashAnim {
   return { kind: 'owflash', side: u.side, at: { ...u.pos }, dur: OW_FLASH_MS, start: null };
@@ -511,6 +512,24 @@ export function pendingAlienMoveStarts(queue: readonly Anim[]): Map<string, Vec2
     if (a.kind !== 'move' || a.side !== 'alien') continue;
     const p0 = a.path[0];
     if (p0 !== undefined && !out.has(a.unitId)) out.set(a.unitId, p0);
+  }
+  return out;
+}
+
+// Фікс фідбеку валідації П14.8 («старий баг» блимання смерті): ядро
+// застосовує смерть миттєво (alive=false), а кадр згасання відтворюється
+// лише після попередніх анімацій черги (трасер, вибух) — статичний прохід,
+// пропускаючи загиблих, давав «зник → з'явився (кадр смерті) → зник».
+// Правило відображення: смерть у черзі ще НЕ відтворена — юніт лишається
+// на полі до свого кадру. Активний кадр (queue[0]) не враховуємо — його
+// уже малює анімаційний шар (інакше силует подвоїться). Чиста функція без
+// RNG: перша смерть юніта в черзі — його позиція.
+export function pendingDeathStarts(queue: readonly Anim[]): Map<string, Vec2> {
+  const out = new Map<string, Vec2>();
+  for (let i = 1; i < queue.length; i++) {
+    const a = queue[i];
+    if (a.kind !== 'death') continue;
+    if (!out.has(a.unitId)) out.set(a.unitId, a.at);
   }
   return out;
 }

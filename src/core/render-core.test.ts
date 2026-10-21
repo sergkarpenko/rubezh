@@ -42,6 +42,7 @@ import {
   makeTracerAnim,
   moveAnimPos,
   pendingAlienMoveStarts,
+  pendingDeathStarts,
   shakeOffset,
   type Anim,
 } from './render-core';
@@ -439,6 +440,22 @@ describe('П14.4: стартові клітинки невідтворених �
     expect(map.has('s1')).toBe(false); // солдати рухаються в реальному часі — не приховується
     expect(map.has('a2')).toBe(false); // owflash — не хід
     expect(pendingAlienMoveStarts([])).toEqual(new Map()); // порожня черга
+  });
+
+  it('pendingDeathStarts (фікс П14.8): перша смерть юніта в черзі — його позиція; активний кадр ігнорується', () => {
+    // «старий баг» блимання: ядро застосував смерть миттєво, кадр згасання
+    // ще в черзі — статичний прохід тримає загиблого на полі до його кадру
+    const active = makeDeathAnim(unit('a1', 'alien', 1, 1)); // queue[0] — малює анімаційний шар
+    const tr = makeTracerAnim('player', { x: 0, y: 0 }, { x: 1, y: 1 }, true);
+    const s1 = makeDeathAnim(unit('s1', 'player', 2, 3));
+    const a2 = makeDeathAnim(unit('a2', 'alien', 4, 5));
+    const s1b = makeDeathAnim(unit('s1', 'player', 2, 3)); // дублікат — перша смерть головна
+    const map = pendingDeathStarts([active, tr, s1, a2, s1b]);
+    expect(map.has('a1')).toBe(false); // активний кадр — не утримується статикою (без двійника)
+    expect(map.get('s1')).toEqual({ x: 2, y: 3 });
+    expect(map.get('a2')).toEqual({ x: 4, y: 5 });
+    expect(map.size).toBe(2); // трасер і не-смерті ігноруються
+    expect(pendingDeathStarts([])).toEqual(new Map());
   });
 });
 

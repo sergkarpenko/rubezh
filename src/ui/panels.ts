@@ -122,8 +122,17 @@ export function createPanels(deps: PanelsDeps): Panels {
     // розміри buffer'а (скан-зона замикається по X — зсунуті копії; клімп хвоста).
     // П14.8 (ADR-0073): ambient-ефекти поверх кадру (розгортка радара у стані
     // спокою, мерехтіння вогнів міст) — до подієвого шару; суто відображення.
-    deps.ambient.paintGeo(ctx, { cell: GCELL, cw: cv.width, ch: cv.height, seed: party.seed, base: { x: b.x, y: b.y } });
+    // Фікс фідбеку валідації: подієвий скан-радар П14.5 грає — ambient-розгортку
+    // приглушаємо (scanActive): один сектор на кадр, без «другого радара» на тік/добу.
     const ga = deps.activeGeoAnim();
+    deps.ambient.paintGeo(ctx, {
+      cell: GCELL,
+      cw: cv.width,
+      ch: cv.height,
+      seed: party.seed,
+      base: { x: b.x, y: b.y },
+      scanActive: ga !== null && ga.kind === 'gscan',
+    });
     if (ga !== null) drawAnimFrame(ctx, ga, deps.geoAnimNow(), GCELL, 0, cv.width, cv.height);
 
     el('clock').textContent = geoClock(party.geo);
