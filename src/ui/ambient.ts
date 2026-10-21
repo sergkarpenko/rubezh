@@ -20,7 +20,7 @@
 // rubezh.settings.ambient у локальному сховищі, дефолт — увімкнено;
 // зміна тумблера — без перезапуску застосунку.
 
-import { cellHash, geoCityLights, makeGeoLayout, type TerrainCell } from '../core/render-core';
+import { cellHash, geoCityLights, GEO_LAND_ROWS, type TerrainCell } from '../core/render-core';
 import { RADAR_RANGE } from '../core/geo';
 import { HP_BAR_H, HP_BAR_W, HP_BAR_Y } from '../render';
 import type { Vec2 } from '../core/combat';
@@ -116,8 +116,10 @@ export interface AmbientBattleScene {
   units: readonly AmbientUnitView[];
 }
 
-// Сцена геосцени: сід партії (розклад континентів makeGeoLayout — той самий,
-// що й у drawGeoTerrain; без geo.rng) і клітинка бази (центр розгортки).
+// Сцена геосцени: розклад суші — фіксована константа GEO_LAND_ROWS
+// (позафазна лінія «візуальні порівняння», 2026-10-21: мапа не залежить
+// від сіда; той самий розклад, що й у drawGeoTerrain) і клітинка бази
+// (центр розгортки).
 // scanActive (фікс фідбеку валідації): подієвий скан-радар П14.5 грає —
 // ambient-розгортку не малюємо (один сектор на кадр, без «другого радара»
 // на тік/добу; між сканами сектор спокою знову видно).
@@ -125,7 +127,6 @@ export interface AmbientGeoScene {
   cell: number; // GCELL
   cw: number;
   ch: number;
-  seed: number;
   base: Vec2;
   scanActive?: boolean;
 }
@@ -185,7 +186,7 @@ export function paintGeoAmbient(ctx: CanvasRenderingContext2D, s: AmbientGeoScen
   }
   if (fx >= AMBIENT_MAX_EFFECTS) return;
   // city-flicker: вогник у центрі клітинки міста (розклад вогнів П14.5, поріг cellHash)
-  const layout = makeGeoLayout(s.seed, s.base);
+  const layout = GEO_LAND_ROWS;
   const cols = Math.ceil(s.cw / s.cell);
   const rows = Math.ceil(s.ch / s.cell);
   for (let y = 0; y < rows; y++) {

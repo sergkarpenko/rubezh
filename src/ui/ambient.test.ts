@@ -68,11 +68,10 @@ const battleScene = (cells: readonly { x: number; y: number; blocked: boolean }[
   units,
 });
 
-const geoScene = (seed: number, base: { x: number; y: number }) => ({
+const geoScene = (base: { x: number; y: number }) => ({
   cell: 48,
   cw: 768,
   ch: 384,
-  seed,
   base,
 });
 
@@ -442,12 +441,12 @@ describe('П14.8: малювальник бою — wall-pulse + hp-glow (пер
 describe('П14.8: малювальник геосцени — radar-sweep + city-flicker', () => {
   it('розгортка: промінь + слід сектора від бази; кут — від t (детерміновано)', () => {
     const { ctx, ops } = mockCtx();
-    paintGeoAmbient(ctx, geoScene(42, { x: 8, y: 4 }), 1000);
+    paintGeoAmbient(ctx, geoScene({ x: 8, y: 4 }), 1000);
     expect(ops).toContain('moveTo(408,216)');
     expect(ops.filter((o) => o.startsWith('lineTo')).length).toBe(1); // передній край
     expect(ops.filter((o) => o.startsWith('arc')).length).toBe(1); // слід сектора
     const other = mockCtx();
-    paintGeoAmbient(other.ctx, geoScene(42, { x: 8, y: 4 }), 1000 + 3000); // пів періоду — інший кут
+    paintGeoAmbient(other.ctx, geoScene({ x: 8, y: 4 }), 1000 + 3000); // пів періоду — інший кут
     expect(other.ops.filter((o) => o.startsWith('lineTo'))).not.toEqual(ops.filter((o) => o.startsWith('lineTo')));
   });
 
@@ -457,13 +456,13 @@ describe('П14.8: малювальник геосцени — radar-sweep + city
     let flickers: string[] = [];
     for (let probe = 0; probe < 2600 && flickers.length === 0; probe += 20) {
       const m = mockCtx();
-      paintGeoAmbient(m.ctx, geoScene(42, { x: 8, y: 4 }), probe);
+      paintGeoAmbient(m.ctx, geoScene({ x: 8, y: 4 }), probe);
       flickers = m.ops.filter((o) => o.startsWith('fillRect'));
       if (flickers.length > 0) t = probe;
     }
     expect(t).toBeGreaterThanOrEqual(0); // мерехтіння існує на розкладі вогнів
     const m = mockCtx();
-    paintGeoAmbient(m.ctx, geoScene(42, { x: 8, y: 4 }), t);
+    paintGeoAmbient(m.ctx, geoScene({ x: 8, y: 4 }), t);
     const all = m.ops.filter((o) => o.startsWith('fillRect'));
     expect(all.length).toBeGreaterThan(0);
     expect(all.length).toBeLessThanOrEqual(AMBIENT_MAX_EFFECTS - 1); // розгортка вже зайняла 1
@@ -473,20 +472,20 @@ describe('П14.8: малювальник геосцени — radar-sweep + city
   it('детермінізм від t: той самий (t, сцена) — той самий потік викликів', () => {
     const a = mockCtx();
     const b = mockCtx();
-    paintGeoAmbient(a.ctx, geoScene(42, { x: 8, y: 4 }), 777);
-    paintGeoAmbient(b.ctx, geoScene(42, { x: 8, y: 4 }), 777);
+    paintGeoAmbient(a.ctx, geoScene({ x: 8, y: 4 }), 777);
+    paintGeoAmbient(b.ctx, geoScene({ x: 8, y: 4 }), 777);
     expect(a.ops).toEqual(b.ops);
   });
 
   it('фікс фідбеку валідації: подієвий gscan грає (scanActive) — ambient-розгортки немає', () => {
     const m = mockCtx();
-    paintGeoAmbient(m.ctx, { ...geoScene(42, { x: 8, y: 4 }), scanActive: true }, 777);
+    paintGeoAmbient(m.ctx, { ...geoScene({ x: 8, y: 4 }), scanActive: true }, 777);
     // один сектор на кадр: промінь/слід не малюється, доки грає подієвий gscan
     expect(m.ops.filter((o) => o.startsWith('lineTo')).length).toBe(0);
     expect(m.ops.filter((o) => o.startsWith('arc')).length).toBe(0);
     // а в стані спокою (без scanActive) розгортка є
     const rest = mockCtx();
-    paintGeoAmbient(rest.ctx, geoScene(42, { x: 8, y: 4 }), 777);
+    paintGeoAmbient(rest.ctx, geoScene({ x: 8, y: 4 }), 777);
     expect(rest.ops.filter((o) => o.startsWith('lineTo')).length).toBe(1);
   });
 
@@ -494,12 +493,12 @@ describe('П14.8: малювальник геосцени — radar-sweep + city
     // база в центрі (8,4), канва 768×384: зона (RADAR_RANGE 4 → 216px)
     // виходить за нижній край (216+216=432 > 384) — радіус уписується до 168
     const m = mockCtx();
-    paintGeoAmbient(m.ctx, geoScene(42, { x: 8, y: 4 }), 0); // кут -π/2 (вгору)
+    paintGeoAmbient(m.ctx, geoScene({ x: 8, y: 4 }), 0); // кут -π/2 (вгору)
     expect(m.ops).toContain('lineTo(408,48)'); // центр (408,216) − вписаний радіус 168
     // промінь у кожному куті оберту лишається у межах канви (без обрізів)
     for (const probe of [0, 500, 1000, 1500, 2000, 2500, 3000, 3500]) {
       const mm = mockCtx();
-      paintGeoAmbient(mm.ctx, geoScene(42, { x: 8, y: 4 }), probe);
+      paintGeoAmbient(mm.ctx, geoScene({ x: 8, y: 4 }), probe);
       const beam = mm.ops.find((o) => o.startsWith('lineTo('));
       expect(beam).toBeDefined();
       const n = beam!.match(/-?\d+(?:\.\d+)?/g)!.map(Number);
@@ -522,13 +521,13 @@ describe('П14.8: facade-методи малювання — гейти тумб
     const off = mockCtx();
     amb.toggle(); // вимк
     amb.paintBattle(off.ctx, battleScene([cell(0, 0, true)], wounded()));
-    amb.paintGeo(off.ctx, geoScene(42, { x: 8, y: 4 }));
+    amb.paintGeo(off.ctx, geoScene({ x: 8, y: 4 }));
     expect(off.ops).toEqual([]); // вимкнений тумблер — 0 Canvas-викликів
     amb.toggle(); // увімк
     const noRaf = createAmbient({ ...makeHarness(), hasRaf: () => false, store: memStore() });
     const jsdom = mockCtx();
     noRaf.paintBattle(jsdom.ctx, battleScene([cell(0, 0, true)], wounded())); // jsdom: стаб П6.16
-    noRaf.paintGeo(jsdom.ctx, geoScene(42, { x: 8, y: 4 }));
+    noRaf.paintGeo(jsdom.ctx, geoScene({ x: 8, y: 4 }));
     expect(jsdom.ops).toEqual([]); // typeof-гейт — 0 викликів
   });
 });
@@ -590,7 +589,7 @@ describe('П14.8 критерій: лог партії байт-у-байт од
     for (let i = 0; i < 48; i++) {
       advanceTime(p1.geo, 1);
       h.step(AMBIENT_FRAME_MS); // репейнт циклу (repaint — мок) + кадр малювання
-      amb.paintGeo(m.ctx, geoScene(p1.seed, p1.geo.base));
+      amb.paintGeo(m.ctx, geoScene(p1.geo.base));
     }
     expect(m.ops.length).toBeGreaterThan(0); // ambient реально малював
     // «без ambient»: та сама послідовність тіків

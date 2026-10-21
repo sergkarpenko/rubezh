@@ -69,7 +69,7 @@ import {
   geoCityLights,
   geoCoastSide,
   geoIsLand,
-  makeGeoLayout,
+  GEO_LAND_ROWS,
   terrainShade,
   type TerrainCell,
 } from './core/render-core';
@@ -686,18 +686,16 @@ describe('П6.13: м’які краї туману і тонка сітка (к
 
 // --- П12.7 (ADR-0064): терен геосцени — двотоновий із неоновою сіткою ---
 
-describe('П12.7/П14.5: терен геосцени — фолбек (без ассета): розклад блобів двома тонами', () => {
+describe('П12.7/П14.5: терен геосцени — фолбек (без ассета): фіксований розклад двома тонами', () => {
   const GCELL = 36; // клітинка геосцени (менша за GCELL 48 — математика не залежить)
-  const SEED = 42;
-  const BASE = { x: 8, y: 4 };
-  const layout = makeGeoLayout(SEED, BASE);
+  const layout = GEO_LAND_ROWS;
 
   it('перший кадр — фон NIGHT_BG; клітинки — суша/океан двома тонами ЗА РОЗКЛАДОМ', () => {
     const s = seqCtx();
-    drawGeoTerrain(s.ctx, 576, 288, GCELL, SEED, BASE);
+    drawGeoTerrain(s.ctx, 576, 288, GCELL);
     expect(s.ops[0]).toEqual({ set: 'fillStyle', v: NIGHT_BG });
     expect(s.ops[1]).toEqual({ m: 'fillRect', args: [0, 0, 576, 288] });
-    // тон клітинки — за розкладом блобів (той самий, що й з ассетом; без RNG)
+    // тон клітинки — за фіксованим розкладом (той самий, що й з ассетом; без RNG)
     for (const [x, y] of [
       [8, 4],
       [3, 3],
@@ -714,7 +712,7 @@ describe('П12.7/П14.5: терен геосцени — фолбек (без а
 
   it('двотоновий: заливки лише фоном і тонами суші/океану; неонова сітка GEO_GRID_COLOR', () => {
     const s = seqCtx();
-    drawGeoTerrain(s.ctx, 576, 288, GCELL, SEED, BASE);
+    drawGeoTerrain(s.ctx, 576, 288, GCELL);
     const fills = s.ops.filter((o) => 'set' in o && o.set === 'fillStyle').map((o) => (o as { v: unknown }).v);
     expect(fills.every((c) => c === NIGHT_BG || c === GEO_CELL_A || c === GEO_CELL_B)).toBe(true);
     expect(fills).toContain(GEO_CELL_B); // сушя є
@@ -725,11 +723,11 @@ describe('П12.7/П14.5: терен геосцени — фолбек (без а
     expect(lines.length).toBeGreaterThanOrEqual(16 + 8); // стовпці 0..16 і рядки 0..8
   });
 
-  it('детермінізм (ADR-0003): той самий вхід → той самий потік операцій; сід міняє тон клітинки', () => {
+  it('детермінізм (ADR-0003): той самий вхід → той самий потік операцій (фіксована мапа без сіда)', () => {
     const a = seqCtx();
-    drawGeoTerrain(a.ctx, 576, 288, GCELL, SEED, BASE);
+    drawGeoTerrain(a.ctx, 576, 288, GCELL);
     const b = seqCtx();
-    drawGeoTerrain(b.ctx, 576, 288, GCELL, SEED, BASE);
+    drawGeoTerrain(b.ctx, 576, 288, GCELL);
     expect(a.ops).toEqual(b.ops);
   });
 });
@@ -999,8 +997,8 @@ describe('П14.3 (ADR-0072): тайлсет терену — підлога за
   });
 });
 
-// --- П14.5 (ADR-0072/0064): тайли геосцени 2.0 — континенти-блоби за сідом ---
-describe('П14.5: тайли геосцени — континенти-блоби (пер-тайловий атлас за сідом)', () => {
+// --- П14.5 (ADR-0072/0064): тайли геосцени 2.0 — фіксована мапа (позафазна лінія 2026-10-21) ---
+describe('П14.5: тайли геосцени — фіксована мапа (пер-тайловий атлас, константа 9×16)', () => {
   // Мок-атлас: завантажувач кликає onLoad синхронно з фіктивним джерелом.
   const tilesImg = { width: 768, height: 96 } as unknown as CanvasImageSource;
   const readyTiles = (): void => {
@@ -1010,10 +1008,8 @@ describe('П14.5: тайли геосцени — континенти-блоб�
   };
   const CELL = 48; // GCELL (П14.5: міграція 44→48)
   const W = 768; // 16 × 48
-  const H = 384; // 8 × 48
-  const SEED = 42; // сід партії (прев'ю)
-  const BASE = { x: 8, y: 4 };
-  const layout = makeGeoLayout(SEED, BASE);
+  const H = 432; // 9 × 48 (канва геосцени 768×432, WORLD_H 9)
+  const layout = GEO_LAND_ROWS;
 
   // очікувана комірка атласу клітинки (x, y): океан / суша A–D / узбережжя
   const wantCol = (x: number, y: number): number => {
@@ -1029,18 +1025,18 @@ describe('П14.5: тайли геосцени — континенти-блоб�
     expect(isGeoTilesReady()).toBe(true);
   });
 
-  it('розклад детермінований: 128 клітин 16×8; комірка атласу за чистою функцією (без RNG)', () => {
+  it('розклад детермінований: 144 клітини 16×9; комірка атласу за чистою функцією (без RNG, без сіда)', () => {
     readyTiles();
     const s = animCtx();
-    drawGeoTerrain(s.ctx, W, H, CELL, SEED, BASE);
+    drawGeoTerrain(s.ctx, W, H, CELL);
     // базові тайли: по одному на клітинку (оверлеї вогнів — окремі виклики)
     const imgs = s.calls.filter((c) => c.m === 'drawImage');
-    expect(imgs.length).toBe(16 * 8 + cityLightCells());
+    expect(imgs.length).toBe(16 * 9 + cityLightCells());
     const base = imgs.filter((d) => (d.args as unknown[])[1] !== GEO_TILE_CITY * GEO_TILE);
-    expect(base.length).toBe(16 * 8);
+    expect(base.length).toBe(16 * 9);
     const plain = base.filter((d) => ((d.args as unknown[])[5] as number) >= 0); // без трансформацій
     const turned = base.filter((d) => ((d.args as unknown[])[5] as number) < 0); // повернуті/дзеркалені узбережжя
-    expect(plain.length + turned.length).toBe(16 * 8);
+    expect(plain.length + turned.length).toBe(16 * 9);
     for (const d of plain) {
       const a = d.args as unknown[];
       expect(a[0]).toBe(tilesImg); // джерело — атлас
@@ -1076,10 +1072,10 @@ describe('П14.5: тайли геосцени — континенти-блоб�
   it('узбережжя: фліп/поворот тайла переходу до першого океанного краю (w→e→n→s)', () => {
     readyTiles();
     const s = animCtx();
-    drawGeoTerrain(s.ctx, W, H, CELL, SEED, BASE);
-    // клітинка кожної сторони узбережжя (сід 42: усі чотири присутні)
+    drawGeoTerrain(s.ctx, W, H, CELL);
+    // клітинка кожної сторони узбережжя (фіксована мапа: усі чотири присутні)
     const find = (side: string): { x: number; y: number } => {
-      for (let y = 0; y < 8; y++) for (let x = 0; x < 16; x++) if (geoCoastSide(layout, x, y) === side) return { x, y };
+      for (let y = 0; y < 9; y++) for (let x = 0; x < 16; x++) if (geoCoastSide(layout, x, y) === side) return { x, y };
       throw new Error('нема клітинки зі стороною ' + side);
     };
     // 'w' — океан на заході: тайл як є (без save/трансформацій)
@@ -1120,7 +1116,7 @@ describe('П14.5: тайли геосцени — континенти-блоб�
   it('вогні міст: альфа-оверлей лише на суші за хешем (рідкий декор, без RNG)', () => {
     readyTiles();
     const s = animCtx();
-    drawGeoTerrain(s.ctx, W, H, CELL, SEED, BASE);
+    drawGeoTerrain(s.ctx, W, H, CELL);
     const dots = s.calls.filter((c) => c.m === 'drawImage' && (c.args as unknown[])[1] === GEO_TILE_CITY * GEO_TILE);
     expect(dots.length).toBe(cityLightCells());
     for (const d of dots) {
@@ -1162,7 +1158,7 @@ describe('П14.5: тайли геосцени — континенти-блоб�
     readyTiles();
     const draw = (): { calls: Call[]; sets: { p: string; v: unknown }[] } => {
       const s = animCtx();
-      drawGeoTerrain(s.ctx, W, H, CELL, SEED, BASE);
+      drawGeoTerrain(s.ctx, W, H, CELL);
       return { calls: s.calls, sets: s.sets };
     };
     expect(draw()).toEqual(draw());
@@ -1171,7 +1167,7 @@ describe('П14.5: тайли геосцени — континенти-блоб�
   // кількість клітинок суші з вогнями (чиста функція розкладу — стабільний)
   function cityLightCells(): number {
     let n = 0;
-    for (let y = 0; y < 8; y++) for (let x = 0; x < 16; x++) if (geoCityLights(layout, x, y)) n++;
+    for (let y = 0; y < 9; y++) for (let x = 0; x < 16; x++) if (geoCityLights(layout, x, y)) n++;
     return n;
   }
 });

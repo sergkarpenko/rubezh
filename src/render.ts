@@ -29,8 +29,8 @@ import {
   geoCityLights,
   geoCoastSide,
   geoIsLand,
+  GEO_LAND_ROWS,
   hasVisibleNeighbor,
-  makeGeoLayout,
   moveAnimPos,
   terrainShade,
   visibleKeys,
@@ -39,7 +39,7 @@ import {
 } from './core/render-core';
 // П14.5: розмір світу для замикання скан-зони по X (куля; як RADAR_RANGE у geo.ts).
 import { WORLD_W } from './core/geo';
-import { grenadeZone, type Vec2 } from './core/combat';
+import { grenadeZone } from './core/combat';
 import {
   ALIEN_STAND,
   ALIEN_STEP,
@@ -505,23 +505,23 @@ export function drawNightTerrain(ctx: CanvasRenderingContext2D, w: number, h: nu
 }
 
 // --- П12.7 (ADR-0064): терен геосцени — двотоновий із неоновою сіткою ---
-// П14.5 (ADR-0072, ітерація 3): геосцена 2.0 — тайли з ассета над розкладом
-// континентів-блобів (makeGeoLayout у render-core: суша/океан за сідом
-// партії + острів вузла, без geo.rng; варіант суші A–D — хеш клітинки;
-// узбережжя — тайл переходу з фліпом/поворотом за маскою сусідства
-// суша/океан (geoCoastSide, детерміновано); вогні міст — рідкий
-// альфа-оверлей за хешем). Фолбек без ассета — ТОЙ САМИЙ розклад блобів
-// двома тонами (суша/океан; поведінка не залежає від ассета, тести від
-// ассета не залежать).
+// П14.5 (ADR-0072): геосцена 2.0 — тайли з ассета над розкладом суші
+// (позафазна лінія «візуальні порівняння», 2026-10-21: фіксована константа
+// GEO_LAND_ROWS у render-core — мапа затверджена власником, більше не
+// залежить від сіда партії; варіант суші A–D — хеш клітинки; узбережжя —
+// тайл переходу з фліпом/поворотом за маскою сусідства суша/океан
+// (geoCoastSide, детерміновано); вогні міст — рідкий альфа-оверлей за
+// хешем). Фолбек без ассета — ТОЙ САМИЙ розклад двома тонами (суша/океан;
+// поведінка не залежає від ассета, тести від ассета не залежать).
 // Палітра і розклад — чиста логіка src/core/render-core.ts; тут — лише
 // Canvas-виклики. Кадр еквівалентний малюванню з нуля (патерн renderGeo,
 // урок П6.6). Чиста функція без DOM-стану; викликається з src/ui/panels.ts.
-export function drawGeoTerrain(ctx: CanvasRenderingContext2D, w: number, h: number, cell: number, seed: number, base: Vec2): void {
+export function drawGeoTerrain(ctx: CanvasRenderingContext2D, w: number, h: number, cell: number): void {
   // фон на весь buffer — краї канви не блимають
   ctx.fillStyle = NIGHT_BG;
   ctx.fillRect(0, 0, w, h);
-  // розклад континентів — один на кадр (чиста функція від сіда і бази)
-  const layout = makeGeoLayout(seed, base);
+  // розклад суші — фіксована константа (одна мапа для всіх партій)
+  const layout = GEO_LAND_ROWS;
   const cols = Math.ceil(w / cell);
   const rows = Math.ceil(h / cell);
   if (geoTilesImg !== null) {
