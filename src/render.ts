@@ -152,6 +152,20 @@ export const ATLAS_POSE_COL: Readonly<Record<UnitPose, number>> = {
 };
 export const ATLAS_WALK2_COL = 2;
 
+// Фідбек власника 2026-10-22 (юніт-атласи Gemini, PR #241): трасер бою має
+// стартувати з ДУЛА стрільця, а не з центру клітинки — у демона Розриву
+// фазовий різак зі спалахом лежить поза центром кадру fire (дуло ліворуч,
+// нижче осі), і «куля з середини тіла» виглядала відірваною. Якір —
+// координати дулового спалаху в 44-просторі кадру fire у НАТИВНІЙ
+// орієнтації (солдат вправо, демон вліво); дзеркалення (flip) мапить
+// колонку col → ATLAS_UNIT-1-col. Солдат — центр кадру (спалах прикриває
+// центр, нульовий офсет — вигляд без змін). Підказку передає ЛИШЕ бойовище
+// (battle.ts); трасер перехоплення на геосцені — від центру, як раніше.
+export const MUZZLE_ANCHOR: Readonly<Record<'player' | 'alien', { x: number; y: number }>> = {
+  player: { x: 22, y: 22 }, // дуловий спалах АР-14 «Гарт» — по центру кадру
+  alien: { x: 5, y: 24 }, // дуловий спалах фазового різака: лівий край, +2 від осі
+};
+
 // Юніт бою з погляду шару відображення: поза вогонь/смерть — надбудова над
 // UnitSprite ядра (ядровий frame 0/1 лишається семантикою стій/крок, ADR-0031);
 // step — фаза двокадрової ходьби атласа (walk1/walk2, П14.3); flip — дзеркало
@@ -643,6 +657,15 @@ const DMG_NUM = '#ffb347';
 const HEAL_NUM = '#7fe2a0';
 const DNUM_RISE = 16; // підйом числа за тривалість анімації, px
 
+// Підказка якоря дула для трасера бою (фідбек власника 2026-10-22): сторона
+// стрільця і ЧИ ФЛІПНУТИЙ кадр (фактичний напрямок погляду цього кадру —
+// його знає лише викликаючий шар бою, battle.ts). Суто відображення: без
+// підказки трасер малюється від центру клітинки, як раніше (геосцена).
+export interface MuzzleHint {
+  side: 'player' | 'alien';
+  flip: boolean;
+}
+
 // Один кадр анімаційного шару (малюється поверх статичного стану).
 // move — силует у проміжній позиції; tracer — куля летить від стрільця до цілі,
 // при влучанні друга фаза — спалах-кільце; death — згасання силуета; owflash —
@@ -660,7 +683,8 @@ export function drawAnimFrame(
   cell: number,
   r: number,
   cw = Number.POSITIVE_INFINITY,
-  ch = Number.POSITIVE_INFINITY
+  ch = Number.POSITIVE_INFINITY,
+  muzzle?: MuzzleHint
 ): void {
   const t = animT(a, now);
   // П6.9: пульс радара геосцени — кільце від бази до maxR, що гасне.
@@ -826,10 +850,19 @@ export function drawAnimFrame(
     return;
   }
   if (a.kind === 'tracer') {
-    const x0 = a.from.x * cell + cell / 2;
-    const y0 = a.from.y * cell + cell / 2;
+    let x0 = a.from.x * cell + cell / 2;
+    let y0 = a.from.y * cell + cell / 2;
     const x1 = a.to.x * cell + cell / 2;
     const y1 = a.to.y * cell + cell / 2;
+    // Фідбек власника 2026-10-22: куля стартує з дулового спалаху кадру fire
+    // (якір — MUZZLE_ANCHOR, геометрия та ж, що drawAtlasUnit: round(центр-22))
+    // — лише з підказкою бойовища; без неї (геосцена) — від центру клітинки.
+    if (muzzle !== undefined) {
+      const m = MUZZLE_ANCHOR[muzzle.side];
+      const mx = muzzle.flip ? ATLAS_UNIT - 1 - m.x : m.x;
+      x0 = Math.round(x0 - ATLAS_UNIT / 2) + mx;
+      y0 = Math.round(y0 - ATLAS_UNIT / 2) + m.y;
+    }
     const share = TRACER_MS / a.dur;
     if (t < share) {
       // фаза 1: куля летить — відрізок від стрільця до поточного «заголовка»

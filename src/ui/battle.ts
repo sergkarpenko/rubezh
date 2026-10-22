@@ -382,8 +382,21 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
     // поза туманом не малюємо (movingId null — П14.4: до входу у зону видимості
     // демон прихований, а не стоїть у фінальній клітинці).
     // П14.4: розміри buffer'а — клімп частинок вибуху і чисел у межі канви.
+    // Фідбек власника 2026-10-22: трасер бою стартує з ДУЛА стрільця (якір
+    // кадру fire — MUZZLE_ANCHOR у render.ts), не з центру клітинки. Фліп —
+    // фактичний напрямок погляду стрільця ЦЬОГО кадру (facing уже оновано
+    // статичним проходом за активним трасером; вертикальний постріл — facing
+    // попередній, як і намальована поза fire). Лише трасер бою: перехоплення
+    // на геосцені малюється без підказки, від центру, як раніше.
+    const muzzleHint =
+      activeAnim !== null && activeAnim.kind === 'tracer' && firingId !== null
+        ? {
+            side: activeAnim.side,
+            flip: (facing.get(firingId) ?? (activeAnim.side === 'player' ? 1 : -1)) !== (activeAnim.side === 'player' ? 1 : -1),
+          }
+        : undefined;
     if (activeAnim !== null && (activeAnim.kind !== 'move' || movingId !== null)) {
-      drawAnimFrame(ctx, activeAnim, deps.anim.now, BCELL, 8, cv.width, cv.height);
+      drawAnimFrame(ctx, activeAnim, deps.anim.now, BCELL, 8, cv.width, cv.height, muzzleHint);
     }
 
     // П14.8 (ADR-0073): ambient-ефекти поверх кадру (пульс ціанових кантів
