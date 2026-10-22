@@ -298,6 +298,77 @@ describe('П6.13 (П12.7): неонові трасери/спалахи — ці
   });
 });
 
+describe('фідбек власника 2026-10-22: якір дула — трасер бою стартує з дулового спалаху кадру fire', () => {
+  it('без підказки (геосцена, перехоплення): старт — центр клітинки, як раніше', () => {
+    const a = makeTracerAnim('alien', { x: 5, y: 5 }, { x: 3, y: 5 }, false);
+    a.start = 0;
+    const { ctx, calls } = animCtx();
+    drawAnimFrame(ctx, a, TRACER_MS / 2, 48, 8);
+    const mv = calls.find((c) => c.m === 'moveTo');
+    expect(mv).toBeDefined();
+    expect((mv!.args as number[])[0]).toBe(5 * 48 + 24); // центр клітинки (5,5)
+    expect((mv!.args as number[])[1]).toBe(5 * 48 + 24);
+  });
+
+  it('демон (натив, вліво): старт — дуло фазового різака (лівий край, +2 від осі)', () => {
+    const a = makeTracerAnim('alien', { x: 5, y: 5 }, { x: 3, y: 5 }, false);
+    a.start = 0;
+    const { ctx, calls } = animCtx();
+    drawAnimFrame(ctx, a, TRACER_MS / 2, 48, 8, Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY, {
+      side: 'alien',
+      flip: false,
+    });
+    const mv = calls.find((c) => c.m === 'moveTo');
+    expect(mv).toBeDefined();
+    expect((mv!.args as number[])[0]).toBe(Math.round(5 * 48 + 24 - 22) + 5); // 264-22+5
+    expect((mv!.args as number[])[1]).toBe(Math.round(5 * 48 + 24 - 22) + 24); // +2 від осі
+  });
+
+  it('демон (дзеркало, вправо): дуло віддзеркалене до правого краю', () => {
+    const a = makeTracerAnim('alien', { x: 3, y: 5 }, { x: 5, y: 5 }, false);
+    a.start = 0;
+    const { ctx, calls } = animCtx();
+    drawAnimFrame(ctx, a, TRACER_MS / 2, 48, 8, Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY, {
+      side: 'alien',
+      flip: true,
+    });
+    const mv = calls.find((c) => c.m === 'moveTo');
+    expect(mv).toBeDefined();
+    expect((mv!.args as number[])[0]).toBe(Math.round(3 * 48 + 24 - 22) + (44 - 1 - 5)); // дзеркало: col → 43-col
+    expect((mv!.args as number[])[1]).toBe(Math.round(5 * 48 + 24 - 22) + 24);
+  });
+
+  it('солдат: якір — центр кадру (нульовий офсет, вигляд без змін)', () => {
+    const a = makeTracerAnim('player', { x: 1, y: 1 }, { x: 3, y: 1 }, true);
+    a.start = 0;
+    const { ctx, calls } = animCtx();
+    drawAnimFrame(ctx, a, TRACER_MS / 2, 48, 8, Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY, {
+      side: 'player',
+      flip: false,
+    });
+    const mv = calls.find((c) => c.m === 'moveTo');
+    expect(mv).toBeDefined();
+    expect((mv!.args as number[])[0]).toBe(1 * 48 + 24); // центр клітинки (1,1)
+    expect((mv!.args as number[])[1]).toBe(1 * 48 + 24);
+  });
+
+  it('солдат (дзеркало, вліво): центр кадру — дзеркальний якір на 1px від центру клітинки (обертання кадру навколо 21.5)', () => {
+    const a = makeTracerAnim('player', { x: 3, y: 1 }, { x: 1, y: 1 }, true);
+    a.start = 0;
+    const { ctx, calls } = animCtx();
+    drawAnimFrame(ctx, a, TRACER_MS / 2, 48, 8, Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY, {
+      side: 'player',
+      flip: true,
+    });
+    const mv = calls.find((c) => c.m === 'moveTo');
+    expect(mv).toBeDefined();
+    // дзеркало мапить кол 22 → 43−22 = 21: старт на 1px лівіше центру (непомітно,
+    // спалах солдата прикриває центр кадру в обох напрямках)
+    expect((mv!.args as number[])[0]).toBe(Math.round(3 * 48 + 24 - 22) + 21);
+    expect((mv!.args as number[])[1]).toBe(Math.round(1 * 48 + 24 - 22) + 22);
+  });
+});
+
 describe('П14.4 (ADR-0072/0064): вибух гранати — зона, спалах-кільце, частинки', () => {
   it('boom: зона «епіцентр + хрест» (5 рамок, дзеркало прев’ю гранати), кільце з епіцентру і 12 частинок', () => {
     const a = makeBoomAnim({ x: 5, y: 2 });
