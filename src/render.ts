@@ -57,7 +57,8 @@ import {
   type UfoSprite,
 } from './core/sprites';
 import unitAtlasUrl from '../assets/units-atlas.png';
-import terrainTilesUrl from '../assets/terrain-tiles.png';
+import metroBgUrl from '../assets/metro-bg.webp';
+import metroTilesUrl from '../assets/metro-tiles.png';
 import geoMapUrl from '../assets/geo-map.webp';
 import radarTowerUrl from '../assets/radar-tower.png';
 
@@ -207,47 +208,64 @@ export function isUnitAtlasReady(): boolean {
   return unitAtlasImg !== null;
 }
 
-// --- П14.3 (ADR-0072): тайлсет терену бою — згенеровані тайли ---
-// Джерело — assets/terrain-tiles.png (384×48): 8 тайлів 48×48 — кол. 0–3
-// варіанти підлоги (темні й ненасичені — дизайн-вимога контрасту: неон
-// юнітів — найяскравіший акцент клітинки), кол. 4 — стіна з неоновим
-// ціановим кантом, кол. 5–7 — декори (уламки, труба, вентиляція зі
-// світінням). Малюються під клітинку 48 (= BCELL, 1:1; П14.3 ADR-0068).
-export const TERRAIN_TILE = 48; // сторона тайла, px
-export const TERRAIN_COLS = 8; // 0–3 підлоги, 4 стіна, 5–7 декори
-export const TERRAIN_WALL_COL = 4;
-export const TERRAIN_DECOR_COL = { уламки: 5, труба: 6, вентиляція: 7 } as const;
+// --- Позафазна лінія «візуальні порівняння» (кандидат «Мегаполіс», крок 2,
+// ADR-0072): терен бою — ЦІЛА картина підлоги + згенеровані об'єкти ---
+// Пер-тайлові підлоги відкладені рішенням власника (крок 1 — відхилено
+// 2026-10-22): фон бою — ОДНА картина assets/metro-bg.webp (1024×1024,
+// нічна вулиця згори) cover-кропом на весь buffer канви 960×960; стіна —
+// спрайт з assets/metro-tiles.png (192×48, тайли 48×48: кол. 0 стіна з
+// ціановим кантом, 1 лампа, 2 голограма, 3 уламки) на blocked-клітинках;
+// декори — за хешем координат (~8% відкритих, чинний контракт П14.3
+// cellHash % 37); туман — чинне приглушення rgba(5,8,15,0.55) поверх
+// фону (рельєф видно, вміст не розкривається — ADR-0006), м'який край —
+// як і раніше. Фолбек без ассетів — чинні два тони terrainShade
+// (обов'язковий, тести від ассета не залежать, сейви не зачіпаються —
+// ADR-0026). Подієві ефекти/тряска/HP-бейджі П14.4 — без змін.
+export const METRO_TILE = 48; // сторона тайла, px (= BCELL, 1:1)
+export const METRO_WALL_COL = 0; // стіна блоку з ціановим кантом
+export const METRO_DECOR_COL = { лампа: 1, голограма: 2, уламки: 3 } as const;
 
 // Розклад декорів — чиста функція координат (детермінований хеш, без RNG —
-// ADR-0003/0072): рідкі декори на відкритих клітинках, мозаїка стабільна
-// між кадрами. ~3/37 відкритих клітинок (~8%).
+// ADR-0003/0072; чинний контракт П14.3): рідкі декори на відкритих
+// клітинках, мозаїка стабільна між кадрами. ~3/37 відкритих (~8%).
 export function decorCol(x: number, y: number): number | null {
   const h = cellHash(x, y) % 37;
-  if (h === 0) return TERRAIN_DECOR_COL['уламки'];
-  if (h === 1) return TERRAIN_DECOR_COL['труба'];
-  if (h === 2) return TERRAIN_DECOR_COL['вентиляція'];
+  if (h === 0) return METRO_DECOR_COL['лампа'];
+  if (h === 1) return METRO_DECOR_COL['голограма'];
+  if (h === 2) return METRO_DECOR_COL['уламки'];
   return null;
 }
 
-// Приглушення тайлів у тумані (рельєф видно, вміст не розкривається —
-// ADR-0006): напівпрозоре перекриття поверх тайла, патерн фолбеку.
+// Приглушення фону у тумані (рельєф видно, вміст не розкривається —
+// ADR-0006): напівпрозоре перекриття поверх картини, патерн фолбеку.
 const TILE_FOG = 'rgba(5,8,15,0.55)';
 
-// Ліниве завантаження тайлсету — той самий патерн, що initUnitAtlas
-// (ADR-0072 п.3): фабрика інжектиться, невдача — тихий фолбек на два тони.
-export type LoadTerrainTiles = (url: string, onLoad: (img: CanvasImageSource) => void) => void;
-let terrainTilesImg: CanvasImageSource | null = null;
+// Ліниве завантаження ассетів «Мегаполісу» — той самий патерн, що
+// initUnitAtlas (ADR-0072 п.3): фабрика інжектиться, невдача — тихий
+// фолбек на два тони. Фон і тайли — окремі джерела з окремими
+// прапорцями; нова гілка рендера вимагає ОБИДВА (частина картин без
+// стін читалась б гравцем як помилка).
+export type LoadMetroAsset = (url: string, onLoad: (img: CanvasImageSource) => void) => void;
+let metroBgImg: CanvasImageSource | null = null;
+let metroTilesImg: CanvasImageSource | null = null;
 
-export function initTerrainAtlas(load: LoadTerrainTiles): void {
-  terrainTilesImg = null;
-  load(terrainTilesUrl, (img) => {
-    terrainTilesImg = img;
+export function initMetroMap(load: LoadMetroAsset): void {
+  metroBgImg = null;
+  load(metroBgUrl, (img) => {
+    metroBgImg = img;
   });
 }
 
-// Прапорець готовності тайлсету (фолбек терену — !isTerrainAtlasReady).
-export function isTerrainAtlasReady(): boolean {
-  return terrainTilesImg !== null;
+export function initMetroTiles(load: LoadMetroAsset): void {
+  metroTilesImg = null;
+  load(metroTilesUrl, (img) => {
+    metroTilesImg = img;
+  });
+}
+
+// Прапорець готовності терену «Мегаполіс» (фолбек — !isMetroTerrainReady).
+export function isMetroTerrainReady(): boolean {
+  return metroBgImg !== null && metroTilesImg !== null;
 }
 
 // --- Позафазна лінія «візуальні порівняння» (кандидат А «нічний супутник»,
@@ -269,7 +287,7 @@ export function isTerrainAtlasReady(): boolean {
 // центру клітинки бази. Фолбек без ассетів — розклад двома тонами
 // (суша/океан; поведінка не залежить від ассета, тести від ассета не
 // залежать, сейви не зачіпаються — ADR-0026).
-// Ліниве завантаження — той самий патерн, що initTerrainAtlas (ADR-0072).
+// Ліниве завантаження — той самий патерн, що initUnitAtlas (ADR-0072).
 export type LoadGeoAsset = (url: string, onLoad: (img: CanvasImageSource) => void) => void;
 let geoMapImg: CanvasImageSource | null = null;
 let geoTowerImg: CanvasImageSource | null = null;
@@ -473,34 +491,45 @@ export function drawUfoSprite(ctx: CanvasRenderingContext2D, u: UfoSprite): void
 // Палітра, хеш-варіація і сусідство туману — чиста логіка src/core/render-core.ts
 // (terrainShade/visibleKeys/hasVisibleNeighbor); тут — лише Canvas-виклики.
 
-// Нічний терен: фон → клітинки → м'який край туману → (фолбек) тонка сітка.
-// П14.3 (ADR-0072): тайлсет готовий — підлога за хешем (4 варіанти, без RNG),
-// стіна — за мапою (blocked), декори — за хешем координат; туман —
-// напівпрозоре приглушення поверх тайла (рельєф видно, ADR-0006), м'який
-// край — як і раніше. Фолбек без ассета — чинні два тони terrainShade
-// (обов'язковий, тести від ассета не залежать). Чиста функція без RNG і
-// DOM-стану; викликається кожен кадр після clearRect (урок П6.6) — кадр
-// еквівалентний малюванню з нуля. w/h — розмір buffer'а канви в пікселях,
-// cell — BCELL.
+// Нічний терен: фон → (Мегаполіс: цілісна картина cover → стіни → декори →
+// туман | фолбек: клітинки двома тонами і сітка) → м'який край туману.
+// Позафазна лінія «візуальні порівняння» (крок 2): ассети готові — фон
+// ОДНІМ кадром cover на весь buffer (фото — згладжування увімкнене),
+// стіна — за мапою (blocked), декори — за хешем координат (піксель-арт
+// атлас — nearest-neighbor), туман — чинне напівпрозоре приглушення
+// rgba(5,8,15,0.55) поверх фону (рельєф видно, ADR-0006). Фолбек без
+// ассетів — чинні два тони terrainShade (обов'язковий, тести від ассета
+// не залежать). Чиста функція без RNG і DOM-стану; викликається кожен
+// кадр після clearRect (урок П6.6) — кадр еквівалентний малюванню з
+// нуля. w/h — розмір buffer'а канви в пікселях, cell — BCELL.
 export function drawNightTerrain(ctx: CanvasRenderingContext2D, w: number, h: number, cells: readonly TerrainCell[], cell: number): void {
   // фон на весь buffer (при трясці translate оголює край — колір збігається з CSS-тлом)
   ctx.fillStyle = NIGHT_BG;
   ctx.fillRect(0, 0, w, h);
   // мапа видимості для м'якого краю туману (сусідство за 4 напрямками)
   const vis = visibleKeys(cells);
-  if (terrainTilesImg !== null) {
-    // П14.3: тайли — nearest-neighbor, підлога/стіна цілодобово під клітинку
+  if (metroBgImg !== null && metroTilesImg !== null) {
+    // цілісна картина підлоги: cover на весь buffer, центр — у центрі канви
+    // (квадратний ассет у квадратну канву 960×960 — рівномірний масштаб)
+    const { w: iw, h: ih } = imgSize(metroBgImg);
+    const scale = Math.max(w / iw, h / ih);
+    const dw = iw * scale;
+    const dh = ih * scale;
+    ctx.imageSmoothingEnabled = true;
+    ctx.drawImage(metroBgImg, Math.round((w - dw) / 2), Math.round((h - dh) / 2), Math.round(dw), Math.round(dh));
+    // об'єкти поверх підлоги: піксель-арт атлас — nearest-neighbor, 1:1
     ctx.imageSmoothingEnabled = false;
+    // стіни — на blocked-клітинках (за мапою рельєфу)
     for (const c of cells) {
-      const col = c.blocked ? TERRAIN_WALL_COL : cellHash(c.x, c.y) % (TERRAIN_COLS - TERRAIN_WALL_COL);
-      ctx.drawImage(terrainTilesImg, col * TERRAIN_TILE, 0, TERRAIN_TILE, TERRAIN_TILE, c.x * cell, c.y * cell, cell, cell);
+      if (!c.blocked) continue;
+      ctx.drawImage(metroTilesImg, METRO_WALL_COL * METRO_TILE, 0, METRO_TILE, METRO_TILE, c.x * cell, c.y * cell, cell, cell);
     }
-    // декори поверх підлоги — рідкий детермінований розклад (без RNG)
+    // декори — рідкий детермінований розклад на відкритих (без RNG)
     for (const c of cells) {
       if (c.blocked) continue;
       const dcol = decorCol(c.x, c.y);
       if (dcol === null) continue;
-      ctx.drawImage(terrainTilesImg, dcol * TERRAIN_TILE, 0, TERRAIN_TILE, TERRAIN_TILE, c.x * cell, c.y * cell, cell, cell);
+      ctx.drawImage(metroTilesImg, dcol * METRO_TILE, 0, METRO_TILE, METRO_TILE, c.x * cell, c.y * cell, cell, cell);
     }
     // туман: приглушення клітинок поза зоною видимості (вміст не розкривається)
     ctx.fillStyle = TILE_FOG;

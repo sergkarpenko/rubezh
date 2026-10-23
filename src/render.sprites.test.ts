@@ -28,9 +28,9 @@ import {
   CHANCE_LABEL_BG,
   CHANCE_LABEL_TEXT,
   TARGET_FRAME_COLOR,
-  TERRAIN_DECOR_COL,
-  TERRAIN_TILE,
-  TERRAIN_WALL_COL,
+  METRO_DECOR_COL,
+  METRO_TILE,
+  METRO_WALL_COL,
   decorCol,
   drawAlienSprite,
   drawBaseSprite,
@@ -44,12 +44,13 @@ import {
   drawUnitSprite,
   initGeoMap,
   initGeoTower,
+  initMetroMap,
+  initMetroTiles,
   initPixelSprites,
-  initTerrainAtlas,
   initUnitAtlas,
   isGeoMapReady,
   isGeoTowerReady,
-  isTerrainAtlasReady,
+  isMetroTerrainReady,
   isUnitAtlasReady,
   unitPose,
   type MakeOffscreen,
@@ -164,13 +165,14 @@ function rasterFactory(): { make: MakeOffscreen; canvases: RasterCanvas[] } {
 
 // Кожен тест малює через свіжий мок-фабрик: initPixelSprites скидає кеш
 // розгорнутих спрайтів (ліниво + кеш — ADR-0031). П14.2/П14.3 (ADR-0072):
-// атлас юнітів і тайлсет терену скидаються у фолбек — завантажувачі, що не
-// кликаються (тести від ассетів не залежать; свої моки атласні describe
-// ставлять локально).
+// атлас юнітів і ассети терену «Мегаполіс» скидаються у фолбек —
+// завантажувачі, що не кликаються (тести від ассетів не залежать; свої
+// моки атласні describe ставлять локально).
 beforeEach(() => {
   initPixelSprites(rasterFactory().make);
   initUnitAtlas(() => {});
-  initTerrainAtlas(() => {});
+  initMetroMap(() => {}); // позафазна лінія «Мегаполіс»: фон і тайли — фолбек за замовчуванням
+  initMetroTiles(() => {});
   initGeoMap(() => {}); // позафазна лінія: карта світу і спрайт радара — фолбек за замовчуванням
   initGeoTower(() => {});
 });
@@ -878,13 +880,19 @@ describe('П14.2/П14.3 (ADR-0072): атлас спрайтів юнітів —
   });
 });
 
-// --- П14.3 (ADR-0072): тайлсет терену бою — розклад за cellHash, фолбек ---
+// --- Позафазна лінія «візуальні порівняння» (кандидат «Мегаполіс», крок 2,
+// ADR-0072): цілісна підлога + згенеровані стіна і декори ---
 
-describe('П14.3 (ADR-0072): тайлсет терену — підлога за хешем, стіна, декори', () => {
-  // Мок-тайлсет: завантажувач кликає onLoad синхронно з фіктивним джерелом.
-  const tilesImg = { width: 384, height: 48 } as unknown as CanvasImageSource;
-  const readyTiles = (): void => {
-    initTerrainAtlas((_url, onLoad) => {
+describe('позафазна лінія «Мегаполіс»: цілісна підлога cover, стіна, декори', () => {
+  // Мок-ассети: завантажувачі кличуть onLoad синхронно з фіктивними джерелами
+  // (фон 1024×1024 — як ассет; атлас 192×48 — 4 тайли 48).
+  const bgImg = { width: 1024, height: 1024 } as unknown as CanvasImageSource;
+  const tilesImg = { width: 192, height: 48 } as unknown as CanvasImageSource;
+  const readyMetro = (): void => {
+    initMetroMap((_url, onLoad) => {
+      onLoad(bgImg);
+    });
+    initMetroTiles((_url, onLoad) => {
       onLoad(tilesImg);
     });
   };
@@ -897,46 +905,59 @@ describe('П14.3 (ADR-0072): тайлсет терену — підлога за
     { x: 1, y: 1, blocked: true, visible: true },
     { x: 2, y: 1, blocked: false, visible: true },
   ];
-  const tileDraws = (ops: Op[]): Array<{ col: number; x: number; y: number }> =>
+  const tileDraws = (ops: Op[]): Array<{ img: unknown; col: number; x: number; y: number }> =>
     ops
       .filter((o): o is { m: string; args: unknown[] } => 'm' in o && o.m === 'drawImage')
       .map((o) => ({
-        col: (o.args[1] as number) / TERRAIN_TILE,
+        img: o.args[0],
+        col: (o.args[1] as number) / METRO_TILE,
         x: o.args[5] as number,
         y: o.args[6] as number,
       }));
 
-  it('прапорець завантаженості: фолбек до onload, готовий — після', () => {
-    expect(isTerrainAtlasReady()).toBe(false);
-    readyTiles();
-    expect(isTerrainAtlasReady()).toBe(true);
+  it('прапорець завантаженості: фолбек до onload, готовий — після (потрібні ОБИДВА ассети)', () => {
+    expect(isMetroTerrainReady()).toBe(false);
+    initMetroMap((_url, onLoad) => {
+      onLoad(bgImg);
+    }); // лише фон — терен ще у фолбеку (без стін не читається)
+    expect(isMetroTerrainReady()).toBe(false);
+    readyMetro();
+    expect(isMetroTerrainReady()).toBe(true);
   });
 
-  it('підлога — 4 варіанти за cellHash (без RNG), стіна — за мапою (blocked), 1:1 під клітинку', () => {
-    readyTiles();
+  it('підлога — ОДНА цілісна картина cover на весь buffer (без розкладу тайлів); фото — згладжування', () => {
+    readyMetro();
     const s = seqCtx();
     drawNightTerrain(s.ctx, 144, 96, cells, 48);
-    const draws = tileDraws(s.ops);
-    // підлога/стіна кожній + декори за хешем (у сітці 3×2 одна клітинка з декором)
+    const imgs = s.ops.filter((o): o is { m: string; args: unknown[] } => 'm' in o && o.m === 'drawImage');
+    // фон + стіна + декори за хешем (у сітці 3×2 одна клітинка з декором) — жодних тайлів підлоги
     const decors = cells.filter((c) => !c.blocked && decorCol(c.x, c.y) !== null).length;
-    expect(draws.length).toBe(cells.length + decors);
-    for (const c of cells) {
-      const d = draws.find((t) => t.x === c.x * 48 && t.y === c.y * 48);
-      expect(d, `клітинка (${c.x},${c.y})`).toBeDefined();
-      expect(d!.col).toBe(c.blocked ? TERRAIN_WALL_COL : cellHash(c.x, c.y) % 4); // розклад за хешем (ADR-0072 п.6)
-    }
-    // nearest-neighbor і розмір 1:1 з клітинкою (48 = BCELL, П14.3)
-    expect(s.ops.some((o) => 'set' in o && o.set === 'imageSmoothingEnabled' && o.v === false)).toBe(true);
-    for (const o of s.ops) {
-      if ('m' in o && o.m === 'drawImage') {
-        expect(o.args[7]).toBe(48); // ширина цільова
-        expect(o.args[8]).toBe(48); // висота цільова
-      }
-    }
+    expect(imgs.length).toBe(1 + 1 + decors);
+    // перший кадр — фон: cover 1024→144 (масштаб 0.140625), dh=144>96 — центр у центрі канви
+    const bg = imgs[0]!;
+    expect(bg.args[0]).toBe(bgImg);
+    expect(bg.args[1]).toBe(0); // (144−144)/2
+    expect(bg.args[2]).toBe(-24); // (96−144)/2
+    expect(bg.args[3]).toBe(144);
+    expect(bg.args[4]).toBe(144);
+    // фото-фон — згладжування; піксель-арт атлас об'єктів — nearest-neighbor (по одному разу)
+    expect(s.ops.filter((o) => 'set' in o && o.set === 'imageSmoothingEnabled' && o.v === true).length).toBe(1);
+    expect(s.ops.filter((o) => 'set' in o && o.set === 'imageSmoothingEnabled' && o.v === false).length).toBe(1);
   });
 
-  it('декори — детермінований рідкий розклад decorCol (уламки/труба/вентиляція), лише на відкритих', () => {
-    // чиста функція: знаходимо по одному представнику кожного типу на сітці 60×60
+  it('стіна — за мапою (blocked), тайл кол. 0; декори — детермінований рідкий розклад decorCol (лампа/голограма/уламки), лише на відкритих', () => {
+    readyMetro();
+    const s = seqCtx();
+    drawNightTerrain(s.ctx, 144, 96, cells, 48);
+    const draws = tileDraws(s.ops).filter((d) => d.img === tilesImg);
+    // стіна кожній blocked + декори за хешем (у сітці 3×2 одна клітинка з декором)
+    const decors = cells.filter((c) => !c.blocked && decorCol(c.x, c.y) !== null).length;
+    expect(draws.length).toBe(1 + decors); // 1 стіна + декори
+    const wall = draws.find((d) => d.x === 48 && d.y === 48); // (1,1) — blocked
+    expect(wall).toBeDefined();
+    expect(wall!.col).toBe(METRO_WALL_COL);
+    expect(draws.some((d) => d.col === METRO_WALL_COL && d.x === 0 && d.y === 0)).toBe(false); // відкрита — не стіна
+    // чиста функція decorCol: по одному представнику кожного типу на сітці 60×60
     const found = new Map<number, TerrainCell>();
     for (let y = 0; y < 60 && found.size < 3; y++) {
       for (let x = 0; x < 60 && found.size < 3; x++) {
@@ -944,43 +965,50 @@ describe('П14.3 (ADR-0072): тайлсет терену — підлога за
         if (d !== null && !found.has(d)) found.set(d, { x, y, blocked: false, visible: true });
       }
     }
-    expect([...found.keys()].sort()).toEqual(
-      [TERRAIN_DECOR_COL['уламки'], TERRAIN_DECOR_COL['труба'], TERRAIN_DECOR_COL['вентиляція']].sort()
-    );
-    const list = [...found.values()];
-    for (const c of list) expect(decorCol(c.x, c.y)).toBe(decorCol(c.x, c.y)); // стабільний (без RNG)
-    readyTiles();
-    const s = seqCtx();
-    drawNightTerrain(s.ctx, 60 * 48, 60 * 48, list, 48);
-    const draws = tileDraws(s.ops);
-    expect(draws.length).toBe(list.length * 2); // підлога кожній + декор кожній
-    for (const c of list) {
-      const dcol = decorCol(c.x, c.y)!;
-      expect(draws.some((t) => t.col === dcol && t.x === c.x * 48 && t.y === c.y * 48)).toBe(true);
-    }
+    expect([...found.keys()].sort()).toEqual([METRO_DECOR_COL['лампа'], METRO_DECOR_COL['голограма'], METRO_DECOR_COL['уламки']].sort());
+    for (const c of found.values()) expect(decorCol(c.x, c.y)).toBe(decorCol(c.x, c.y)); // стабільний (без RNG)
+    // розклад рідкий: ~3/37 відкритих (~8%), три типи
+    let dec = 0;
+    const kinds = new Set<number>();
+    for (let y = 0; y < 60; y++)
+      for (let x = 0; x < 60; x++) {
+        const d = decorCol(x, y);
+        if (d !== null) {
+          dec++;
+          kinds.add(d);
+        }
+      }
+    expect(dec / (60 * 60)).toBeGreaterThan(0.05);
+    expect(dec / (60 * 60)).toBeLessThan(0.11);
+    expect(kinds.size).toBe(3);
   });
 
-  it('туман: клітинки поза видимістю перекриваються напівпрозорим TILE-шаром (вміст не розкривається)', () => {
-    readyTiles();
+  it('туман: клітинки поза видимістю перекриваються чинним напівпрозорим шаром поверх фону (вміст не розкривається)', () => {
+    readyMetro();
     const fogged = cells.map((c) => ({ ...c, visible: c.x === 0 })); // видимий лише стовпець x=0
     const s = seqCtx();
     drawNightTerrain(s.ctx, 144, 96, fogged, 48);
     const fogFills = s.ops.filter(
-      (o): o is { m: string; args: unknown[] } => 'm' in o && o.m === 'fillRect' && o.args[3] === 48 && o.args[2] === 48
+      (o): o is { m: string; args: unknown[] } => 'm' in o && o.m === 'fillRect' && o.args[2] === 48 && o.args[3] === 48
     );
-    expect(fogFills.length).toBe(4); // 4 клітинки туману (з 6)
+    expect(fogFills.length).toBe(4); // 4 клітинки туману (з 6); фон 144×96 і край туману 47×47 не рахуються
+    const before = s.ops.findIndex((o) => 'm' in o && o.m === 'drawImage');
+    const fogStyle = s.ops.findIndex((o) => 'set' in o && o.set === 'fillStyle' && o.v === 'rgba(5,8,15,0.55)');
+    expect(fogStyle).toBeGreaterThan(-1);
+    expect(s.ops[fogStyle + 1]).toEqual({ m: 'fillRect', args: [48, 0, 48, 48] }); // перша клітинка туману (1,0)
+    expect(fogStyle).toBeGreaterThan(before); // туман — ПОВЕРХ фону і об'єктів
   });
 
-  it('фолбек без ассета — чинні два тони terrainShade (загальний випадок покривають тести П6.13)', () => {
-    expect(isTerrainAtlasReady()).toBe(false); // завантажувач не кликнувся — headless/офлайн
+  it('фолбек без ассетів — чинні два тони terrainShade (загальний випадок покривають тести П6.13)', () => {
+    expect(isMetroTerrainReady()).toBe(false); // завантажувачі не кликнулися — headless/офлайн
     const s = seqCtx();
     drawNightTerrain(s.ctx, 144, 96, cells, 48);
-    expect(s.ops.some((o) => 'm' in o && o.m === 'drawImage')).toBe(false); // тайли не малюються
+    expect(s.ops.some((o) => 'm' in o && o.m === 'drawImage')).toBe(false); // картина і тайли не малюються
     expect(cellFills(s.ops, 0, 0, 48)[0]).toBe(terrainShade(0, 0, false, true)); // двотоновий фолбек
   });
 
   it('детермінізм (ADR-0003): той самий терен → той самий потік операцій', () => {
-    readyTiles();
+    readyMetro();
     const a = seqCtx();
     drawNightTerrain(a.ctx, 144, 96, cells, 48);
     const b = seqCtx();
