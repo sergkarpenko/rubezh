@@ -402,4 +402,37 @@ describe('Фікс П14.8 (фідбек валідації): смерть у ч�
     const ops2 = withRecCtx(() => f.battle.renderBattle());
     expect(ops2.some((o) => o.startsWith('fillText(0,'))).toBe(false);
   });
+
+  // Фідбек власника 2026-10-22: трасер бою стартує з ДУЛА стрільця (якір
+  // MUZZLE_ANCHOR у render.ts), фліп — фактичний facing кадру: демон у нативі
+  // (вліво) — дуло лівого краю (+2 від осі); постріл по солдату праворуч від
+  // демона — дзеркальний якір. renderBattle передає підказку в drawAnimFrame.
+  it('трасер демона: старт з дула (натив вліво), постріл вправо — дзеркальний якір', () => {
+    const f = makeFixture();
+    f.battle.launch(firstTarget(f));
+    const g = createGame({
+      map: { width: 20, height: 20, blocked: new Set<string>() },
+      units: [
+        makeUnit({ id: 's1', side: 'player', name: 'Гарт', pos: { x: 3, y: 5 }, hp: 10, maxHp: 10 }),
+        makeUnit({ id: 'a1', side: 'alien', name: 'Морок', pos: { x: 5, y: 5 }, hp: 10, maxHp: 10 }),
+      ],
+    });
+    f.ui.mission!.state = g;
+    // натив: демон (5,5) стріляє вліво по солдату (3,5) — facing −1, без дзеркала
+    const left = makeTracerAnim('alien', { x: 5, y: 5 }, { x: 3, y: 5 }, false);
+    left.start = 0;
+    f.deps.anim.active = () => left;
+    f.deps.anim.queued = () => [left];
+    const ops = withRecCtx(() => f.battle.renderBattle());
+    // дуло: round(264−22)+5 = 247, round(264−22)+24 = 266 (центр був би 264,264)
+    expect(ops).toContain('moveTo(247,266)');
+    // дзеркало: той самий демон стріляє вправо (5,5)→(7,5) — facing +1, дзеркало
+    const right = makeTracerAnim('alien', { x: 5, y: 5 }, { x: 7, y: 5 }, false);
+    right.start = 0;
+    f.deps.anim.active = () => right;
+    f.deps.anim.queued = () => [right];
+    const ops2 = withRecCtx(() => f.battle.renderBattle());
+    // віддзеркалене дуло: round(264−22)+(44−1−5) = 280
+    expect(ops2).toContain('moveTo(280,266)');
+  });
 });
