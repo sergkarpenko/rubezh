@@ -1065,11 +1065,17 @@ describe('позафазна лінія: фон геосцени — ціліс�
     const a = d!.args as unknown[];
     expect(a[0]).toBe(towerImg);
     // фіт у клітинку зі збереженням аспекта: scale = min(48/96, 48/95) = 0.5
-    expect(a[1]).toBe(Math.round(b.cx - CELL / 2)); // центр клітинки бази
-    expect(a[2]).toBe(Math.round(b.cy - CELL / 2));
+    expect(a[1]).toBe(Math.round(b.cx - CELL / 2)); // центр клітинки бази по X
+    // фідбек власника 2026-10-23: якір — підошва на size/8 вище центру клітинки
+    // (острів у картині — у верхній половині клітинки, центр — океан):
+    // feet = cy - 6 = 210, верх вежі = feet - 48 = 162
+    expect(a[2]).toBe(Math.round(b.cy - CELL / 8 - CELL));
     expect(a[3]).toBe(CELL);
     expect(a[4]).toBe(CELL);
-    expect(s.calls.some((c) => c.m === 'fillText' && c.args[0] === 'ВУЗОЛ')).toBe(true);
+    const label = s.calls.find((c) => c.m === 'fillText' && c.args[0] === 'ВУЗОЛ');
+    expect(label).toBeDefined();
+    // підпис — під підошвою вежі (feet + 10), не по центру клітинки
+    expect(label!.args[2]).toBe(Math.round(b.cy - CELL / 8 + 10));
     // фолбек: без ассета — піксельний спрайт ADR-0031 (джерело — offscreen, не ассет)
     initGeoTower(() => {}); // скидання у фолбек (завантажувач не кликається)
     const f = animCtx();
