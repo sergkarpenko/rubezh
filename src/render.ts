@@ -41,7 +41,6 @@ import { grenadeZone } from './core/combat';
 import {
   ALIEN_STAND,
   ALIEN_STEP,
-  BASE_OUTLINE,
   BASE_SPRITE,
   FIGHTER_SPRITE,
   OW_BOLT,
@@ -426,23 +425,20 @@ export function drawUnitSprite(ctx: CanvasRenderingContext2D, u: UnitSpriteView)
 }
 
 export function drawBaseSprite(ctx: CanvasRenderingContext2D, b: BaseSprite): void {
-  // спрайт — трохи вище центру клітинки, під ним напис (обидва в межах клітинки)
+  // спрайт — трохи вище центру клітинки; підпис «ВУЗОЛ» прибрано (фідбек
+  // власника 2026-10-23: текст на геосцені зайвий)
   drawPixelSprite(ctx, BASE_SPRITE, b.cx, b.cy - 6, SPRITE_SCALE);
-  ctx.font = '11px system-ui'; // П13.5: більший підпис під більшим спрайтом
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillStyle = BASE_OUTLINE;
-  ctx.fillText('ВУЗОЛ', b.cx, b.cy + 16);
 }
 
 // Позафазна лінія «візуальні порівняння» (кандидат А): позначка бази геосцени —
 // вежа-радар з assets/radar-tower.png (фото-спрайт, альфа flood-fill по чорному
 // тлу сирця), вписується у клітинку зі збереженням аспекта, згладжування
-// увімкнене (фото, не піксель-арт); підпис «ВУЗОЛ» — як у чинного спрайта.
-// Фідбек власника 2026-10-23: острів у картині — у ВЕРХНІЙ половині клітинки
-// бази (півострів, що спускається з материка рядка вище), низ клітинки —
-// океан; якір — ПІДОШВА вежі (низ спрайта) на size/8 вище центру клітинки,
-// щоб вежа стояла на острові, а не у воді; підпис — під підошвою.
+// увімкнене (фото, не піксель-арт). Фідбек власника 2026-10-23: видимый острів
+// у картині — світле узбережжя у ВЕРХНІЙ частині клітинки бази (нічний
+// супутник: темна суша мало відрізняється від океану, читається лише світла
+// смуга вогнів), низ клітинки читається як вода; якір — ПІДОШВА вежі (низ
+// спрайта) на верхньому краї клітинки (feet = cy - size/2), щоб вежа стояла
+// на узбережжі острова. Підпис «ВУЗОЛ» прибрано (фідбек власника 2026-10-23).
 // Фолбек без ассета — піксельний спрайт ADR-0031 (drawBaseSprite); тести від
 // ассета не залежать.
 export function drawGeoBaseSprite(ctx: CanvasRenderingContext2D, b: BaseSprite): void {
@@ -454,14 +450,9 @@ export function drawGeoBaseSprite(ctx: CanvasRenderingContext2D, b: BaseSprite):
   const scale = Math.min(b.size / iw, b.size / ih); // вписати в клітинку
   const dw = Math.round(iw * scale);
   const dh = Math.round(ih * scale);
-  const feet = b.cy - Math.round(b.size / 8); // підошва — на острові (верх клітинки)
+  const feet = b.cy - Math.round(b.size / 2); // підошва — верхній край клітинки (острів)
   ctx.imageSmoothingEnabled = true;
   ctx.drawImage(geoTowerImg, Math.round(b.cx - dw / 2), feet - dh, dw, dh);
-  ctx.font = '11px system-ui';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillStyle = BASE_OUTLINE;
-  ctx.fillText('ВУЗОЛ', b.cx, feet + 10); // підпис — під підошвою вежі
 }
 
 export function drawFighterSprite(ctx: CanvasRenderingContext2D, f: FighterSprite): void {
