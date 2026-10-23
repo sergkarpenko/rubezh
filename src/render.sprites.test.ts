@@ -443,7 +443,7 @@ describe('детермінованість малювання (ADR-0003 — бе
 });
 
 describe('спрайти геосцени (піксель-арт П6.12)', () => {
-  it('вузол-маяк «Рубіж» (П12.7, ADR-0064; П13.5 — 16×16): 16×16 @2× = 32px вище центру, неоновий маяк, напис «ВУЗОЛ» під спрайтом', () => {
+  it('вузол-маяк «Рубіж» (П12.7, ADR-0064; П13.5 — 16×16): 16×16 @2× = 32px вище центру, неоновий маяк; підпису «ВУЗОЛ» нема (фідбек власника 2026-10-23)', () => {
     const rf = rasterFactory();
     initPixelSprites(rf.make);
     const { ctx, calls } = mockCtx();
@@ -454,10 +454,8 @@ describe('спрайти геосцени (піксель-арт П6.12)', () =>
     expect((d!.args as number[])[2]).toBe(22 - 6 - 16); // спрайт зміщено вгору
     expect((d!.args as number[])[3]).toBe(32);
     expect((d!.args as number[])[4]).toBe(32);
-    const label = calls.find((c) => c.m === 'fillText' && c.args[0] === 'ВУЗОЛ');
-    expect(label).toBeDefined();
-    expect((label!.args as number[])[1]).toBe(22);
-    expect((label!.args as number[])[2]).toBe(22 + 16); // напис під спрайтом
+    // фідбек власника 2026-10-23: текстовий підпис на геосцені прибрано
+    expect(calls.some((c) => c.m === 'fillText')).toBe(false);
     // неоновий маяк-вогонь на вершині вежі (ціан «Рубіжу»)
     expect(rf.canvases[0].pixels.some((p) => p.color === '#00e5ff')).toBe(true);
   });
@@ -1055,7 +1053,7 @@ describe('позафазна лінія: фон геосцени — ціліс�
     expect(a[4]).toBe(450);
   });
 
-  it('вежа-радар на базі: кадр з ассету аспект-фітом у клітинку + підпис; фолбек — піксельний спрайт (ADR-0031)', () => {
+  it('вежа-радар на базі: кадр з ассету аспект-фітом, строго по центру клітинки, без підпису; фолбек — піксельний спрайт (ADR-0031)', () => {
     const b = { cx: 8 * CELL + CELL / 2, cy: 4 * CELL + CELL / 2, size: CELL };
     readyTower();
     const s = animCtx();
@@ -1065,11 +1063,14 @@ describe('позафазна лінія: фон геосцени — ціліс�
     const a = d!.args as unknown[];
     expect(a[0]).toBe(towerImg);
     // фіт у клітинку зі збереженням аспекта: scale = min(48/96, 48/95) = 0.5
-    expect(a[1]).toBe(Math.round(b.cx - CELL / 2)); // центр клітинки бази
-    expect(a[2]).toBe(Math.round(b.cy - CELL / 2));
+    // фідбек власника 2026-10-23: вежа — по центру клітинки (звідки виходить
+    // промінь радара); острів у скорегованій картині — саме там
+    expect(a[1]).toBe(Math.round(b.cx - CELL / 2)); // центр клітинки бази по X
+    expect(a[2]).toBe(Math.round(b.cy - CELL / 2)); // і по Y
     expect(a[3]).toBe(CELL);
     expect(a[4]).toBe(CELL);
-    expect(s.calls.some((c) => c.m === 'fillText' && c.args[0] === 'ВУЗОЛ')).toBe(true);
+    // фідбек власника 2026-10-23: підпис «ВУЗОЛ» прибрано — жодного тексту
+    expect(s.calls.some((c) => c.m === 'fillText')).toBe(false);
     // фолбек: без ассета — піксельний спрайт ADR-0031 (джерело — offscreen, не ассет)
     initGeoTower(() => {}); // скидання у фолбек (завантажувач не кликається)
     const f = animCtx();
@@ -1077,7 +1078,7 @@ describe('позафазна лінія: фон геосцени — ціліс�
     const fd = f.calls.find((c) => c.m === 'drawImage');
     expect(fd).toBeDefined();
     expect((fd!.args as unknown[])[0]).not.toBe(towerImg);
-    expect(f.calls.some((c) => c.m === 'fillText' && c.args[0] === 'ВУЗОЛ')).toBe(true);
+    expect(f.calls.some((c) => c.m === 'fillText')).toBe(false);
   });
 
   it('детермінізм (ADR-0003): той самий вхід → той самий потік викликів і присвоєнь', () => {

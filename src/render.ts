@@ -41,7 +41,6 @@ import { grenadeZone } from './core/combat';
 import {
   ALIEN_STAND,
   ALIEN_STEP,
-  BASE_OUTLINE,
   BASE_SPRITE,
   FIGHTER_SPRITE,
   OW_BOLT,
@@ -152,6 +151,20 @@ export const ATLAS_POSE_COL: Readonly<Record<UnitPose, number>> = {
 };
 export const ATLAS_WALK2_COL = 2;
 
+// Фідбек власника 2026-10-22 (юніт-атласи Gemini, PR #241): трасер бою має
+// стартувати з ДУЛА стрільця, а не з центру клітинки — у демона Розриву
+// фазовий різак зі спалахом лежить поза центром кадру fire (дуло ліворуч,
+// нижче осі), і «куля з середини тіла» виглядала відірваною. Якір —
+// координати дулового спалаху в 44-просторі кадру fire у НАТИВНІЙ
+// орієнтації (солдат вправо, демон вліво); дзеркалення (flip) мапить
+// колонку col → ATLAS_UNIT-1-col. Солдат — центр кадру (спалах прикриває
+// центр, нульовий офсет — вигляд без змін). Підказку передає ЛИШЕ бойовище
+// (battle.ts); трасер перехоплення на геосцені — від центру, як раніше.
+export const MUZZLE_ANCHOR: Readonly<Record<'player' | 'alien', { x: number; y: number }>> = {
+  player: { x: 22, y: 22 }, // дуловий спалах АР-14 «Гарт» — по центру кадру
+  alien: { x: 5, y: 24 }, // дуловий спалах фазового різака: лівий край, +2 від осі
+};
+
 // Юніт бою з погляду шару відображення: поза вогонь/смерть — надбудова над
 // UnitSprite ядра (ядровий frame 0/1 лишається семантикою стій/крок, ADR-0031);
 // step — фаза двокадрової ходьби атласа (walk1/walk2, П14.3); flip — дзеркало
@@ -239,17 +252,23 @@ export function isTerrainAtlasReady(): boolean {
 
 // --- Позафазна лінія «візуальні порівняння» (кандидат А «нічний супутник»,
 // Work-сесія 2026-10-21): геосцена — ОДНА цілісна картина світу ---
-// Фон — assets/geo-map.webp (1024×576, кроп видимого вікна cover сирця
-// власника 1024×768): малюється cover на всю канву геосцени; розклад
-// суші GEO_LAYOUT (render-core) ВИВЕДЕНО з цієї ж картини (медіани
-// яскравості клітинок 64×64, поріг за фактичним джерелом — скрипт
-// scripts/geo-layout.py), тож розклад збігається з картиною. Атлас
-// geo-tiles.png і тайл узбережжя більше не використовуються; вогні
-// міст намальовані на самій карті (оверлей вимкнено). Спрайт бази —
-// вежа-радар assets/radar-tower.png (flood-fill альфа по чорному тлу
-// сирця, 96×95 — 2× клітинки). Фолбек без ассетів — розклад двома
-// тонами (суша/океан; поведінка не залежить від ассета, тести від
-// ассета не залежать, сейви не зачіпаються — ADR-0026).
+// Фон — assets/geo-map.webp (1120×630, 16:9 — вікно сирця geo-map2.jpg
+// x 0..1024, y 9..639 (повна ширина, 82% висоти — увесь материк з
+// вогнями) + безшовні паддінги тоном темної рамки сирця: захід 68px,
+// схід 28px; фідбек власника 2026-10-23 ×4, вказівка «сюди»: клітинка
+// бази (8,4) — на ЯСКРАВОМУ мисі-«острові» південного узбережжя
+// материка (сирець x 480..576, y 288..352); вежа по центру, промінь
+// з вежі): малюється cover на всю канву геосцени
+// (1120/768 = 630/432 — точний 16:9, без швів); розклад суші
+// GEO_LAYOUT (render-core) ВИВЕДЕНО з цієї ж картини (медіани
+// клітинок 70×70, поріг 16.5 — скрипт scripts/geo-layout.py), тож
+// розклад збігається з картиною. Атлас geo-tiles.png і тайл узбережжя
+// більше не використовуються; вогні міст намальовані на самій карті
+// (оверлей вимкнено). Спрайт бази — вежа-радар assets/radar-tower.png
+// (flood-fill альфа по чорному тлу сирця, 96×95 — 2× клітинки), по
+// центру клітинки бази. Фолбек без ассетів — розклад двома тонами
+// (суша/океан; поведінка не залежить від ассета, тести від ассета не
+// залежать, сейви не зачіпаються — ADR-0026).
 // Ліниве завантаження — той самий патерн, що initTerrainAtlas (ADR-0072).
 export type LoadGeoAsset = (url: string, onLoad: (img: CanvasImageSource) => void) => void;
 let geoMapImg: CanvasImageSource | null = null;
@@ -412,21 +431,20 @@ export function drawUnitSprite(ctx: CanvasRenderingContext2D, u: UnitSpriteView)
 }
 
 export function drawBaseSprite(ctx: CanvasRenderingContext2D, b: BaseSprite): void {
-  // спрайт — трохи вище центру клітинки, під ним напис (обидва в межах клітинки)
+  // спрайт — трохи вище центру клітинки; підпис «ВУЗОЛ» прибрано (фідбек
+  // власника 2026-10-23: текст на геосцені зайвий)
   drawPixelSprite(ctx, BASE_SPRITE, b.cx, b.cy - 6, SPRITE_SCALE);
-  ctx.font = '11px system-ui'; // П13.5: більший підпис під більшим спрайтом
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillStyle = BASE_OUTLINE;
-  ctx.fillText('ВУЗОЛ', b.cx, b.cy + 16);
 }
 
 // Позафазна лінія «візуальні порівняння» (кандидат А): позначка бази геосцени —
 // вежа-радар з assets/radar-tower.png (фото-спрайт, альфа flood-fill по чорному
 // тлу сирця), вписується у клітинку зі збереженням аспекта, згладжування
-// увімкнене (фото, не піксель-арт); підпис «ВУЗОЛ» — як у чинного спрайта.
-// Фолбек без ассета — піксельний спрайт ADR-0031 (drawBaseSprite); тести від
-// ассета не залежать.
+// увімкнене (фото, не піксель-арт). Фідбек власника 2026-10-23: вежа —
+// строго по ЦЕНТРУ клітинки бази (звідки виходить промінь/розгортка
+// радара), а під клітинкою в скорегованій картині — острів. Підпис
+// «ВУЗОЛ» прибрано (фідбек власника 2026-10-23). Фолбек без ассета —
+// піксельний спрайт ADR-0031 (drawBaseSprite); тести від ассета не
+// залежать.
 export function drawGeoBaseSprite(ctx: CanvasRenderingContext2D, b: BaseSprite): void {
   if (geoTowerImg === null) {
     drawBaseSprite(ctx, b);
@@ -438,11 +456,6 @@ export function drawGeoBaseSprite(ctx: CanvasRenderingContext2D, b: BaseSprite):
   const dh = Math.round(ih * scale);
   ctx.imageSmoothingEnabled = true;
   ctx.drawImage(geoTowerImg, Math.round(b.cx - dw / 2), Math.round(b.cy - dh / 2), dw, dh);
-  ctx.font = '11px system-ui';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillStyle = BASE_OUTLINE;
-  ctx.fillText('ВУЗОЛ', b.cx, b.cy + 16);
 }
 
 export function drawFighterSprite(ctx: CanvasRenderingContext2D, f: FighterSprite): void {
@@ -517,9 +530,9 @@ export function drawNightTerrain(ctx: CanvasRenderingContext2D, w: number, h: nu
 
 // --- Позафазна лінія «візуальні порівняння» (кандидат А «нічний супутник»):
 // терен геосцени — ОДНА цілісна картина світу ---
-// Фон — geo-map.webp cover на всю канву (ассет — кроп видимого вікна cover
-// сирця власника, аспект 16:9 = канва 768×432 — точне вписування без швів;
-// згладжування увімкнене — фото, не піксель-арт). Розклад суші GEO_LAYOUT
+// Фон — geo-map.webp cover на всю канву (ассет 1120×630 — вікно сирця
+// 16:9 з безшовними паддінгами, 1120/768 = 630/432 — точне вписування
+// без швів; згладжування увімкнене — фото, не піксель-арт). Розклад суші GEO_LAYOUT
 // виведено з цієї ж картини (render-core; константа — не залежить ні від
 // сіда партії, ні в рантаймі від ассета). Фолбек !loaded — ТОЙ САМИЙ
 // розклад двома тонами: суша GEO_CELL_B, океан GEO_CELL_A (мапа читається
@@ -643,6 +656,15 @@ const DMG_NUM = '#ffb347';
 const HEAL_NUM = '#7fe2a0';
 const DNUM_RISE = 16; // підйом числа за тривалість анімації, px
 
+// Підказка якоря дула для трасера бою (фідбек власника 2026-10-22): сторона
+// стрільця і ЧИ ФЛІПНУТИЙ кадр (фактичний напрямок погляду цього кадру —
+// його знає лише викликаючий шар бою, battle.ts). Суто відображення: без
+// підказки трасер малюється від центру клітинки, як раніше (геосцена).
+export interface MuzzleHint {
+  side: 'player' | 'alien';
+  flip: boolean;
+}
+
 // Один кадр анімаційного шару (малюється поверх статичного стану).
 // move — силует у проміжній позиції; tracer — куля летить від стрільця до цілі,
 // при влучанні друга фаза — спалах-кільце; death — згасання силуета; owflash —
@@ -660,7 +682,8 @@ export function drawAnimFrame(
   cell: number,
   r: number,
   cw = Number.POSITIVE_INFINITY,
-  ch = Number.POSITIVE_INFINITY
+  ch = Number.POSITIVE_INFINITY,
+  muzzle?: MuzzleHint
 ): void {
   const t = animT(a, now);
   // П6.9: пульс радара геосцени — кільце від бази до maxR, що гасне.
@@ -826,10 +849,19 @@ export function drawAnimFrame(
     return;
   }
   if (a.kind === 'tracer') {
-    const x0 = a.from.x * cell + cell / 2;
-    const y0 = a.from.y * cell + cell / 2;
+    let x0 = a.from.x * cell + cell / 2;
+    let y0 = a.from.y * cell + cell / 2;
     const x1 = a.to.x * cell + cell / 2;
     const y1 = a.to.y * cell + cell / 2;
+    // Фідбек власника 2026-10-22: куля стартує з дулового спалаху кадру fire
+    // (якір — MUZZLE_ANCHOR, геометрия та ж, що drawAtlasUnit: round(центр-22))
+    // — лише з підказкою бойовища; без неї (геосцена) — від центру клітинки.
+    if (muzzle !== undefined) {
+      const m = MUZZLE_ANCHOR[muzzle.side];
+      const mx = muzzle.flip ? ATLAS_UNIT - 1 - m.x : m.x;
+      x0 = Math.round(x0 - ATLAS_UNIT / 2) + mx;
+      y0 = Math.round(y0 - ATLAS_UNIT / 2) + m.y;
+    }
     const share = TRACER_MS / a.dur;
     if (t < share) {
       // фаза 1: куля летить — відрізок від стрільця до поточного «заголовка»
