@@ -8,6 +8,8 @@ import {
   calculateHitChance,
   createGame,
   endTurn,
+  evacuate,
+  EVAC_AP_COST,
   hasLineOfSight,
   makeUnit,
   moveUnit,
@@ -15,6 +17,7 @@ import {
   resolveAttack,
   setOverwatch,
   throwGrenade,
+  unitAt,
   useMedkit,
   type GameEvent,
   type GameMap,
@@ -474,5 +477,124 @@ describe('П11.4: ізоляція (критерій 1: бій без предм
       return JSON.stringify(g.log) + '|' + (g.rng as StatefulRng).state;
     };
     expect(play()).toBe(play({ s1: { medkit: true, grenade: true }, s2: { medkit: true, grenade: true } }));
+  });
+});
+
+// --- П15.2 (ADR-0075): евакуація з місії ---
+
+describe('П15.2: евакуація (ADR-0075)', () => {
+  const zone = [
+    { x: 2, y: 2 },
+    { x: 3, y: 2 },
+    { x: 2, y: 3 },
+  ];
+
+  // Бій із зоною висадки: солдат на першій клітинці зони, демон Розриву неподалік.
+  function evacGame(evacZone?: { x: number; y: number }[]): GameState {
+    return createGame({
+      map: map(),
+      units: [
+        makeUnit({ id: 's1', side: 'player', pos: { x: 2, y: 2 } }),
+        makeUnit({ id: 's2', side: 'player', pos: { x: 4, y: 4 } }),
+        makeUnit({ id: 'a1', side: 'alien', pos: { x: 10, y: 10 } }),
+      ],
+      rng: mulberry32(7),
+      evacZone,
+    });
+  }
+
+  it('EARS 1: у зоні з ≥2 AP — знімається з поля, evac_unit у лог, AP −2', () => {
+    const g = evacGame(zone);
+    evacuate(g, 's1');
+    expect(g.units.some((u) => u.id === 's1')).toBe(false); // знятий з поля
+    expect(g.evacuated?.map((u) => u.id)).toEqual(['s1']);
+    expect(g.log.filter((e) => e.type === 'evac_unit')).toEqual([{ type: 'evac_unit', unitId: 's1' }]);
+    const s1 = g.evacuated![0];
+    expect(s1.ap).toBe(s1.maxAp - EVAC_AP_COST);
+    expect(s1.alive).toBe(true); // евакуйований — живий (уцілілий, EARS 6)
+  });
+
+  it('EARS 1: одна подія evac_unit на солдата; кілька евакуацій — у порядку викликів', () => {
+    const g = evacGame(zone);
+    g.units[1].pos = { x: 3, y: 2 }; // s2 у зону
+    evacuate(g, 's1');
+    evacuate(g, 's2');
+    expect(g.log.filter((e) => e.type === 'evac_unit').map((e) => (e as { unitId: string }).unitId)).toEqual(['s1', 's2']);
+  });
+
+  it('EARS 2: поза зоною висадки → відхилення з причиною', () => {
+    const g = evacGame(zone);
+    expect(() => evacuate(g, 's2')).toThrow('Евакуація доступна лише з клітинки зони висадки');
+    expect(g.evacuated?.length ?? 0).toBe(0);
+    expect(g.log.some((e) => e.type === 'evac_unit')).toBe(false);
+  });
+
+  it('EARS 2: <2 AP → відхилення з причиною', () => {
+    const g = evacGame(zone);
+    g.units[0].ap = EVAC_AP_COST - 1;
+    expect(() => evacuate(g, 's1')).toThrow('Недостатньо очок дій для евакуації');
+  });
+
+  it('порядок перевірок фіксований: спершу зона, потім AP (детермінізм, ADR-0003)', () => {
+    const g = evacGame(zone);
+    const s2 = g.units[1]; // поза зоною (4,4) І без AP одночасно
+    s2.ap = 0;
+    expect(() => evacuate(g, 's2')).toThrow('Евакуація доступна лише з клітинки зони висадки');
+  });
+
+  it('лише гравець і лише свій хід: демон/чужий хід/мертвий — відхилення', () => {
+    const g = evacGame(zone);
+    expect(() => evacuate(g, 'нема')).toThrow('Невідомий юніт');
+    g.units[2].pos = { x: 3, y: 2 }; // демон у зоні
+    expect(() => evacuate(g, 'a1')).toThrow('Зараз хід не сторони alien');
+    endTurn(g); // хід демонів
+    expect(() => evacuate(g, 'a1')).toThrow('Евакуюватись можуть лише оперативники гравця');
+    expect(() => evacuate(g, 's1')).toThrow('Зараз хід не сторони player');
+    endTurn(g); // знову хід гравця
+    g.units[0].alive = false;
+    expect(() => evacuate(g, 's1')).toThrow('мертвий');
+  });
+
+  it('без evacZone (демо-бій) евакуація недоступна; зона — копія, не мутується', () => {
+    const g = evacGame();
+    expect(() => evacuate(g, 's1')).toThrow('Евакуація доступна лише з клітинки зони висадки');
+    const src = [{ x: 2, y: 2 }];
+    const g2 = evacGame(src);
+    src[0] = { x: 9, y: 9 };
+    evacuate(g2, 's1'); // зона скопійована при createGame
+    expect(g2.evacuated?.length).toBe(1);
+  });
+
+  it('не провокує реакційний вогонь і не витягає RNG (ADR-0003/0075)', () => {
+    const g = evacGame([{ x: 2, y: 2 }]);
+    g.units[2].pos = { x: 5, y: 5 }; // демон у радіусі та лінії огляду
+    g.units[2].overwatch = true;
+    const rngBefore = (g.rng as StatefulRng).state;
+    evacuate(g, 's1');
+    expect(g.log.some((e) => e.type === 'shot')).toBe(false); // не рух — дозор мовчить
+    expect(g.units.find((u) => u.id === 'a1')?.overwatch).toBe(true); // дозор не розряджений
+    expect((g.rng as StatefulRng).state).toBe(rngBefore);
+  });
+
+  it('евакуйований поза полем: не юніт, не ціль — getUnit/unitAt його не бачать', () => {
+    const g = evacGame([{ x: 2, y: 2 }]);
+    evacuate(g, 's1');
+    expect(g.units.some((u) => u.id === 's1')).toBe(false);
+    expect(unitAt(g, { x: 2, y: 2 })).toBeUndefined(); // клітинка звільнилась
+    expect(() => evacuate(g, 's1')).toThrow('Невідомий юніт'); // повторна евакуація неможлива
+  });
+
+  it('детермінізм: той самий сід і дії → той самий лог (критерій EARS 7)', () => {
+    const play = () => {
+      const g = evacGame(zone);
+      const s2 = g.units[1];
+      evacuate(g, 's1');
+      resolveAttack(g, 's2', 'a1', 'snap'); // постріл до евакуації (евакуйований — не стрілець)
+      s2.pos = { x: 2, y: 3 }; // units — новий масив після евакуації, тримаємо посилання
+      evacuate(g, 's2');
+      endTurn(g);
+      return JSON.stringify(g.log) + '|' + (g.rng as StatefulRng).state;
+    };
+    expect(play()).toBe(play());
   });
 });

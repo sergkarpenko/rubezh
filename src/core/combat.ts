@@ -7,6 +7,10 @@
 // П11.4 (ADR-0058): бойові дії з витратниками — «Лікування» (аптечка)
 // і «Кидок гранати» (осколкова). ШІ прибульців предметів не має (MVP);
 // бій без предметів — байт-у-байт незмінний (критерій П11.4).
+// П15.2 (ADR-0075): евакуація з місії — дія evacuate: активний солдат у
+// клітинці зони висадки (evacZone) знімається з поля у список evacuated.
+// Евакуйований вилучений з units → не ціль ШІ/пострілів/гранат/дозору
+// (формальні тести — П15.3); бій без евакуації — байт-у-байт незмінний.
 //
 // Чиста логіка: жодних залежностей від DOM/Canvas.
 // Уся недетермінованість ізольована в ін'єктованому RNG (детерміновані тести і реплеї).
@@ -67,7 +71,9 @@ export type GameEvent =
   | { type: 'overwatch'; unitId: string; armed: boolean }
   // П11.4 (ADR-0058): події нових бойових дій з витратниками
   | { type: 'heal'; unitId: string; targetId: string; healed: number }
-  | { type: 'grenade'; unitId: string; center: Vec2; hits: { unitId: string; damage: number }[] };
+  | { type: 'grenade'; unitId: string; center: Vec2; hits: { unitId: string; damage: number }[] }
+  // П15.2 (ADR-0075): солдат евакуйований з зони висадки (одна подія на солдата)
+  | { type: 'evac_unit'; unitId: string };
 
 export interface GameMap {
   width: number;
@@ -82,6 +88,12 @@ export interface GameState {
   rng: RNG;
   log: GameEvent[];
   items?: Record<string, UnitItems>; // П11.4: витратники юнітів у цьому бою (id → предмети)
+  // П15.2 (ADR-0075): зона висадки — клітинки, з яких можлива евакуація
+  // (у місії — SQUAD_SPAWN, mission.ts); без зони (демо-бої) евакуація недоступна.
+  evacZone?: Vec2[];
+  // П15.2 (ADR-0075): евакуйовані солдати — зняті з поля, поза units.
+  // Стан бою (сейв у бою недоступний, ADR-0026): формат сейву не змінюється.
+  evacuated?: Unit[];
 }
 
 export const MOVE_AP_PER_CELL = 1;
@@ -97,6 +109,8 @@ export const HEAL_AMOUNT = 3; // +3 HP, не вище maxHp
 export const GRENADE_AP_COST = 4; // «Кидок гранати»: 4 AP
 export const GRENADE_RANGE = 6; // дальність кидка (Чебишев) — менша за радіус огляду 12 (map.ts)
 export const GRENADE_DAMAGE: [number, number] = [3, 5]; // пошкодження всієї зони вибуху (один кидок RNG)
+
+export const EVAC_AP_COST = 2; // П15.2 (ADR-0075): «Евакуація» — 2 AP (кандидат, probe П15.5)
 
 export const RIFLE: Weapon = {
   name: 'АР-14 «Гарт»',
@@ -236,6 +250,7 @@ export interface CreateGameOptions {
   rng?: RNG;
   startingSide?: Side;
   items?: Record<string, UnitItems>; // П11.4: витратники юнітів у цьому бою
+  evacZone?: Vec2[]; // П15.2 (ADR-0075): зона висадки для евакуації (mission.ts)
 }
 
 export function createGame(opts: CreateGameOptions): GameState {
@@ -247,6 +262,8 @@ export function createGame(opts: CreateGameOptions): GameState {
     rng: opts.rng ?? mulberry32(42),
     log: [],
     items: opts.items,
+    evacZone: opts.evacZone?.map((c) => ({ ...c })), // П15.2: копія — зона не мутується боєм
+    evacuated: [], // П15.2 (ADR-0075): евакуйовані цього бою
   };
   for (const u of state.units) if (u.side === state.activeSide) u.ap = u.maxAp;
   return state;
@@ -476,4 +493,36 @@ export function throwGrenade(state: GameState, throwerId: string, center: Vec2):
   items.grenade = false; // витратник списується (по одній на місію, ADR-0058)
   state.log.push({ type: 'grenade', unitId: u.id, center: { ...center }, hits });
   return { damage, affected: affected.map((t) => t.id) };
+}
+
+// --- П15.2 (ADR-0075): евакуація з місії ---
+
+export interface EvacuateResult {
+  unit: Unit; // евакуйований солдат (той самий об'єкт — стан ростеру збережено)
+}
+
+// «Евакуація» (ADR-0075): активний солдат у клітинці зони висадки (evacZone),
+// 2 AP, будь-який момент ходу гравця. Успіх: солдат знімається з поля
+// (вилучається з units) і потрапляє у список evacuated стану бою; подія
+// evac_unit у лог (одна на солдата). Евакуйований поза боєм: не ціль ШІ,
+// пострілів, гранат, дозору й реакційного вогню — його немає в units;
+// сама дія — не рух, реакційного вогню не провокує (triggerOverwatch не викликається).
+// Відхилення (EARS 2): поза зоною висадки або <2 AP → throw з причиною.
+// Порядок перевірок фіксований (детермінізм, ADR-0003): бік → зона → AP.
+// RNG не витягається (ADR-0003/0075): geo.rng і бойовий потік не змінюються.
+export function evacuate(state: GameState, unitId: string): EvacuateResult {
+  const u = getUnit(state, unitId);
+  requireActive(state, u);
+  if (u.side !== 'player') throw new Error('Евакуюватись можуть лише оперативники гравця');
+  const zone = state.evacZone;
+  if (!zone?.some((c) => c.x === u.pos.x && c.y === u.pos.y)) {
+    throw new Error('Евакуація доступна лише з клітинки зони висадки');
+  }
+  if (u.ap < EVAC_AP_COST) throw new Error('Недостатньо очок дій для евакуації');
+  u.ap -= EVAC_AP_COST;
+  u.overwatch = false; // з поля знятий — дозор не актуальний
+  state.units = state.units.filter((x) => x.id !== unitId);
+  (state.evacuated ??= []).push(u);
+  state.log.push({ type: 'evac_unit', unitId: u.id });
+  return { unit: u };
 }

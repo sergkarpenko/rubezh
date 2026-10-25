@@ -3,7 +3,7 @@
 // Логіка всіх сценаріїв попередньо перевірена в пісочниці.
 
 import { describe, expect, it } from 'vitest';
-import { isBlocked, makeUnit } from './combat';
+import { isBlocked, evacuate, makeUnit } from './combat';
 import { advanceTime, createGeoGame, missionTargets, type GeoState, type Ufo } from './geo';
 import {
   ALIEN_SPAWN,
@@ -257,5 +257,76 @@ describe('mission: витратники загону (П11.4, ADR-0058)', () => 
     expect(withItems.state.items).toEqual({ s1: { medkit: true, grenade: true } });
     const bare = createMission(mkGeo('uI2'), 'uI2', { squad: [makeSoldier('s9', 'Тарас')] });
     expect(bare.state.items).toBeUndefined();
+  });
+});
+
+// --- П15.2 (ADR-0075): третій результат місії «евакуйовано» ---
+
+describe('mission: П15.2 — третій результат (ADR-0075)', () => {
+  function killSide(state: Mission['state'], side: 'player' | 'alien'): void {
+    for (const u of state.units.filter((x) => x.side === side)) {
+      u.alive = false;
+      u.hp = 0;
+    }
+  }
+
+  it('EARS 3: часткова евакуація + загін загинув → «евакуйовано», НЛО лишається', () => {
+    const g = mkGeo('uP1');
+    const m = createMission(g, 'uP1');
+    evacuate(m.state, 's1');
+    killSide(m.state, 'player');
+    expect(missionOutcome(m.state)).toBe('евакуйовано'); // не «поразка»: 1 евакуйований
+    completeMission(g, 'uP1', 'евакуйовано');
+    expect(g.log.filter((e) => e.type === 'mission_evacuated')).toEqual([{ type: 'mission_evacuated', ufoId: 'uP1', minute: g.minute }]);
+    expect(g.log.some((e) => e.type === 'mission_won' || e.type === 'mission_lost')).toBe(false); // без премій/поразки
+    expect(g.ufos.some((u) => u.id === 'uP1')).toBe(true); // НЛО лишається приземленим
+  });
+
+  it('EARS 3: повна евакуація → «евакуйовано» (порожнє поле ≠ поразка)', () => {
+    const g = mkGeo('uP2');
+    const m = createMission(g, 'uP2');
+    evacuate(m.state, 's1');
+    evacuate(m.state, 's2');
+    evacuate(m.state, 's3');
+    expect(missionOutcome(m.state)).toBe('евакуйовано');
+    completeMission(g, 'uP2', 'евакуйовано');
+    expect(g.log.filter((e) => e.type === 'mission_evacuated')).toHaveLength(1);
+  });
+
+  it('EARS 8: вікно посадки тікає чинною логікою; місію можна повторити новим загоном', () => {
+    const g = mkGeo('uP3');
+    const m = createMission(g, 'uP3');
+    evacuate(m.state, 's1');
+    killSide(m.state, 'player');
+    completeMission(g, 'uP3', 'евакуйовано');
+    expect(missionTargets(g).map((u) => u.id)).toEqual(['uP3']); // кандидат на повторну місію
+    const m2 = createMission(g, 'uP3'); // новий загін за замовчуванням
+    expect(m2.state.units.filter((u) => u.side === 'player')).toHaveLength(3);
+    expect(m2.state.evacuated).toEqual([]); // новий бій — без евакуйованих
+    advanceTime(g, 8); // вікно розвідника — 8 тіків; після евакуації тікає далі
+    expect(g.ufos.some((u) => u.id === 'uP3')).toBe(false);
+    expect(g.log.some((e) => e.type === 'ufo_left' && e.ufoId === 'uP3')).toBe(true);
+  });
+
+  it('кутовий випадок (рішення власника №5): часткова евакуація + зачистка прибульців → ПЕРЕМОГА з пріоритетом', () => {
+    const g = mkGeo('uP4');
+    const m = createMission(g, 'uP4');
+    evacuate(m.state, 's1');
+    killSide(m.state, 'alien'); // останній солдат на полі знищив усіх прибульців
+    expect(missionOutcome(m.state)).toBe('перемога'); // перемога має пріоритет над «евакуйовано»
+    completeMission(g, 'uP4', 'перемога');
+    expect(g.ufos.some((u) => u.id === 'uP4')).toBe(false); // зачищено
+    expect(g.log.some((e) => e.type === 'mission_won' && e.ufoId === 'uP4')).toBe(true);
+    expect(g.log.some((e) => e.type === 'mission_evacuated')).toBe(false);
+  });
+
+  it('часткова евакуація, бій триває → «триває»; EARS 4: без евакуйованих — чинна поразка', () => {
+    const m = createMission(mkGeo('uP5'), 'uP5');
+    evacuate(m.state, 's1');
+    expect(missionOutcome(m.state)).toBe('триває'); // 2 живих на полі
+    const m2 = createMission(mkGeo('uP6'), 'uP6');
+    killSide(m2.state, 'player');
+    expect(m2.state.evacuated?.length ?? 0).toBe(0);
+    expect(missionOutcome(m2.state)).toBe('поразка'); // 0 евакуйованих — поразка 5.0 без змін
   });
 });
