@@ -4,7 +4,7 @@
 
 import { describe, expect, it } from 'vitest';
 import type { Side } from './combat';
-import { evacuate } from './combat';
+import { evacuate, useMedkit } from './combat';
 import { advanceTime, createGeoGame, type GeoState } from './geo';
 import { completeMission, createMission, makeSoldier, missionOutcome, type Mission } from './mission';
 import {
@@ -20,6 +20,7 @@ import {
   type Roster,
 } from './squad';
 import { createEconomy, HIRE_PRICE, hirePrice, spend } from './economy';
+import { createWorkshop, deployConsumables, equipItem, settleConsumables } from './workshop';
 
 // Геопартія з вручну «посадженим» НЛО (спавн вимкнено) — для точкових сценаріїв.
 function mkGeo(ufoId: string): GeoState {
@@ -447,5 +448,38 @@ describe('squad: П15.2 — евакуйовані проходять конту
     evacuate(m.state, squad[0].id);
     m.state.evacuated!.push(makeSoldier('spy', 'Чужак')); // підроблений «евакуйований»
     expect(() => applyMissionResult(roster, m.state)).toThrow('Оперативник не з цього ростеру: spy');
+  });
+});
+
+// --- П15.3 (ADR-0075): витратники евакуйованого у контурі уцілілих (EARS 6) ---
+// Прогалина П15.2: тести закривали лікарню/kills/предмети ростеру, але не
+// витратники уцілілих (settleConsumables, дзеркало partyBotMissionStep) —
+// евакуйований у списку survivors, його запис items у стані бою живий.
+
+describe('squad: П15.3 — витратники евакуйованого у контурі уцілілих (ADR-0075, EARS 6)', () => {
+  it('евакуйований уцілілий: використана аптечка списана, невикористана граната лишається', () => {
+    const workshop = createWorkshop();
+    workshop.store['medkit'] = 1;
+    workshop.store['grenade'] = 1;
+    const roster = createRoster(6);
+    equipItem(workshop, roster.soldiers[0], 'medkit');
+    equipItem(workshop, roster.soldiers[0], 'grenade');
+    const squad = roster.soldiers.slice(0, 2);
+    const items = deployConsumables(workshop, squad);
+    const m = createMission(mkGeo('uV4'), 'uV4', { squad, items });
+    const s0 = m.state.units.find((u) => u.id === squad[0].id)!;
+    s0.hp = 4; // поранення до евакуації
+    useMedkit(m.state, s0.id, s0.id); // аптечка витрачена в бою
+    expect(m.state.items![s0.id].medkit).toBe(false);
+    evacuate(m.state, s0.id);
+    for (const u of m.state.units.filter((x) => x.side === 'player')) {
+      u.alive = false;
+      u.hp = 0;
+    }
+    expect(missionOutcome(m.state)).toBe('евакуйовано');
+    const after = applyMissionResult(roster, m.state);
+    expect(after.survivors.map((s) => s.id)).toEqual([squad[0].id]); // евакуйований — уцілілий
+    settleConsumables(workshop, after.survivors, m.state.items); // дзеркало partyBotMissionStep (П11.4)
+    expect(workshop.equipped[squad[0].id]).toEqual({ armor: false, optics: false, medkit: false, grenade: true });
   });
 });

@@ -3,9 +3,21 @@
 // Логіка всіх сценаріїв попередньо перевірена в пісочниці.
 
 import { describe, expect, it } from 'vitest';
-import { createGame, endTurn, makeUnit, mulberry32, setOverwatch, type GameMap, type GameState, type RNG, type Vec2 } from './combat';
-import { makeTestMap } from './map';
+import {
+  createGame,
+  endTurn,
+  evacuate,
+  makeUnit,
+  mulberry32,
+  setOverwatch,
+  type GameMap,
+  type GameState,
+  type RNG,
+  type Vec2,
+} from './combat';
+import { makeTestMap, visibleEnemies } from './map';
 import { aiStep } from './ai';
+import { SQUAD_SPAWN } from './mission';
 
 const alwaysHit: RNG = () => 0;
 
@@ -206,5 +218,54 @@ describe('ШІ прибульців (жадібний)', () => {
     expect(steps).toBe(1);
     expect(g.log.filter((e) => e.type === 'move')).toHaveLength(0);
     expect(g.units[1].overwatch).toBe(true);
+  });
+});
+
+// --- П15.3 (ADR-0075): евакуйований — не ціль ШІ (EARS 5) ---
+// Евакуйований вилучається з units (combat.ts evacuate) — усі шляхи ШІ
+// (visibleEnemies/aiStep) фільтрують лише по state.units, тож він
+// природно невидимий; 0 видимих неевакуйованих → patrol (ADR-0022).
+
+describe('П15.3: ШІ і евакуйовані (ADR-0075, EARS 5)', () => {
+  it('евакуйований не у visibleEnemies і не ціль пострілів: 0 видимих → patrol до зони висадки', () => {
+    const g = createGame({
+      map: map(),
+      rng: alwaysHit,
+      startingSide: 'player',
+      units: [
+        makeUnit({ id: 's1', side: 'player', pos: { x: 2, y: 2 } }), // у зоні висадки
+        makeUnit({ id: 'a1', side: 'alien', pos: { x: 8, y: 2 } }), // бачив би s1 (дистанція 6)
+      ],
+      evacZone: [{ x: 2, y: 2 }],
+    });
+    expect(visibleEnemies(g, 'alien').map((u) => u.id)).toEqual(['s1']); // до евакуації — видима ціль
+    evacuate(g, 's1');
+    expect(visibleEnemies(g, 'alien')).toEqual([]); // EARS 5: евакуйований невидимий для ШІ
+    endTurn(g); // хід прибульців
+    const steps = playAlienTurn(g, 100, [{ x: 2, y: 2 }]);
+    expect(steps).toBeGreaterThan(0);
+    expect(g.log.filter((e) => e.type === 'shot')).toHaveLength(0); // жодного пострілу по евакуйованому
+    expect(g.log.filter((e) => e.type === 'move').length).toBeGreaterThan(0); // patrol: рух до зони висадки
+  });
+
+  it('повністю евакуйований загін (0 солдатів у units): patrol працює, не падає (ADR-0022)', () => {
+    const g = createGame({
+      map: map(),
+      rng: alwaysHit,
+      startingSide: 'player',
+      units: [
+        makeUnit({ id: 's1', side: 'player', pos: { x: 2, y: 2 } }),
+        makeUnit({ id: 's2', side: 'player', pos: { x: 3, y: 2 } }),
+        makeUnit({ id: 'a1', side: 'alien', pos: { x: 8, y: 2 } }),
+      ],
+      evacZone: SQUAD_SPAWN.map((c) => ({ ...c })),
+    });
+    evacuate(g, 's1');
+    evacuate(g, 's2');
+    expect(g.units.filter((u) => u.side === 'player')).toHaveLength(0); // загін повністю евакуйований
+    endTurn(g); // хід прибульців
+    expect(() => playAlienTurn(g, 100, SQUAD_SPAWN)).not.toThrow(); // patrol при 0 солдатів не падає
+    expect(g.log.filter((e) => e.type === 'shot')).toHaveLength(0); // цілей немає — пострілів немає
+    expect(g.log.filter((e) => e.type === 'move').length).toBeGreaterThan(0); // patrol до зони висадки
   });
 });

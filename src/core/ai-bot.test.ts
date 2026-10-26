@@ -4,7 +4,7 @@
 // Покроковий драйвер: лог DemoSteps байт-у-байт ідентичний миттєвому autoBattle.
 
 import { describe, expect, it } from 'vitest';
-import { createGame, makeUnit, mulberry32, type GameState, type UnitItems } from './combat';
+import { createGame, evacuate, makeUnit, mulberry32, type GameEvent, type GameState, type UnitItems } from './combat';
 import { advanceTime, createGeoGame, type GeoState } from './geo';
 import { aliensTurn, autoBattle, botTurn, DemoSteps } from './ai-bot';
 import { createMission, missionOutcome, type Mission } from './mission';
@@ -237,5 +237,48 @@ describe('bot: ізоляція без предметів (критерій 1 П
     };
     // аптечка у здорового і граната без скупчення — жодна не спрацює
     expect(play()).toBe(play({ s1: { medkit: true, grenade: true }, s2: { medkit: true, grenade: false } }));
+  });
+});
+
+// --- П15.3 (ADR-0075): бот і евакуйований (EARS 5) ---
+// Евакуйований поза units: бот діє лише по state.units (botTurn/soldierStep),
+// граната уражає лише юнітів у units (throwGrenade) — евакуйований
+// не лікується, не витрачає витратники і не уражений вибухом.
+
+describe('П15.3: бот не діє щодо евакуйованого (ADR-0075, EARS 5)', () => {
+  it('евакуйований не лікується і не витрачає витратники — жодної дії бота щодо нього', () => {
+    const m = mkMission('uV1');
+    const u = m.state.units.find((x) => x.side === 'player')!;
+    u.hp = 4; // поранений до евакуації
+    m.state.items = { [u.id]: { medkit: true, grenade: true } };
+    evacuate(m.state, u.id); // знімається з поля у списку evacuated
+    botTurn(m.state);
+    // жодна подія ходу бота не стосується евакуйованого (окрім його evac_unit)
+    const touching = m.state.log.filter((e) => JSON.stringify(e).includes(u.id));
+    expect(touching.map((e) => e.type)).toEqual(['evac_unit']);
+    expect(m.state.items![u.id]).toEqual({ medkit: true, grenade: true }); // витратники не списані
+  });
+
+  it('евакуйований у клітинці зони вибуху гранати бота — не уражений, вибух лише по ворогах', () => {
+    const g = createGame({
+      map: { width: 20, height: 20, blocked: new Set() },
+      rng: mulberry32(7),
+      startingSide: 'player',
+      units: [
+        makeUnit({ id: 's1', side: 'player', pos: { x: 4, y: 4 } }), // кидач з гранатою
+        makeUnit({ id: 's2', side: 'player', pos: { x: 5, y: 4 } }), // майбутній евакуйований — у хресті вибуху
+        makeUnit({ id: 'a1', side: 'alien', pos: { x: 6, y: 4 }, hp: 100, maxHp: 100 }),
+        makeUnit({ id: 'a2', side: 'alien', pos: { x: 6, y: 5 }, hp: 100, maxHp: 100 }),
+      ],
+      items: { s1: { medkit: false, grenade: true } },
+      evacZone: [{ x: 5, y: 4 }],
+    });
+    evacuate(g, 's2'); // його колишня клітинка залишиться у зоні вибуху — він поза полем
+    botTurn(g);
+    const grenade = g.log.find((e) => e.type === 'grenade') as Extract<GameEvent, { type: 'grenade' }>;
+    expect(grenade).toBeDefined(); // кидок по скупченню ворогів відбувся
+    expect(grenade.hits.map((h) => h.unitId).sort()).toEqual(['a1', 'a2']); // уражені лише вороги
+    expect(g.evacuated![0].hp).toBe(10); // EARS 5: евакуйований у зоні вибуху не уражений
+    expect(g.evacuated![0].alive).toBe(true);
   });
 });

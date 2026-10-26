@@ -598,3 +598,50 @@ describe('П15.2: евакуація (ADR-0075)', () => {
     expect(play()).toBe(play());
   });
 });
+
+// --- П15.3 (ADR-0075): евакуйований не ціль дозору і реакційного вогню (EARS 5) ---
+// Евакуйований поза units: triggerOverwatch спрацьовує лише по рухомому
+// (moveUnit), а evacuate реакційного вогню не провокує — евакуйований
+// не може бути ні рухомим, ні ціллю пострілу.
+
+describe('П15.3: дозор/реакційний вогонь і евакуйований (ADR-0075, EARS 5)', () => {
+  it('евакуація не провокує реакційний вогонь; дозор лишається озброєним', () => {
+    const g = createGame({
+      map: map(),
+      rng: alwaysMiss,
+      startingSide: 'player',
+      units: [
+        makeUnit({ id: 's1', side: 'player', pos: { x: 2, y: 2 } }), // у зоні висадки, в зоні вогню дозору
+        makeUnit({ id: 'a1', side: 'alien', pos: { x: 5, y: 2 } }), // дистанція 3 ≤ 12, LOS чистий
+      ],
+      evacZone: [{ x: 2, y: 2 }],
+    });
+    g.units[1].overwatch = true; // прибульець у дозорі
+    evacuate(g, 's1');
+    expect(g.log.filter((e) => e.type === 'shot')).toHaveLength(0); // жодного реакційного пострілу
+    expect(g.units.find((u) => u.id === 'a1')!.overwatch).toBe(true); // дозор не розряджено
+  });
+
+  it('реакційний вогонь після евакуації — лише по рухомому; евакуйований не уражений', () => {
+    const g = createGame({
+      map: map(),
+      rng: alwaysMiss,
+      startingSide: 'player',
+      units: [
+        makeUnit({ id: 's1', side: 'player', pos: { x: 2, y: 2 }, hp: 4 }), // поранений, евакуйований
+        makeUnit({ id: 's2', side: 'player', pos: { x: 3, y: 4 } }), // рухомий
+        makeUnit({ id: 'a1', side: 'alien', pos: { x: 5, y: 2 } }),
+      ],
+      evacZone: [{ x: 2, y: 2 }],
+    });
+    g.units[2].overwatch = true; // прибульець у дозорі
+    evacuate(g, 's1');
+    moveUnit(g, 's2', [{ x: 4, y: 4 }]); // рух у зоні вогню дозору
+    const shots = g.log.filter((e) => e.type === 'shot');
+    expect(shots).toHaveLength(1); // один реакційний постріл
+    expect(shots[0].targetId).toBe('s2'); // ціль — лише рухомий
+    expect(g.evacuated![0].hp).toBe(4); // EARS 5: евакуйований не уражений
+    expect(g.evacuated![0].alive).toBe(true);
+    expect(g.units.find((u) => u.id === 'a1')!.overwatch).toBe(false); // дозор розряджено по рухомому
+  });
+});
