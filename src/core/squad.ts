@@ -147,8 +147,12 @@ export function isBankrupt(econ: EconomyState, roster: Roster, preset: Difficult
 // Загиблий вилучається з ростеру назавжди; уцілілий НЕ лікується миттєво
 // (ADR-0021): hp < maxHp → «поранений» у лікарню на (maxHp − hp) × HEAL_TICKS_PER_HP
 // тиків; дозор скидається; kills зберігаються — стаж ветерана.
+// П15.2 (ADR-0075): евакуйований — уцілілий через чинний контур (вилучений
+// з поля бою → у списку evacuated стану бою, EARS 6: лікарня при пораненні,
+// предмети/kills збережені, перма-смерть не зачіпається); порядок — спершу
+// юніти на полі, потім евакуйовані (детермінізм, ADR-0003).
 export function applyMissionResult(roster: Roster, state: GameState): MissionAftermath {
-  const deployed = state.units.filter((u) => u.side === 'player');
+  const deployed = [...state.units.filter((u) => u.side === 'player'), ...(state.evacuated ?? [])];
   if (deployed.length === 0) throw new Error('У стані місії немає оперативників гравця');
   const lost: Unit[] = [];
   const survivors: Unit[] = [];

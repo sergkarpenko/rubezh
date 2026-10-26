@@ -20,7 +20,9 @@
 // - Розвідник → 2 прибульці, збирач → 3 (баланс підбере ітерація 6).
 // - Перемога = усі прибульці мертві → НЛО зникає з геосцени («зачищено»).
 // - Поразка = увесь загін мертвий → НЛО лишається до кінця вікна; загін
-//   втрачено (перма-смерть). Евакуація/відступ — не в MVP.
+//   втрачено (перма-смерть). П15.2 (ADR-0075): третій результат «евакуйовано» —
+//   живих на полі немає й ≥1 евакуйований: НЛО лишається (як при поразці),
+//   премія не нараховується, врятовані — уцілілі (контур applyMissionResult).
 // - Загін передається ззовні; персистентний ростер між місіями — модуль
 //   squad.ts (ітерація 5.2, ADR 0008). За замовчуванням — 3 нових солдати
 //   (для точкових тестів без ростеру).
@@ -166,30 +168,40 @@ export function createMission(geo: GeoState, ufoId: string, opts: CreateMissionO
     );
   }
 
-  const state = createGame({ map, units: [...squad, ...aliens], rng, items: opts.items });
+  const state = createGame({ map, units: [...squad, ...aliens], rng, items: opts.items, evacZone: SQUAD_SPAWN });
   return { briefing: { ufoId: ufo.id, kind: ufo.kind, aliens: n, minute: geo.minute }, state };
 }
 
-export type MissionOutcome = 'триває' | 'перемога' | 'поразка';
+export type MissionOutcome = 'триває' | 'перемога' | 'поразка' | 'евакуйовано';
 
-// Стан місії за бойовим станом: перемога перевіряється першою
-// (останній постріл прибульця не буває «одночасним» із останнім пострілом солдата).
+// Стан місії за бойовим станом. Порядок перевірок фіксований (детермінізм):
+// 1) перемога першою (рішення власника №5, П15.1: часткова евакуація +
+//    останній солдат знищує всіх прибульців → ПЕРЕМОГА; евакуйовані — уцілілі);
+// 2) живих на полі немає → розрізняємо за списком evacuated (евакуйований
+//    вилучений з units, тож «порожнє» поле — ще не поразка): ≥1 евакуйований
+//    = «евакуйовано», інакше — чинна «поразка» 5.0 без змін (EARS 3/4).
 export function missionOutcome(state: GameState): MissionOutcome {
   const aliveAliens = state.units.filter((u) => u.side === 'alien' && u.alive).length;
   if (aliveAliens === 0) return 'перемога';
   const aliveSquad = state.units.filter((u) => u.side === 'player' && u.alive).length;
-  if (aliveSquad === 0) return 'поразка';
+  if (aliveSquad === 0) return (state.evacuated?.length ?? 0) > 0 ? 'евакуйовано' : 'поразка';
   return 'триває';
 }
 
 // Застосувати завершену місію до геосцени (викликати один раз після бою).
 // Перемога: НЛО зникає (зачищено). Поразка: НЛО лишається, вікно триває.
-export function completeMission(geo: GeoState, ufoId: string, outcome: 'перемога' | 'поразка'): void {
+// П15.2 (ADR-0075) «евакуйовано»: НЛО лишається приземленим (вікно посадки
+// тікає чинною логікою geo.ts), премія не нараховується (creditMissionBonus
+// не викликається), місію можна повторити новим загоном (missionTargets
+// без змін); подія mission_evacuated у журнал партії.
+export function completeMission(geo: GeoState, ufoId: string, outcome: 'перемога' | 'поразка' | 'евакуйовано'): void {
   const ufo = geo.ufos.find((u) => u.id === ufoId);
   if (!ufo) throw new Error('Невідомий зонд Розриву: ' + ufoId);
   if (outcome === 'перемога') {
     geo.ufos = geo.ufos.filter((u) => u.id !== ufoId);
     geo.log.push({ type: 'mission_won', ufoId, minute: geo.minute });
+  } else if (outcome === 'евакуйовано') {
+    geo.log.push({ type: 'mission_evacuated', ufoId, minute: geo.minute });
   } else {
     geo.log.push({ type: 'mission_lost', ufoId, minute: geo.minute });
   }

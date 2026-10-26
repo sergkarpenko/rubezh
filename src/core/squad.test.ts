@@ -4,6 +4,7 @@
 
 import { describe, expect, it } from 'vitest';
 import type { Side } from './combat';
+import { evacuate } from './combat';
 import { advanceTime, createGeoGame, type GeoState } from './geo';
 import { completeMission, createMission, makeSoldier, missionOutcome, type Mission } from './mission';
 import {
@@ -397,5 +398,54 @@ describe('squad: банкрутство (П4.4, ADR-0021)', () => {
     expect(isBankrupt(econ, r, 'легкий')).toBe(true); // 90 < 120
     expect(isBankrupt(econ, r, 'норма')).toBe(true); // 90 < 100
     expect(isBankrupt(econ, r, 'складний')).toBe(false); // 90 ≥ 90 — найм доступний
+  });
+});
+
+// --- П15.2 (ADR-0075): евакуйовані в applyMissionResult (EARS 6) ---
+
+describe('squad: П15.2 — евакуйовані проходять контур уцілілих (ADR-0075)', () => {
+  it('поранений евакуйований → лікарня за чинним контуром; kills збережені; загиблі — перма-смерть', () => {
+    const roster = createRoster(6);
+    const squad = roster.soldiers.slice(0, 3);
+    const g = mkGeo('uV1');
+    const m = createMission(g, 'uV1', { squad });
+    squad[0].hp = 4; // поранення до евакуації
+    squad[0].kills = 2; // стаж ветерана
+    evacuate(m.state, squad[0].id);
+    for (const u of m.state.units.filter((x) => x.side === 'player')) {
+      u.alive = false;
+      u.hp = 0;
+    }
+    expect(missionOutcome(m.state)).toBe('евакуйовано');
+    const after = applyMissionResult(roster, m.state);
+    expect(after.survivors.map((s) => s.id)).toEqual([squad[0].id]); // евакуйований — уцілілий
+    expect(after.wounded.map((s) => s.id)).toEqual([squad[0].id]);
+    expect(roster.hospital[squad[0].id]).toBe((10 - 4) * HEAL_TICKS_PER_HP); // лікарня ADR-0021
+    expect(roster.soldiers.find((s) => s.id === squad[0].id)?.kills).toBe(2); // kills збережені
+    expect(after.lost.map((s) => s.id)).toEqual([squad[1].id, squad[2].id]);
+    expect(roster.soldiers.length).toBe(4); // перма-смерть загиблих: 6 − 2
+  });
+
+  it('повна евакуація: на полі 0 оперативників — розрахунок без помилки, усі уцілілі', () => {
+    const roster = createRoster(6);
+    const squad = roster.soldiers.slice(0, 3);
+    const g = mkGeo('uV2');
+    const m = createMission(g, 'uV2', { squad });
+    for (const s of squad) evacuate(m.state, s.id);
+    expect(missionOutcome(m.state)).toBe('евакуйовано');
+    const after = applyMissionResult(roster, m.state);
+    expect(after.survivors.map((s) => s.id)).toEqual(squad.map((s) => s.id));
+    expect(after.lost).toHaveLength(0);
+    expect(after.wounded).toHaveLength(0);
+  });
+
+  it('чужий id у евакуйованих → помилка, як і для юнітів на полі', () => {
+    const roster = createRoster(6);
+    const squad = roster.soldiers.slice(0, 3);
+    const g = mkGeo('uV3');
+    const m = createMission(g, 'uV3', { squad });
+    evacuate(m.state, squad[0].id);
+    m.state.evacuated!.push(makeSoldier('spy', 'Чужак')); // підроблений «евакуйований»
+    expect(() => applyMissionResult(roster, m.state)).toThrow('Оперативник не з цього ростеру: spy');
   });
 });

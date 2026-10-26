@@ -66,6 +66,9 @@ export type GeoEvent =
   // Ітерація 5.0 (записує модуль mission.ts):
   | { type: 'mission_won'; ufoId: string; minute: number }
   | { type: 'mission_lost'; ufoId: string; minute: number }
+  // П15.2 (ADR-0075): третій результат місії — загін евакуйований
+  // (НЛО лишається приземленим, премії немає); записує mission.ts.
+  | { type: 'mission_evacuated'; ufoId: string; minute: number }
   // П7.3 (ADR-0032): події перехоплення — в журналі геосцени (туман: події лише
   // про виявлені НЛО, бо запуск перехоплення можливий лише на виявлений).
   // Записує модуль intercept.ts; geoTick про винищувача не знає (ADR-0002/0032).

@@ -249,6 +249,19 @@ describe('battle: флоу місії (запуск/закриття/завер�
     expect(document.getElementById('bresult')!.innerHTML).toContain('ЗАГІН ВТРАЧЕНО');
   });
 
+  it('П15.2 (ADR-0075): «евакуйовано» — банер, без премії, НЛО лишається активним', () => {
+    const f = makeFixture();
+    const ufoId = firstTarget(f);
+    f.battle.launch(ufoId);
+    const moneyBefore = f.party.econ.money;
+    f.battle.finish('евакуйовано');
+    expect(f.ui.battleResult).toBe('евакуйовано');
+    expect(document.getElementById('bresult')!.innerHTML).toContain('ЕВАКУЙОВАНО');
+    expect(f.party.econ.money).toBe(moneyBefore); // премія не нараховується (creditMissionBonus не викликається)
+    expect(f.party.geo.ufos.some((u) => u.id === ufoId)).toBe(true); // НЛО лишається приземленим
+    expect(f.party.geo.log.some((e) => e.type === 'mission_evacuated' && e.ufoId === ufoId)).toBe(true);
+  });
+
   it('checkOutcome: усі прибульці мертві → перемога і фініш (одним викликом)', () => {
     const f = makeFixture();
     f.battle.launch(firstTarget(f));

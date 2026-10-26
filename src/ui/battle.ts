@@ -45,7 +45,9 @@ import { BCELL } from './grid';
 import { type LogCat } from './journal';
 import type { AmbientBattleScene, AmbientUnitView } from './ambient';
 
-export type BattleOutcome = 'перемога' | 'поразка';
+// П15.2 (ADR-0075): третій результат бою «евакуйовано» — той самий виклик
+// finish; повний UI евакуації (тулбар/клавіша V/підсвітка/звук) — П15.4.
+export type BattleOutcome = 'перемога' | 'поразка' | 'евакуйовано';
 
 // Стан бою UI — єдиний об'єкт замість модульних let у main.ts; його ж
 // використовують обробники вводу (тап-тап, зведений режим, прев'ю шляху).
@@ -553,6 +555,11 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
         ' уцілілих' +
         woundedNote +
         ')</div>' +
+        '<button id="btn-close">← Повернутись на геосцену</button>';
+    } else if (outcome === 'евакуйовано') {
+      // П15.2 (ADR-0075): без премії (гілка перемоги вище), НЛО лишається активним
+      el('bresult').innerHTML =
+        '<div class="banner lose">ЗАГІН ЕВАКУЙОВАНО — врятовані на базі, зонд Розриву лишається активним</div>' +
         '<button id="btn-close">← Повернутись на геосцену</button>';
     } else {
       el('bresult').innerHTML =

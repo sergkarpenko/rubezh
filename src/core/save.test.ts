@@ -8,7 +8,8 @@ import { describe, expect, it } from 'vitest';
 import { advanceTime } from './geo';
 import { economyTick } from './economy';
 import { hireSoldier, hospitalTick } from './squad';
-import { mulberry32, type StatefulRng } from './combat';
+import { evacuate, mulberry32, type StatefulRng } from './combat';
+import { completeMission, createMission } from './mission';
 import { createResearch, hireScientist, researchTick, startProject } from './research';
 import { createWorkshop, equipItem, installGunModule, orderItem, removeGunModule, workshopTick, WORKSHOP_CATALOG } from './workshop';
 import {
@@ -510,5 +511,37 @@ describe('save: цех (П11.3, ADR-0026)', () => {
     removeGunModule(restored.workshop, restored.intercept);
     expect(restored.workshop.store['gun-module']).toBe(1);
     expect(restored.intercept.fighter.gunModule).toBe(false);
+  });
+});
+
+// --- П15.2 (ADR-0075/0026): сейв-контракт третього результату місії ---
+
+describe('save: П15.2 — «евакуйовано» (EARS 7)', () => {
+  it('mission_evacuated у журналі партії переживає round-trip; SAVE_VERSION не зріс', () => {
+    const p = createParty(42);
+    p.geo.ufos.push({
+      id: 'uV1',
+      kind: 'розвідник',
+      pos: { ...p.geo.base },
+      target: { ...p.geo.base },
+      detected: true,
+      status: 'приземлився',
+      landedTicksLeft: 8,
+    });
+    const squad = p.roster.soldiers.slice(0, 3);
+    const m = createMission(p.geo, 'uV1', { squad });
+    evacuate(m.state, squad[0].id);
+    for (const u of m.state.units.filter((x) => x.side === 'player')) {
+      u.alive = false;
+      u.hp = 0;
+    }
+    completeMission(p.geo, 'uV1', 'евакуйовано');
+    const json = serializeParty(p, 'T');
+    expect(SAVE_VERSION).toBe(1); // формат сейву не зростає (ADR-0026)
+    expect(json.includes('mission_evacuated')).toBe(true);
+    expect(json.includes('evacuated') === json.includes('mission_evacuated')).toBe(true); // стан бою поза сейвом
+    const restored = deserializeParty(json);
+    expect(restored.geo.log.some((e) => e.type === 'mission_evacuated' && e.ufoId === 'uV1')).toBe(true);
+    expect(restored.geo.ufos.some((u) => u.id === 'uV1')).toBe(true); // НЛО лишається після евакуації
   });
 });
