@@ -8,6 +8,7 @@
     "test": "vitest run",
     "test:coverage": "vitest run --coverage --coverage.include='src/core/**' --coverage.thresholds.80 --coverage.reporter=json --coverage.reporter=text --coverage.reportsDirectory=dist/coverage",
     "test:smoke": "playwright test",
+    "test:e2e": "playwright test -c playwright.e2e.config.ts",
     "build": "vite build",
     "prepare": "husky",
     "lint": "eslint src",

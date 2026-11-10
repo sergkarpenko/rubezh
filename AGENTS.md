@@ -191,6 +191,10 @@ npx tsc --noEmit -p tsconfig.core.json
 npm run lint
 # typedoc = генерація довідки API (ADR-0016/0019)
 npm run docs
+# Сценарій приймання в браузері (ADR-0080): smoke-сценарій ADR-0030 проти збірки
+# цього коміту, звірка сторінки з дзеркалом ядра; зміни UI і вводу — обов'язково.
+# Без браузера Playwright: E2E_CHROME=/шлях/до/chrome npm run test:e2e
+npm run test:e2e
 
 # Крок 5: Перевірка exact-байтів (якість коду)
 # - Для зміни файлів
@@ -350,6 +354,7 @@ git pull origin main
 | ADR-0077 | Автоматична перевірка розміру PR — `scripts/pr-size.sh` + workflow `pr-size`; docs/ассети/lockfile поза підрахунком, плановане відхилення — мітка `size-deviation` (частково Supersedes: ADR-0040; доповнює ADR-0036/0061/0069; Т.5c) | accepted | 2026-11-10 |
 | ADR-0078 | Мажорні версії TypeScript — поза Dependabot, лише вручну з ADR: TypeScript 7 не підтримують typedoc 0.28 і typescript-eslint 8 (доповнює ADR-0012/0020) | accepted | 2026-11-10 |
 | ADR-0079 | Правила ядра з AGENTS.md — як гейти: ESLint-правила для `src/core` (Math.random, годинник, імпорти поза ядром) і компіляція ядра без lib.dom (`tsconfig.core.json`) у CI (доповнює ADR-0002/0003/0038/0076; Т.6a) | accepted | 2026-11-10 |
+| ADR-0080 | Сценарій приймання в браузері — smoke ADR-0030 у Playwright (`e2e/acceptance.scenario.ts`), звірка сторінки з дзеркалом ядра (`e2e/mirror.ts`); `npm run test:e2e`, джоба `e2e` у CI проти збірки того ж коміту (доповнює ADR-0030/0063/0003/0076; Т.8) | accepted | 2026-11-10 |
 
 **Нове рішення?** Створювати новий ADR з полем Supersedes.
 
