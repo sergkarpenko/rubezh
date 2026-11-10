@@ -166,6 +166,29 @@ describe('рух', () => {
   });
 });
 
+describe('рух у туман (ADR-0081)', () => {
+  // s1 стоїть у (2,2), a1 — у (8,2): прямий шлях упирається в демона
+  const intoAlien = [3, 4, 5, 6, 7, 8].map((x) => ({ x, y: 2 }));
+
+  it('stopAtUnit: зайнята клітинка на шляху — рух закінчується перед нею, AP за пройдене', () => {
+    const g = setupGame();
+    const apBefore = g.units[0].ap;
+    const blocker = moveUnit(g, 's1', intoAlien, true);
+    expect(blocker?.id).toBe('a1');
+    expect(g.units[0].pos).toEqual({ x: 7, y: 2 });
+    expect(g.units[0].ap).toBe(apBefore - 5);
+    expect(g.log.filter((e) => e.type === 'move')).toHaveLength(5);
+  });
+
+  it('stopAtUnit: вільний шлях — як звичайний рух, повертає undefined; інші заборони лишаються помилками', () => {
+    const g = setupGame();
+    expect(moveUnit(g, 's1', intoAlien.slice(0, 2), true)).toBeUndefined();
+    expect(g.units[0].pos).toEqual({ x: 4, y: 2 });
+    const walled = setupGame(alwaysHit, ['3,2']);
+    expect(() => moveUnit(walled, 's1', [{ x: 3, y: 2 }], true)).toThrow(); // перешкода
+  });
+});
+
 describe('ходи', () => {
   it('передача ходу відновлює AP сторони; turn рахує кола гравця', () => {
     const g = setupGame();

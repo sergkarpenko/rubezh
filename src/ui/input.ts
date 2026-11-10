@@ -238,12 +238,9 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
       return;
     }
 
-    if (u && u.side === 'alien') {
-      const vis = battle.visibleCells();
-      if (!vis.has(cell.x + ',' + cell.y)) {
-        battle.binfo('Там нікого не видно (туман війни).');
-        return;
-      }
+    // ADR-0081: демон у тумані для вводу не існує — невидима клітинка поводиться
+    // як порожня (гілка руху нижче), інакше підказка видає його позицію.
+    if (u && u.side === 'alien' && battle.visibleCells().has(cell.x + ',' + cell.y)) {
       if (!ui.fireMode) {
         battle.binfo('Виберіть режим пострілу на тулбарі, потім клікніть видимого демона Розриву.');
         return;
@@ -309,7 +306,8 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
     ui.fireMode = null;
     ui.aimCell = null; // П6.14: зведений режим знято — підказки прицілювання теж
     try {
-      const path = findPath(st, sel.pos, cell);
+      // ADR-0081: шлях планується за видимим — юніт у тумані його не перекриває
+      const path = findPath(st, sel.pos, cell, undefined, battle.visibleCells());
       if (path === null) {
         ui.tapCell = null;
         battle.binfo('Туди не дістатись.');
@@ -339,11 +337,12 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
         return;
       }
       const prevLen = st.log.length;
-      moveUnit(st, sel.id, path);
+      // ADR-0081: на шляху виявився юніт із туману — рух закінчується перед ним
+      const blocker = moveUnit(st, sel.id, path, true);
       battle.enqueueAnims(prevLen); // П6.8: хід по шляху (кроки логу об'єднуються)
       ui.hoverPath = null;
       if (!battle.checkOutcome()) {
-        battle.binfo(sel.name + ': рух. AP ' + sel.ap + '/' + sel.maxAp + '.');
+        battle.binfo(sel.name + (blocker ? ': шлях перекрито — ' + blocker.name + '. AP ' : ': рух. AP ') + sel.ap + '/' + sel.maxAp + '.');
         deps.renderAll();
       }
     } catch (e) {
@@ -381,7 +380,7 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
       }
       return;
     }
-    const path = findPath(ui.mission.state, sel.pos, cell);
+    const path = findPath(ui.mission.state, sel.pos, cell, undefined, battle.visibleCells()); // ADR-0081
     if (samePath(path, ui.hoverPath)) return; // без перемальовки на кожен піксель
     ui.hoverPath = path;
     ui.hoverAp = path ? pathApCost(path) : 0;

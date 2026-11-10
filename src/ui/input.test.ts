@@ -6,7 +6,7 @@
 // DOM-флоу застосунку — у main.ui.test.ts.
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { advanceTime, missionTargets } from '../core/geo';
-import { distance, hasLineOfSight } from '../core/combat';
+import { distance, hasLineOfSight, type Unit } from '../core/combat';
 import { makeMoveAnim, type Anim } from '../core/render-core';
 import { createParty, type Party } from '../core/save';
 import { initPixelSprites } from '../render';
@@ -477,5 +477,56 @@ describe('П14.4: характеристики демона Розриву по 
     expect(f.binfo()).toContain('зброя «' + alien.weapon.name + '»'); // клік знаходить відображуваного демона
     // бойові гілки незмінні: фактична позиція демона — у тумані, постріл у
     // відображувану клітинку з недієвою зброєю не приводить до дії
+  });
+});
+
+describe('ADR-0081: демон у тумані для вводу не існує', () => {
+  // Сід 42, початок першої місії: демони стоять у своїй зоні, поза оглядом загону.
+  function fogFixture(): { f: Fixture; soldier: Unit; alien: Unit } {
+    const f = makeFixture();
+    launchMission(f);
+    const st = f.ui.mission!.state;
+    const soldier = st.units.find((u) => u.side === 'player' && u.alive)!;
+    const alien = st.units.find((u) => u.side === 'alien' && u.alive)!;
+    expect(f.battle.visibleCells().has(alien.pos.x + ',' + alien.pos.y)).toBe(false);
+    f.ui.selectedId = soldier.id;
+    return { f, soldier, alien };
+  }
+  const PREVIEW = /^(Шлях: \d+ AP|Не вистачає AP: шлях \d+)/; // підказка порожньої клітинки
+
+  it('клік по невидимій клітинці з демоном — прев’ю шляху, як по порожній (і у зведеному режимі)', () => {
+    const { f, alien } = fogFixture();
+    clickAt(f, alien.pos.x, alien.pos.y);
+    expect(f.binfo()).toMatch(PREVIEW);
+    expect(f.binfo()).not.toContain('туман');
+    expect(f.ui.hoverPath!.at(-1)).toEqual(alien.pos); // шлях веде у саму клітинку
+    f.ui.tapCell = null;
+    f.input.armFire('snap');
+    clickAt(f, alien.pos.x, alien.pos.y);
+    expect(f.binfo()).toMatch(PREVIEW);
+    expect(f.ui.fireMode).toBeNull(); // як клік по порожній клітинці: режим знято
+  });
+
+  it('наведення на невидиму клітинку з демоном малює шлях', () => {
+    const { f, alien } = fogFixture();
+    f.input.battleCanvasHover({ clientX: alien.pos.x * 48 + 24, clientY: alien.pos.y * 48 + 24 } as MouseEvent);
+    expect(f.ui.hoverPath!.at(-1)).toEqual(alien.pos);
+  });
+
+  it('хід у клітинку демона: рух закінчується перед юнітом із туману, AP — за пройдене', () => {
+    const { f, soldier, alien } = fogFixture();
+    soldier.ap = 99; // вистачає на весь шлях — зупиняє лише демон
+    const start = { ...soldier.pos };
+    clickAt(f, alien.pos.x, alien.pos.y);
+    const path = f.ui.hoverPath!.map((p) => ({ ...p }));
+    clickAt(f, alien.pos.x, alien.pos.y); // повторний тап — хід
+    const st = f.ui.mission!.state;
+    const moved = 99 - soldier.ap;
+    expect(moved).toBeLessThan(path.length); // останній крок не зроблено
+    expect(soldier.pos).toEqual(moved > 0 ? path[moved - 1] : start);
+    const blocker = st.units.find((u) => u.alive && u.pos.x === path[moved]!.x && u.pos.y === path[moved]!.y)!;
+    expect(blocker.side).toBe('alien');
+    expect(f.binfo()).toBe(soldier.name + ': шлях перекрито — ' + blocker.name + '. AP ' + soldier.ap + '/' + soldier.maxAp + '.');
+    expect(st.log.filter((e) => e.type === 'move')).toHaveLength(moved);
   });
 });
