@@ -344,6 +344,7 @@ git pull origin main
 | ADR-0075 | Евакуація з місії — відступ у зону висадки, врятовані без премії (доповнює ADR-0021/0022/0026; план Фази 15) | accepted | 2026-10-25 |
 | ADR-0076 | Гейти типів, лінту і формату — у CI, а не лише в pre-commit: `tsc --noEmit` (з тестами), ESLint, Prettier у джобі `test`; `npm ci` (доповнює ADR-0014/0015/0016/0025; Т.5b) | accepted | 2026-11-10 |
 | ADR-0077 | Автоматична перевірка розміру PR — `scripts/pr-size.sh` + workflow `pr-size`; docs/ассети/lockfile поза підрахунком, плановане відхилення — мітка `size-deviation` (частково Supersedes: ADR-0040; доповнює ADR-0036/0061/0069; Т.5c) | accepted | 2026-11-10 |
+| ADR-0078 | Мажорні версії TypeScript — поза Dependabot, лише вручну з ADR: TypeScript 7 не підтримують typedoc 0.28 і typescript-eslint 8 (доповнює ADR-0012/0020) | accepted | 2026-11-10 |
 
 **Нове рішення?** Створювати новий ADR з полем Supersedes.
 
