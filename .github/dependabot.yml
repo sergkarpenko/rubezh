@@ -14,6 +14,12 @@ updates:
         dependency-type: "development"
       production:
         dependency-type: "production"
+    # ADR-0078: мажорні версії TypeScript — лише вручну з окремим ADR. TypeScript 7
+    # не підтримують typedoc 0.28 (peer ≤ 6.0.x) і typescript-eslint 8 (< 6.1.0):
+    # груповий PR з ним падав на встановленні залежностей (ERESOLVE, PR #259).
+    ignore:
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
     commit-message:
       prefix: "chore(deps)"
   # GitHub Actions у .github/workflows/
