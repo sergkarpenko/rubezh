@@ -54,7 +54,7 @@ jobs:
         with:
           ref: ${{ inputs.branch }}
           path: branch
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
       - name: Білд main — корінь артефакта
@@ -121,7 +121,7 @@ jobs:
       # Інструментарій — з main (гілка прев'ю коду смоку не виконує), ціль —
       # задеплоєний URL прев'ю; Playwright chromium ~1 хв, лише на dispatch.
       - uses: actions/checkout@v7
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
       - name: Домен-смок — сторінка гілки як документ (ADR-0063)
