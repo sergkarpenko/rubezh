@@ -61,7 +61,7 @@ function doomedSquad(roster: Roster): Mission['state']['units'] {
 }
 
 // Звуження результату бою до фінального ('триває' — це помилка сценарію, бій мав завершитись).
-function finalOutcome(outcome: ReturnType<typeof missionOutcome>): 'перемога' | 'поразка' {
+function finalOutcome(outcome: ReturnType<typeof missionOutcome>): Exclude<ReturnType<typeof missionOutcome>, 'триває'> {
   if (outcome === 'триває') throw new Error('бій не завершився за ліміт півходів');
   return outcome;
 }

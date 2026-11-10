@@ -105,7 +105,8 @@ describe('WorkshopPanel: замовлення, черга і склад', () => 
 
 describe('WorkshopPanel: критерій 1 — числові ефекти ДО замовлення (П12.5, ADR-0065)', () => {
   // Рядок картки предмета за назвою.
-  const row = (name: string): HTMLElement => [...document.querySelectorAll('#workshop .ufo')].find((r) => r.textContent!.includes(name))!;
+  const row = (name: string): HTMLElement =>
+    [...document.querySelectorAll<HTMLElement>('#workshop .ufo')].find((r) => r.textContent!.includes(name))!;
 
   it('кожен предмет показує числовий ефект до замовлення — числа з констант каталогів', () => {
     const panel = createWorkshopPanel(makeDeps());

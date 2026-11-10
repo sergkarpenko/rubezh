@@ -133,7 +133,8 @@ describe('ResearchPanel: каталог проєктів', () => {
 
 describe('ResearchPanel: критерій 1 — числові ефекти ДО старту (П12.5, ADR-0065)', () => {
   // Рядок картки протоколу за назвою.
-  const row = (name: string): HTMLElement => [...document.querySelectorAll('#research .ufo')].find((r) => r.textContent!.includes(name))!;
+  const row = (name: string): HTMLElement =>
+    [...document.querySelectorAll<HTMLElement>('#research .ufo')].find((r) => r.textContent!.includes(name))!;
 
   it('кожен протокол показує числовий ефект до старту — числа з констант каталогів', () => {
     const panel = createResearchPanel(makeDeps());

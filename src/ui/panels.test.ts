@@ -309,7 +309,7 @@ describe('renderCampaign: чипи кампанії і екран перемог
   it('перемога — екран з підсумковим рахунком', () => {
     const f = makeFixture();
     f.party.campaign.status = 'перемога';
-    f.party.campaign.score = { total: 1234 };
+    f.party.campaign.score = { ufosShotDown: 0, missionsWon: 0, veteransAlive: 0, moneyLeft: 0, total: 1234 };
     f.panels.renderCampaign();
     expect(document.getElementById('campaign-victory')!.classList.contains('hidden')).toBe(false);
     expect(document.getElementById('campaign-score')!.textContent).toBe('1234');
@@ -319,7 +319,7 @@ describe('renderCampaign: чипи кампанії і екран перемог
   it('перемога + «Грати далі» (endless) — екран приховано, рахунок лишився', () => {
     const f = makeFixture({ victoryDismissed: () => true });
     f.party.campaign.status = 'перемога';
-    f.party.campaign.score = { total: 1234 };
+    f.party.campaign.score = { ufosShotDown: 0, missionsWon: 0, veteransAlive: 0, moneyLeft: 0, total: 1234 };
     f.panels.renderCampaign();
     expect(document.getElementById('campaign-status')!.textContent).toBe('кампанія: перемога');
     expect(document.getElementById('campaign-victory')!.classList.contains('hidden')).toBe(true);

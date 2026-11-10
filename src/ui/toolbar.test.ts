@@ -41,7 +41,7 @@ describe('тулбар: перелік дій (П13.2, ADR-0066)', () => {
   it('плитки — усі чинні дії бою (id, підписи, іконки); клік → onAction; «Авто»/«Стоп» — перемикач авто-бою (П13.3)', () => {
     const onAction = vi.fn();
     createToolbar(document.getElementById('btoolbar')!, { onAction });
-    const buttons = [...document.querySelectorAll('#btoolbar button')];
+    const buttons = [...document.querySelectorAll<HTMLButtonElement>('#btoolbar button')];
     expect(buttons.map((b) => b.id)).toEqual(TOOLBAR_ACTIONS.map((a) => a.btnId)); // той самий порядок
     expect(TOOLBAR_ACTIONS.map((a) => a.id)).toEqual(['snap', 'aimed', 'auto', 'ow', 'medkit', 'grenade', 'end', 'auto-battle']);
     expect(TOOLBAR_ACTIONS.map((a) => a.label)).toEqual([
