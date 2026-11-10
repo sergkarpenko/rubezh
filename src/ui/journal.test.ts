@@ -191,7 +191,7 @@ describe('Journal (createJournal): запис і кеп журналу', () => {
     const j = createJournal(makeDeps());
     j.add('перший');
     j.add('другий', 'lose', 'battle');
-    const items = document.querySelectorAll('#log li');
+    const items = document.querySelectorAll<HTMLLIElement>('#log li');
     expect(items).toHaveLength(2);
     expect(items[0].textContent).toBe('другий'); // prepend: найновіші догори
     expect(items[0].className).toBe('lose');
@@ -233,7 +233,7 @@ describe('Journal: фільтри-вкладки (ADR-0027)', () => {
     expect(items[0].style.display).toBe('none'); // «гео-новий» — приховано одразу
     expect(items[1].style.display).toBe(''); // «бій» — видно (prepend: він другий)
     j.setFilter('all');
-    expect(document.querySelector('#log-tabs button.active')!.dataset.filter).toBe('all');
+    expect(document.querySelector<HTMLButtonElement>('#log-tabs button.active')!.dataset.filter).toBe('all');
     for (const li of document.querySelectorAll<HTMLLIElement>('#log li')) expect(li.style.display).toBe('');
   });
 });
@@ -263,7 +263,7 @@ describe('Journal: drain* — seen-трекінг подій', () => {
     ];
     const j = createJournal(makeDeps({ econLog: () => econLog }));
     j.drainEcon();
-    const items = document.querySelectorAll('#log li');
+    const items = document.querySelectorAll<HTMLLIElement>('#log li');
     expect(items).toHaveLength(2);
     expect(items[0].dataset.cat).toBe('econ');
     expect(items[0].textContent).toBe('Витрати: −50');
@@ -279,7 +279,7 @@ describe('Journal: drain* — seen-трекінг подій', () => {
     ];
     const j2 = createJournal(makeDeps({ battleLog: () => battleLog, unitName: (id) => (id === 's1' ? 'Гарт' : 'Морок') }));
     j2.drainBattle();
-    const items = document.querySelectorAll('#log li');
+    const items = document.querySelectorAll<HTMLLIElement>('#log li');
     expect(items).toHaveLength(1); // move — не для журналу, але seen просунуто
     expect(items[0].dataset.cat).toBe('battle');
     expect(items[0].textContent).toContain('Гарт → Морок');
@@ -479,7 +479,7 @@ describe('drainResearch: seen-трекінг подій науки (П11.6)', ()
     p.research.log.push(evResearch({ type: 'hire', name: 'Зінаїда' }), evResearch({ type: 'project_started', id: 'medkit' }));
     const j = createJournal(makeDeps({ researchLog: () => p.research.log }));
     j.drainResearch();
-    const lis = [...document.querySelectorAll('#log li')];
+    const lis = [...document.querySelectorAll<HTMLLIElement>('#log li')];
     expect(lis).toHaveLength(2);
     expect(lis.every((li) => li.dataset.cat === 'base')).toBe(true);
     expect(lis[0].textContent).toContain('Протокол розпочато');

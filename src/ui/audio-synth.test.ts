@@ -3,7 +3,7 @@
 // детермінізм шумового буфера і критерій 1 — байт-у-байт інваріант:
 // дрен журналу зі звуком «увімкненим» (мок-контекст) не міняє лог бою,
 // rng.state і DOM-журнал (патерн ізоляції П11.2/П11.4).
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import {
   createGame,
   endTurn,
@@ -26,11 +26,11 @@ interface MockRec {
   src: { start: number; stop: number; len: number }[];
   gain: { v: number; t: number }[][];
   buffers: { ch: number; len: number; data: Float32Array }[];
-  resume: ReturnType<typeof vi.fn>;
+  resume: Mock<() => void>;
 }
 
 function mockContext(state = 'running'): { ctx: SoundContext; rec: MockRec } {
-  const rec: MockRec = { osc: [], src: [], gain: [], buffers: [], resume: vi.fn() };
+  const rec: MockRec = { osc: [], src: [], gain: [], buffers: [], resume: vi.fn<() => void>() };
   const param = (r: { v: number; t: number }[]) => ({
     value: 0,
     setValueAtTime(v: number, t: number) {

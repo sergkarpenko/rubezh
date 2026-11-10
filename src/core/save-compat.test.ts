@@ -151,7 +151,7 @@ describe('П12.6: продовження сіда 42 — види подій і 
     expect(kinds(p.research.log.slice(before.research))).toEqual(['salary', 'points', 'salary', 'points']);
     expect(kinds(p.workshop.log.slice(before.workshop))).toEqual(['produced']);
     // позиції потоку rng — байт-у-байт golden (traєкторія не залежить від перейменувань)
-    expect((p.geo.rng as { state: number }).state).toBe(-1677623680);
+    expect((p.geo.rng as unknown as { state: number }).state).toBe(-1677623680);
     expect((p.intercept.rng as unknown as { state: number }).state).toBe(42);
     // числа стану — як до перейменувань
     expect(p.econ.money).toBe(3755);

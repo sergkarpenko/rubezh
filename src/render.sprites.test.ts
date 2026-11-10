@@ -54,9 +54,9 @@ import {
   isUnitAtlasReady,
   unitPose,
   type MakeOffscreen,
+  type UnitSpriteView,
 } from './render';
 import {
-  FOG_EDGE,
   GEO_CELL_A,
   GEO_CELL_B,
   GEO_GRID_COLOR,
@@ -76,7 +76,6 @@ import {
   SPRITE_SCALE,
   UFO_LANDED_SPRITE,
   UFO_SCOUT_SPRITE,
-  type UnitSpriteView,
 } from './core/sprites';
 import { BCELL, GCELL } from './ui/grid';
 
