@@ -34,11 +34,6 @@
         margin: 0;
         letter-spacing: 0.06em;
       }
-      .sub {
-        color: #7d8794;
-        font-size: 12px;
-        margin-top: 2px;
-      }
       #topbar .chips {
         display: flex;
         gap: 8px;
@@ -106,6 +101,18 @@
       #status-tabs button.active {
         background: #31435f;
         border-color: #6ea8ff;
+      }
+      /* Т.7: сигнал «на вкладці чекають дії» — бурштиновий бейдж-лічильник */
+      #status-tabs button.attention {
+        border-color: #ffb454;
+      }
+      #status-tabs .tab-badge {
+        margin-left: 6px;
+        padding: 0 5px;
+        border-radius: 8px;
+        background: #ffb454;
+        color: #0d1017;
+        font-weight: 700;
       }
       /* ADR-0027: двоколонковий каркас до ~900px (iPad Pro 1024/1366), нижче — складання */
       @media (max-width: 899px) {
@@ -665,7 +672,6 @@
     <header id="topbar">
       <div>
         <h1>РУБІЖ</h1>
-        <div class="sub">прев'ю · фаза 6a: єдиний каркас (топбар + фокус + стан)</div>
       </div>
       <div class="chips">
         <span class="chip clock" id="clock">—</span>
@@ -747,9 +753,10 @@
           <h2>Фінанси</h2>
           <div style="margin-bottom: 8px">
             Баланс: <b id="money-card">—</b>
-            <span class="meta">· дотація 75/добу · премії за місію 110/170</span>
+            <!-- Т.7: числа — з ядра за пресетом партії (panels.ts renderFinances; урок П9.1) -->
+            <span class="meta" id="econ-rates"></span>
           </div>
-          <button id="btn-hire">Вербувати оперативника (100)</button>
+          <button id="btn-hire">Вербувати оперативника</button>
         </section>
         <!-- П11.6 (ADR-0058): панель «Дослідження» — штат вчених, слоти, каталог проєктів -->
         <section class="panel" data-tab="base">

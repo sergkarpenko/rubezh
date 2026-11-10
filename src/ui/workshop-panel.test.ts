@@ -11,6 +11,7 @@ import { GRENADE_DAMAGE, GRENADE_RANGE, HEAL_AMOUNT, HIT_CHANCE_CAP } from '../c
 import { GUN_MODULE_DAMAGE } from '../core/intercept';
 import { createWorkshopPanel, type WorkshopPanelDeps } from './workshop-panel';
 import { el } from './dom';
+import { ticksText } from './text';
 
 let party: Party;
 
@@ -40,7 +41,7 @@ describe('WorkshopPanel: каталог і гейт дослідження', () 
       expect(b).toBeTruthy();
       expect(b.textContent).toBe('Замовити');
     }
-    expect(el('workshop').textContent).toContain(String(WORKSHOP_CATALOG['medkit'].ticks) + ' тік(и)');
+    expect(el('workshop').textContent).toContain(ticksText(WORKSHOP_CATALOG['medkit'].ticks));
   });
 
   it('не досліджений предмет — кнопка вимкнена з підказкою; досліджений — активна', () => {
@@ -76,7 +77,7 @@ describe('WorkshopPanel: замовлення, черга і склад', () => 
     expect(party.econ.money).toBe(before - WORKSHOP_CATALOG['medkit'].cost);
     expect(party.workshop.queue).toHaveLength(1);
     panel.render();
-    expect(el('workshop').textContent).toContain('Активне замовлення: Регенеративний гель — 12 тік(и)');
+    expect(el('workshop').textContent).toContain('Активне замовлення: Регенеративний гель — 12 тіків');
     (el('btn-order-armor') as HTMLButtonElement).click();
     expect(party.workshop.queue).toHaveLength(2);
     panel.render();

@@ -29,6 +29,7 @@ import { aliensTurn } from '../core/ai-bot';
 import { el } from './dom';
 import { BCELL } from './grid';
 import { MODE_LABEL } from './journal';
+import { byGender } from './text';
 import type { BattleUI, BattleUIState } from './battle';
 
 // П7: чиста частина cellFromEvent — координати вікна (CSS) → клітинка бойовища
@@ -216,7 +217,18 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
         const res = throwGrenade(st, sel.id, cell);
         battle.enqueueAnims(prevLen);
         if (!battle.checkOutcome()) {
-          battle.binfo(sel.name + ' кинув гранату (−' + res.damage + ' ураженим). AP ' + sel.ap + '/' + sel.maxAp + '.');
+          battle.binfo(
+            sel.name +
+              ' ' +
+              byGender(sel.name, 'кинув', 'кинула') +
+              ' гранату (−' +
+              res.damage +
+              ' ураженим). AP ' +
+              sel.ap +
+              '/' +
+              sel.maxAp +
+              '.'
+          );
           deps.renderAll();
         }
       } catch (e) {
@@ -270,7 +282,18 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
         resolveAttack(st, sel.id, u.id, mode);
         battle.enqueueAnims(prevLen); // П6.8: трасер/спалах/смерть — з подій логу
         if (!battle.checkOutcome()) {
-          battle.binfo(sel.name + ' вистрілив (' + MODE_LABEL[mode] + '). AP ' + sel.ap + '/' + sel.maxAp + '.');
+          battle.binfo(
+            sel.name +
+              ' ' +
+              byGender(sel.name, 'вистрілив', 'вистрілила') +
+              ' (' +
+              MODE_LABEL[mode] +
+              '). AP ' +
+              sel.ap +
+              '/' +
+              sel.maxAp +
+              '.'
+          );
           deps.renderAll();
         }
       } catch (e) {
@@ -489,7 +512,7 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
     }
     const has = ui.mission.state.items?.[sel.id]?.[mode] ?? false;
     if (!has) {
-      battle.binfo((mode === 'medkit' ? 'Гелю' : 'Гранати') + ' немає при ' + sel.name + ' (спорядьте у «Кузні» на геосцені).');
+      battle.binfo(sel.name + ': ' + (mode === 'medkit' ? 'гелю' : 'гранати') + ' немає (спорядьте у «Кузні» на геосцені).');
       return;
     }
     const cost = mode === 'medkit' ? HEAL_AP_COST : GRENADE_AP_COST;

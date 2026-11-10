@@ -148,3 +148,49 @@ describe('П12.4: персист активної вкладки поза сей
     ).toEqual(['Збереження']);
   });
 });
+
+describe('Т.7: сигнал на вкладці — дії, що чекають гравця', () => {
+  it('setAttention: бейдж-лічильник і клас на кнопці «Вузол», видно з вкладки «Загін»', () => {
+    const tabs = createStatusTabs();
+    expect(tabs.active()).toBe('squad');
+    tabs.setAttention('base', 2);
+    const b = btn('status-tab-base');
+    expect(b.classList.contains('attention')).toBe(true);
+    expect(b.querySelector('.tab-badge')!.textContent).toBe('2');
+    expect(b.title).toBe('Доступні дії: 2');
+    expect(b.firstChild!.textContent).toBe('Вузол'); // підпис вкладки не зачеплено
+    expect(btn('status-tab-squad').querySelector('.tab-badge')).toBeNull();
+  });
+
+  it('число змінюється в тому самому бейджі; 0 — сигнал знято повністю', () => {
+    const tabs = createStatusTabs();
+    tabs.setAttention('base', 1);
+    tabs.setAttention('base', 3);
+    const b = btn('status-tab-base');
+    expect(b.querySelectorAll('.tab-badge').length).toBe(1);
+    expect(b.querySelector('.tab-badge')!.textContent).toBe('3');
+    tabs.setAttention('base', 0);
+    expect(b.querySelector('.tab-badge')).toBeNull();
+    expect(b.classList.contains('attention')).toBe(false);
+    expect(b.hasAttribute('title')).toBe(false);
+    expect(b.textContent).toBe('Вузол');
+  });
+
+  it('те саме число повторно — DOM не чіпається (idle → 0 змін, ADR-0029)', () => {
+    const tabs = createStatusTabs();
+    tabs.setAttention('base', 1);
+    const badge = btn('status-tab-base').querySelector('.tab-badge');
+    tabs.setAttention('base', 1);
+    expect(btn('status-tab-base').querySelector('.tab-badge')).toBe(badge);
+    tabs.setAttention('squad', 0); // нуль без попереднього сигналу — no-op
+    expect(btn('status-tab-squad').classList.contains('attention')).toBe(false);
+  });
+
+  it('перемикання вкладок сигнал не скидає (його знімає лише стан партії)', () => {
+    const tabs = createStatusTabs();
+    tabs.setAttention('base', 1);
+    btn('status-tab-base').click();
+    btn('status-tab-squad').click();
+    expect(btn('status-tab-base').querySelector('.tab-badge')!.textContent).toBe('1');
+  });
+});

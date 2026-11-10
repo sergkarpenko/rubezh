@@ -55,6 +55,10 @@ export interface StatusTabsDeps {
 export interface StatusTabs {
   active(): StatusTabId; // активна вкладка (для тестів і зв'язок шару)
   set(id: StatusTabId): void; // перемкнути (клік або програмно) і персистити
+  // Т.7: сигнал на кнопці вкладки — лічильник дій, що чекають гравця на цій
+  // вкладці (0 — сигналу нема). Видно з будь-якої вкладки: «Перехопити» і
+  // «Запустити місію» живуть у «Вузлі», а за замовчуванням відкрито «Загін».
+  setAttention(id: StatusTabId, count: number): void;
 }
 
 // Збережене значення валідне, лише якщо збігається з id вкладки —
@@ -106,9 +110,36 @@ export function createStatusTabs(deps: StatusTabsDeps = {}): StatusTabs {
     }
   }
 
+  // Т.7: бейдж-лічильник — окремий span у кнопці (створюється за потреби,
+  // іконка і текст кнопки не чіпаються — контракти П14.6); DOM змінюється лише
+  // при зміні числа (idle → 0 перерисовок, ADR-0029).
+  const attention = new Map<StatusTabId, number>();
+  function setAttention(id: StatusTabId, count: number): void {
+    if ((attention.get(id) ?? 0) === count) return;
+    attention.set(id, count);
+    const b = buttons.get(id);
+    if (!b) return;
+    let badge = b.querySelector<HTMLElement>('.tab-badge');
+    if (count <= 0) {
+      badge?.remove();
+      b.classList.remove('attention');
+      b.removeAttribute('title');
+      return;
+    }
+    if (!badge) {
+      badge = document.createElement('span');
+      badge.className = 'tab-badge';
+      b.appendChild(badge);
+    }
+    badge.textContent = String(count);
+    b.classList.add('attention');
+    b.title = 'Доступні дії: ' + count;
+  }
+
   set(current); // початковий стан: збережена вкладка або дефолт
   return {
     active: () => current,
     set,
+    setAttention,
   };
 }

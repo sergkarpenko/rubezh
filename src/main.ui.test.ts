@@ -318,6 +318,9 @@ describe('UI-флоу прев’ю: геосцена → місія → бій 
     expect($('log').textContent).toContain('складність «складний»');
     // економіка ×0.9 (П10.4): стартові кошти 300 → 270
     expect($('money').textContent).toBe('270');
+    // Т.7: ставки в картці «Фінанси» — фактичні за пресетом (з ядра, не з розмітки)
+    expect($('econ-rates').textContent).toBe('· дотація 68/добу · премії за місію 99/153');
+    expect($('btn-hire').textContent).toBe('Вербувати оперативника (90)');
     // повертаємо «норму»: наступні тести очікують дефолтний баланс
     startParty();
     expect($('money').textContent).toBe('300');
@@ -330,6 +333,18 @@ describe('UI-флоу прев’ю: геосцена → місія → бій 
       found = document.querySelector('button.mission') !== null;
     }
     expect(found).toBe(true); // сід 42: виявлений НЛО приземлюється в межах ліміту
+    // Т.7: відкрита вкладка «Загін», кнопка місії — у «Вузлі»: сигнал на вкладці
+    expect($('status-tab-squad').classList.contains('active')).toBe(true);
+    expect($('status-tab-base').querySelector('.tab-badge')).not.toBeNull();
+    expect($('status-tab-base').classList.contains('attention')).toBe(true);
+  });
+
+  it('Т.7: розмітка без службового підпису в шапці і без зашитих чисел економіки', () => {
+    const doc = new DOMParser().parseFromString(htmlRaw, 'text/html');
+    expect(doc.querySelector('#topbar > div')!.textContent!.trim()).toBe('РУБІЖ');
+    expect(htmlRaw).not.toContain("прев'ю · фаза");
+    expect(doc.getElementById('econ-rates')!.textContent).toBe('');
+    expect(doc.getElementById('btn-hire')!.textContent).not.toMatch(/\d/);
   });
 
   it('запуск місії: панель бою відкрита, геосцена прихована, час геосцени заблоковано', () => {
@@ -341,6 +356,7 @@ describe('UI-флоу прев’ю: геосцена → місія → бій 
     expect(btn('btn-tick').disabled).toBe(true);
     expect($('binfo').textContent).toContain('Ваш хід');
     expect($('log').textContent).toContain('Місія: загін висаджено');
+    expect($('status-tab-base').querySelector('.tab-badge')).toBeNull(); // Т.7: у бою сигналу нема
   });
 
   it('вибір солдата кліком по бойовищу (клітина 2,2 — зона висадки)', () => {
@@ -456,7 +472,7 @@ describe('критичний флоу економіки: найм → місі�
     await runAutoBattle();
     expect($('bresult').textContent).toContain('ЗАЧИЩЕНО');
     expect($('bresult').textContent).toContain('поранених: 1');
-    expect($('log').textContent).toContain('Іван поранений — лікарня: 8 тик(и)');
+    expect($('log').textContent).toContain('Іван поранений — лікарня: 8 тіків');
     expect($('log').textContent).toContain('Премія за місію (розвідник): +110');
     expect($('money').textContent).toBe('310'); // 300 − 100 найм + 110 премія (П8.6)
   });
@@ -465,7 +481,7 @@ describe('критичний флоу економіки: найм → місі�
     btn('btn-close').click();
     expect($('battle-panel').classList.contains('hidden')).toBe(true);
     expect($('roster').textContent).toContain('6 оперативників (5 боєготових)');
-    expect($('roster').textContent).toContain('лікарня: 8 тик(и)');
+    expect($('roster').textContent).toContain('лікарня: 8 тіків');
     expect($('roster').textContent).toContain('HP 6/10');
     expect(btn('btn-tick').disabled).toBe(false);
   });
@@ -585,13 +601,13 @@ describe('панель збереження: 3 слоти, лише на гео�
 
   it('лікарня у сейві: поранений відновлюється після завантаження', () => {
     // авто-бій цієї партії: перемога, s2 загинув, Іван поранений 6/10 (сід 42)
-    expect($('roster').textContent).toContain('лікарня: 8 тик(и)');
+    expect($('roster').textContent).toContain('лікарня: 8 тіків');
     expect($('money').textContent).toBe('410'); // 300 + премія 110 (П8.6)
     btn('btn-save-3').click();
     for (let i = 0; i < 8; i++) btn('btn-tick').click(); // одужання
     expect($('roster').textContent).not.toContain('лікарня');
     btn('btn-load-3').click();
-    expect($('roster').textContent).toContain('лікарня: 8 тик(и)');
+    expect($('roster').textContent).toContain('лікарня: 8 тіків');
     expect($('roster').textContent).toContain('HP 6/10');
     expect($('money').textContent).toBe('410');
   });
@@ -820,7 +836,7 @@ describe('П6.14: UX прицілювання — обведення цілей,
     tap(16, 2); // знову перший тап — прев'ю (ходу/пострілу ще немає)
     expect($('bctx-unit').textContent).toContain('AP 9/10');
     tap(16, 2); // повторний тап у ту саму ціль — постріл
-    expect($('binfo').textContent).toContain('вистрілив');
+    expect($('binfo').textContent).toContain('Олена вистрілила'); // Т.7: рід дієслова — за іменем
     expect($('bctx-unit').textContent).toContain('AP 6/10');
   });
 

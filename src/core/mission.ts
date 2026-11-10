@@ -160,7 +160,7 @@ export function createMission(geo: GeoState, ufoId: string, opts: CreateMissionO
       makeUnit({
         id: 'a' + (i + 1),
         side: 'alien',
-        name: 'Прибулець ' + (i + 1),
+        name: 'Демон ' + (i + 1), // П12.6 (ADR-0064): «демон Розриву», не «прибулець»
         pos: { ...ALIEN_SPAWN[i] },
         firingAccuracy: ALIEN_ACCURACY[i % ALIEN_ACCURACY.length],
         weapon: ALIEN_CUTTER,

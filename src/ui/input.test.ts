@@ -305,7 +305,7 @@ describe('input: витратники бою — аптечка і гранат�
     const s = f.ui.mission!.state.units.find((u) => u.side === 'player')!;
     f.ui.selectedId = s.id;
     f.input.armMedkit();
-    expect(f.binfo()).toContain('Гелю немає');
+    expect(f.binfo()).toContain('гелю немає');
     f.ui.mission!.state.items = { [s.id]: { medkit: true, grenade: false } };
     s.ap = 2;
     f.input.onKeyDown({ code: 'KeyM' } as KeyboardEvent);

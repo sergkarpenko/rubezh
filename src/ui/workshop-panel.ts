@@ -14,6 +14,7 @@ import type { Party } from '../core/save';
 import { itemEffect } from './effects';
 import { el } from './dom';
 import type { LogCat } from './journal';
+import { ticksText } from './text';
 
 // Залежності від шару застосунку (main.ts): читання стану і дії панелі.
 export interface WorkshopPanelDeps {
@@ -46,7 +47,7 @@ export function createWorkshopPanel(deps: WorkshopPanelDeps): WorkshopPanel {
     queue.style.marginBottom = '4px';
     queue.innerHTML =
       'Активне замовлення: <b>' +
-      (active ? itemName(active.id) + ' — ' + active.ticksLeft + ' тік(и)' : '—') +
+      (active ? itemName(active.id) + ' — ' + ticksText(active.ticksLeft) : '—') +
       '</b>' +
       (w.queue.length > 1 ? ' · у черзі ще ' + (w.queue.length - 1) : '');
     box.appendChild(queue);
@@ -70,7 +71,7 @@ export function createWorkshopPanel(deps: WorkshopPanelDeps): WorkshopPanel {
       row.className = 'ufo';
       row.style.marginBottom = '4px';
       const info = document.createElement('span');
-      info.textContent = def.name + ' · ' + def.cost + ' · ' + def.ticks + ' тік(и)';
+      info.textContent = def.name + ' · ' + def.cost + ' · ' + ticksText(def.ticks);
       row.appendChild(info);
       const effect = document.createElement('span');
       effect.className = 'meta';
@@ -87,7 +88,7 @@ export function createWorkshopPanel(deps: WorkshopPanelDeps): WorkshopPanel {
         ? 'Ще не досліджено (панель «Дослідження»)'
         : party.econ.money < price
           ? 'Недостатньо кредитів (ціна ' + price + ')'
-          : 'Замовити в «Кузні» (−' + price + ', готовність через ' + def.ticks + ' тік(и))';
+          : 'Замовити в «Кузні» (−' + price + ', готовність через ' + ticksText(def.ticks) + ')';
       order.onclick = () => {
         try {
           orderItem(party.econ, party.workshop, party.research, id, party.campaign.preset);

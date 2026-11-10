@@ -5,7 +5,7 @@
 // застосунку (party/mission/gameOver) модуль знає лише через Deps-інтерфейс;
 // логіка ядра — виклики src/core, DOM — через хелпер el (src/ui/dom.ts).
 
-import { RADAR_RANGE, TICK_MINUTES, detectedUfos, geoClock, geoDay, missionTargets } from '../core/geo';
+import { RADAR_RANGE, TICK_MINUTES, detectedUfos, geoClock, geoDay, missionTargets, type Ufo } from '../core/geo';
 import {
   FIGHTER_MAX_HP,
   FIGHTER_REPAIR_COST,
@@ -15,7 +15,7 @@ import {
   startRepair,
   type InterceptChoice,
 } from '../core/intercept';
-import { hirePrice } from '../core/economy';
+import { dailyAllowance, hirePrice, missionBonus } from '../core/economy';
 // П11.6 (ADR-0058): екіпірування в картці солдата ростеру — броня/оптика
 // (постійні), аптечка/граната (витратні); дії — лише на геосцені.
 import { equipItem, unequipItem, itemName, type SoldierEquipment, type SoldierItemId } from '../core/workshop';
@@ -27,6 +27,7 @@ import type { Anim } from '../core/render-core';
 import { el } from './dom';
 import { GCELL } from './grid';
 import type { LogCat } from './journal';
+import { ticksText } from './text';
 import type { AmbientGeoScene } from './ambient';
 
 // П7: колір HP (чиста функція): повне — зелений, понад половину — жовтий, інакше — червоний.
@@ -76,6 +77,13 @@ export interface Panels {
   renderRoster(): void;
   renderInterceptCtx(): void;
   renderCampaign(): void; // П8.3: чипи кампанії + екран перемоги
+  nodeActions(): number; // Т.7: дії, що чекають гравця на вкладці «Вузол» (сигнал вкладки)
+}
+
+// П7.4 (ADR-0032): «Перехопити» — лише для зонда в повітрі, коли перехоплюач
+// на базі. Спільна умова кнопки (renderUfos) і сигналу вкладки (nodeActions, Т.7).
+function canIntercept(party: Party, u: Ufo): boolean {
+  return u.status === 'летить' && party.intercept.fighter.status === 'на базі';
 }
 
 export function createPanels(deps: PanelsDeps): Panels {
@@ -140,6 +148,21 @@ export function createPanels(deps: PanelsDeps): Panels {
     (el('btn-day') as HTMLButtonElement).disabled = busy || deps.isGameOver();
   }
 
+  // Т.7: дії гравця на вкладці «Вузол» — ті самі умови, що показують кнопки
+  // «Перехопити» / «Запустити місію» (renderUfos) і дистанції повітряного бою
+  // (renderFighter). У тактичному бою і після банкрутства дій нема.
+  function nodeActions(): number {
+    if (deps.inBattle() || deps.isGameOver()) return 0;
+    const party = deps.getParty();
+    const targets = new Set(missionTargets(party.geo).map((u) => u.id));
+    let n = party.intercept.fighter.status === 'бій' ? 1 : 0;
+    for (const u of detectedUfos(party.geo)) {
+      if (canIntercept(party, u)) n++;
+      if (targets.has(u.id)) n++;
+    }
+    return n;
+  }
+
   function renderUfos(): void {
     const party = deps.getParty();
     const box = el('ufos');
@@ -158,7 +181,7 @@ export function createPanels(deps: PanelsDeps): Panels {
         '<b>' + u.kind + '</b> · ' + u.status + '<br><span class="meta">(' + u.pos.x + ',' + u.pos.y + ') · ' + info + '</span>';
       // П7.4 (ADR-0032): «Перехопити» — лише для виявленого НЛО в повітрі; під час ремонту
       // або погоні запуск заблокований (пошкоджений винищувач не стартує)
-      if (u.status === 'летить' && party.intercept.fighter.status === 'на базі') {
+      if (canIntercept(party, u)) {
         const ib = document.createElement('button');
         ib.className = 'intercept';
         ib.textContent = '✦ Перехопити';
@@ -206,7 +229,17 @@ export function createPanels(deps: PanelsDeps): Panels {
     el('money-card').textContent = moneyText;
     const hire = el<HTMLButtonElement>('btn-hire');
     // П11.8: ціна найму за пресетом (ADR-0058 — «легкий» 120, «норма» 100, «складний» 90).
-    const hireCost = hirePrice(party.campaign.preset);
+    const preset = party.campaign.preset;
+    const hireCost = hirePrice(preset);
+    // Т.7: ставки і ціна — з ядра за пресетом (урок П9.1: числа в розмітці дрейфують)
+    el('econ-rates').textContent =
+      '· дотація ' +
+      dailyAllowance(preset) +
+      '/добу · премії за місію ' +
+      missionBonus('розвідник', preset) +
+      '/' +
+      missionBonus('збирач', preset);
+    hire.textContent = 'Вербувати оперативника (' + hireCost + ')';
     hire.disabled = deps.isGameOver() || party.econ.money < hireCost;
     hire.title = hire.disabled
       ? 'Недостатньо кредитів (ціна вербування ' + hireCost + ')'
@@ -240,7 +273,7 @@ export function createPanels(deps: PanelsDeps): Panels {
     renderInterceptCtx(); // П7.5: контекст-стрічка повітряного бою у фокусній зоні
     const statusText =
       f.status === 'ремонт'
-        ? 'ремонт: ' + f.repairTicksLeft + ' тік(и)'
+        ? 'ремонт: ' + ticksText(f.repairTicksLeft ?? 0)
         : f.status === 'на базі'
           ? f.hp < FIGHTER_MAX_HP
             ? 'на базі · пошкоджений'
@@ -346,7 +379,7 @@ export function createPanels(deps: PanelsDeps): Panels {
         '/' +
         s.maxHp +
         '</span>' +
-        (heal !== undefined ? '<span class="meta">лікарня: ' + heal + ' тик(и)</span>' : '') +
+        (heal !== undefined ? '<span class="meta">лікарня: ' + ticksText(heal) + '</span>' : '') +
         '<span class="kills">⚔ ' +
         s.kills +
         '</span>';
@@ -412,5 +445,6 @@ export function createPanels(deps: PanelsDeps): Panels {
     renderRoster,
     renderInterceptCtx,
     renderCampaign,
+    nodeActions,
   };
 }

@@ -15,6 +15,7 @@ import { itemName, type WorkshopEvent } from '../core/workshop';
 import type { GameEvent, ShotMode } from '../core/combat';
 import { claimHint, type Party } from '../core/save';
 import { el } from './dom';
+import { byGender, ticksText } from './text';
 
 // Підписи режимів пострілу (спільні для журналу і панелі керування боєм).
 export const MODE_LABEL: Record<ShotMode, string> = { snap: 'швидкий', aimed: 'прицільний', auto: 'черга' };
@@ -117,13 +118,17 @@ export function createJournal(deps: JournalDeps): Journal {
     // «Можна перехопити»: виявлений НЛО у повітрі + боєготовий винищувач
     if (f.status === 'на базі' && f.hp === FIGHTER_MAX_HP && p.geo.ufos.some((u) => u.detected && u.status === 'летить')) {
       if (claimHint(p.hints, 'intercept')) {
-        journal('Підказка: виявлений зонд Розриву у повітрі можна перехопити — кнопка «Перехопити» у панелі «Сенсорна сітка».');
+        journal(
+          'Підказка: виявлений зонд Розриву у повітрі можна перехопити — кнопка «Перехопити» на вкладці «Вузол», панель «Сенсорна сітка».'
+        );
       }
     }
     // «Доступна місія»: приземлений/збитий виявлений НЛО — ціль місії (missionTargets)
     if (missionTargets(p.geo).length > 0) {
       if (claimHint(p.hints, 'mission')) {
-        journal('Підказка: зонд Розриву на землі — можна висадити загін, кнопка «Запустити місію» у панелі «Сенсорна сітка».');
+        journal(
+          'Підказка: зонд Розриву на землі — можна висадити загін, кнопка «Запустити місію» на вкладці «Вузол», панель «Сенсорна сітка».'
+        );
       }
     }
   }
@@ -207,7 +212,8 @@ export function battleEventText(e: GameEvent, name: (id: string) => string): { t
     };
   }
   if (e.type === 'death') {
-    return { text: '✝ ' + name(e.unitId) + ' загинув', cls: 'lose' };
+    const dead = name(e.unitId);
+    return { text: '✝ ' + dead + ' ' + byGender(dead, 'загинув', 'загинула'), cls: 'lose' };
   }
   // П11.4 (ADR-0058): події нових бойових дій з витратниками
   if (e.type === 'heal') {
@@ -310,7 +316,7 @@ export function researchEventText(e: ResearchEvent): { text: string; cls: string
 export function workshopEventText(e: WorkshopEvent): { text: string; cls: string } | null {
   switch (e.type) {
     case 'order':
-      return { text: '⚑ Кузня: замовлено «' + itemName(e.id) + '» — ' + e.ticks + ' тік(и)', cls: '' };
+      return { text: '⚑ Кузня: замовлено «' + itemName(e.id) + '» — ' + ticksText(e.ticks), cls: '' };
     case 'produced':
       return { text: '⚑ Кузня: виготовлено «' + itemName(e.id) + '» → склад ✓', cls: 'win' };
     case 'equip':

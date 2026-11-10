@@ -87,6 +87,8 @@ describe('mission: структура', () => {
     expect(aliens.length).toBe(3);
     expect(aliens.every((u) => u.weapon.name === 'Фазовий різак')).toBe(true);
     expect(aliens.map((u) => u.firingAccuracy)).toEqual([0.5, 0.45, 0.4]);
+    // Т.7 (ADR-0064): у журналі бою — «Демон N», як «демони Розриву» в решті текстів
+    expect(aliens.map((u) => u.name)).toEqual(['Демон 1', 'Демон 2', 'Демон 3']);
   });
 
   it('усі позиції унікальні, без перешкод, мапа 20×20', () => {

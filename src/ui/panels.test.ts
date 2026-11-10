@@ -35,7 +35,8 @@ function setupDom(): void {
     <span id="ready">—</span>
     <button id="btn-tick">+1 тік</button>
     <button id="btn-day">+1 доба</button>
-    <button id="btn-hire">Найм солдата (100)</button>
+    <span id="econ-rates"></span>
+    <button id="btn-hire">Вербувати оперативника</button>
     <section id="geo-panel"><canvas id="geo" width="768" height="432"></canvas></section>
     <div id="ictx" class="hidden">
       <span><b id="ictx-target">—</b></span>
@@ -177,6 +178,37 @@ describe('renderUfos: сканери НЛО', () => {
   });
 });
 
+describe('Т.7: nodeActions — дії, що чекають на вкладці «Вузол» (сигнал вкладки)', () => {
+  it('нічого не виявлено — 0; зонд у повітрі і перехоплюач на базі — 1; погоня — 0', () => {
+    const f = makeFixture();
+    expect(f.panels.nodeActions()).toBe(0);
+    expect(tickUntil(f.party, () => detectedUfos(f.party.geo).some((u) => u.status === 'летить'))).toBe(true);
+    const flying = detectedUfos(f.party.geo).filter((u) => u.status === 'летить');
+    expect(f.panels.nodeActions()).toBe(flying.length + missionTargets(f.party.geo).length);
+    expect(f.panels.nodeActions()).toBeGreaterThan(0);
+    startIntercept(f.party.intercept, f.party.geo, flying[0]!.id);
+    expect(f.panels.nodeActions()).toBe(missionTargets(f.party.geo).length); // перехоплюач у погоні — кнопки «Перехопити» нема
+  });
+
+  it('приземлений зонд — місія рахується; повітряний бій — +1 (рішення про дистанцію)', () => {
+    const f = makeFixture();
+    expect(tickUntil(f.party, () => missionTargets(f.party.geo).length > 0)).toBe(true);
+    const base = f.panels.nodeActions();
+    expect(base).toBeGreaterThanOrEqual(missionTargets(f.party.geo).length);
+    f.party.intercept.fighter.status = 'бій';
+    const flying = detectedUfos(f.party.geo).filter((u) => u.status === 'летить').length;
+    expect(f.panels.nodeActions()).toBe(base - flying + 1);
+  });
+
+  it('у тактичному бою і після банкрутства — 0 (колонка неактивна)', () => {
+    for (const over of [{ inBattle: () => true }, { isGameOver: () => true }]) {
+      const f = makeFixture(over);
+      expect(tickUntil(f.party, () => missionTargets(f.party.geo).length > 0)).toBe(true);
+      expect(f.panels.nodeActions()).toBe(0);
+    }
+  });
+});
+
 describe('renderFinances: чип балансу і кнопка найму', () => {
   it('баланс у чипі і картці (дублювання свідоме, ADR-0027); найм доступний', () => {
     const f = makeFixture();
@@ -185,6 +217,17 @@ describe('renderFinances: чип балансу і кнопка найму', () 
     expect(document.getElementById('money')!.textContent).toBe('300');
     expect(document.getElementById('money-card')!.textContent).toBe('300');
     expect((document.getElementById('btn-hire') as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it('Т.7: ставки і ціна вербування — з ядра за пресетом партії, не з розмітки', () => {
+    const f = makeFixture();
+    f.panels.renderFinances();
+    expect(document.getElementById('econ-rates')!.textContent).toBe('· дотація 75/добу · премії за місію 110/170');
+    expect(document.getElementById('btn-hire')!.textContent).toBe('Вербувати оперативника (100)');
+    f.party.campaign.preset = 'легкий';
+    f.panels.renderFinances();
+    expect(document.getElementById('econ-rates')!.textContent).toBe('· дотація 90/добу · премії за місію 132/204');
+    expect(document.getElementById('btn-hire')!.textContent).toBe('Вербувати оперативника (120)');
   });
 
   it('мало грошей — найм вимкнений з причиною; банкрутство — БАНКРУТ', () => {
@@ -251,7 +294,7 @@ describe('renderFighter: панель винищувача (П7.4)', () => {
     f.party.intercept.fighter.status = 'ремонт';
     f.party.intercept.fighter.repairTicksLeft = 2;
     f.panels.renderFighter();
-    expect(document.getElementById('fighter')!.textContent).toContain('ремонт: 2 тік(и)');
+    expect(document.getElementById('fighter')!.textContent).toContain('ремонт: 2 тіки');
     expect(document.getElementById('fighter')!.querySelectorAll('button').length).toBe(0);
   });
 
@@ -279,7 +322,7 @@ describe('renderRoster: ростер і чип боєготових (ADR-0027)',
     expect(document.getElementById('ready')!.textContent).toBe('5/6');
     const box = document.getElementById('roster')!;
     expect(box.textContent).toContain('6 оперативників (5 боєготових)');
-    expect(box.innerHTML).toContain('лікарня: 3 тик(и)');
+    expect(box.innerHTML).toContain('лікарня: 3 тіки');
     expect(box.innerHTML).toContain('#ff9c9c'); // hpColor(4, 10) — поранений
   });
 
