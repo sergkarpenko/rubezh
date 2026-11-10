@@ -206,6 +206,8 @@ git add .
 git commit -m "feat(core): додати функцію X"
 
 # Крок 2: Пуш гілки + PR у main
+# Розмір дифа до пушу (ADR-0077; ліміт 500 рядків коду, ADR-0036/0061):
+./scripts/pr-size.sh origin/main HEAD
 git push origin <гілка>
 # Опис PR: що змінилось, чому, критерії приймання (ADR-0023), результати npm test
 
@@ -341,6 +343,7 @@ git pull origin main
 | ADR-0074 | Структура workflow.md — активна фаза + архів завершених фаз у docs/workflow-archive/ (доповнює ADR-0023/0028/0043)                                                                                | accepted              | 2026-10-19 |
 | ADR-0075 | Евакуація з місії — відступ у зону висадки, врятовані без премії (доповнює ADR-0021/0022/0026; план Фази 15) | accepted | 2026-10-25 |
 | ADR-0076 | Гейти типів, лінту і формату — у CI, а не лише в pre-commit: `tsc --noEmit` (з тестами), ESLint, Prettier у джобі `test`; `npm ci` (доповнює ADR-0014/0015/0016/0025; Т.5b) | accepted | 2026-11-10 |
+| ADR-0077 | Автоматична перевірка розміру PR — `scripts/pr-size.sh` + workflow `pr-size`; docs/ассети/lockfile поза підрахунком, плановане відхилення — мітка `size-deviation` (частково Supersedes: ADR-0040; доповнює ADR-0036/0061/0069; Т.5c) | accepted | 2026-11-10 |
 
 **Нове рішення?** Створювати новий ADR з полем Supersedes.
 
