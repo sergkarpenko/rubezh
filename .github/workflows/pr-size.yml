@@ -1,0 +1,36 @@
+# Перевірка розміру PR (ADR-0077 — реалізація ADR-0040): ліміт 500 рядків коду
+# (ADR-0036); docs, ассети, бінарні файли і lockfile у підрахунок не входять
+# (ADR-0036/0069); плановане відхилення — мітка `size-deviation` (ADR-0061).
+# Логіка — у scripts/pr-size.sh (той самий скрипт агент запускає локально до пушу).
+# Dependabot-PR пропускаються (ADR-0036); пропущена джоба = зелений чек.
+name: pr-size
+
+on:
+  pull_request:
+    branches: [main]
+    # edited — перенацілення складеного PR на main (урок П11.4);
+    # labeled/unlabeled — поява чи зняття мітки планованого відхилення
+    types: [opened, synchronize, reopened, edited, labeled, unlabeled]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-size-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pr-size:
+    if: github.event.pull_request.user.login != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # повна історія: merge-base гілки і main потрібен для дифа base...head
+          fetch-depth: 0
+      - name: Розмір PR
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_SIZE_DEVIATION: ${{ contains(github.event.pull_request.labels.*.name, 'size-deviation') }}
+        run: ./scripts/pr-size.sh "$BASE_SHA" "$HEAD_SHA"
