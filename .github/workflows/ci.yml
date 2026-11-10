@@ -27,6 +27,8 @@ jobs:
       # ADR-0076: гейти типів, лінту і формату — у CI, а не лише в pre-commit.
       # tsc перевіряє і тестові файли: vitest типи не перевіряє, typedoc тести виключає.
       - run: npx tsc --noEmit
+      # ADR-0079: ядро компілюється без lib.dom — «чисте ядро без DOM» (ADR-0002) як гейт
+      - run: npx tsc --noEmit -p tsconfig.core.json
       - run: npm run lint
       - run: npm run format:check
       - run: npm test

@@ -135,7 +135,7 @@
 
 ### 4. Шари архітектури
 
-- **`src/core/`:** Чиста логіка (без DOM/Canvas) — див. ADR-0002
+- **`src/core/`:** Чиста логіка (без DOM/Canvas) — див. ADR-0002; перевіряється механічно (ADR-0079): `tsconfig.core.json` без lib.dom + ESLint-правила `src/core` (без `Math.random`, годинника, імпортів поза ядром)
 - **`src/main.ts`:** Цільовий UI (ванільний TS + Canvas 2D) — див. ADR-0010
 - **`src/core/ai-bot.ts` + `src/core/intercept-bot.ts`:** Демо-бот і бот перехоплень (пR.3, ADR-0038; колишній `src/bot.ts` видалено — UI-інтеграція в `src/ui/*`)
 
@@ -185,6 +185,10 @@ npm test
 # Повна перевірка типів, включно з тестами (ADR-0076): vitest типи не перевіряє
 # (урок П11.3), typedoc тести виключає — той самий крок є гейтом у CI
 npx tsc --noEmit
+# Ядро без DOM (ADR-0002/0079): src/core компілюється без lib.dom
+npx tsc --noEmit -p tsconfig.core.json
+# Лінт, зокрема правила ядра (ADR-0079): Math.random/годинник/імпорти поза src/core
+npm run lint
 # typedoc = генерація довідки API (ADR-0016/0019)
 npm run docs
 
@@ -345,6 +349,7 @@ git pull origin main
 | ADR-0076 | Гейти типів, лінту і формату — у CI, а не лише в pre-commit: `tsc --noEmit` (з тестами), ESLint, Prettier у джобі `test`; `npm ci` (доповнює ADR-0014/0015/0016/0025; Т.5b) | accepted | 2026-11-10 |
 | ADR-0077 | Автоматична перевірка розміру PR — `scripts/pr-size.sh` + workflow `pr-size`; docs/ассети/lockfile поза підрахунком, плановане відхилення — мітка `size-deviation` (частково Supersedes: ADR-0040; доповнює ADR-0036/0061/0069; Т.5c) | accepted | 2026-11-10 |
 | ADR-0078 | Мажорні версії TypeScript — поза Dependabot, лише вручну з ADR: TypeScript 7 не підтримують typedoc 0.28 і typescript-eslint 8 (доповнює ADR-0012/0020) | accepted | 2026-11-10 |
+| ADR-0079 | Правила ядра з AGENTS.md — як гейти: ESLint-правила для `src/core` (Math.random, годинник, імпорти поза ядром) і компіляція ядра без lib.dom (`tsconfig.core.json`) у CI (доповнює ADR-0002/0003/0038/0076; Т.6a) | accepted | 2026-11-10 |
 
 **Нове рішення?** Створювати новий ADR з полем Supersedes.
 
