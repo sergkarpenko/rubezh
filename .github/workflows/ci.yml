@@ -1,4 +1,4 @@
-# CI-гейт на PR (ADR-0025/0035): тести + поріг покриття + звіт на Codecov (гейт codecov/patch, ADR-0034) + збірка + docs — без деплою.
+# CI-гейт на PR (ADR-0025/0035/0076): типи + лінт + формат + тести + поріг покриття + звіт на Codecov (гейт codecov/patch, ADR-0034) + збірка + docs — без деплою.
 # Працює при кожному PR у main; чек «test» — required status check
 # для захисту гілки main (той самий рубіж, що й preview на push).
 name: ci
@@ -22,7 +22,13 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: npm install
+      # ADR-0076: строго за lockfile (урок П9.4 — дрейф node_modules від lockfile)
+      - run: npm ci
+      # ADR-0076: гейти типів, лінту і формату — у CI, а не лише в pre-commit.
+      # tsc перевіряє і тестові файли: vitest типи не перевіряє, typedoc тести виключає.
+      - run: npx tsc --noEmit
+      - run: npm run lint
+      - run: npm run format:check
       - run: npm test
       # Покриття ядра + поріг 80% (ADR-0017); звіт — dist/coverage
       - run: npm run test:coverage
