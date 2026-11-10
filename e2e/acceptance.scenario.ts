@@ -105,6 +105,11 @@ test('сценарій приймання ADR-0030: партія → місія 
     const soldier = mirror.squad()[0];
     await tap(page, soldier.pos);
     await expect(unit).toHaveText(unitLine(soldier));
+    // ADR-0081: демон у тумані не видає себе — тап по його клітинці дає те
+    // саме прев'ю шляху, що й по порожній невидимій
+    const probe = mirror.fogProbe(soldier);
+    await tap(page, probe.cell);
+    await expect(info).toContainText(probe.hint);
     const option = mirror.moveOption(soldier);
     await tap(page, option.cell); // перший тап — прев'ю шляху
     await expect(info).toContainText('Шлях: ' + option.cost + ' AP');

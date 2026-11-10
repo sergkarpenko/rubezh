@@ -73,6 +73,20 @@ describe('A*: перешкоди і недосяжність', () => {
     expect(p.some((st) => st.x === 3 && st.y === 2)).toBe(false);
   });
 
+  it('ADR-0081: юніт поза seen шляху не перекриває, у seen — обходиться; зайнята невидима ціль досяжна', () => {
+    const g = setupGame([], { x: 3, y: 2 });
+    const fog = findPath(g, { x: 2, y: 2 }, { x: 4, y: 2 }, undefined, new Set())!;
+    expect(fog).toEqual([
+      { x: 3, y: 2 },
+      { x: 4, y: 2 },
+    ]); // планувальник про юніта не знає — шлях прямий, крізь його клітинку
+    const known = findPath(g, { x: 2, y: 2 }, { x: 4, y: 2 }, undefined, new Set(['3,2']))!;
+    expect(known).toHaveLength(4); // видимий юніт — обхід, як без seen
+    expect(known.some((st) => st.x === 3 && st.y === 2)).toBe(false);
+    expect(findPath(g, { x: 2, y: 2 }, { x: 3, y: 2 }, undefined, new Set())).toEqual([{ x: 3, y: 2 }]);
+    expect(findPath(g, { x: 2, y: 2 }, { x: 3, y: 2 }, undefined, new Set(['3,2']))).toBeNull();
+  });
+
   it('інтеграція: findPath → moveUnit витрачає AP за шляхом', () => {
     const g = setupGame();
     const path = findPath(g, { x: 2, y: 2 }, { x: 8, y: 2 })!;

@@ -31,11 +31,15 @@ function key(pos: Vec2): string {
  * Коротший шлях від start до goal (не включаючи start) або null, якщо ціль недосяжна.
  * Перешкоди та зайняті юнітами клітинки непрохідні; ціль, зайнята юнітом → null.
  * Вартість: path.length × MOVE_AP_PER_CELL (див. pathApCost).
+ * seen (ADR-0081) — клітинки, які бачить той, хто планує шлях (ключі "x,y"):
+ * юніт поза ними шляху не перекриває — планувальник про нього не знає, і шлях
+ * не видає його позицію. Без seen — усі юніти відомі (ШІ, боти).
  */
-export function findPath(state: GameState, start: Vec2, goal: Vec2, maxNodes = 2000): Vec2[] | null {
+export function findPath(state: GameState, start: Vec2, goal: Vec2, maxNodes = 2000, seen?: ReadonlySet<string>): Vec2[] | null {
   const k = (p: Vec2) => p.x + ',' + p.y;
   if (k(start) === k(goal)) return []; // спершу старт = ціль, потім перевірка зайнятості
-  const passable = (p: Vec2): boolean => isInside(state.map, p) && !isBlocked(state.map, p) && !unitAt(state, p);
+  const occupied = (p: Vec2): boolean => unitAt(state, p) !== undefined && (seen === undefined || seen.has(k(p)));
+  const passable = (p: Vec2): boolean => isInside(state.map, p) && !isBlocked(state.map, p) && !occupied(p);
   if (!passable(goal)) return null;
 
   const h = (p: Vec2) => Math.abs(p.x - goal.x) + Math.abs(p.y - goal.y);

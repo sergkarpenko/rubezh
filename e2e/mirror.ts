@@ -130,7 +130,7 @@ export class CoreMirror {
       for (let dx = -2; dx <= 2; dx++) {
         const cell = { x: u.pos.x + dx, y: u.pos.y + dy };
         if (this.state.units.some((o) => o.alive && o.pos.x === cell.x && o.pos.y === cell.y)) continue;
-        const path = findPath(this.state, u.pos, cell);
+        const path = findPath(this.state, u.pos, cell, undefined, this.seen());
         if (path === null || path.length === 0) continue;
         const cost = pathApCost(path);
         if (cost <= maxCost && cost <= u.ap) return { cell, path, cost };
@@ -140,7 +140,26 @@ export class CoreMirror {
   }
 
   move(u: Unit, option: MoveOption): void {
-    moveUnit(this.state, u.id, option.path);
+    moveUnit(this.state, u.id, option.path, true);
+  }
+
+  // Клітинки, які бачить загін (battle.ts visibleCells) — за ними ввід бою
+  // планує шлях: юніт у тумані шляху не перекриває (ADR-0081).
+  seen(): Set<string> {
+    const cells = new Set<string>();
+    for (const s of this.squad()) for (const k of computeVisibleCells(this.state, s.pos)) cells.add(k);
+    return cells;
+  }
+
+  // Туман не видає демона (ADR-0081): клітинка першого невидимого демона і
+  // підказка, яку дає тап по ній, — те саме прев'ю шляху, що й по порожній.
+  fogProbe(u: Unit): { cell: Vec2; hint: string } {
+    const seen = this.seen();
+    const hidden = this.state.units.find((a) => a.side === 'alien' && a.alive && !seen.has(a.pos.x + ',' + a.pos.y));
+    const path = hidden === undefined ? null : findPath(this.state, u.pos, hidden.pos, undefined, seen);
+    if (hidden === undefined || path === null) throw new Error('Дзеркало: немає досяжного демона в тумані');
+    const cost = pathApCost(path);
+    return { cell: hidden.pos, hint: cost > u.ap ? 'Не вистачає AP: шлях ' + cost + ' проти ' + u.ap : 'Шлях: ' + cost + ' AP' };
   }
 
   overwatch(u: Unit): void {
@@ -156,7 +175,7 @@ export class CoreMirror {
 
   // Чи бачить загін клітинку юніта (туман війни, battle.ts visibleCells).
   sees(u: Unit): boolean {
-    return this.squad().some((s) => computeVisibleCells(this.state, s.pos).has(u.pos.x + ',' + u.pos.y));
+    return this.seen().has(u.pos.x + ',' + u.pos.y);
   }
 
   // Перша пара «стрілець → видима ціль»: ті самі перевірки, що у

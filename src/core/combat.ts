@@ -308,10 +308,15 @@ function assertStep(state: GameState, u: Unit, step: Vec2): void {
 
 // Рух по готовому шляху (A* — у map.ts, ітерація 2). Кроки строго по 4 напрямках.
 // Кожен крок може спровокувати реакційний вогонь дозору ворога; смерть перериває рух.
-export function moveUnit(state: GameState, unitId: string, path: Vec2[]): void {
+// stopAtUnit (ADR-0081): шлях планувався без знання про юнітів у тумані — крок у
+// зайняту клітинку не помилка, а кінець руху перед нею; пройдені кроки й AP
+// лишаються. Повертає юніта, що перекрив шлях (інакше undefined).
+export function moveUnit(state: GameState, unitId: string, path: Vec2[], stopAtUnit = false): Unit | undefined {
   const u = getUnit(state, unitId);
   requireActive(state, u);
   for (const step of path) {
+    const blocker = stopAtUnit ? unitAt(state, step) : undefined;
+    if (blocker !== undefined) return blocker;
     assertStep(state, u, step);
     const from = { ...u.pos };
     u.ap -= MOVE_AP_PER_CELL;
@@ -320,6 +325,7 @@ export function moveUnit(state: GameState, unitId: string, path: Vec2[]): void {
     triggerOverwatch(state, u);
     if (!u.alive) break; // реакційний вогонь перервав рух
   }
+  return undefined;
 }
 
 // Один постріл (спільний для атаки й реакційного вогню дозору, Фаза 2/П5):

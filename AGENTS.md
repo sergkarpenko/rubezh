@@ -355,6 +355,7 @@ git pull origin main
 | ADR-0078 | Мажорні версії TypeScript — поза Dependabot, лише вручну з ADR: TypeScript 7 не підтримують typedoc 0.28 і typescript-eslint 8 (доповнює ADR-0012/0020) | accepted | 2026-11-10 |
 | ADR-0079 | Правила ядра з AGENTS.md — як гейти: ESLint-правила для `src/core` (Math.random, годинник, імпорти поза ядром) і компіляція ядра без lib.dom (`tsconfig.core.json`) у CI (доповнює ADR-0002/0003/0038/0076; Т.6a) | accepted | 2026-11-10 |
 | ADR-0080 | Сценарій приймання в браузері — smoke ADR-0030 у Playwright (`e2e/acceptance.scenario.ts`), звірка сторінки з дзеркалом ядра (`e2e/mirror.ts`); `npm run test:e2e`, джоба `e2e` у CI проти збірки того ж коміту (доповнює ADR-0030/0063/0003/0076; Т.8) | accepted | 2026-11-10 |
+| ADR-0081 | Юніт у тумані для вводу гравця не існує: невидима клітинка поводиться як порожня, шлях планується за видимим (`findPath` із `seen`), рух закінчується перед юнітом із туману (`moveUnit` зі `stopAtUnit`) (доповнює ADR-0006/0027/0080; Т.9) | accepted | 2026-11-11 |
 
 **Нове рішення?** Створювати новий ADR з полем Supersedes.
 
