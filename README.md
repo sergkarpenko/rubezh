@@ -39,6 +39,7 @@ npm run lint           # ESLint (src/)
 npm run format:check   # Prettier (src/, index.html)
 npm run build          # прод-збірка (vite → dist/)
 npm run docs           # TypeDoc-довідка API (HTML у dist/api)
+npm run test:e2e       # сценарій приймання в браузері (Playwright, ADR-0080)
 ```
 
 - Стек: TypeScript + Canvas 2D, Vite, без фреймворків. Тестування: vitest (809 тестів; jsdom для DOM-тестів UI), покриття v8 → Codecov.

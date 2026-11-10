@@ -1,4 +1,5 @@
 # CI-гейт на PR (ADR-0025/0035/0076): типи + лінт + формат + тести + поріг покриття + звіт на Codecov (гейт codecov/patch, ADR-0034) + збірка + docs — без деплою.
+# Джоба «e2e» (ADR-0080): сценарій приймання в браузері.
 # Працює при кожному PR у main; чек «test» — required status check
 # для захисту гілки main (той самий рубіж, що й preview на push).
 name: ci
@@ -45,3 +46,20 @@ jobs:
       - run: npm run build
       # TypeDoc-довідка (ADR-0019) — перевірка генерації на PR
       - run: npm run docs
+
+  # ADR-0080: сценарій приймання — smoke-сценарій ADR-0030 у браузері проти збірки
+  # цього ж коміту (vite build + vite preview піднімає сам Playwright), звірка
+  # сторінки з дзеркалом ядра. Окрема джоба: встановлення браузера (~1 хв) не
+  # гальмує чек «test». Поки не required — рішення власника (ADR-0080 п.8).
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - run: npm ci
+      # Типи сценарію і дзеркала: Playwright, як і vitest, типів не перевіряє
+      - run: npx tsc --noEmit -p tsconfig.e2e.json
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
