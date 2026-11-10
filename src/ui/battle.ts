@@ -43,6 +43,7 @@ import {
 import { el } from './dom';
 import { BCELL } from './grid';
 import { type LogCat } from './journal';
+import { byGender, ticksText } from './text';
 import type { AmbientBattleScene, AmbientUnitView } from './ambient';
 
 // П15.2 (ADR-0075): третій результат бою «евакуйовано» — той самий виклик
@@ -542,9 +543,14 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
     // П11.4 (ADR-0058): витратники уцілілих — використані зникають, невикористані лишаються.
     settleConsumables(party.workshop, aftermath.survivors, mission.state.items);
     completeMission(party.geo, mission.briefing.ufoId, outcome);
-    for (const s of aftermath.lost) deps.journal('✝ ' + s.name + ' загинув у бою', 'lose', 'battle');
+    for (const s of aftermath.lost)
+      deps.journal('✝ ' + s.name + ' ' + byGender(s.name, 'загинув у бою', 'загинула в бою'), 'lose', 'battle');
     for (const s of aftermath.wounded)
-      deps.journal('✚ ' + s.name + ' поранений — лікарня: ' + party.roster.hospital[s.id] + ' тик(и)', '', 'battle');
+      deps.journal(
+        '✚ ' + s.name + ' ' + byGender(s.name, 'поранений', 'поранена') + ' — лікарня: ' + ticksText(party.roster.hospital[s.id]),
+        '',
+        'battle'
+      );
     if (outcome === 'перемога') {
       // П4.5 (ADR-0021): премія за перемогу за тип НЛО; надходження — у журнал
       creditMissionBonus(party.econ, mission.briefing.kind, party.campaign.preset);

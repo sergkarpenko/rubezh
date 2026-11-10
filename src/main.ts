@@ -56,7 +56,7 @@ import { createScreens, type Screens } from './ui/screens';
 import { createSettings } from './ui/settings';
 // П12.4 (ADR-0065): вкладки статус-колонки «Загін»/«База»/«Система» —
 // модуль src/ui/status-tabs.ts (панелі в DOM, персист поза сейвом).
-import { createStatusTabs } from './ui/status-tabs';
+import { createStatusTabs, type StatusTabs } from './ui/status-tabs';
 import { initPanelFrame } from './ui/panel-frame';
 import { decorateTabButtons } from './ui/tab-icons';
 
@@ -211,6 +211,9 @@ function hasUnsavedChanges(): boolean {
 // П12.2 (ADR-0065): каркас екранів — створюється лише у браузері (контент
 // будує DOM); твердження про null страхують шари-зв'язки до ініціалізації.
 let screens: Screens | null = null;
+// Т.7: вкладки статус-колонки — посилання для сигналу дій «Вузла» (renderAll);
+// null до ініціалізації DOM (node-середовище тестів модулів).
+let statusTabs: StatusTabs | null = null;
 // пR.2 (ADR-0037): стан бою — явний об'єкт замість модульних let (мітигація
 // плану рефакторингу); ним спільно користуються модуль бою (src/ui/battle.ts)
 // і обробники вводу (нижче). Порядок оголошень — TDZ, див. docs/workflow.md.
@@ -481,6 +484,8 @@ function renderAll(): void {
   researchPanel.render(); // П11.6: панель «Дослідження» (лише геосцена — кнопки вимкнені в бою)
   workshopPanel.render(); // П11.6: панель «Цех» (лише геосцена — кнопки вимкнені в бою)
   savePanel.render();
+  // Т.7: сигнал на вкладці «Вузол» — скільки дій чекає там гравця
+  statusTabs?.setAttention('base', panels.nodeActions());
   if (ui.mission) battle.renderBattle();
 }
 
@@ -551,7 +556,7 @@ if (typeof document !== 'undefined') {
   // запам'ятовується в localStorage поза сейвом (ADR-0026, формат
   // rubezh.settings.*), помилки сховища — тихо. Приглушення в бою — чинний
   // механізм #status.dimmed (П6.3): вкладки живуть у колонці.
-  createStatusTabs();
+  statusTabs = createStatusTabs();
   // П14.6 (ADR-0072): іконки вкладок («Загін»/«Вузол»/«Система» статус-колонки
   // і фільтри журналу) — піксель-матриці кодом, узгоджені з тулбаром (П13.2);
   // canvas перед текстом, контракти кнопок не змінюються.

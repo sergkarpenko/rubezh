@@ -241,6 +241,27 @@ describe('battle: флоу місії (запуск/закриття/завер�
     expect(f.ui.mission).toBeNull(); // кнопка повернення закрила бій
   });
 
+  it('Т.7: журнал втрат і поранених — рід за іменем, «тіків» узгоджено з числом', () => {
+    // загін місії — перші боєготові ростеру: Іван, Олена, …; лікарня — 2 тіки на HP
+    const run = (dead: string, wounded: string, lostHp: number): string[] => {
+      const f = makeFixture();
+      f.battle.launch(firstTarget(f));
+      const st = f.ui.mission!.state;
+      for (const u of st.units) if (u.side === 'alien') u.alive = false;
+      const byName = (n: string) => st.units.find((u) => u.name === n)!;
+      byName(dead).alive = false;
+      byName(wounded).hp = byName(wounded).maxHp - lostHp;
+      f.battle.finish('перемога');
+      return vi.mocked(f.deps.journal).mock.calls.map((c) => c[0]);
+    };
+    const a = run('Олена', 'Іван', 4);
+    expect(a).toContain('✝ Олена загинула в бою');
+    expect(a).toContain('✚ Іван поранений — лікарня: 8 тіків');
+    const b = run('Іван', 'Олена', 1);
+    expect(b).toContain('✝ Іван загинув у бою');
+    expect(b).toContain('✚ Олена поранена — лікарня: 2 тіки');
+  });
+
   it('поразка: банер «загін втрачено», НЛО лишається активним', () => {
     const f = makeFixture();
     f.battle.launch(firstTarget(f));

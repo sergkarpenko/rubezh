@@ -48,6 +48,17 @@ export const SHOT_DOWN_BONUS: Record<UfoKind, number> = {
   збирач: 210,
 };
 
+// Т.7: фактичні суми за пресетом (множник економіки, ADR-0033/0058) — єдине
+// джерело і для нарахувань нижче, і для текстів шару відображення (урок П9.1:
+// числа в розмітці дрейфують; патерн hirePrice). Математика без змін.
+export function dailyAllowance(preset: DifficultyPreset = DEFAULT_PRESET): number {
+  return Math.round(DAILY_ALLOWANCE * DIFFICULTY_MULTIPLIERS[preset].economyMultiplier);
+}
+
+export function missionBonus(kind: UfoKind, preset: DifficultyPreset = DEFAULT_PRESET): number {
+  return Math.round(MISSION_BONUS[kind] * DIFFICULTY_MULTIPLIERS[preset].economyMultiplier);
+}
+
 export type EconomyEvent =
   | { type: 'allowance'; day: number; amount: number }
   | { type: 'mission_bonus'; kind: UfoKind; amount: number }
@@ -75,8 +86,7 @@ export function createEconomy(preset: DifficultyPreset = DEFAULT_PRESET): Econom
 // завершених діб — no-op (захист від подвійного нарахування).
 export function economyTick(state: EconomyState, geo: GeoState, preset: DifficultyPreset = DEFAULT_PRESET): void {
   const completedDays = geoDay(geo) - 1;
-  const multipliers = DIFFICULTY_MULTIPLIERS[preset];
-  const effectiveAllowance = Math.round(DAILY_ALLOWANCE * multipliers.economyMultiplier);
+  const effectiveAllowance = dailyAllowance(preset);
   while (state.lastAllowanceDay < completedDays) {
     state.lastAllowanceDay += 1;
     state.money += effectiveAllowance;
@@ -87,9 +97,7 @@ export function economyTick(state: EconomyState, geo: GeoState, preset: Difficul
 // Премія за перемогу в місії за тип НЛО (поразка премії не дає — ADR-0021).
 // Викликає шар застосунку один раз після mission_won; тип — із briefing.kind.
 export function creditMissionBonus(state: EconomyState, kind: UfoKind, preset: DifficultyPreset = DEFAULT_PRESET): void {
-  const baseAmount = MISSION_BONUS[kind];
-  const multipliers = DIFFICULTY_MULTIPLIERS[preset];
-  const amount = Math.round(baseAmount * multipliers.economyMultiplier);
+  const amount = missionBonus(kind, preset);
   state.money += amount;
   state.log.push({ type: 'mission_bonus', kind, amount });
 }

@@ -11,9 +11,11 @@ import {
   createEconomy,
   creditMissionBonus,
   DAILY_ALLOWANCE,
+  dailyAllowance,
   economyTick,
   HIRE_PRICE,
   MISSION_BONUS,
+  missionBonus,
   spend,
   START_MONEY,
   type EconomyState,
@@ -171,5 +173,27 @@ describe('інваріанти ізоляції (ADR-0002/0003)', () => {
     };
     expect(run()).toEqual(run());
     expect(run().money).toBe(START_MONEY + 2 * DAILY_ALLOWANCE + MISSION_BONUS['збирач'] - HIRE_PRICE);
+  });
+});
+
+describe('Т.7: фактичні суми за пресетом — одне джерело для нарахувань і текстів', () => {
+  it('«норма» — базові константи; «легкий» ×1.2, «складний» ×0.9 (округлення)', () => {
+    expect(dailyAllowance()).toBe(DAILY_ALLOWANCE);
+    expect(missionBonus('розвідник')).toBe(MISSION_BONUS['розвідник']);
+    expect([dailyAllowance('легкий'), dailyAllowance('складний')]).toEqual([90, 68]);
+    expect([missionBonus('розвідник', 'легкий'), missionBonus('збирач', 'легкий')]).toEqual([132, 204]);
+    expect([missionBonus('розвідник', 'складний'), missionBonus('збирач', 'складний')]).toEqual([99, 153]);
+  });
+
+  it('нарахування збігаються з хелперами на кожному пресеті', () => {
+    for (const preset of ['легкий', 'норма', 'складний'] as const) {
+      const geo = geoNoUfo();
+      const econ = createEconomy(preset);
+      const start = econ.money;
+      advanceTime(geo, 48);
+      economyTick(econ, geo, preset);
+      creditMissionBonus(econ, 'збирач', preset);
+      expect(econ.money).toBe(start + dailyAllowance(preset) + missionBonus('збирач', preset));
+    }
   });
 });

@@ -159,6 +159,8 @@ describe('battleEventText: події бою → журнал', () => {
       text: '✝ Морок загинув',
       cls: 'lose',
     });
+    // Т.7: рід дієслова — за іменем («Олена загинула», не «загинув»)
+    expect(battleEventText(evBattle({ type: 'death', unitId: 's2', killerId: 'a1' }), () => 'Олена')?.text).toBe('✝ Олена загинула');
     expect(battleEventText(evBattle({ type: 'move', unitId: 's1', from: { x: 0, y: 0 }, to: { x: 1, y: 0 } }), name)).toBe(null);
     expect(battleEventText(evBattle({ type: 'turn', turn: 2, side: 'alien' }), name)).toBe(null);
     expect(battleEventText(evBattle({ type: 'overwatch', unitId: 's1', armed: true }), name)).toBe(null);
@@ -517,7 +519,7 @@ describe('drainResearch: seen-трекінг подій науки (П11.6)', ()
 describe('workshopEventText: перетворювач подій цеху (П11.6)', () => {
   it('замовлення/виготовлення/екіпірування — з прапорцем ⚑', () => {
     expect(workshopEventText(evWorkshop({ type: 'order', id: 'medkit', ticks: 12 }))).toEqual({
-      text: '⚑ Кузня: замовлено «Регенеративний гель» — 12 тік(и)',
+      text: '⚑ Кузня: замовлено «Регенеративний гель» — 12 тіків',
       cls: '',
     });
     expect(workshopEventText(evWorkshop({ type: 'produced', id: 'armor' }))).toEqual({
