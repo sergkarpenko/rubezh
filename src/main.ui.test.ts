@@ -1057,8 +1057,8 @@ describe('П11.6: критичний флоу «дослідити → виро�
     // 1. ДОСЛІДИТИ: 2 вчених, старт «аптечки» (каталог: індекс 2), доби до завершення
     btn('btn-hire-scientist').click();
     btn('btn-hire-scientist').click();
-    btn('btn-start-2').click(); // «аптечка» — 100 (баланс 300−200 = якраз)
-    expect($('money').textContent).toBe('0');
+    btn('btn-start-2').click(); // «аптечка» — 80 (Т.19, ADR-0088): баланс 300−200−80
+    expect($('money').textContent).toBe('20');
     let done = researchDone('Регенеративний гель');
     for (let i = 0; i < 60 && !done; i++) {
       btn('btn-day').click();

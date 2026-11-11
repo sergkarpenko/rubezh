@@ -185,20 +185,22 @@ describe('П11.8: політика науки — повний флоу (фік�
     expect(JSON.stringify(b)).toBe(JSON.stringify(a));
     expect(a.outcome).toBe('перемога');
     expect(a.scientistsHired).toBe(3);
-    // П11.8 (тунінг ×0.75 точок, комбо-B): за 30 діб — 3 проєкти
-    expect(a.completedProjects).toEqual(['medkit', 'lab-extension', 'optics']);
-    expect(a.workshopProduced).toBe(3);
-    expect(a.equippedItems).toBe(3);
+    // П11.8 (тунінг ×0.75 точок, комбо-B): за 30 діб — 3 проєкти.
+    // Т.19 (ADR-0088, ціни протоколів ×0,8): числа перемірено — «око» завершується
+    // першим, цех встигає четвертий предмет.
+    expect(a.completedProjects).toEqual(['optics', 'medkit', 'lab-extension']);
+    expect(a.workshopProduced).toBe(4);
+    expect(a.equippedItems).toBe(4);
     expect(a.salarySpent).toBe(1800);
-    expect(a.projectSpent).toBe(270);
-    expect(a.workshopSpent).toBe(130);
+    expect(a.projectSpent).toBe(216); // 80 + 64 + 72
+    expect(a.workshopSpent).toBe(180);
     expect(a.scientistsFired).toBe(0);
     expect(a.scientistsByDay[a.scientistsByDay.length - 1]).toBe(3);
   });
 
   it('спіраль зарплата→звільнення (урок П11.2): бідна партія звільняє вчених з кінця штату', () => {
     const heavy = { ...SCIENCE_POLICY, name: 'sci-heavy', scientistsUpTo: 5 };
-    const r = simulateParty(44, 'норма', { policy: heavy }); // сід 44: спіраль при WORLD_H 9 (probe)
+    const r = simulateParty(42, 'норма', { policy: heavy }); // сід 42: спіраль за цін Т.19 (probe; до Т.19 — сід 44)
     expect(r.salaryShortfallDays).toBe(2);
     expect(r.scientistsFired).toBe(2);
     // штат просідає 5 → 3 (наймані поверх звільнених) — метрики бачать спіраль
@@ -221,9 +223,9 @@ describe('П11.8: partyBotScienceStep — детерміновані рішен�
     const p = createParty(42, 'норма');
     partyBotScienceStep(p, { ...NO_SCIENCE_BASE, scientistsUpTo: 0, projects: ['grenade', 'medkit'] });
     // «осколкова граната»: передумова «аптечка» не завершена — гейт;
-    // «аптечка» стартує першою доступною (100 кошти), слот один зайнятий
+    // «аптечка» стартує першою доступною (80 кредитів, Т.19), слот один зайнятий
     expect(p.research.active.map((x) => x.id)).toEqual(['medkit']);
-    expect(p.econ.money).toBe(200);
+    expect(p.econ.money).toBe(220);
   });
 
   it('проєкт не стартує без слота (слоти лабораторії — гейт ADR-0058)', () => {

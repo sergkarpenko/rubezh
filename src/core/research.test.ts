@@ -359,12 +359,12 @@ describe('ізоляція від геосцени (критерій П11.2: geo
 describe('Т.14: каталог, пул імен, звільнення, слоти', () => {
   it('каталог протоколів: назви, ціни, точки, передумови; назва невідомого ключа — сам ключ', () => {
     expect(PROJECTS.map((p) => [p.id, p.name, p.cost, p.points, p.prerequisite])).toEqual([
-      ['armor', 'Композитна броня', 120, 27, undefined],
-      ['optics', 'Кібернетичне око', 90, 23, undefined],
-      ['medkit', 'Регенеративний гель', 100, 24, undefined],
-      ['lab-extension', 'Розширення лабораторії', 80, 33, undefined],
-      ['grenade', 'Імпульсна граната', 140, 30, 'medkit'],
-      ['gun-module', 'Гарматний модуль перехоплювача', 160, 36, 'optics'],
+      ['armor', 'Композитна броня', 96, 27, undefined],
+      ['optics', 'Кібернетичне око', 72, 23, undefined],
+      ['medkit', 'Регенеративний гель', 80, 24, undefined],
+      ['lab-extension', 'Розширення лабораторії', 64, 33, undefined],
+      ['grenade', 'Імпульсна граната', 112, 30, 'medkit'],
+      ['gun-module', 'Гарматний модуль перехоплювача', 128, 36, 'optics'],
     ]);
     expect(projectName('grenade')).toBe('Імпульсна граната');
     expect(projectName('невідомий' as ProjectId)).toBe('невідомий');
