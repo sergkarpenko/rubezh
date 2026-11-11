@@ -5,12 +5,16 @@
 
 import { describe, expect, it } from 'vitest';
 import {
+  ALIEN_CUTTER,
   calculateHitChance,
   createGame,
   endTurn,
   evacuate,
   EVAC_AP_COST,
+  GRENADE_AP_COST,
+  grenadeZone,
   hasLineOfSight,
+  HEAL_AP_COST,
   makeUnit,
   moveUnit,
   mulberry32,
@@ -81,6 +85,14 @@ describe('лінія вогню', () => {
   });
 });
 
+describe('лінія вогню по вертикалі (Т.11)', () => {
+  it('стіна між стрільцем і ціллю в одній колонці — не видно', () => {
+    const g = setupGame(alwaysHit, ['2,5']);
+    expect(hasLineOfSight(g, { x: 2, y: 2 }, { x: 2, y: 8 })).toBe(false);
+    expect(hasLineOfSight(g, { x: 2, y: 2 }, { x: 2, y: 4 })).toBe(true);
+  });
+});
+
 describe('атака', () => {
   it('aimed при завжди-влучному RNG: ціль гине, AP і kills враховані', () => {
     const g = setupGame();
@@ -129,6 +141,45 @@ describe('атака', () => {
   });
 });
 
+describe('атака: хто і по кому може стріляти (Т.11)', () => {
+  it('не свій хід або мертвий стрілець — помилка, пострілу немає', () => {
+    const g = setupGame();
+    endTurn(g); // хід демонів; у s1 лишилось 10 AP
+    expect(() => resolveAttack(g, 's1', 'a1', 'snap')).toThrow('Зараз хід не сторони player');
+    endTurn(g);
+    g.units[0].alive = false;
+    expect(() => resolveAttack(g, 's1', 'a1', 'snap')).toThrow('Юніт s1 мертвий');
+    expect(g.log.some((e) => e.type === 'shot')).toBe(false);
+    expect(g.units[0].ap).toBe(10);
+  });
+
+  it('«Фазовий різак» демонів: черга — 3 постріли за 4 AP, snap — 1 за 3, aimed — 1 за 5', () => {
+    const g = setupGame(alwaysMiss);
+    g.units[1].weapon = ALIEN_CUTTER;
+    endTurn(g); // хід демонів: у a1 10 AP
+    expect(resolveAttack(g, 'a1', 's1', 'auto').shots).toHaveLength(3);
+    expect(resolveAttack(g, 'a1', 's1', 'snap').shots).toHaveLength(1);
+    expect(g.units[1].ap).toBe(3);
+    g.units[1].ap = 5;
+    expect(resolveAttack(g, 'a1', 's1', 'aimed').shots).toHaveLength(1);
+    expect(g.units[1].ap).toBe(0);
+  });
+
+  it('кидок, що дорівнює шансу влучання, — промах; ціль стоїть', () => {
+    const chance = calculateHitChance(setupGame().units[0], 'snap');
+    const g = setupGame(seqRng([chance]));
+    expect(resolveAttack(g, 's1', 'a1', 'snap')).toEqual({ shots: [{ hit: false, damage: 0 }], targetDown: false });
+  });
+
+  it('мертва ціль — помилка, AP не витрачено', () => {
+    const g = setupGame();
+    g.units[1].alive = false;
+    expect(() => resolveAttack(g, 's1', 'a1', 'snap')).toThrow('Ціль уже мертва');
+    expect(g.units[0].ap).toBe(10);
+    expect(g.log.some((e) => e.type === 'shot')).toBe(false);
+  });
+});
+
 describe('рух', () => {
   it('дві клітинки = 2 AP, позиція оновлена, події в лозі', () => {
     const g = setupGame();
@@ -163,6 +214,36 @@ describe('рух', () => {
 
     const g2 = setupGame();
     expect(() => moveUnit(g2, 'a1', [{ x: 8, y: 3 }])).toThrow(); // не свій хід
+  });
+});
+
+describe('рух: зайнята клітинка, край мапи, подія (Т.11)', () => {
+  it('крок у зайняту сусідню клітинку — «Клітинка зайнята», юніт стоїть', () => {
+    const g = setupGame();
+    g.units[1].pos = { x: 3, y: 2 };
+    expect(() => moveUnit(g, 's1', [{ x: 3, y: 2 }])).toThrow('Клітинка зайнята');
+    expect(g.units[0].pos).toEqual({ x: 2, y: 2 });
+    expect(g.units[0].ap).toBe(10);
+  });
+
+  it('край мапи 20×20: крок на x = 20 або y = 20 — «Крок за межі мапи»', () => {
+    const g = setupGame();
+    g.units[0].pos = { x: 19, y: 19 };
+    expect(() => moveUnit(g, 's1', [{ x: 20, y: 19 }])).toThrow('Крок за межі мапи');
+    expect(() => moveUnit(g, 's1', [{ x: 19, y: 20 }])).toThrow('Крок за межі мапи');
+    expect(g.units[0].pos).toEqual({ x: 19, y: 19 });
+  });
+
+  it('подія move несе клітинки «звідки» і «куди»', () => {
+    const g = setupGame();
+    moveUnit(g, 's1', [
+      { x: 3, y: 2 },
+      { x: 3, y: 3 },
+    ]);
+    expect(g.log).toEqual([
+      { type: 'move', unitId: 's1', from: { x: 2, y: 2 }, to: { x: 3, y: 2 } },
+      { type: 'move', unitId: 's1', from: { x: 3, y: 2 }, to: { x: 3, y: 3 } },
+    ]);
   });
 });
 
@@ -201,6 +282,28 @@ describe('ходи', () => {
     expect(g.activeSide).toBe('player');
     expect(g.turn).toBe(2);
     expect(g.units[0].ap).toBe(10);
+  });
+});
+
+describe('ходи: старт бою і подія turn (Т.11)', () => {
+  const pair = () => [
+    makeUnit({ id: 's1', side: 'player', pos: { x: 2, y: 2 }, ap: 3 }),
+    makeUnit({ id: 'a1', side: 'alien', pos: { x: 8, y: 2 }, ap: 3 }),
+  ];
+
+  it('на старті повні AP отримує лише сторона, що ходить першою', () => {
+    expect(createGame({ map: map(), units: pair() }).units.map((u) => u.ap)).toEqual([10, 3]);
+    expect(createGame({ map: map(), units: pair(), startingSide: 'alien' }).units.map((u) => u.ap)).toEqual([3, 10]);
+  });
+
+  it('подія turn: номер кола і сторона, що отримала хід', () => {
+    const g = setupGame();
+    endTurn(g);
+    endTurn(g);
+    expect(g.log).toEqual([
+      { type: 'turn', turn: 1, side: 'alien' },
+      { type: 'turn', turn: 2, side: 'player' },
+    ]);
   });
 });
 
@@ -300,6 +403,83 @@ describe('дозор (overwatch)', () => {
   });
 });
 
+describe('дозор: хід, дальність, свої, кілька дозорів (Т.11)', () => {
+  const shotsBy = (g: GameState, id: string) => g.log.filter((e) => e.type === 'shot' && e.shooterId === id);
+
+  it('не свій хід або мертвий юніт — помилка, дозор не озброєно', () => {
+    const g = setupGame();
+    endTurn(g); // хід демонів; у s1 лишилось 10 AP
+    expect(() => setOverwatch(g, 's1')).toThrow('Зараз хід не сторони player');
+    endTurn(g);
+    g.units[0].alive = false;
+    expect(() => setOverwatch(g, 's1')).toThrow('Юніт s1 мертвий');
+    expect(g.units[0].overwatch).toBe(false);
+    expect(g.units[0].ap).toBe(10);
+  });
+
+  it('повторний дозор того ж ходу нічого не коштує і не пише подію', () => {
+    const g = setupGame();
+    setOverwatch(g, 's1');
+    setOverwatch(g, 's1');
+    expect(g.units[0].ap).toBe(7);
+    expect(g.log.filter((e) => e.type === 'overwatch')).toHaveLength(1);
+  });
+
+  it('дальність зброї: на 13 клітинках дозор мовчить і лишається озброєним, на 12 — стріляє', () => {
+    const g = setupGame(); // s1 у (2,2), гвинтівка б'є на 12
+    g.units[1].hp = 10;
+    g.units[1].maxHp = 10;
+    g.units[1].pos = { x: 16, y: 2 };
+    setOverwatch(g, 's1');
+    endTurn(g);
+    moveUnit(g, 'a1', [{ x: 15, y: 2 }]); // відстань 13: лінія вогню чиста, але далеко
+    expect(shotsBy(g, 's1')).toHaveLength(0);
+    expect(g.units[0].overwatch).toBe(true);
+    moveUnit(g, 'a1', [{ x: 14, y: 2 }]); // відстань 12: межа дальності — постріл
+    expect(shotsBy(g, 's1')).toHaveLength(1);
+    expect(g.units[0].overwatch).toBe(false);
+  });
+
+  it('дозор не стріляє по своїх: рух союзника його не розряджає', () => {
+    const g = itemsGame(); // s1 (2,2) і s2 (3,2) — одна сторона
+    setOverwatch(g, 's2');
+    moveUnit(g, 's1', [{ x: 2, y: 3 }]);
+    expect(g.log.some((e) => e.type === 'shot')).toBe(false);
+    expect(g.units[1].overwatch).toBe(true);
+    expect(g.units[0].hp).toBe(10);
+  });
+
+  it('два дозори, рухомий гине від першого: другий не стріляє і лишається озброєним', () => {
+    const g = itemsGame(); // alwaysHit: пошкодження 3
+    g.units[2].hp = 3; // a1 гине від одного влучання
+    setOverwatch(g, 's1');
+    setOverwatch(g, 's2');
+    endTurn(g);
+    moveUnit(g, 'a1', [{ x: 7, y: 2 }]);
+    expect(g.units[2].alive).toBe(false);
+    expect(shotsBy(g, 's1')).toHaveLength(1);
+    expect(shotsBy(g, 's2')).toHaveLength(0);
+    expect(g.units[1].overwatch).toBe(true);
+    expect(g.log.filter((e) => e.type === 'death')).toEqual([{ type: 'death', unitId: 'a1', killerId: 's1' }]);
+    expect(g.units.map((u) => u.kills)).toEqual([1, 0, 0, 0]);
+  });
+
+  it('два дозори, рухомий вижив після першого: стріляють обидва, у порядку масиву юнітів', () => {
+    const g = itemsGame(); // a1 має 10 HP: два влучання по 3
+    setOverwatch(g, 's1');
+    setOverwatch(g, 's2');
+    endTurn(g);
+    moveUnit(g, 'a1', [{ x: 7, y: 2 }]);
+    expect(g.log.filter((e) => e.type === 'shot')).toEqual([
+      { type: 'shot', shooterId: 's1', targetId: 'a1', mode: 'snap', hit: true, damage: 3 },
+      { type: 'shot', shooterId: 's2', targetId: 'a1', mode: 'snap', hit: true, damage: 3 },
+    ]);
+    expect(g.units[2].hp).toBe(4);
+    expect(g.units[0].overwatch).toBe(false);
+    expect(g.units[1].overwatch).toBe(false);
+  });
+});
+
 describe('детермінізм', () => {
   it('один сід RNG — повністю однаковий лог і стан', () => {
     const play = (seed: number) => {
@@ -392,6 +572,17 @@ describe('П11.4: лікування (аптечка)', () => {
     expect(() => useMedkit(g, 's1', 's1')).toThrow('Зараз хід не сторони player');
   });
 
+  it('бій без витратників (items не задано): «Гелю немає», а не аварія (Т.11)', () => {
+    expect(() => useMedkit(setupGame(), 's1', 's1')).toThrow('Гелю немає');
+  });
+
+  it('рівно 4 AP — лікування дозволене, лишається 0 (Т.11)', () => {
+    const g = itemsGame({ s1: { medkit: true, grenade: false } });
+    g.units[0].ap = HEAL_AP_COST;
+    expect(useMedkit(g, 's1', 's2').healed).toBe(3);
+    expect(g.units[0].ap).toBe(0);
+  });
+
   it('без RNG: лікування не споживає бойовий генератор (детермінізм)', () => {
     const g = itemsGame({ s1: { medkit: true, grenade: false } }, [], mulberry32(5));
     const s0 = (g.rng as StatefulRng).state;
@@ -480,6 +671,46 @@ describe('П11.4: кидок гранати', () => {
     expect(() => throwGrenade(w, 's1', { x: 8, y: 2 })).toThrow('Немає лінії кидка');
   });
 
+  it('зона вибуху — епіцентр і чотири сусіди по сторонах, без діагоналей (Т.11)', () => {
+    const cells = grenadeZone({ x: 5, y: 7 }).map((c) => c.x + ',' + c.y);
+    expect(cells.sort()).toEqual(['4,7', '5,6', '5,7', '5,8', '6,7']);
+  });
+
+  it('kills кидача: 0 за вбитого союзника, +1 за кожного вбитого ворога (Т.11)', () => {
+    const ally = itemsGame({ s1: { medkit: false, grenade: true } }); // alwaysHit: пошкодження 3
+    ally.units[1].pos = { x: 6, y: 2 };
+    ally.units[1].hp = 3;
+    throwGrenade(ally, 's1', { x: 6, y: 2 });
+    expect(ally.units[1].alive).toBe(false);
+    expect(ally.units[0].kills).toBe(0);
+
+    const foes = itemsGame({ s1: { medkit: false, grenade: true } });
+    foes.units[2].hp = 3;
+    foes.units[3].hp = 3;
+    throwGrenade(foes, 's1', { x: 8, y: 2 });
+    expect(foes.units[0].kills).toBe(2);
+  });
+
+  it('рівно 4 AP — кидок дозволений, лишається 0 (Т.11)', () => {
+    const g = itemsGame({ s1: { medkit: false, grenade: true } });
+    g.units[0].ap = GRENADE_AP_COST;
+    expect(throwGrenade(g, 's1', { x: 8, y: 2 }).affected).toEqual(['a1', 'a2']);
+    expect(g.units[0].ap).toBe(0);
+  });
+
+  it('не свій хід або мертвий кидач — помилка, граната і rng цілі (Т.11)', () => {
+    const g = itemsGame({ s1: { medkit: false, grenade: true } }, [], mulberry32(5));
+    const rngBefore = (g.rng as StatefulRng).state;
+    endTurn(g); // хід демонів; у s1 лишилось 10 AP
+    expect(() => throwGrenade(g, 's1', { x: 8, y: 2 })).toThrow('Зараз хід не сторони player');
+    endTurn(g);
+    g.units[0].alive = false;
+    expect(() => throwGrenade(g, 's1', { x: 8, y: 2 })).toThrow('Юніт s1 мертвий');
+    expect(g.items?.s1.grenade).toBe(true);
+    expect((g.rng as StatefulRng).state).toBe(rngBefore);
+    expect(g.log.some((e) => e.type === 'grenade')).toBe(false);
+  });
+
   it('епіцентр — видима кидачу клітинка: дальність 6 < радіуса огляду, LOS достатній', () => {
     // дзеркало computeVisibleCells (map.ts): клітинка в зоні кидка з чистою
     // лінією від кидача завжди видима йому (туман — лише рельєф, ADR-0006)
@@ -556,6 +787,30 @@ describe('П15.2: евакуація (ADR-0075)', () => {
     const g = evacGame(zone);
     g.units[0].ap = EVAC_AP_COST - 1;
     expect(() => evacuate(g, 's1')).toThrow('Недостатньо очок дій для евакуації');
+  });
+
+  it('рівно 2 AP — евакуація дозволена, лишається 0 (Т.11)', () => {
+    const g = evacGame(zone);
+    g.units[0].ap = EVAC_AP_COST;
+    expect(evacuate(g, 's1').unit.ap).toBe(0);
+    expect(g.evacuated?.map((u) => u.id)).toEqual(['s1']);
+  });
+
+  it('зона — це клітинка: збіг лише колонки або лише рядка з клітинкою зони не рахується (Т.11)', () => {
+    const g = evacGame([{ x: 2, y: 2 }]);
+    g.units[0].pos = { x: 2, y: 5 }; // та сама колонка, інший рядок
+    expect(() => evacuate(g, 's1')).toThrow('Евакуація доступна лише з клітинки зони висадки');
+    g.units[0].pos = { x: 5, y: 2 }; // той самий рядок, інша колонка
+    expect(() => evacuate(g, 's1')).toThrow('Евакуація доступна лише з клітинки зони висадки');
+    expect(g.evacuated?.length ?? 0).toBe(0);
+  });
+
+  it('евакуйований знятий з дозору (Т.11)', () => {
+    const g = evacGame(zone);
+    setOverwatch(g, 's1'); // 3 AP, прапор дозору
+    const { unit } = evacuate(g, 's1');
+    expect(unit.overwatch).toBe(false);
+    expect(unit.ap).toBe(10 - 3 - EVAC_AP_COST);
   });
 
   it('порядок перевірок фіксований: спершу зона, потім AP (детермінізм, ADR-0003)', () => {
