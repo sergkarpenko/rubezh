@@ -975,6 +975,15 @@ describe('П7.5: повітряний бій — контекст-стрічка
     expect($('ictx-round').textContent).toMatch(/^\d+$/);
     expect($('ictx-fighter').textContent).toContain('HP 4/4');
     expect($('ictx-ufo').textContent).toMatch(/HP \d+/);
+    // Т.16: у бою час геосцени заморожено — кнопки вимкнені, а обробники
+    // (виклик в обхід disabled) не рухають ні годинника, ні зондів, ні фінансів
+    expect(btn('btn-tick').disabled).toBe(true);
+    expect(btn('btn-day').disabled).toBe(true);
+    const frozen = (): string[] => [$('clock').textContent, $('ufos').textContent, $('money').textContent, $('ictx').textContent];
+    const before = frozen();
+    btn('btn-tick').onclick!(new MouseEvent('click') as PointerEvent);
+    btn('btn-day').onclick!(new MouseEvent('click') as PointerEvent);
+    expect(frozen()).toEqual(before);
     // доводимо бій до результату — стрічка ховається, збереження повертається
     let guard = 0;
     while (guard++ < 6000 && fighterText().includes('Бій з')) {
@@ -985,6 +994,7 @@ describe('П7.5: повітряний бій — контекст-стрічка
     expect(fighterText()).not.toContain('Бій з');
     expect($('ictx').classList.contains('hidden')).toBe(true);
     expect(btn('btn-save-1').disabled).toBe(false);
+    expect(btn('btn-tick').disabled).toBe(false); // Т.16: бій завершено — час знову йде
   });
 });
 

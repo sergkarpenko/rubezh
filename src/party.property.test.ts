@@ -63,7 +63,9 @@ type Cmd = typeof cmdArb extends fc.Arbitrary<infer T> ? T : never;
 const OPENING = ['scientist', 'project', 'days', 'scientist', 'days', 'scientist', 'wait', 'order', 'wait', 'equip'] as const;
 
 // Один тік партії — у тому порядку, що й partyTick шару відображення (src/main.ts).
+// Т.16: у повітряному бою час заморожено — тік нічого не робить, як і в partyTick.
 function tick(p: Party): void {
+  if (p.intercept.fighter.status === 'бій') return;
   const preset = p.campaign.preset;
   advanceTime(p.geo, 1);
   economyTick(p.econ, p.geo, preset);
@@ -242,6 +244,17 @@ function broken(p: Party): string[] {
   const left = f.repairTicksLeft;
   must(f.status === 'ремонт' ? left !== undefined && left >= 1 && left <= FIGHTER_REPAIR_TICKS : left === undefined, 'ремонт: ' + left);
   for (const u of geo.ufos) must((u.status === 'збитий') === (p.intercept.ufoHp[u.id] === 0), 'зонд ' + u.id + ': статус і HP у повітрі');
+  // Т.16: бій іде там, де зустрілись, — перехоплювач у клітинці зонда, зонд у повітрі.
+  const target = geo.ufos.find((u) => u.id === p.intercept.activeUfoId);
+  must(
+    f.status !== 'бій' || (target !== undefined && target.status === 'летить' && target.pos.x === f.pos.x && target.pos.y === f.pos.y),
+    'повітряний бій: зонд ' +
+      (target ? target.status + ' у ' + target.pos.x + ',' + target.pos.y : 'зник') +
+      ', перехоплювач у ' +
+      f.pos.x +
+      ',' +
+      f.pos.y
+  );
 
   // Кампанія: перемога — рівно з 31-ї доби, рахунок є лише з перемогою.
   must(

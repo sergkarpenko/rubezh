@@ -10,7 +10,7 @@ import { createParty, type Party } from '../core/save';
 import { ARMOR_MAX_HP_BONUS, OPTICS_ACCURACY_BONUS } from '../core/workshop';
 import { GRENADE_DAMAGE, GRENADE_RANGE, HEAL_AMOUNT, HIT_CHANCE_CAP } from '../core/combat';
 import { initPixelSprites } from '../render';
-import { createPanels, hpColor, type PanelsDeps } from './panels';
+import { createPanels, hpColor, inAirCombat, type PanelsDeps } from './panels';
 
 // Піксельний рушій (ADR-0031): тестовий мок фабрики offscreen-канвасів —
 // той самий патерн, що й у main.ui.test.ts (jsdom без пакета canvas).
@@ -123,6 +123,24 @@ describe('renderGeo: годинник, кнопки часу, анімаційн
     expect((document.getElementById('btn-tick') as HTMLButtonElement).disabled).toBe(true);
     expect((document.getElementById('btn-day') as HTMLButtonElement).disabled).toBe(true);
     expect(f.deps.activeGeoAnim).toHaveBeenCalled();
+  });
+});
+
+describe('Т.16: повітряний бій заморожує час геосцени', () => {
+  it('перехоплювач у бою — кнопки часу вимкнені; у погоні й на базі — активні', () => {
+    const f = makeFixture();
+    const fighter = f.party.intercept.fighter;
+    const buttons = (): boolean[] => ['btn-tick', 'btn-day'].map((id) => (document.getElementById(id) as HTMLButtonElement).disabled);
+    fighter.status = 'бій';
+    expect(inAirCombat(f.party)).toBe(true);
+    f.panels.renderGeo();
+    expect(buttons()).toEqual([true, true]);
+    for (const status of ['погоня', 'ремонт', 'на базі'] as const) {
+      fighter.status = status;
+      expect(inAirCombat(f.party)).toBe(false);
+      f.panels.renderGeo();
+      expect(buttons(), status).toEqual([false, false]);
+    }
   });
 });
 

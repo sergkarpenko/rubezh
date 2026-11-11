@@ -32,7 +32,7 @@ import { createSound } from './ui/audio';
 // П14.8 (ADR-0073): ambient-шар — модуль src/ui/ambient.ts.
 import { createAmbient } from './ui/ambient';
 // пR.2 (ADR-0037): панелі стану і топбара — модуль src/ui/panels.ts; масштаб сітки — src/ui/grid.ts.
-import { createPanels } from './ui/panels';
+import { createPanels, inAirCombat } from './ui/panels';
 import { GCELL } from './ui/grid';
 // пR.2 (ADR-0037): бойовище і флоу бою — модуль src/ui/battle.ts.
 import { createBattleUI, type BattleUIState } from './ui/battle';
@@ -427,8 +427,10 @@ function interceptAnims(e: InterceptEvent): Anim[] {
 // перевірка банкрутства. Викликати лише поза бою (час геосцени заморожено).
 // П12.2 (ADR-0065): виклик можливий лише в активній грі (стартовий екран
 // партії не має) — захист на вході.
+// Т.16: у повітряному бою час геосцени теж заморожено — тік нічого не робить
+// (і «+1 доба», що почалась до зустрічі, решту тіків не рахує).
 function partyTick(): void {
-  if (party === null) return;
+  if (party === null || inAirCombat(party)) return;
   const p = party;
   advanceTime(p.geo, 1);
   economyTick(p.econ, p.geo, p.campaign.preset);
