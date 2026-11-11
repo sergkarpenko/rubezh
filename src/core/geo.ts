@@ -178,8 +178,10 @@ export function geoTick(state: GeoState): void {
     state.log.push({ type: 'day', day: geoDay(state), minute: state.minute });
   }
 
-  // Фаза 1: спавн нового НЛО (якщо є місце і пощастило з шансом).
-  if (state.ufos.length < state.maxUfos && state.rng() < state.spawnChance) {
+  // Фаза 1: спавн нового НЛО (якщо є місце і пощастило з шансом). Збиті НЛО
+  // ліміт не займають (Т.17, ADR-0086): вони чекають місії без строку.
+  const airborne = state.ufos.filter((u) => u.status !== 'збитий').length;
+  if (airborne < state.maxUfos && state.rng() < state.spawnChance) {
     const kind: UfoKind = state.rng() < 0.7 ? 'розвідник' : 'збирач';
     const pos = randomCell(state.rng);
     const ufo: Ufo = {
