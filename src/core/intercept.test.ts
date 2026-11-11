@@ -3,6 +3,7 @@
 // Логіка всіх сценаріїв попередньо перевірена вручну; покриття intercept.ts ≥ 80% (ADR-0017).
 
 import { describe, expect, it } from 'vitest';
+import type { RNG } from './combat';
 import { SHOT_DOWN_BONUS, createEconomy } from './economy';
 import { advanceTime, createGeoGame, type GeoState, type Ufo } from './geo';
 import {
@@ -118,6 +119,48 @@ describe('intercept: погоня', () => {
   });
 });
 
+// Т.11: крок погоні (stepTowardWrap) — через interceptTick без тіків геосцени:
+// НЛО стоїть, винищувач робить до двох кроків за тік від вузла.
+describe('intercept: крок погоні (Т.11)', () => {
+  // Погоня від вузла base до НЛО в клітинці ufo; кроки винищувача записом 'x,y>x,y'.
+  function chase(base: [number, number], ufo: [number, number], ticks: number): { ic: InterceptState; moves: string[] } {
+    const geo = createGeoGame({ seed: 1, spawnChance: 0, base: { x: base[0], y: base[1] } });
+    const pos = { x: ufo[0], y: ufo[1] };
+    geo.ufos.push(mkUfo({ id: 'u1', pos, target: pos, detected: true }));
+    const ic = createIntercept();
+    startIntercept(ic, geo, 'u1');
+    for (let i = 0; i < ticks; i++) interceptTick(ic, geo);
+    const moves = ic.log.flatMap((e) => (e.type === 'intercept_move' ? [e.from.x + ',' + e.from.y + '>' + e.to.x + ',' + e.to.y] : []));
+    return { ic, moves };
+  }
+  const engages = (ic: InterceptState) => ic.log.filter((e) => e.type === 'intercept_engage');
+
+  it('НЛО по інший бік краю світу: погоня через край в обидва боки, бій з того ж тіку', () => {
+    const west = chase([1, 4], [15, 4], 1);
+    expect(west.moves).toEqual(['1,4>0,4', '0,4>15,4']);
+    expect(west.ic.fighter.status).toBe('бій');
+    // контакт другим кроком тіку: подія несе клітинку НЛО
+    expect(engages(west.ic)).toEqual([{ type: 'intercept_engage', ufoId: 'u1', pos: { x: 15, y: 4 }, minute: 0 }]);
+    const east = chase([14, 4], [0, 4], 1);
+    expect(east.moves).toEqual(['14,4>15,4', '15,4>0,4']);
+    expect(east.ic.fighter.status).toBe('бій');
+  });
+
+  it('рівно півсвіту (8 клітинок): обидва шляхи однакові — винищувач не йде через край', () => {
+    expect(chase([0, 4], [8, 4], 1).moves).toEqual(['0,4>1,4', '1,4>2,4']);
+    expect(chase([8, 4], [0, 4], 1).moves).toEqual(['8,4>7,4', '7,4>6,4']);
+  });
+
+  it('вісь кроку — та, де лишок більший; за рівних лишків — X', () => {
+    // лишки X/Y: 2/3 → Y; 2/2 → X; 1/2 → Y; 1/1 → X; 0/1 → Y
+    const { ic, moves } = chase([3, 3], [5, 6], 3);
+    expect(moves).toEqual(['3,3>3,4', '3,4>4,4', '4,4>4,5', '4,5>5,5', '5,5>5,6']);
+    // контакт на початку другого кроку третього тіку (без руху): та сама подія
+    expect(ic.fighter.status).toBe('бій');
+    expect(engages(ic)).toEqual([{ type: 'intercept_engage', ufoId: 'u1', pos: { x: 5, y: 6 }, minute: 0 }]);
+  });
+});
+
 describe('intercept: раундовий бій', () => {
   function engaged(seed = 7): { ic: InterceptState; geo: GeoState } {
     const ic = createIntercept(seed);
@@ -229,6 +272,89 @@ describe('intercept: раундовий бій', () => {
     expect(RANGE_PROFILES['впритул'].fighterHitChance).toBeGreaterThan(RANGE_PROFILES['середня'].fighterHitChance);
     expect(RANGE_PROFILES['середня'].fighterHitChance).toBeGreaterThan(RANGE_PROFILES['далека'].fighterHitChance);
     expect(RANGE_PROFILES['впритул'].ufoHitChance).toBeGreaterThan(RANGE_PROFILES['далека'].ufoHitChance);
+  });
+});
+
+// Т.11: раунд бою з заданими кидками rng — межі шансів, формула урону, журнал.
+describe('intercept: раунд бою — точні значення (Т.11)', () => {
+  const seqRng = (vals: number[]): RNG => {
+    let i = 0;
+    return () => vals[i++ % vals.length];
+  };
+
+  // Бій над вузлом (8,4): НЛО у клітинці винищувача — контакт першим тіком.
+  function fight(rolls: number[]): { ic: InterceptState; geo: GeoState } {
+    const ic = createIntercept({ rng: seqRng(rolls) });
+    const geo = geoWith(mkUfo({ id: 'u1', pos: { x: 8, y: 4 }, target: { x: 15, y: 7 }, detected: true }));
+    startIntercept(ic, geo, 'u1');
+    interceptTick(ic, geo);
+    ic.ufoHp.u1 = 99; // НЛО не буде збитий — дивимось на один раунд
+    return { ic, geo };
+  }
+  const rounds = (ic: InterceptState) => ic.log.filter((e) => e.type === 'intercept_round');
+
+  it('впритул, обидва влучили: урон = мінімум + floor(кидок × ширина діапазону)', () => {
+    // кидки: влучання винищувача, влучання НЛО, урон винищувача [2,3], урон НЛО [1,3]
+    const { ic, geo } = fight([0, 0, 0.6, 0.9]);
+    interceptRound(ic, geo, 'впритул');
+    expect(rounds(ic)).toEqual([
+      { type: 'intercept_round', round: 1, choice: 'впритул', fighterHit: true, fighterDamage: 3, ufoHit: true, ufoDamage: 3, minute: 0 },
+    ]);
+    expect(ic.ufoHp.u1).toBe(96);
+    expect(ic.fighter.hp).toBe(FIGHTER_MAX_HP - 3);
+  });
+
+  it('далека: урон рівно 1 з обох боків', () => {
+    const { ic, geo } = fight([0, 0, 0.9, 0.9]);
+    interceptRound(ic, geo, 'далека');
+    expect(rounds(ic)[0]).toMatchObject({ fighterHit: true, fighterDamage: 1, ufoHit: true, ufoDamage: 1 });
+  });
+
+  it('кидок, що дорівнює шансу влучання, — промах з обох боків', () => {
+    const p = RANGE_PROFILES['середня'];
+    const { ic, geo } = fight([p.fighterHitChance, p.ufoHitChance]);
+    interceptRound(ic, geo, 'середня');
+    expect(rounds(ic)[0]).toMatchObject({ fighterHit: false, fighterDamage: 0, ufoHit: false, ufoDamage: 0 });
+    expect(ic.fighter.hp).toBe(FIGHTER_MAX_HP);
+  });
+
+  it('відступ: раунд у журналі без пострілів, далі розрив контакту і повернення у вузол', () => {
+    const { ic, geo } = fight([0]);
+    interceptRound(ic, geo, 'відступ');
+    expect(ic.log.slice(-3)).toEqual([
+      { type: 'intercept_round', round: 1, choice: 'відступ', fighterHit: false, fighterDamage: 0, ufoHit: false, ufoDamage: 0, minute: 0 },
+      { type: 'intercept_break_off', ufoId: 'u1', minute: 0 },
+      { type: 'fighter_returned', pos: { x: 8, y: 4 }, minute: 0 },
+    ]);
+  });
+
+  it('грошей рівно на ремонт: після пошкодження до нуля ремонт стартує, лишається 0', () => {
+    // щораунду: винищувач промахується, НЛО влучає на 3 → 4 HP закінчуються за два раунди
+    const { ic, geo } = fight([0.99, 0, 0.99]);
+    const econ = createEconomy();
+    econ.money = FIGHTER_REPAIR_COST;
+    interceptRound(ic, geo, 'впритул', econ);
+    interceptRound(ic, geo, 'впритул', econ);
+    expect(ic.fighter.hp).toBe(0);
+    expect(ic.fighter.status).toBe('ремонт');
+    expect(econ.money).toBe(0);
+  });
+
+  it('repairTick поза ремонтом нічого не міняє', () => {
+    const ic = createIntercept();
+    const geo = createGeoGame({ seed: 1, spawnChance: 0 });
+    const before = JSON.stringify(ic.fighter);
+    repairTick(ic, geo);
+    expect(JSON.stringify(ic.fighter)).toBe(before);
+    expect(ic.log).toEqual([]);
+  });
+
+  it('shotDownUfos: лише події збиття, решта журналу не рахується', () => {
+    const { ic, geo } = fight([0, 0.99, 0.99]); // винищувач влучає, НЛО — ні
+    ic.ufoHp.u1 = 1;
+    interceptRound(ic, geo, 'впритул');
+    expect(ic.log.find((e) => e.type === 'ufo_shot_down')).toEqual({ type: 'ufo_shot_down', ufoId: 'u1', pos: { x: 8, y: 4 }, minute: 0 });
+    expect(shotDownUfos(ic)).toEqual(['u1']);
   });
 });
 
