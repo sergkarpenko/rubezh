@@ -299,23 +299,35 @@ const partyArb = fc
     return [seed, preset, [...opening, ...cmds]];
   });
 
-describe('property: партія під випадковими командами', () => {
-  it('жодна послідовність команд не ламає стан партії; відмова нічого не змінює', () => {
-    fc.assert(
-      fc.property(partyArb, ([seed, preset, cmds]) => void play(seed, preset, cmds, true)),
-      RUN
-    );
-  });
+// Сто партій на тест: локально ≈ 1,5 с, у CI під покриттям — до 6–7 с на повільному
+// раннері, понад типові 5 с vitest (PR #293). Ліміт — із запасом, сід фіксований.
+const PARTY_TIMEOUT = 30_000;
 
-  it('сейв і лоад у будь-який момент не змінюють подальшої партії (ADR-0003/0026)', () => {
-    fc.assert(
-      fc.property(partyArb, ([seed, preset, cmds]) => {
-        const json = serializeParty(play(seed, preset, cmds, false));
-        const straight = cmds.filter((c) => c.t !== 'reload');
-        expect(serializeParty(play(seed, preset, straight, false))).toBe(json);
-        expect(serializeParty(deserializeParty(json))).toBe(json);
-      }),
-      RUN
-    );
-  });
+describe('property: партія під випадковими командами', () => {
+  it(
+    'жодна послідовність команд не ламає стан партії; відмова нічого не змінює',
+    () => {
+      fc.assert(
+        fc.property(partyArb, ([seed, preset, cmds]) => void play(seed, preset, cmds, true)),
+        RUN
+      );
+    },
+    PARTY_TIMEOUT
+  );
+
+  it(
+    'сейв і лоад у будь-який момент не змінюють подальшої партії (ADR-0003/0026)',
+    () => {
+      fc.assert(
+        fc.property(partyArb, ([seed, preset, cmds]) => {
+          const json = serializeParty(play(seed, preset, cmds, false));
+          const straight = cmds.filter((c) => c.t !== 'reload');
+          expect(serializeParty(play(seed, preset, straight, false))).toBe(json);
+          expect(serializeParty(deserializeParty(json))).toBe(json);
+        }),
+        RUN
+      );
+    },
+    PARTY_TIMEOUT
+  );
 });
