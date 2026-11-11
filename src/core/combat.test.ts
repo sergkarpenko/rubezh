@@ -102,6 +102,12 @@ describe('лінія вогню симетрична (Т.18, ADR-0087)', () => {
     expect(hasLineOfSight(g, B, A)).toBe(true);
   });
 
+  it('кінці лінії не перевіряються: між двома стінами видно в обидва боки', () => {
+    const g = setupGame(alwaysHit, ['2,0', '0,1']);
+    expect(hasLineOfSight(g, A, B)).toBe(true);
+    expect(hasLineOfSight(g, B, A)).toBe(true);
+  });
+
   it('стіни на обох лініях — не видно в жоден бік', () => {
     const g = setupGame(alwaysHit, ['1,0', '1,1']);
     expect(hasLineOfSight(g, A, B)).toBe(false);
