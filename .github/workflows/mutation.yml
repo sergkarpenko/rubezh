@@ -1,0 +1,82 @@
+# Мутаційний прогін ядра за розкладом (ADR-0084; інструмент і склад прогону — ADR-0083).
+# Вимірювання, а не гейт: порога немає, чек не обов'язковий, мерж не блокує.
+# Результат — зведення прогону (таблиця за файлами) і артефакт `mutation-report`
+# (dist/mutation: index.html + mutation.json).
+#
+# Коли запускається:
+#   • щопонеділка — якщо від останнього успішного прогону на main змінилось щось
+#     із того, від чого залежить число (код і тести, конфіги, lockfile); інакше пропуск;
+#   • вручну (Actions → mutation → Run workflow) — завжди;
+#   • на PR, що змінює сам механізм вимірювання, — щоб поломку було видно до мержу.
+name: mutation
+
+on:
+  schedule:
+    # Понеділок, 02:17 UTC: не на початку години, коли черга раннерів найдовша
+    - cron: '17 2 * * 1'
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/mutation.yml'
+      - 'stryker.config.mjs'
+      - 'vitest.stryker.config.ts'
+      - 'scripts/mutation-summary.mjs'
+
+permissions:
+  contents: read
+  # Читання попередніх прогонів цього workflow — для рішення «є що міряти чи ні»
+  actions: read
+
+concurrency:
+  group: mutation-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  mutation:
+    runs-on: ubuntu-latest
+    # На двох ядрах прогін іде 35–45 хв (ADR-0083); запас — на повільний раннер
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # Повна історія: порівняння з комітом попереднього прогону
+          fetch-depth: 0
+      - name: Чи змінилось те, що міряємо
+        id: changed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ "${GITHUB_EVENT_NAME}" != "schedule" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          LAST="$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/mutation.yml/runs?branch=main&status=success&per_page=1" --jq '.workflow_runs[0].head_sha // empty')"
+          # Пропущений прогін теж успішний, але його коміт за цими шляхами дорівнює
+          # коміту останнього вимірювання — ланцюжок порівнянь не рветься.
+          if [ -n "${LAST}" ] && git cat-file -e "${LAST}^{commit}" 2>/dev/null &&
+            git diff --quiet "${LAST}" HEAD -- src package-lock.json \
+              stryker.config.mjs vitest.stryker.config.ts vite.config.ts \
+              scripts/mutation-summary.mjs .github/workflows/mutation.yml; then
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "Від прогону на \`${LAST:0:7}\` код, тести і конфіги мутаційного прогону не змінювались — прогін пропущено." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/setup-node@v7
+        if: steps.changed.outputs.run == 'true'
+        with:
+          node-version: 22
+      - run: npm ci
+        if: steps.changed.outputs.run == 'true'
+      - run: npm run test:mutation
+        if: steps.changed.outputs.run == 'true'
+      - name: Зведення
+        if: steps.changed.outputs.run == 'true'
+        run: node scripts/mutation-summary.mjs >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v7
+        if: steps.changed.outputs.run == 'true' && !cancelled()
+        with:
+          name: mutation-report
+          path: dist/mutation
+          retention-days: 90
