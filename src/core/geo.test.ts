@@ -60,6 +60,23 @@ describe('geo: спавн НЛО', () => {
     expect(s.ufos.length).toBe(3);
     expect(s.log.filter((e) => e.type === 'ufo_spawned').length).toBe(3);
   });
+
+  it("збиті НЛО ліміт не займають: при maxUfos збитих нові з'являються (Т.17)", () => {
+    const s = createGeoGame({ seed: 1, spawnChance: 1, maxUfos: 2 });
+    s.ufos.push(mkUfo({ id: 'd1', pos: { x: 1, y: 1 }, target: { x: 1, y: 1 }, status: 'збитий' }));
+    s.ufos.push(mkUfo({ id: 'd2', pos: { x: 2, y: 2 }, target: { x: 2, y: 2 }, status: 'збитий' }));
+    advanceTime(s, 3);
+    expect(s.log.filter((e) => e.type === 'ufo_spawned').length).toBe(2);
+    expect(s.ufos.filter((u) => u.status !== 'збитий').length).toBe(2);
+    expect(s.ufos.filter((u) => u.status === 'збитий').map((u) => u.id)).toEqual(['d1', 'd2']);
+  });
+
+  it('збитий НЛО лишається на місці без строку (Т.17)', () => {
+    const s = createGeoGame({ seed: 1, spawnChance: 0 });
+    s.ufos.push(mkUfo({ id: 'd', pos: { x: 3, y: 3 }, target: { x: 5, y: 5 }, status: 'збитий' }));
+    advanceTime(s, 48 * 10);
+    expect(s.ufos.map((u) => ({ id: u.id, pos: u.pos, status: u.status }))).toEqual([{ id: 'd', pos: { x: 3, y: 3 }, status: 'збитий' }]);
+  });
 });
 
 describe('geo: радар і туман', () => {

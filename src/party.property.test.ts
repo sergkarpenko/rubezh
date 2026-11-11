@@ -163,7 +163,10 @@ function broken(p: Party): string[] {
   const day = geoDay(geo);
 
   // Геосцена: зонди в межах світу й ліміту, журнал іде за часом.
-  must(geo.ufos.length <= geo.maxUfos && new Set(geo.ufos.map((u) => u.id)).size === geo.ufos.length, 'зонди: ліміт або повтор id');
+  must(
+    geo.ufos.filter((u) => u.status !== 'збитий').length <= geo.maxUfos && new Set(geo.ufos.map((u) => u.id)).size === geo.ufos.length,
+    'зонди: ліміт або повтор id'
+  );
   for (const u of geo.ufos) must(inWorld(u.pos) && inWorld(u.target) && u.landedTicksLeft >= 0, 'зонд ' + u.id + ' поза світом');
   const cleared = new Set(geo.log.map((e) => (e.type === 'mission_won' ? e.ufoId : '')));
   must(!geo.ufos.some((u) => cleared.has(u.id)), 'зонд лишився після виграної місії');
