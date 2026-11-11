@@ -40,7 +40,7 @@ npm run format:check   # Prettier (src/, index.html)
 npm run build          # прод-збірка (vite → dist/)
 npm run docs           # TypeDoc-довідка API (HTML у dist/api)
 npm run test:e2e       # сценарій приймання в браузері (Playwright, ADR-0080)
-npm run test:mutation  # мутаційне тестування ядра (StrykerJS, ADR-0083; довгий прогін)
+npm run test:mutation  # мутаційне тестування ядра (StrykerJS, ADR-0083; повний прогін іде за розкладом у CI, ADR-0084)
 ```
 
 - Стек: TypeScript + Canvas 2D, Vite, без фреймворків. Тестування: vitest (809 тестів; jsdom для DOM-тестів UI), покриття v8 → Codecov.
