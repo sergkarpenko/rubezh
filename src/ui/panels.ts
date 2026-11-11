@@ -47,6 +47,13 @@ const EQUIP_ITEMS: [SoldierItemId, keyof SoldierEquipment, string][] = [
 
 // Залежності від шару застосунку (main.ts): читання стану і дії панелей.
 // Панелі не знають, як стан зберігається у застосунку.
+// Т.16 (рішення власника 2026-11-11): повітряний бій заморожує час геосцени, як
+// тактична місія — тік партії нічого не робить, кнопки часу неактивні; вихід —
+// раундом (збиття, пошкодження) або відступом.
+export function inAirCombat(party: Party): boolean {
+  return party.intercept.fighter.status === 'бій';
+}
+
 export interface PanelsDeps {
   getParty(): Party;
   inBattle(): boolean; // тактичний бій триває (час геосцени заморожено, ADR-0026)
@@ -143,7 +150,7 @@ export function createPanels(deps: PanelsDeps): Panels {
     if (ga !== null) drawAnimFrame(ctx, ga, deps.geoAnimNow(), GCELL, 0, cv.width, cv.height);
 
     el('clock').textContent = geoClock(party.geo);
-    const busy = deps.inBattle();
+    const busy = deps.inBattle() || inAirCombat(party);
     (el('btn-tick') as HTMLButtonElement).disabled = busy || deps.isGameOver();
     (el('btn-day') as HTMLButtonElement).disabled = busy || deps.isGameOver();
   }
