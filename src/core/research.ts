@@ -41,13 +41,16 @@ export interface ProjectDef {
 // 30 діб бот-гравець із трьома вченими встигає 1.7–2.4 проєкти замість
 // 1.0–1.4; «легка броня» стає досяжною (до тунінгу — 0% партій).
 // П12.6 (ADR-0064): ключі англійські, назви — за мапою перейменувань.
+// Т.19 (ADR-0088, docs/reports/t19-tuning.md): ціни протоколів ×0,8
+// (120/90/100/80/140/160 → 96/72/80/64/112/128) — вердикт власника 2026-11-11
+// за probe на 480 сідах; точки й передумови без змін.
 export const PROJECTS: ProjectDef[] = [
-  { id: 'armor', name: 'Композитна броня', cost: 120, points: 27 },
-  { id: 'optics', name: 'Кібернетичне око', cost: 90, points: 23 },
-  { id: 'medkit', name: 'Регенеративний гель', cost: 100, points: 24 },
-  { id: 'lab-extension', name: 'Розширення лабораторії', cost: 80, points: 33 },
-  { id: 'grenade', name: 'Імпульсна граната', cost: 140, points: 30, prerequisite: 'medkit' },
-  { id: 'gun-module', name: 'Гарматний модуль перехоплювача', cost: 160, points: 36, prerequisite: 'optics' },
+  { id: 'armor', name: 'Композитна броня', cost: 96, points: 27 },
+  { id: 'optics', name: 'Кібернетичне око', cost: 72, points: 23 },
+  { id: 'medkit', name: 'Регенеративний гель', cost: 80, points: 24 },
+  { id: 'lab-extension', name: 'Розширення лабораторії', cost: 64, points: 33 },
+  { id: 'grenade', name: 'Імпульсна граната', cost: 112, points: 30, prerequisite: 'medkit' },
+  { id: 'gun-module', name: 'Гарматний модуль перехоплювача', cost: 128, points: 36, prerequisite: 'optics' },
 ];
 
 export const LAB_EXTENSION_PROJECT: ProjectId = 'lab-extension';
