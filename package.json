@@ -9,6 +9,7 @@
     "test:coverage": "vitest run --coverage --coverage.include='src/core/**' --coverage.thresholds.80 --coverage.reporter=json --coverage.reporter=text --coverage.reportsDirectory=dist/coverage",
     "test:smoke": "playwright test",
     "test:e2e": "playwright test -c playwright.e2e.config.ts",
+    "test:mutation": "stryker run",
     "build": "vite build",
     "prepare": "husky",
     "lint": "eslint src",
@@ -28,6 +29,8 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.65.0",
+    "@stryker-mutator/core": "^10.1.1",
+    "@stryker-mutator/vitest-runner": "^10.1.1",
     "@vitest/coverage-v8": "^5.1.0",
     "eslint": "^10.14.0",
     "eslint-config-prettier": "^10.1.8",
