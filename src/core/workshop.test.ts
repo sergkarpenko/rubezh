@@ -10,7 +10,7 @@ import { describe, expect, it } from 'vitest';
 import { advanceTime, createGeoGame, geoTick, type GeoState } from './geo';
 import type { StatefulRng } from './combat';
 import { createResearch, type ResearchState } from './research';
-import { createWorkshop, emptyStore, orderItem, WORKSHOP_CATALOG, workshopTick } from './workshop';
+import { createWorkshop, emptyStore, itemName, orderItem, WORKSHOP_CATALOG, workshopTick } from './workshop';
 import {
   ARMOR_MAX_HP_BONUS,
   OPTICS_ACCURACY_BONUS,
@@ -21,6 +21,7 @@ import {
   removeLostEquipment,
   settleConsumables,
   unequipItem,
+  type ItemId,
   type WorkshopState,
 } from './workshop';
 import type { EconomyState } from './economy';
@@ -457,5 +458,42 @@ describe('deployConsumables / settleConsumables (П11.4)', () => {
     settleConsumables(workshop, [squad[0], squad[1]], items);
     expect(workshop.equipped[squad[0].id]).toBeUndefined();
     expect(workshop.equipped[squad[1].id]).toEqual({ armor: false, optics: false, medkit: true, grenade: false });
+  });
+});
+
+// Т.12: прогалини, знайдені мутаційним прогоном (звіт Т.10, група 6).
+describe('цех: Т.12 — зняття саме того предмета, що знімають', () => {
+  it('зняття витратника не чіпає ні броню, ні оптику', () => {
+    const workshop = stockedWorkshop();
+    const soldier = makeSoldier('s1', 'Іван');
+    for (const id of ['armor', 'optics', 'medkit'] as const) equipItem(workshop, soldier, id);
+    unequipItem(workshop, soldier, 'medkit');
+    expect(soldier.maxHp).toBe(10 + ARMOR_MAX_HP_BONUS);
+    expect(soldier.firingAccuracy).toBeCloseTo(0.6 + OPTICS_ACCURACY_BONUS, 10);
+  });
+
+  it.each(['armor', 'optics'] as const)('запис екіпірування лишається, доки на солдатові %s', (keep) => {
+    // зняття гранати вручну
+    const workshop = stockedWorkshop();
+    const soldier = makeSoldier('s1', 'Іван');
+    equipItem(workshop, soldier, keep);
+    equipItem(workshop, soldier, 'grenade');
+    unequipItem(workshop, soldier, 'grenade');
+    expect(workshop.equipped['s1']?.[keep]).toBe(true);
+    // аптечку витрачено на місії; у items немає запису солдата — без падіння
+    equipItem(workshop, soldier, 'medkit');
+    settleConsumables(workshop, [soldier], {});
+    expect(workshop.equipped['s1']).toEqual({ armor: false, optics: false, medkit: false, grenade: false, [keep]: true });
+  });
+
+  it('каталог «Кузні» — назви, ціни, тики (ADR-0058); невідомий ключ — як є', () => {
+    expect(WORKSHOP_CATALOG).toEqual({
+      medkit: { name: 'Регенеративний гель', cost: 40, ticks: 12 },
+      grenade: { name: 'Імпульсна граната', cost: 60, ticks: 16 },
+      optics: { name: 'Кібернетичне око', cost: 50, ticks: 20 },
+      armor: { name: 'Композитна броня', cost: 60, ticks: 24 },
+      'gun-module': { name: 'Гарматний модуль перехоплювача', cost: 80, ticks: 32 },
+    });
+    expect(itemName('гаубиця' as ItemId)).toBe('гаубиця');
   });
 });

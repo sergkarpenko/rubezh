@@ -545,3 +545,130 @@ describe('save: П15.2 — «евакуйовано» (EARS 7)', () => {
     expect(restored.geo.ufos.some((u) => u.id === 'uV1')).toBe(true); // НЛО лишається після евакуації
   });
 });
+
+// Т.12: прогалини перевірки сейву, знайдені мутаційним прогоном (звіт Т.10, групи 4–5).
+describe('save: Т.12 — кожне поле сейву перевіряється окремо', () => {
+  // Сейв нової партії, у якому зіпсовано одне поле (шлях через крапку).
+  const corrupt = (path: string, value: unknown): string => {
+    const d = JSON.parse(serializeParty(createParty(42), 'T')) as Record<string, unknown>;
+    const keys = path.split('.');
+    let node = d;
+    for (const k of keys.slice(0, -1)) node = node[k] as Record<string, unknown>;
+    node[keys[keys.length - 1]] = value;
+    return JSON.stringify(d);
+  };
+
+  it.each([
+    ['state', null, 'state'],
+    ...[
+      ['rngState', 1.5],
+      ['minute', 'x'],
+      ['nextId', 2.5],
+      ['spawnChance', '0.1'],
+      ['maxUfos', 1.5],
+      ['ufos', {}],
+      ['log', 'x'],
+      ['base', null],
+      ['base.x', '8'],
+      ['base.y', null],
+    ].map(([f, v]) => ['state.geo.' + f, v, 'гео-стан']),
+    ...[
+      ['soldiers', {}],
+      ['hired', 7.5],
+      ['hospital', null],
+      ['hospital', 'x'],
+    ].map(([f, v]) => ['state.roster.' + f, v, 'ростер']),
+    ...[
+      ['money', 1.5],
+      ['lastAllowanceDay', '3'],
+      ['log', {}],
+    ].map(([f, v]) => ['state.econ.' + f, v, 'економіка']),
+    ['state.campaign.status', 'поразка', 'кампанія'],
+    ['state.campaign.preset', 'жорсткий', 'кампанія'],
+    ['state.hints', null, 'підказки'],
+    ...[
+      ['scientists', {}],
+      ['hired', 1.5],
+      ['slots', '2'],
+      ['active', {}],
+      ['completed', 'x'],
+      ['pool', 0.5],
+      ['lastSalaryDay', null],
+      ['log', {}],
+    ].map(([f, v]) => ['state.research.' + f, v, 'наука']),
+    ...[
+      ['queue', {}],
+      ['store', null],
+      ['store', 5],
+      ['log', {}],
+      ['equipped', null],
+    ].map(([f, v]) => ['state.workshop.' + f, v, 'Кузня']),
+  ])('%s = %j — throw «%s»', (path, value, message) => {
+    expect(() => deserializeParty(corrupt(path as string, value))).toThrow(message as string);
+  });
+
+  it('припустимі значення проходять: дробовий шанс спавну, статус «перемога», пресет «легкий»', () => {
+    expect(deserializeParty(corrupt('state.geo.spawnChance', 0.5)).geo.spawnChance).toBe(0.5);
+    expect(deserializeParty(corrupt('state.campaign.status', 'перемога')).campaign.status).toBe('перемога');
+    expect(deserializeParty(corrupt('state.campaign.preset', 'легкий')).campaign.preset).toBe('легкий');
+  });
+
+  it('тексти відмов називають причину: некоректний JSON, очікувана версія', () => {
+    expect(() => deserializeParty('{не json')).toThrow('Пошкоджені дані збереження: некоректний JSON');
+    expect(() => deserializeParty(corrupt('version', 2))).toThrow(`Невідома версія збереження: 2 (очікується ${SAVE_VERSION})`);
+  });
+
+  it('round-trip стану не за замовчуванням: лікарня, погоня винищувача, НЛО в бою, рахунок кампанії', () => {
+    const p = createParty(42);
+    p.roster.hospital = { s2: 5 };
+    p.intercept.fighter = { ...p.intercept.fighter, pos: { x: 3, y: 2 }, status: 'погоня', targetId: 'ufo1' };
+    p.intercept.ufoHp = { ufo1: 2 };
+    p.intercept.activeUfoId = 'ufo1';
+    p.intercept.round = 2;
+    p.campaign.score = { ufosShotDown: 1, missionsWon: 2, veteransAlive: 3, moneyLeft: 400, total: 77 };
+    p.intercept.rng(); // потік rng перехоплення зрушив від стартового сіда
+    const r = deserializeParty(serializeParty(p, 'T'));
+    expect(r.intercept.rng()).toBe(p.intercept.rng());
+    expect(r.roster.hospital).toEqual({ s2: 5 });
+    expect(r.intercept.fighter).toEqual(p.intercept.fighter);
+    expect(r.intercept.ufoHp).toEqual({ ufo1: 2 });
+    expect(r.intercept.activeUfoId).toBe('ufo1');
+    expect(r.intercept.round).toBe(2);
+    expect(r.campaign.score).toEqual(p.campaign.score);
+    // рахунку ще немає — після завантаження теж null, а не порожній об'єкт
+    expect(deserializeParty(serializeParty(createParty(42))).campaign.score).toBeNull();
+  });
+
+  it('старі українські ключі протоколів і подій «Кузні» мігрують; події без предмета не отримують id', () => {
+    const d = JSON.parse(serializeParty(createParty(42), 'T')) as {
+      state: { research: { completed: string[]; log: object[] }; workshop: { log: object[] } };
+    };
+    d.state.research.completed = ['легка броня', 'гарматний модуль', 'розширення лабораторії'];
+    d.state.research.log = [
+      { type: 'project_started', id: 'аптечка' },
+      { type: 'hire', name: 'Зінаїда' },
+    ];
+    d.state.workshop.log = [
+      { type: 'unequip', soldierId: 's1', id: 'легка броня' },
+      { type: 'gun_module_installed' },
+      { type: 'equipment_lost', soldierId: 's2', items: ['medkit'] },
+    ];
+    const r = deserializeParty(JSON.stringify(d));
+    expect(r.research.completed).toEqual(['armor', 'gun-module', 'lab-extension']);
+    expect(r.research.log).toStrictEqual([
+      { type: 'project_started', id: 'medkit' },
+      { type: 'hire', name: 'Зінаїда' },
+    ]);
+    expect(r.workshop.log).toStrictEqual([
+      { type: 'unequip', soldierId: 's1', id: 'armor' },
+      { type: 'gun_module_installed' },
+      { type: 'equipment_lost', soldierId: 's2', items: ['medkit'] },
+    ]);
+  });
+
+  it('saveToSlot без мітки часу — savedAt порожній', () => {
+    const store = memoryStore();
+    saveToSlot(store, 1, createParty(42));
+    expect(slotMeta(store.dump.get(1)!).savedAt).toBe('');
+  });
+});
