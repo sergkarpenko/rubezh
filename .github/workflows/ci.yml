@@ -50,7 +50,7 @@ jobs:
   # ADR-0080: сценарій приймання — smoke-сценарій ADR-0030 у браузері проти збірки
   # цього ж коміту (vite build + vite preview піднімає сам Playwright), звірка
   # сторінки з дзеркалом ядра. Окрема джоба: встановлення браузера (~1 хв) не
-  # гальмує чек «test». Поки не required — рішення власника (ADR-0080 п.8).
+  # гальмує чек «test». Чек «e2e» — required status check гілки main (ADR-0082).
   e2e:
     runs-on: ubuntu-latest
     steps:
