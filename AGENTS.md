@@ -357,6 +357,7 @@ git pull origin main
 | ADR-0079 | Правила ядра з AGENTS.md — як гейти: ESLint-правила для `src/core` (Math.random, годинник, імпорти поза ядром) і компіляція ядра без lib.dom (`tsconfig.core.json`) у CI (доповнює ADR-0002/0003/0038/0076; Т.6a) | accepted | 2026-11-10 |
 | ADR-0080 | Сценарій приймання в браузері — smoke ADR-0030 у Playwright (`e2e/acceptance.scenario.ts`), звірка сторінки з дзеркалом ядра (`e2e/mirror.ts`); `npm run test:e2e`, джоба `e2e` у CI проти збірки того ж коміту (доповнює ADR-0030/0063/0003/0076; Т.8) | accepted | 2026-11-10 |
 | ADR-0081 | Юніт у тумані для вводу гравця не існує: невидима клітинка поводиться як порожня, шлях планується за видимим (`findPath` із `seen`), рух закінчується перед юнітом із туману (`moveUnit` зі `stopAtUnit`) (доповнює ADR-0006/0027/0080; Т.9) | accepted | 2026-11-11 |
+| ADR-0082 | Чек `e2e` — обов'язковий чек гілки `main` поруч із `test`, `codecov/patch`, `pr-size`; ADR-0080 п.8 виконано (доповнює ADR-0080/0028/0076; Хвіст Т.8) | accepted | 2026-11-11 |
 | ADR-0083 | Мутаційне тестування ядра — StrykerJS (`npm run test:mutation`, `stryker.config.mjs`): вимірювання без гейта і без CI; мутується `src/core` без `party-bot.ts` і `sprites.ts`, убивають тести без DOM; базова лінія — `docs/reports/t10-mutation-baseline.md` (доповнює ADR-0012/0017/0034/0080; Т.10) | accepted | 2026-11-11 |
 
 **Нове рішення?** Створювати новий ADR з полем Supersedes.
