@@ -85,6 +85,36 @@ describe('лінія вогню', () => {
   });
 });
 
+describe('лінія вогню симетрична (Т.18, ADR-0087)', () => {
+  // Растеризація (2,0)→(0,1) йде через (1,0), а (0,1)→(2,0) — через (1,1).
+  const A = { x: 2, y: 0 };
+  const B = { x: 0, y: 1 };
+
+  it('стіна лише на лінії A→B — видно в обидва боки', () => {
+    const g = setupGame(alwaysHit, ['1,0']);
+    expect(hasLineOfSight(g, A, B)).toBe(true);
+    expect(hasLineOfSight(g, B, A)).toBe(true);
+  });
+
+  it('стіна лише на лінії B→A — видно в обидва боки', () => {
+    const g = setupGame(alwaysHit, ['1,1']);
+    expect(hasLineOfSight(g, A, B)).toBe(true);
+    expect(hasLineOfSight(g, B, A)).toBe(true);
+  });
+
+  it('кінці лінії не перевіряються: між двома стінами видно в обидва боки', () => {
+    const g = setupGame(alwaysHit, ['2,0', '0,1']);
+    expect(hasLineOfSight(g, A, B)).toBe(true);
+    expect(hasLineOfSight(g, B, A)).toBe(true);
+  });
+
+  it('стіни на обох лініях — не видно в жоден бік', () => {
+    const g = setupGame(alwaysHit, ['1,0', '1,1']);
+    expect(hasLineOfSight(g, A, B)).toBe(false);
+    expect(hasLineOfSight(g, B, A)).toBe(false);
+  });
+});
+
 describe('лінія вогню по вертикалі (Т.11)', () => {
   it('стіна між стрільцем і ціллю в одній колонці — не видно', () => {
     const g = setupGame(alwaysHit, ['2,5']);
@@ -355,7 +385,8 @@ describe('дозор (overwatch)', () => {
   });
 
   it('без лінії вогню дозор не спрацьовує і залишається озброєним', () => {
-    const g = setupGame(alwaysHit, ['4,2', '4,3', '4,4']);
+    // стіна 4,1 закриває й зворотну лінію (6,1)→(2,2): лінія вогню симетрична (ADR-0087)
+    const g = setupGame(alwaysHit, ['4,1', '4,2', '4,3', '4,4']);
     g.units[1].pos = { x: 6, y: 2 };
     setOverwatch(g, 's1');
     endTurn(g);
