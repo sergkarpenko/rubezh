@@ -80,27 +80,28 @@ describe('П8.5: оркестратор — повна партія (фіксо�
     expect(r.moneyByDay).toHaveLength(30);
     expect(r.readyByDay).toHaveLength(30);
     // П8.6/П14.8: числа лінії тунінгу (probe-перед-тестами, урок П8.5); WORLD_H 9
-    // (фідбек П14.8) зсунув траєкторії: залишок 2210, ваги рахунку
-    // (ветерани 50, гроші 0.25) → тотал 4053.
-    expect(r.score).toEqual({ ufosShotDown: 0, missionsWon: 22, veteransAlive: 4, moneyLeft: 2210, total: 4053 });
-    expect(r.missionsLaunched).toBe(28);
+    // (фідбек П14.8) і симетрична лінія вогню (Т.18, ADR-0087) зсунули
+    // траєкторії: залишок 2610, ваги рахунку (ветерани 50, гроші 0.25) → тотал 4203.
+    expect(r.score).toEqual({ ufosShotDown: 0, missionsWon: 22, veteransAlive: 5, moneyLeft: 2610, total: 4203 });
+    expect(r.missionsLaunched).toBe(26);
     expect(r.missionsWon).toBe(22);
-    expect(r.missionsLost).toBe(6);
-    expect(r.soldiersLost).toBe(35);
-    expect(r.soldiersWounded).toBe(20);
-    expect(r.hiredTotal).toBe(33);
-    expect(r.hireSpent).toBe(33 * hirePrice('норма')); // П11.8: hirePrice «норми» = 100
+    expect(r.missionsLost).toBe(4);
+    expect(r.soldiersLost).toBe(30);
+    expect(r.soldiersWounded).toBe(21);
+    expect(r.hiredTotal).toBe(29);
+    expect(r.hireSpent).toBe(29 * hirePrice('норма')); // П11.8: hirePrice «норми» = 100
   });
 
-  // П8.6: банкрутний сід нової лінії; WORLD_H 9 (фідбек П14.8) віддаляє
-  // банкрутство сіда 35 з Д11 на Д27 (probe-перед-тестами, урок П8.5).
-  it('банкрутство (ADR-0021): сід 35 «норма» — боєготових немає і грошей немає', () => {
-    const r = simulateParty(35, 'норма');
+  // П8.6: банкрутний сід нової лінії (probe-перед-тестами, урок П8.5). Т.18
+  // (ADR-0087): із симетричною лінією вогню сід 35 виграє партію — банкрутний
+  // сід лінії тепер 16 (Д8).
+  it('банкрутство (ADR-0021): сід 16 «норма» — боєготових немає і грошей немає', () => {
+    const r = simulateParty(16, 'норма');
     expect(r.outcome).toBe('банкрутство');
-    expect(r.endDay).toBe(27);
-    expect(r.ticks).toBe(1252);
-    expect(r.soldiersLost).toBe(76);
-    expect(r.moneyByDay.length).toBeLessThan(30); // обірвана крива — доба 27 незавершена
+    expect(r.endDay).toBe(8);
+    expect(r.ticks).toBe(336);
+    expect(r.soldiersLost).toBe(24);
+    expect(r.moneyByDay.length).toBeLessThan(30); // обірвана крива — доба 8 незавершена
   });
 
   it('смоук: 4 доби × 2 сіди × 2 пресети — без винятків, криви заповнені', () => {

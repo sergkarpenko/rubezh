@@ -437,12 +437,13 @@ describe('UI-флоу прев’ю: геосцена → місія → бій 
 });
 
 describe('критичний флоу економіки: найм → місія → поранення → одужання (П4.5, ADR-0021)', () => {
-  // Сід 42 детермінований (перевірено сценарієм у пісочниці): перша місія —
-  // «розвідник» на 22-му тіку; авто-бій — перемога, s2 гине, s1 поранений
-  // 6/10 → лікарня 8 тіків; премія +150.
+  // Сід 27 детермінований: перша місія — «розвідник» на 18-му тіку; авто-бій —
+  // перемога, Олена гине, Іван поранений 3/10 → лікарня 14 тіків; премія +110.
+  // Т.18 (ADR-0087): до симетричної лінії вогню флоу йшов на сіді 42 — там
+  // авто-бій тепер минає без поранених.
 
   it('скидання партії: баланс 300, ростер 6', () => {
-    startParty();
+    startParty('27');
     expect($('money').textContent).toBe('300');
     expect($('roster').textContent).toContain('6 оперативників (6 боєготових)');
   });
@@ -472,7 +473,7 @@ describe('критичний флоу економіки: найм → місі�
     await runAutoBattle();
     expect($('bresult').textContent).toContain('ЗАЧИЩЕНО');
     expect($('bresult').textContent).toContain('поранених: 1');
-    expect($('log').textContent).toContain('Іван поранений — лікарня: 8 тіків');
+    expect($('log').textContent).toContain('Іван поранений — лікарня: 14 тіків');
     expect($('log').textContent).toContain('Премія за місію (розвідник): +110');
     expect($('money').textContent).toBe('310'); // 300 − 100 найм + 110 премія (П8.6)
   });
@@ -481,22 +482,22 @@ describe('критичний флоу економіки: найм → місі�
     btn('btn-close').click();
     expect($('battle-panel').classList.contains('hidden')).toBe(true);
     expect($('roster').textContent).toContain('6 оперативників (5 боєготових)');
-    expect($('roster').textContent).toContain('лікарня: 8 тіків');
-    expect($('roster').textContent).toContain('HP 6/10');
+    expect($('roster').textContent).toContain('лікарня: 14 тіків');
+    expect($('roster').textContent).toContain('HP 3/10');
     expect(btn('btn-tick').disabled).toBe(false);
   });
 
-  it('одужання: 8 тіків — ветеран знову боєготовий, баланс і годинник цілі', () => {
-    for (let i = 0; i < 8; i++) btn('btn-tick').click();
+  it('одужання: 14 тіків — ветеран знову боєготовий, баланс і годинник цілі', () => {
+    for (let i = 0; i < 14; i++) btn('btn-tick').click();
     expect($('roster').textContent).not.toContain('лікарня');
     expect($('roster').textContent).toContain('HP 10/10');
     expect($('roster').textContent).toContain('6 оперативників (6 боєготових)');
     expect($('money').textContent).toBe('310'); // доти не було — доба не завершена
-    expect($('clock').textContent).toBe('Д1 15:00'); // 22 + 8 тіків по 30 хв
+    expect($('clock').textContent).toBe('Д1 16:00'); // 18 + 14 тіків по 30 хв
   });
 
   it('дотація: завершення доби 1 — +75 у журналі і балансі', () => {
-    for (let i = 0; i < 18; i++) btn('btn-tick').click(); // 30 тіків усього
+    for (let i = 0; i < 16; i++) btn('btn-tick').click(); // 48 тіків усього
     expect($('clock').textContent).toBe('Д2 00:00');
     expect($('money').textContent).toBe('385');
     expect($('log').textContent).toContain('Дотація за добу 1: +75');
@@ -539,7 +540,7 @@ describe('панель збереження: 3 слоти, лише на гео�
   });
 
   it('критичний флоу: зберегти → «перезавантаження» (нова партія) → завантажити → жорсткий збіг стану', () => {
-    startParty();
+    startParty('27');
     // дотікати до виявленого приземленого НЛО (трекінг НЛО має потрапити у сейв)
     let found = false;
     for (let i = 0; i < 1500 && !found; i++) {
@@ -549,23 +550,23 @@ describe('панель збереження: 3 слоти, лише на гео�
     expect(found).toBe(true);
     const ufosBefore = $('ufos').textContent;
     const rosterBefore = $('roster').textContent;
-    expect($('clock').textContent).toBe('Д1 11:00'); // 22-й тік (детерміновано, сід 42)
+    expect($('clock').textContent).toBe('Д1 09:00'); // 18-й тік (детерміновано, сід 27)
 
     btn('btn-save-1').click();
     expect($('log').textContent).toContain('Збережено: слот 1');
-    expect($('slot-1').textContent).toContain('сід 42');
+    expect($('slot-1').textContent).toContain('сід 27');
     expect(btn('btn-load-1').disabled).toBe(false);
     expect(localStorage.getItem('rubezh.save.1')).not.toBeNull();
 
     // «перезавантаження сторінки»: свіжа партія — слот виживає у localStorage
-    startParty();
+    startParty('27');
     expect($('clock').textContent).toBe('Д1 00:00');
     expect($('ufos').textContent).toContain('Нічого не виявлено');
 
     // завантаження відновлює партію: час, трекінг НЛО, ростер, фінанси
     btn('btn-load-1').click();
     expect($('log').textContent).toContain('Завантажено: слот 1');
-    expect($('clock').textContent).toBe('Д1 11:00');
+    expect($('clock').textContent).toBe('Д1 09:00');
     expect($('ufos').textContent).toBe(ufosBefore);
     expect($('roster').textContent).toBe(rosterBefore);
     expect($('money').textContent).toBe('300');
@@ -579,10 +580,10 @@ describe('панель збереження: 3 слоти, лише на гео�
 
   it('розбіжність і відкат: тики після сейву → завантаження повертає стан точки збереження', () => {
     btn('btn-day').click(); // доба вперед: дотація +75 (П8.6)
-    expect($('clock').textContent).toBe('Д2 11:00');
+    expect($('clock').textContent).toBe('Д2 09:00');
     expect($('money').textContent).toBe('375');
     btn('btn-load-1').click();
-    expect($('clock').textContent).toBe('Д1 11:00');
+    expect($('clock').textContent).toBe('Д1 09:00');
     expect($('money').textContent).toBe('300');
     expect(document.querySelector('button.mission')).not.toBeNull(); // вікно місії відновлено
   });
@@ -593,22 +594,22 @@ describe('панель збереження: 3 слоти, лише на гео�
     expect(btn('btn-save-1').disabled).toBe(true);
     expect(btn('btn-load-1').disabled).toBe(true);
     expect(btn('btn-del-1').disabled).toBe(true);
-    await runAutoBattle(); // завершити бій (детерміновано: сід 42)
+    await runAutoBattle(); // завершити бій (детерміновано: сід 27)
     btn('btn-close').click();
     expect(btn('btn-save-1').disabled).toBe(false);
     expect(btn('btn-load-1').disabled).toBe(false);
   });
 
   it('лікарня у сейві: поранений відновлюється після завантаження', () => {
-    // авто-бій цієї партії: перемога, s2 загинув, Іван поранений 6/10 (сід 42)
-    expect($('roster').textContent).toContain('лікарня: 8 тіків');
+    // авто-бій цієї партії: перемога, один загиблий, Іван поранений 3/10 (сід 27)
+    expect($('roster').textContent).toContain('лікарня: 14 тіків');
     expect($('money').textContent).toBe('410'); // 300 + премія 110 (П8.6)
     btn('btn-save-3').click();
-    for (let i = 0; i < 8; i++) btn('btn-tick').click(); // одужання
+    for (let i = 0; i < 14; i++) btn('btn-tick').click(); // одужання
     expect($('roster').textContent).not.toContain('лікарня');
     btn('btn-load-3').click();
-    expect($('roster').textContent).toContain('лікарня: 8 тіків');
-    expect($('roster').textContent).toContain('HP 6/10');
+    expect($('roster').textContent).toContain('лікарня: 14 тіків');
+    expect($('roster').textContent).toContain('HP 3/10');
     expect($('money').textContent).toBe('410');
   });
 

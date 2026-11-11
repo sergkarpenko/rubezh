@@ -238,7 +238,7 @@ describe('property: бій на випадковому бойовищі', () => 
     );
   });
 
-  it('туман: спостерігач бачить свою клітинку; прибрана стіна огляду не зменшує', () => {
+  it('туман: спостерігач бачить свою клітинку; прибрана стіна огляду не зменшує; лінія вогню однакова в обидва боки', () => {
     fc.assert(
       fc.property(arenaArb, fc.nat(80), (arena, n) => {
         const s = build(arena);
@@ -249,19 +249,27 @@ describe('property: бій на випадковому бойовищі', () => 
         const opened = { ...s, map: { ...s.map, blocked: new Set(walls.filter((_, i) => i !== n % (walls.length || 1))) } };
         const wider = computeVisibleCells(opened, from);
         expect([...seen].filter((c) => !wider.has(c))).toEqual([]);
+        // Т.18 (ADR-0087): хто бачить клітинку, того з неї видно — для кожної пари клітинок поля
+        const cells: Vec2[] = [];
+        for (let x = 0; x < s.map.width; x++) for (let y = 0; y < s.map.height; y++) cells.push({ x, y });
+        const oneWay = cells.flatMap((a) =>
+          cells.filter((b) => hasLineOfSight(s, a, b) !== hasLineOfSight(s, b, a)).map((b) => key(a) + '→' + key(b))
+        );
+        expect(oneWay).toEqual([]);
+        for (const c of cells) expect(computeVisibleCells(s, c).has(key(from))).toBe(seen.has(key(c)));
       }),
       RUN
     );
   });
 
-  // Знахідка Т.15: property «лінія вогню однакова в обидва боки» не виконується —
-  // растеризація лінії залежить від напрямку. Тест фіксує чинну поведінку найменшим
-  // прикладом від fast-check; чи має лінія бути симетричною — рішення власника.
-  it('лінія вогню залежить від напрямку: демон стріляє в оперативника, той у відповідь — ні', () => {
+  // Т.18 (ADR-0087): найменший приклад знахідки Т.15. Лінія (2,0)→(0,1) проходить
+  // через стіну (1,0), лінія (0,1)→(2,0) — повз неї. Лінія вогню чиста, якщо чиста
+  // хоч в один бік, тож стріляють обидва.
+  it('лінія вогню чиста, якщо чиста хоч в один бік: оперативник і демон стріляють одне в одного', () => {
     const s = build({ w: 5, h: 5, walls: [1], spots: [2, 5], seed: 0 }); // стіна (1,0), p0 у (2,0), a1 у (0,1)
     expect(hasLineOfSight(s, s.units[1].pos, s.units[0].pos)).toBe(true);
-    expect(hasLineOfSight(s, s.units[0].pos, s.units[1].pos)).toBe(false);
-    expect(() => resolveAttack(s, 'p0', 'a1', 'snap')).toThrow('Немає лінії вогню');
+    expect(hasLineOfSight(s, s.units[0].pos, s.units[1].pos)).toBe(true);
+    expect(resolveAttack(s, 'p0', 'a1', 'snap').shots).toHaveLength(1);
     endTurn(s);
     expect(resolveAttack(s, 'a1', 'p0', 'snap').shots).toHaveLength(1);
   });

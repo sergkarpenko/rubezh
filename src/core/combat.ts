@@ -211,13 +211,19 @@ function requireActive(state: GameState, u: Unit): void {
   if (u.side !== state.activeSide) throw new Error('Зараз хід не сторони ' + u.side);
 }
 
-// Лінія вогню: проміжні клітинки (без кінців) не мають перешкод.
-export function hasLineOfSight(state: GameState, from: Vec2, to: Vec2): boolean {
+function lineClear(map: GameMap, from: Vec2, to: Vec2): boolean {
   const line = bresenham(from, to);
   for (let i = 1; i < line.length - 1; i++) {
-    if (isBlocked(state.map, line[i])) return false;
+    if (isBlocked(map, line[i])) return false;
   }
   return true;
+}
+
+// Лінія вогню: проміжні клітинки (без кінців) не мають перешкод. Растеризація
+// залежить від напрямку, тож лінія чиста, якщо чиста хоч в один бік, — правило
+// симетричне: хто бачить, того бачать (ADR-0087).
+export function hasLineOfSight(state: GameState, from: Vec2, to: Vec2): boolean {
+  return lineClear(state.map, from, to) || lineClear(state.map, to, from);
 }
 
 // Влучність не залежить від цілі (як в оригіналі): точність солдата × режим пострілу.
