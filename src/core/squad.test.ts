@@ -483,3 +483,30 @@ describe('squad: П15.3 — витратники евакуйованого у �
     expect(workshop.equipped[squad[0].id]).toEqual({ armor: false, optics: false, medkit: false, grenade: true });
   });
 });
+
+// --- Т.14: прогалини за мутаційним прогоном ---
+
+describe('squad: Т.14 — пул імен, межі розміру, причини відмов', () => {
+  it('пул імен: 12 імен за порядком, 13-й солдат — перше ім’я з номером', () => {
+    const pool = ['Іван', 'Олена', 'Тарас', 'Марія', 'Богдан', 'Софія', 'Дмитро', 'Ярина', 'Орест', 'Наталія', 'Андрій', 'Віра'];
+    expect(createRoster(13).soldiers.map((s) => s.name)).toEqual([...pool, 'Іван 2']);
+  });
+
+  it('розмір ростеру і загону: відмова називає причину; загін з одного — припустимий', () => {
+    expect(() => createRoster(0)).toThrow('Розмір ростеру має бути цілим числом від 1');
+    const r = createRoster();
+    for (const size of [0, 1.5, 4]) {
+      expect(() => missionSquad(r, size)).toThrow('Розмір загону: ціле число від 1 до 3');
+    }
+    expect(missionSquad(r, 1).map((s) => s.id)).toEqual(['s1']);
+  });
+
+  it('applyMissionResult: стан без списку evacuated — як порожній список; без оперативників → помилка', () => {
+    const r = createRoster();
+    const m = createMission(mkGeo('uN'), 'uN', { squad: missionSquad(r) });
+    delete m.state.evacuated;
+    expect(applyMissionResult(r, m.state).survivors.map((s) => s.id)).toEqual(['s1', 's2', 's3']);
+    m.state.units = m.state.units.filter((u) => u.side === 'alien');
+    expect(() => applyMissionResult(r, m.state)).toThrow('У стані місії немає оперативників гравця');
+  });
+});

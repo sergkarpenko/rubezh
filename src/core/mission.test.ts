@@ -2,8 +2,8 @@
 // Юніт-тести зв'язку шарів (ітерація 5.0). Запуск: npx vitest
 // Логіка всіх сценаріїв попередньо перевірена в пісочниці.
 
-import { describe, expect, it } from 'vitest';
-import { isBlocked, evacuate, makeUnit } from './combat';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { RIFLE, isBlocked, evacuate, makeUnit, type GameMap } from './combat';
 import { advanceTime, createGeoGame, missionTargets, type GeoState, type Ufo } from './geo';
 import {
   ALIEN_SPAWN,
@@ -15,6 +15,15 @@ import {
   missionSeed,
   type Mission,
 } from './mission';
+
+// Т.14: генератор мап справжній, доки тест не підставить свій (gen.fake), — так
+// перевіряється перебір сідів бойовища: на 8 % перешкод справжній генератор
+// незв'язної мапи не дає, і без підстановки цей код не виконується.
+const gen = vi.hoisted(() => ({ fake: null as ((seed: number) => GameMap) | null }));
+vi.mock('./map', async (importOriginal) => {
+  const real = await importOriginal<typeof import('./map')>();
+  return { ...real, makeTestMap: (seed: number, w?: number, h?: number) => (gen.fake ? gen.fake(seed) : real.makeTestMap(seed, w, h)) };
+});
 
 // Геопартія з вручну «посадженим» НЛО (спавн вимкнено) — для точкових сценаріїв.
 function mkGeo(ufoId: string, detected = true, status: Ufo['status'] = 'приземлився'): GeoState {
@@ -330,5 +339,81 @@ describe('mission: П15.2 — третій результат (ADR-0075)', () =>
     killSide(m2.state, 'player');
     expect(m2.state.evacuated?.length ?? 0).toBe(0);
     expect(missionOutcome(m2.state)).toBe('поразка'); // 0 евакуйованих — поразка 5.0 без змін
+  });
+});
+
+// --- Т.14: прогалини за мутаційним прогоном ---
+
+describe('mission: Т.14 — перебір сідів бойовища', () => {
+  const open = (): GameMap => ({ width: 20, height: 20, blocked: new Set() });
+  // Стіна x = 10 на всю висоту: зона висадки ціла, демони відрізані.
+  const walled = (): GameMap => ({ width: 20, height: 20, blocked: new Set(Array.from({ length: 20 }, (_, y) => '10,' + y)) });
+  afterEach(() => {
+    gen.fake = null;
+  });
+
+  it("незв'язна мапа відкидається: сіди перебираються як seed, seed+1, … до першої зв'язної", () => {
+    const g = mkGeo('uS');
+    const seed = missionSeed(g, 'uS');
+    const asked: number[] = [];
+    gen.fake = (s) => {
+      asked.push(s);
+      return s === seed + 2 ? open() : walled();
+    };
+    expect(createMission(g, 'uS').state.map.blocked.size).toBe(0);
+    expect(asked).toEqual([seed, seed + 1, seed + 2]);
+  });
+
+  it("50 сідів без зв'язної мапи → помилка, 51-ї спроби немає", () => {
+    let calls = 0;
+    gen.fake = () => {
+      calls++;
+      return walled();
+    };
+    expect(() => createMission(mkGeo('uS'), 'uS')).toThrow('Не вдалося згенерувати');
+    expect(calls).toBe(50);
+  });
+});
+
+describe('mission: Т.14 — сід, склад бою, причини відмов', () => {
+  it('сід — FNV-1a рядка «id:хвилина»; роздільник розводить u1+23 і u12+3', () => {
+    const at = (minute: number): GeoState => ({ ...mkGeo('u'), minute });
+    expect(missionSeed(at(600), 'uA')).toBe(1749931695);
+    expect(missionSeed(at(23), 'u1')).not.toBe(missionSeed(at(3), 'u12'));
+  });
+
+  it('типовий загін і демони: id та імена; стандартний солдат', () => {
+    const m = createMission(mkGeo('uA'), 'uA');
+    expect(m.state.units.map((u) => u.id + ' ' + u.name)).toEqual(['s1 Іван', 's2 Олена', 's3 Тарас', 'a1 Демон 1', 'a2 Демон 2']);
+    expect(makeSoldier('n1', 'Ніна')).toMatchObject({ id: 'n1', side: 'player', pos: { x: 0, y: 0 }, firingAccuracy: 0.6, weapon: RIFLE });
+  });
+
+  it('відмова запуску називає причину', () => {
+    const noTarget = 'лише з приземленого виявленого зонду Розриву: ';
+    expect(() => createMission(mkGeo('uX'), 'нема')).toThrow(noTarget + 'нема');
+    expect(() => createMission(mkGeo('u1', false), 'u1')).toThrow(noTarget + 'u1');
+    expect(() => createMission(mkGeo('u2', true, 'летить'), 'u2')).toThrow(noTarget + 'u2');
+    expect(() => createMission(mkGeo('uD'), 'uD', { squad: [] })).toThrow('Загін не може бути порожнім');
+    const four = ['a', 'b', 'c', 'd'].map((id) => makeSoldier(id, id));
+    expect(() => createMission(mkGeo('uE'), 'uE', { squad: four })).toThrow('Максимум 3 оперативників у зоні висадки');
+    const spy = makeUnit({ id: 'spy', side: 'alien', pos: { x: 0, y: 0 } });
+    expect(() => createMission(mkGeo('uF'), 'uF', { squad: [spy] })).toThrow('лише оперативники гравця: spy');
+  });
+
+  it('стан бою без списку evacuated: загін мертвий → «поразка»', () => {
+    const m = createMission(mkGeo('uO'), 'uO');
+    delete m.state.evacuated;
+    for (const u of m.state.units) if (u.side === 'player') u.alive = false;
+    expect(missionOutcome(m.state)).toBe('поразка');
+  });
+
+  it('completeMission серед кількох зондів: невідомий → помилка без запису; перемога прибирає лише свій', () => {
+    const g = mkGeo('uK');
+    g.ufos.push({ ...g.ufos[0], id: 'uZ' });
+    const logged = g.log.length;
+    expect(() => completeMission(g, 'нема', 'поразка')).toThrow('Невідомий зонд Розриву: нема');
+    expect(g.log).toHaveLength(logged);
+    completeMission(g, 'uK', 'перемога');
+    expect(g.ufos.map((u) => u.id)).toEqual(['uZ']);
   });
 });

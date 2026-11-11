@@ -18,6 +18,8 @@ import {
   HIRE_SCIENTIST_PRICE,
   MAX_LAB_SLOTS,
   PROJECT_CATALOG,
+  projectName,
+  PROJECTS,
   researchTick,
   SCIENTIST_SALARY,
   startProject,
@@ -349,5 +351,48 @@ describe('ізоляція від геосцени (критерій П11.2: geo
     // 120 тіків = 2.5 доби: 2 завершені доби → 2 точки
     expect(research.pool).toBe(2);
     expect(geoDay(withScience)).toBe(3);
+  });
+});
+
+// --- Т.14: прогалини за мутаційним прогоном ---
+
+describe('Т.14: каталог, пул імен, звільнення, слоти', () => {
+  it('каталог протоколів: назви, ціни, точки, передумови; назва невідомого ключа — сам ключ', () => {
+    expect(PROJECTS.map((p) => [p.id, p.name, p.cost, p.points, p.prerequisite])).toEqual([
+      ['armor', 'Композитна броня', 120, 27, undefined],
+      ['optics', 'Кібернетичне око', 90, 23, undefined],
+      ['medkit', 'Регенеративний гель', 100, 24, undefined],
+      ['lab-extension', 'Розширення лабораторії', 80, 33, undefined],
+      ['grenade', 'Імпульсна граната', 140, 30, 'medkit'],
+      ['gun-module', 'Гарматний модуль перехоплювача', 160, 36, 'optics'],
+    ]);
+    expect(projectName('grenade')).toBe('Імпульсна граната');
+    expect(projectName('невідомий' as ProjectId)).toBe('невідомий');
+  });
+
+  it('пул імен техномантів: 12 імен за порядком, 13-й — перше з номером', () => {
+    const econ = richEcon();
+    const research = createResearch();
+    for (let i = 0; i < 13; i++) hireScientist(econ, research);
+    const pool = ['Зінаїда', 'Ярослав', 'Меланія', 'Володимир', 'Дарія', 'Микола', 'Оксана', 'Левко', 'Ірина', 'Панас', 'Любов', 'Остап'];
+    expect(research.scientists.map((s) => s.name)).toEqual([...pool, 'Зінаїда 2']);
+  });
+
+  it('звільнення з кількох: іде саме названий, решта на місці, подія з його іменем', () => {
+    const econ = richEcon();
+    const research = createResearch();
+    for (let i = 0; i < 3; i++) hireScientist(econ, research);
+    expect(fireScientist(research, 'в2')).toEqual({ id: 'в2', name: 'Ярослав' });
+    expect(research.scientists.map((s) => s.id)).toEqual(['в1', 'в3']);
+    expect(research.log.at(-1)).toEqual({ type: 'fire', name: 'Ярослав' });
+  });
+
+  it('третій слот відкриває лише «Розширення лабораторії», а не будь-який завершений протокол', () => {
+    const research = createResearch();
+    research.active = [{ id: 'optics', invested: PROJECT_CATALOG.optics.points - 1 }];
+    research.pool = 1;
+    startProject(richEcon(), research, 'medkit');
+    expect(research.completed).toEqual(['optics']);
+    expect(research.slots).toBe(BASE_LAB_SLOTS);
   });
 });

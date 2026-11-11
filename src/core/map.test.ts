@@ -154,3 +154,29 @@ describe('генератор тестових мап', () => {
     expect([...a.blocked]).not.toEqual([...b.blocked]);
   });
 });
+
+// --- Т.14: прогалини за мутаційним прогоном ---
+
+describe('Т.14: бюджет вузлів A*, вибір з рівних шляхів, межі генератора', () => {
+  const from: Vec2 = { x: 2, y: 2 };
+  const cells = (p: Vec2[] | null): string => (p ?? []).map((c) => c.x + ',' + c.y).join(' ');
+
+  it('maxNodes — число розкритих вузлів: пряма на 6 клітинок коштує рівно 7', () => {
+    const g = setupGame();
+    expect(findPath(g, from, { x: 8, y: 2 }, 7)).toHaveLength(6);
+    expect(findPath(g, from, { x: 8, y: 2 }, 6)).toBeNull();
+  });
+
+  it('з рівних за довжиною шляхів обирається той самий (детермінізм траєкторій)', () => {
+    expect(cells(findPath(setupGame(), from, { x: 4, y: 4 }))).toBe('3,2 4,2 4,3 4,4');
+    expect(cells(findPath(setupGame(['3,2', '2,3', '4,3']), from, { x: 4, y: 4 }))).toBe('1,2 1,3 1,4 2,4 3,4 4,4');
+    // стіна x = 3: обхід згори і знизу рівні (7 кроків) — обирається нижній
+    expect(cells(findPath(setupGame(['3,1', '3,2', '3,3']), from, { x: 5, y: 2 }))).toBe('2,3 2,4 3,4 4,4 5,4 5,3 5,2');
+  });
+
+  it('перешкоди генератора — лише в межах мапи, ключі «x,y»', () => {
+    const m = makeTestMap(3, 6, 4, 0.5);
+    expect(m.blocked.size).toBeGreaterThan(0);
+    for (const cell of m.blocked) expect(cell).toMatch(/^[0-5],[0-3]$/);
+  });
+});
