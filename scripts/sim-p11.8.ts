@@ -17,10 +17,14 @@
 // Вивід (урок П8.5: повний вивід/CSV одразу на диск): markdown-таблиці в
 // stdout І у dist/p11.8-simulations.md; по-партійний CSV — dist/p11.8-parties.csv.
 // Зведення для звіту — docs/reports/p11.8-tuning.md.
+// Т.21: розділ «Числа балансу» — вимірювачі поруч із часткою перемог (вона
+// міряє обережність бота, Т.20): виграні місії на партію, гроші й ростер на
+// 30-ту добу, частка діб без повного загону. Базова лінія —
+// docs/reports/t21-balance-numbers.md.
 
 import { mkdirSync, writeFileSync } from 'node:fs';
-import { DEFAULT_PARTY_POLICY, SCIENCE_POLICY, simulateParty, type PartySimResult } from '../src/core/party-bot';
-import type { DifficultyPreset } from '../src/core/campaign';
+import { DEFAULT_PARTY_POLICY, MISSION_SQUAD_SIZE, SCIENCE_POLICY, simulateParty, type PartySimResult } from '../src/core/party-bot';
+import { VICTORY_DAY, type DifficultyPreset } from '../src/core/campaign';
 import type { ProjectId } from '../src/core/research';
 
 const ALL_PRESETS: DifficultyPreset[] = ['легкий', 'норма', 'складний'];
@@ -59,6 +63,36 @@ function meanOf(rs: PartySimResult[], f: (r: PartySimResult) => number): number 
 function curveAt(rs: PartySimResult[], curve: (r: PartySimResult) => number[], day: number): number {
   const xs = rs.map((r) => curve(r)[day - 1]).filter((x) => x !== undefined);
   return xs.length ? Math.round(xs.reduce((a, b) => a + b, 0) / xs.length) : 0;
+}
+
+// Квантиль p відсортованої вибірки (правило таблиці «Розподіл фінального рахунку»).
+function quantile(sorted: number[], p: number): number {
+  return sorted[Math.min(sorted.length - 1, Math.floor(p * sorted.length))];
+}
+
+// Т.21: числа балансу однієї партії. Гроші, боєготові й ростер на 30-ту добу —
+// лише для партій, що до неї дожили (знімок кінця 30-ї доби; ростер — живі
+// оперативники разом із лікарнею, score.veteransAlive). Доба «без повного
+// загону» — наприкінці доби боєготових менше, ніж іде в місію.
+interface BalanceNumbers {
+  missionsWon: number;
+  days: number; // завершених діб партії
+  daysNoFullSquad: number;
+  money30: number | null;
+  ready30: number | null;
+  roster30: number | null;
+}
+
+function balanceOf(r: PartySimResult): BalanceNumbers {
+  const reached = r.moneyByDay.length >= VICTORY_DAY;
+  return {
+    missionsWon: r.missionsWon,
+    days: r.readyByDay.length,
+    daysNoFullSquad: r.readyByDay.filter((n) => n < MISSION_SQUAD_SIZE).length,
+    money30: reached ? r.moneyByDay[VICTORY_DAY - 1] : null,
+    ready30: reached ? r.readyByDay[VICTORY_DAY - 1] : null,
+    roster30: reached ? r.score.veteransAlive : null,
+  };
 }
 
 const seedCount = parseSeedCount();
@@ -127,6 +161,33 @@ for (const policyName of POLICIES) {
   }
 }
 
+// Т.21: числа балансу — поруч із часткою перемог, а не замість неї.
+out.push('## Числа балансу (Т.21)');
+out.push('');
+out.push(
+  `Виграні місії і доби без повного загону — за всіма партіями; гроші й ростер на ${VICTORY_DAY}-ту добу — за партіями, що до неї дожили (медіана, у дужках p25–p75).`
+);
+out.push('');
+out.push(
+  `| Політика/Пресет | Виграно місій / партію (медіана) | Дожили до ${VICTORY_DAY}-ї доби | Гроші на ${VICTORY_DAY}-ту добу | Ростер на ${VICTORY_DAY}-ту добу | із них боєготових | Діб без повного загону, % |`
+);
+out.push('| --- | --- | --- | --- | --- | --- | --- |');
+for (const policyName of POLICIES) {
+  for (const preset of PRESETS) {
+    const bs = byCell.get(`${policyName}/${preset}`)!.map(balanceOf);
+    const at30 = (f: (b: BalanceNumbers) => number | null): string => {
+      const xs = bs.flatMap((b) => (f(b) === null ? [] : [f(b)!])).sort((a, b) => a - b);
+      return xs.length ? `${median(xs)} (${quantile(xs, 0.25)}–${quantile(xs, 0.75)})` : '—';
+    };
+    const days = bs.reduce((a, b) => a + b.days, 0);
+    const noFull = bs.reduce((a, b) => a + b.daysNoFullSquad, 0);
+    out.push(
+      `| ${policyName}/${preset} | ${round1(bs.reduce((a, b) => a + b.missionsWon, 0) / bs.length)} (${median(bs.map((b) => b.missionsWon))}) | ${bs.filter((b) => b.money30 !== null).length} із ${bs.length} | ${at30((b) => b.money30)} | ${at30((b) => b.roster30)} | ${at30((b) => b.ready30)} | ${days ? round1((100 * noFull) / days) : 0} |`
+    );
+  }
+}
+out.push('');
+
 // Завершення проєктів: скільки партій завершили кожен проєкт (політика науки).
 for (const preset of PRESETS) {
   const rs = byCell.get(`science/${preset}`);
@@ -176,8 +237,7 @@ for (const policyName of POLICIES) {
       .get(`${policyName}/${preset}`)!
       .map((r) => r.score.total)
       .sort((a, b) => a - b);
-    const q = (p: number) => s[Math.min(s.length - 1, Math.floor(p * s.length))];
-    out.push(`| ${policyName}/${preset} | ${s[0]} | ${q(0.25)} | ${median(s)} | ${q(0.75)} | ${s[s.length - 1]} |`);
+    out.push(`| ${policyName}/${preset} | ${s[0]} | ${quantile(s, 0.25)} | ${median(s)} | ${quantile(s, 0.75)} | ${s[s.length - 1]} |`);
   }
 }
 out.push('');
@@ -188,11 +248,12 @@ console.log(out.join('\n'));
 
 // CSV по-партійний: усі метрики, включно з наукою (probe-аналіз поза скриптом).
 const header =
-  'policy,preset,seed,outcome,endDay,score,missionsLaunched,missionsWon,soldiersLost,soldiersWounded,hiredTotal,hireSpent,repairs,scientistsHired,scientistsFired,salaryShortfallDays,salarySpent,projectSpent,workshopSpent,projectsCompleted,completedProjects,workshopProduced,equippedItems';
+  'policy,preset,seed,outcome,endDay,score,missionsLaunched,missionsWon,soldiersLost,soldiersWounded,hiredTotal,hireSpent,repairs,scientistsHired,scientistsFired,salaryShortfallDays,salarySpent,projectSpent,workshopSpent,projectsCompleted,completedProjects,workshopProduced,equippedItems,days,daysNoFullSquad,money30,roster30,ready30';
 const lines = [header];
 for (const policyName of POLICIES) {
   for (const preset of PRESETS) {
     for (const r of byCell.get(`${policyName}/${preset}`)!) {
+      const b = balanceOf(r);
       lines.push(
         [
           policyName,
@@ -218,6 +279,11 @@ for (const policyName of POLICIES) {
           r.completedProjects.join(';'),
           r.workshopProduced,
           r.equippedItems,
+          b.days,
+          b.daysNoFullSquad,
+          b.money30 ?? '',
+          b.roster30 ?? '',
+          b.ready30 ?? '',
         ].join(',')
       );
     }
