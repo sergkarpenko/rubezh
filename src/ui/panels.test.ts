@@ -187,6 +187,32 @@ describe('renderUfos: сканери НЛО', () => {
     btn2.onclick = null;
   });
 
+  it('Т.24: останній загін без грошей на вербування — рядок-попередження, кнопка активна', () => {
+    const f = makeFixture();
+    expect(tickUntil(f.party, () => missionTargets(f.party.geo).length > 0)).toBe(true);
+    f.panels.renderUfos();
+    expect(document.querySelector('.mission-warn')).toBeNull(); // старт: 300 кредитів — запас є
+    f.party.econ.money = 99; // «норма»: вербування 100
+    f.panels.renderUfos();
+    expect(f.party.roster.soldiers.length).toBeGreaterThan(3);
+    expect(document.querySelector('.mission-warn')).toBeNull(); // боєготових більше за загін (3) — резерв є
+    for (const s of f.party.roster.soldiers.slice(3)) f.party.roster.hospital[s.id] = 3; // боєготових троє — увесь загін іде в бій
+    f.panels.renderUfos();
+    const warn = document.querySelector('.ufo .mission-warn');
+    expect(warn!.textContent).toBe('⚠ Останній загін, а на вербування бракує (99 з 100): загине — банкрутство.');
+    const btn = document.querySelector('button.mission') as HTMLButtonElement;
+    expect(btn.disabled).toBe(false); // запуск лишається в один клік
+    btn.click();
+    expect(f.deps.launchMission).toHaveBeenCalledTimes(1);
+    f.party.econ.money = 100; // на вербування вистачає — без попередження
+    f.panels.renderUfos();
+    expect(document.querySelector('.mission-warn')).toBeNull();
+    f.party.econ.money = 0;
+    for (const s of f.party.roster.soldiers) f.party.roster.hospital[s.id] = 3; // кнопка вимкнена — рядка нема
+    f.panels.renderUfos();
+    expect(document.querySelector('.mission-warn')).toBeNull();
+  });
+
   it('кнопка місії веде до launchMission (застосунок)', () => {
     const f = makeFixture();
     expect(tickUntil(f.party, () => missionTargets(f.party.geo).length > 0)).toBe(true);

@@ -19,7 +19,8 @@ import { dailyAllowance, hirePrice, missionBonus } from '../core/economy';
 // П11.6 (ADR-0058): екіпірування в картці солдата ростеру — броня/оптика
 // (постійні), аптечка/граната (витратні); дії — лише на геосцені.
 import { equipItem, unequipItem, itemName, type SoldierEquipment, type SoldierItemId } from '../core/workshop';
-import { readySoldiers } from '../core/squad';
+import { missionRisksBankruptcy, readySoldiers } from '../core/squad';
+import { SQUAD_SPAWN } from '../core/mission';
 import type { Party } from '../core/save';
 import { itemEffect } from './effects';
 import { drawAnimFrame, drawFighterSprite, drawGeoBaseSprite, drawGeoTerrain, drawUfoSprite } from '../render';
@@ -221,6 +222,18 @@ export function createPanels(deps: PanelsDeps): Panels {
               : 'Усі оперативники поранені — чекайте одужання або вербуйте';
         btn.onclick = () => deps.launchMission(u.id);
         div.appendChild(btn);
+        // Т.24 (рішення власника за Т.20): у бій іде останній боєготовий загін, а на
+        // вербування не вистачає — рядок-попередження; запуск лишається в один клік.
+        // Умова — та сама, що в боті партії (missionRisksBankruptcy, ADR-0089);
+        // розмір загону — як у missionSquad за замовчуванням (SQUAD_SPAWN).
+        const preset = party.campaign.preset;
+        if (!btn.disabled && missionRisksBankruptcy(party.econ, party.roster, SQUAD_SPAWN.length, preset)) {
+          const warn = document.createElement('div');
+          warn.className = 'mission-warn';
+          warn.textContent =
+            '⚠ Останній загін, а на вербування бракує (' + party.econ.money + ' з ' + hirePrice(preset) + '): загине — банкрутство.';
+          div.appendChild(warn);
+        }
       }
       box.appendChild(div);
     }
