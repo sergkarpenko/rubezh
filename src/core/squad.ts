@@ -153,6 +153,19 @@ export function isBankrupt(econ: EconomyState, roster: Roster, preset: Difficult
   return readySoldiers(roster).length === 0 && econ.money < hirePrice(preset);
 }
 
+// Т.22 (ADR-0089): чи загрожує місія банкрутством — якщо загін із squadSize
+// боєготових загине весь, боєготових не лишиться, а грошей на найм немає
+// (тобто після розгрому одразу настане isBankrupt). Одна умова для бота
+// партії (party-bot.ts) і для попередження в UI перед запуском місії.
+export function missionRisksBankruptcy(
+  econ: EconomyState,
+  roster: Roster,
+  squadSize: number,
+  preset: DifficultyPreset = DEFAULT_PRESET
+): boolean {
+  return readySoldiers(roster).length <= squadSize && econ.money < hirePrice(preset);
+}
+
 // Застосувати результат завершеної місії до ростеру (один раз після бою;
 // порядок виклику щодо completeMission не важливий — це різні стани).
 // Порівняння за id: солдат у стані місії, якого нема в ростері, → помилка

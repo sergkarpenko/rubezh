@@ -12,8 +12,19 @@ import { describe, expect, it } from 'vitest';
 import { createParty } from './save';
 import { fireSoldier, readySoldiers } from './squad';
 import { hirePrice } from './economy';
-import { PASSIVE_POLICY } from './intercept-bot';
-import { DEFAULT_PARTY_POLICY, SCIENCE_POLICY, TICKS_PER_DAY, partyBotHireStep, partyBotScienceStep, simulateParty } from './party-bot';
+import { spend } from './economy';
+import { advanceTime, missionTargets } from './geo';
+import { BALANCED_POLICY, PASSIVE_POLICY } from './intercept-bot';
+import {
+  DEFAULT_PARTY_POLICY,
+  SCIENCE_POLICY,
+  TICKS_PER_DAY,
+  partyBotHireStep,
+  partyBotInterceptStep,
+  partyBotMissionStep,
+  partyBotScienceStep,
+  simulateParty,
+} from './party-bot';
 
 describe('П8.5: оркестратор — детермінізм (ADR-0003)', () => {
   it('повна партія: сід + пресет + політика = байт-у-байт той самий результат', () => {
@@ -92,16 +103,25 @@ describe('П8.5: оркестратор — повна партія (фіксо�
     expect(r.hireSpent).toBe(29 * hirePrice('норма')); // П11.8: hirePrice «норми» = 100
   });
 
-  // П8.6: банкрутний сід нової лінії (probe-перед-тестами, урок П8.5). Т.18
-  // (ADR-0087): із симетричною лінією вогню сід 35 виграє партію — банкрутний
-  // сід лінії тепер 16 (Д8).
-  it('банкрутство (ADR-0021): сід 16 «норма» — боєготових немає і грошей немає', () => {
+  // Т.22 (ADR-0089): чинний бот не банкрутує — останній загін без грошей на найм
+  // у бій не йде, ремонт без боєготових чекає (сід 16, банкрутний до Т.22, тепер
+  // виграє). Банкрутство лишається досяжним для політики, що не наймає і
+  // витрачає на науку: загін гине, а гроші на найм ідуть техномантам (probe).
+  it('чинний бот на колись банкрутному сіді 16 «норма» виграє партію', () => {
     const r = simulateParty(16, 'норма');
+    expect(r.outcome).toBe('перемога');
+    expect(r.missionsLaunched).toBe(42);
+    expect(r.missionsWon).toBe(35);
+    expect(r.soldiersLost).toBe(50);
+  });
+
+  it('банкрутство (ADR-0021): наука без найму, сід 26 «норма» — боєготових немає і грошей немає', () => {
+    const r = simulateParty(26, 'норма', { policy: { ...SCIENCE_POLICY, name: 'sci-no-hire', hireUpTo: 0 } });
     expect(r.outcome).toBe('банкрутство');
-    expect(r.endDay).toBe(8);
-    expect(r.ticks).toBe(336);
-    expect(r.soldiersLost).toBe(24);
-    expect(r.moneyByDay.length).toBeLessThan(30); // обірвана крива — доба 8 незавершена
+    expect(r.endDay).toBe(2);
+    expect(r.ticks).toBe(48);
+    expect(r.soldiersLost).toBe(6);
+    expect(r.moneyByDay.length).toBeLessThan(30); // обірвана крива — доба 2 незавершена
   });
 
   it('смоук: 4 доби × 2 сіди × 2 пресети — без винятків, криви заповнені', () => {
@@ -140,6 +160,58 @@ describe('П8.5: політика бот-гравця — детермінова
     const r = simulateParty(42, 'норма', { policy, maxDays: 5 });
     expect(r.hiredTotal).toBe(0);
     expect(r.hireSpent).toBe(0);
+  });
+});
+
+// Т.22 (ADR-0089, рішення власника за звітом Т.20): два дефекти політики, з
+// яких складались усі банкрутства бота.
+describe('Т.22: запобіжник останнього загону і ремонт без боєготових', () => {
+  // Партія з ціллю місії: тіки геосцени до першого приземленого зонда.
+  function partyWithTarget(): ReturnType<typeof createParty> {
+    const p = createParty(42, 'норма');
+    for (let t = 0; t < 30 * TICKS_PER_DAY && missionTargets(p.geo).length === 0; t++) advanceTime(p.geo, 1);
+    expect(missionTargets(p.geo).length).toBeGreaterThan(0);
+    while (readySoldiers(p.roster).length > 3) fireSoldier(p.roster, p.roster.soldiers[0].id);
+    return p;
+  }
+
+  it('останній боєготовий загін без грошей на найм у бій не йде', () => {
+    const p = partyWithTarget();
+    spend(p.econ, p.econ.money - 99); // 99 < ціни найму 100
+    const before = JSON.stringify(p);
+    expect(partyBotMissionStep(p, DEFAULT_PARTY_POLICY).launched).toBe(false);
+    expect(JSON.stringify(p)).toBe(before); // крок нічого не змінив
+  });
+
+  it('із грошима рівно на найм той самий загін іде в бій', () => {
+    const p = partyWithTarget();
+    spend(p.econ, p.econ.money - 100);
+    expect(partyBotMissionStep(p, DEFAULT_PARTY_POLICY).launched).toBe(true);
+  });
+
+  it('без грошей, але з четвертим боєготовим місія запускається', () => {
+    const p = createParty(42, 'норма');
+    for (let t = 0; t < 30 * TICKS_PER_DAY && missionTargets(p.geo).length === 0; t++) advanceTime(p.geo, 1);
+    while (readySoldiers(p.roster).length > 4) fireSoldier(p.roster, p.roster.soldiers[0].id);
+    spend(p.econ, p.econ.money);
+    expect(partyBotMissionStep(p, DEFAULT_PARTY_POLICY).launched).toBe(true);
+  });
+
+  it('пошкоджений перехоплювач без боєготових не ремонтується; з одним боєготовим — ремонтується', () => {
+    const p = createParty(42, 'норма');
+    p.intercept.fighter.hp = 1;
+    const money = p.econ.money;
+    const all = p.roster.soldiers.map((s) => s.id);
+    for (const id of all) p.roster.hospital[id] = 10; // боєготових немає
+    partyBotInterceptStep(p, BALANCED_POLICY);
+    expect(p.econ.money).toBe(money);
+    expect(p.intercept.fighter.status).toBe('на базі');
+    expect(p.intercept.fighter.repairTicksLeft).toBeUndefined();
+
+    delete p.roster.hospital[all[0]];
+    partyBotInterceptStep(p, BALANCED_POLICY);
+    expect(p.econ.money).toBe(money - 50);
+    expect(p.intercept.fighter.repairTicksLeft).toBeGreaterThan(0);
   });
 });
 
@@ -201,8 +273,9 @@ describe('П11.8: політика науки — повний флоу (фік�
   it('спіраль зарплата→звільнення (урок П11.2): бідна партія звільняє вчених з кінця штату', () => {
     const heavy = { ...SCIENCE_POLICY, name: 'sci-heavy', scientistsUpTo: 5 };
     const r = simulateParty(42, 'норма', { policy: heavy }); // сід 42: спіраль за цін Т.19 (probe; до Т.19 — сід 44)
-    expect(r.salaryShortfallDays).toBe(2);
-    expect(r.scientistsFired).toBe(2);
+    // Т.22 (ADR-0089): із запобіжником партія сидить без грошей довше — числа перемірено.
+    expect(r.salaryShortfallDays).toBe(3);
+    expect(r.scientistsFired).toBe(4);
     // штат просідає 5 → 3 (наймані поверх звільнених) — метрики бачать спіраль
     expect(Math.max(...r.scientistsByDay)).toBe(5);
     expect(r.scientistsByDay[r.scientistsByDay.length - 1]).toBeLessThan(5);
