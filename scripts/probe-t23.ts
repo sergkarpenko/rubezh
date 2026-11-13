@@ -20,6 +20,11 @@
 //             без техномантів, протоколів і витрат; бот лише екіпірує (стан партії задає
 //             скрипт); gift+afterN — склад наповнюється після N-ї доби;
 //   g:<предмет> — те саме для одного предмета (medkit, grenade, optics, armor, gun-module).
+// Т.25 — probe констант (ядро не змінюється; зарплату міряють у копії репозиторію з sed):
+//   c:<предмет>=N — ціна предмета в цеху N кредитів (на час варіанта міняє запис каталогу в пам'яті);
+//   keep    — броня й око загиблого повертаються на склад (скрипт читає журнал цеху після бою);
+//   eqN     — бот замовляє й екіпірує предмети лише для перших N боєготових (eq3 — загін місії);
+//             eq99 повторює чинну політику іншим кодом — звірка цього варіанта.
 // Детермінізм (ADR-0003): сіди 1..N. Зведення — docs/reports/t23-science-policies.md.
 
 import { mkdirSync, writeFileSync } from 'node:fs';
@@ -28,10 +33,10 @@ import { advanceTime, geoDay } from '../src/core/geo';
 import { economyTick, hirePrice } from '../src/core/economy';
 import { hospitalTick, isBankrupt, readySoldiers } from '../src/core/squad';
 import { interceptTick, repairTick } from '../src/core/intercept';
-import { VICTORY_DAY, campaignScore, campaignTick, type DifficultyPreset } from '../src/core/campaign';
+import { DIFFICULTY_MULTIPLIERS, VICTORY_DAY, campaignScore, campaignTick, type DifficultyPreset } from '../src/core/campaign';
 import { createParty } from '../src/core/save';
 import { fireScientist, researchTick, type ProjectId } from '../src/core/research';
-import { WORKSHOP_CATALOG, workshopTick, type ItemId } from '../src/core/workshop';
+import { WORKSHOP_CATALOG, equipItem, installGunModule, orderItem, workshopTick, type ItemId } from '../src/core/workshop';
 import {
   DEFAULT_PARTY_POLICY,
   MISSION_SQUAD_SIZE,
@@ -64,6 +69,9 @@ interface Variant {
   done: ProjectId[]; // протоколи, завершені від початку без витрат
   afterDay: number; // наука — після стількох завершених діб
   reserve: (preset: DifficultyPreset) => number | null; // null — резерв політики (спільний із наймом)
+  costs: Partial<Record<ItemId, number>>; // Т.25: ціни предметів на час варіанта
+  keep: boolean; // Т.25: броня й око загиблого повертаються на склад
+  equipFirst: number; // Т.25: замовляти й екіпірувати для перших N боєготових; 0 — крок бота
 }
 
 function parseVariant(name: string): Variant {
@@ -72,9 +80,13 @@ function parseVariant(name: string): Variant {
     gift: [],
     projects: null,
     fire: false,
+    done: [],
     scientists: SCIENCE_POLICY.scientistsUpTo,
     afterDay: 0,
     reserve: () => null,
+    costs: {},
+    keep: false,
+    equipFirst: 0,
   };
   for (const part of name.split('+')) {
     const num = Number(part.replace(/^[a-z]+/, ''));
@@ -84,6 +96,9 @@ function parseVariant(name: string): Variant {
     else if (part === 'fire') v.fire = true;
     else if (part.startsWith('done:')) v.done = part.slice(5).split('.') as ProjectId[];
     else if (part.startsWith('g:')) v.gift = [part.slice(2) as ItemId];
+    else if (part.startsWith('c:')) v.costs[part.slice(2).split('=')[0] as ItemId] = Number(part.split('=')[1]);
+    else if (part === 'keep') v.keep = true;
+    else if (part.startsWith('eq')) v.equipFirst = num;
     else if (part.startsWith('sci')) v.scientists = num;
     else if (part.startsWith('after')) v.afterDay = num;
     else if (part === 'rh') v.reserve = (p) => hirePrice(p);
@@ -112,6 +127,37 @@ interface Rec {
   scientistDays: number; // сума штату техномантів за добами
   spentScience: number; // найм техномантів + протоколи + цех
   spentSalary: number;
+}
+
+// Т.25: пункти 3–5 partyBotScienceStep (цех, екіпірування, гарматний модуль) для
+// перших `first` боєготових замість усіх. Решта умов — як у кроці бота.
+const SOLDIER_ITEMS = ['armor', 'optics', 'medkit', 'grenade'] as const;
+function scienceTail(party: ReturnType<typeof createParty>, policy: PartyBotPolicy, first: number): void {
+  const preset = party.campaign.preset;
+  const w = party.workshop;
+  const squad = readySoldiers(party.roster).slice(0, first);
+  if (policy.workshopOrders.length > 0 && w.queue.length === 0) {
+    for (const id of policy.workshopOrders) {
+      if (!party.research.completed.includes(id)) continue;
+      const lacking =
+        id === 'gun-module' ? (party.intercept.fighter.gunModule ? 0 : 1) : squad.filter((s) => !w.equipped[s.id]?.[id]).length;
+      if (lacking - w.store[id] - w.queue.filter((o) => o.id === id).length <= 0) continue;
+      const price = Math.round(WORKSHOP_CATALOG[id].cost * DIFFICULTY_MULTIPLIERS[preset].economyMultiplier);
+      if (party.econ.money - price < policy.hireReserve) continue;
+      orderItem(party.econ, w, party.research, id, preset);
+      break;
+    }
+  }
+  if (!policy.equip) return;
+  for (const soldier of squad) {
+    for (const id of SOLDIER_ITEMS) {
+      if (w.equipped[soldier.id]?.[id] || w.store[id] <= 0) continue;
+      equipItem(w, soldier, id);
+    }
+  }
+  if (party.intercept.fighter.status === 'на базі' && !party.intercept.fighter.gunModule && w.store['gun-module'] > 0) {
+    installGunModule(w, party.intercept);
+  }
 }
 
 function run(name: string, v: Variant, preset: DifficultyPreset, seed: number): Rec {
@@ -171,9 +217,20 @@ function run(name: string, v: Variant, preset: DifficultyPreset, seed: number): 
     const m1 = party.econ.money;
     const done = v.fire && sci.projects.every((id) => party.research.completed.includes(id));
     if (on && done) for (const sc of [...party.research.scientists]) fireScientist(party.research, sc.id);
-    partyBotScienceStep(party, on ? (done ? sciDone : sciStep) : DEFAULT_PARTY_POLICY);
+    const step = on ? (done ? sciDone : sciStep) : DEFAULT_PARTY_POLICY;
+    if (on && v.equipFirst > 0) {
+      partyBotScienceStep(party, { ...step, workshopOrders: [], equip: false });
+      scienceTail(party, step, v.equipFirst);
+    } else partyBotScienceStep(party, step);
     rec.spentScience += m1 - party.econ.money;
+    const logFrom = party.workshop.log.length;
     const m = partyBotMissionStep(party, policy);
+    if (v.keep) {
+      for (const e of party.workshop.log.slice(logFrom)) {
+        if (e.type !== 'equipment_lost') continue;
+        for (const k of e.items) if (k === 'armor' || k === 'optics') party.workshop.store[k] += 1;
+      }
+    }
     if (m.launched) {
       rec.missions += 1;
       if (m.outcome === 'перемога') rec.missionsWon += 1;
@@ -214,12 +271,16 @@ const mean = (a: number[]): number => a.reduce((x, y) => x + y, 0) / a.length;
 const f1 = (x: number): string => x.toFixed(1);
 
 const all: Rec[] = [];
+const ITEMS = Object.keys(WORKSHOP_CATALOG) as ItemId[];
+// Ціни каталогу до першого варіанта: кожен варіант стартує від них, а не від цін попереднього.
+const baseCosts = Object.fromEntries(ITEMS.map((id) => [id, WORKSHOP_CATALOG[id].cost]));
 console.log(
   '| Варіант / пресет | Перемог, % | Виграно місій на партію | Частка виграних місій, % | Місій на добу | Діб без повного загону, % | Завершили 30-ту добу | Гроші на 30-ту добу | Ростер на 30-ту добу | Загиблих на партію | Протоколів | Техномантів у середньому | Витрати: наука / зарплата | Рахунок, медіана |'
 );
 console.log('| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |');
 for (const name of variants) {
   const v = parseVariant(name);
+  for (const id of ITEMS) WORKSHOP_CATALOG[id].cost = v.costs[id] ?? baseCosts[id];
   for (const preset of presets) {
     const rs: Rec[] = [];
     let mismatch = 0;
