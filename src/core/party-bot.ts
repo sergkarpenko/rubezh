@@ -26,7 +26,7 @@
 
 import { TICK_MINUTES, advanceTime, chebyshevWrap, geoDay, missionTargets, type GeoState, type Ufo } from './geo';
 import { creditMissionBonus, economyTick, hirePrice } from './economy';
-import { applyMissionResult, hireSoldier, hospitalTick, isBankrupt, missionSquad, readySoldiers } from './squad';
+import { applyMissionResult, hireSoldier, hospitalTick, isBankrupt, missionRisksBankruptcy, missionSquad, readySoldiers } from './squad';
 import { FIGHTER_MAX_HP, FIGHTER_REPAIR_COST, interceptRound, interceptTick, repairTick, startIntercept, startRepair } from './intercept';
 import { BALANCED_POLICY, type InterceptPolicy } from './intercept-bot';
 import { autoBattle } from './ai-bot';
@@ -169,7 +169,11 @@ export function partyBotInterceptStep(party: Party, policy: InterceptPolicy): vo
     }
   } else if (f.status === 'на базі' && f.hp < FIGHTER_MAX_HP && !f.repairTicksLeft) {
     // Пошкоджений без ремонту: платимо одразу, як лише є гроші (X-COM досвід, ADR-0021).
-    if (party.econ.money >= FIGHTER_REPAIR_COST) startRepair(ic, party.geo, party.econ);
+    // Т.22 (ADR-0089): без боєготових ремонт чекає — цей крок іде раніше за найм,
+    // і ремонт забрав би гроші, на які після розгрому наймають новий загін.
+    if (party.econ.money >= FIGHTER_REPAIR_COST && readySoldiers(party.roster).length > 0) {
+      startRepair(ic, party.geo, party.econ);
+    }
   } else if (f.status === 'бій' && ic.activeUfoId) {
     const ufo = party.geo.ufos.find((u) => u.id === ic.activeUfoId);
     if (ufo) {
@@ -314,6 +318,9 @@ export function partyBotMissionStep(party: Party, policy: PartyBotPolicy): Missi
   const info: MissionStepInfo = { launched: false, outcome: null, lost: 0, wounded: 0 };
   if (!policy.missions) return info;
   if (readySoldiers(party.roster).length < policy.missionSquadSize) return info;
+  // Т.22 (ADR-0089): запобіжник останнього загону — без грошей на найм
+  // останні боєготові в бій не йдуть (розгром був би банкрутством).
+  if (missionRisksBankruptcy(party.econ, party.roster, policy.missionSquadSize, party.campaign.preset)) return info;
   const target = missionTargets(party.geo)[0];
   if (!target) return info;
   const squad = missionSquad(party.roster, policy.missionSquadSize);

@@ -15,6 +15,7 @@ import {
   hospitalTick,
   hireSoldier,
   isBankrupt,
+  missionRisksBankruptcy,
   missionSquad,
   readySoldiers,
   type Roster,
@@ -399,6 +400,26 @@ describe('squad: банкрутство (П4.4, ADR-0021)', () => {
     expect(isBankrupt(econ, r, 'легкий')).toBe(true); // 90 < 120
     expect(isBankrupt(econ, r, 'норма')).toBe(true); // 90 < 100
     expect(isBankrupt(econ, r, 'складний')).toBe(false); // 90 ≥ 90 — найм доступний
+  });
+
+  // Т.22 (ADR-0089): умова «розгром цього загону = банкрутство» — до бою.
+  it('місія загрожує банкрутством: у бій ідуть останні боєготові, а грошей на найм немає', () => {
+    const econ = createEconomy();
+    spend(econ, 201); // 99 < HIRE_PRICE
+    const r = createRoster(4);
+    expect(missionRisksBankruptcy(econ, r, 3)).toBe(false); // четвертий боєготовий лишається
+    r.hospital['s4'] = 10; // поранений не рахується
+    expect(missionRisksBankruptcy(econ, r, 3)).toBe(true);
+    expect(missionRisksBankruptcy(econ, r, 2)).toBe(false); // загін із двох — третій лишається
+  });
+
+  it('місія не загрожує банкрутством, коли грошей рівно на найм; поріг — за пресетом', () => {
+    const econ = createEconomy();
+    spend(econ, 200); // рівно 100
+    const r = createRoster(3);
+    expect(missionRisksBankruptcy(econ, r, 3)).toBe(false);
+    expect(missionRisksBankruptcy(econ, r, 3, 'складний')).toBe(false); // 100 ≥ 90
+    expect(missionRisksBankruptcy(econ, r, 3, 'легкий')).toBe(true); // 100 < 120
   });
 });
 
