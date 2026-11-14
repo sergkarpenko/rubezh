@@ -1,0 +1,83 @@
+# Тег кроку `iter-X.Y` — без дій власника (ADR-0093, Т.34).
+# Хмарна сесія агента тег не створить: її проксі відхиляє і пуш тегу, і
+# створення ref через API (урок Т.5/Т.6, перевірено знову в Т.34). Тому тег
+# ставить цей workflow на merge-коміті PR одразу після мержу.
+#
+# Назва тегу — рядок «Iter-Tag: iter-X.Y» в описі PR. Уся логіка — у
+# scripts/iter-tag.sh (його самоперевірка проганяє і кроки цього workflow
+# на заглушці gh). PR без такого рядка workflow не чіпає: рядки тегів,
+# Dependabot, перші PR серії (тег несе останній змістовний PR, урок П8.5).
+#
+# Джоби:
+#   check — на кожну зміну PR: самоперевірка скрипта і назва майбутнього тегу
+#           (недопустима або зайнята назва — червоний чек до мержу);
+#   tag   — після мержу PR або вручну (workflow_dispatch: tag + sha коміту
+#           в main) — запасний шлях, якщо подія мержу не спрацювала.
+# Наявний тег workflow не пересуває: той самий коміт — нічого не робить,
+# інший — червоний прогін.
+name: iter-tag
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, edited, closed]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Назва тегу (наприклад iter-T.34)'
+        required: true
+        type: string
+      sha:
+        description: 'Повний sha merge-коміту в main (40 знаків)'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    # зміна опису вже закритого PR чек не запускає
+    if: >-
+      github.event_name == 'pull_request' && github.event.action != 'closed' &&
+      github.event.pull_request.state == 'open'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Самоперевірка скрипта
+        run: sh scripts/iter-tag.sh --self-test
+      - name: Назва майбутнього тегу
+        env:
+          # опис PR — недовірений текст: лише через змінну середовища
+          PR_BODY: ${{ github.event.pull_request.body }}
+          GH_TOKEN: ${{ github.token }}
+        run: sh scripts/iter-tag.sh --preview
+
+  tag:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.action == 'closed' && github.event.pull_request.merged == true)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      # код скрипта — з main після мержу, а не з гілки PR
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.merge_commit_sha || 'main' }}
+      - name: Назва тегу і коміт
+        id: plan
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+          MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+          INPUT_TAG: ${{ inputs.tag }}
+          INPUT_SHA: ${{ inputs.sha }}
+          GH_TOKEN: ${{ github.token }}
+        run: sh scripts/iter-tag.sh --plan
+      - name: Поставити тег
+        if: steps.plan.outputs.tag != ''
+        env:
+          TAG: ${{ steps.plan.outputs.tag }}
+          SHA: ${{ steps.plan.outputs.sha }}
+          GH_TOKEN: ${{ github.token }}
+        run: sh scripts/iter-tag.sh --put
