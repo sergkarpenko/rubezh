@@ -464,7 +464,11 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
       const actions = aliensTurn(ui.mission.state); // синхронно, одним кліком (5.1.4)
       battle.enqueueAnims(prevLen); // П6.8: відтворення ходу прибульців поверх фінального стану
       if (!battle.checkOutcome()) {
-        battle.binfo('Хід демонів Розриву відпрацьовано (' + actions + ' дій). Ваш хід — хід ' + ui.mission.state.turn + '.');
+        // Т.33: плашка ходу демонів, потім підсумок і ця підказка
+        battle.alienTurnDone(
+          prevLen,
+          'Хід демонів Розриву відпрацьовано (' + actions + ' дій). Ваш хід — хід ' + ui.mission.state.turn + '.'
+        );
         deps.renderAll();
       }
     } catch (e) {
@@ -558,6 +562,7 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
 
   function onKeyDown(ev: KeyboardEvent): void {
     if (isTypingTarget(ev.target)) return;
+    battle.dismissTurnPlate(); // Т.33: клавіша дії прибирає підсумок ходу демонів
     if (ev.code === 'Digit1' || ev.key === '1') armFire('snap');
     else if (ev.code === 'Digit2' || ev.key === '2') armFire('aimed');
     else if (ev.code === 'Digit3' || ev.key === '3') armFire('auto');

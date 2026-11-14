@@ -37,6 +37,24 @@ beforeEach(() => {
   proto.getContext = () => noopCtx;
 });
 
+describe('Т.33: ціна в AP і клавіша в кутках плитки', () => {
+  it('ціна — з констант ядра, клавіша — як у обробнику клавіш; «Кінець» без ціни, «Авто» без обох', () => {
+    createToolbar(document.getElementById('btoolbar')!, { onAction: () => {} });
+    const corner = (id: string, cls: string): string | null => document.querySelector('#' + id + ' .' + cls)?.textContent ?? null;
+    const got = TOOLBAR_ACTIONS.map((a) => [a.btnId, corner(a.btnId, 'tb-ap'), corner(a.btnId, 'tb-key')]);
+    expect(got).toEqual([
+      ['btn-snap', RIFLE.modes.snap.apCost + ' AP', '1'],
+      ['btn-aimed', RIFLE.modes.aimed.apCost + ' AP', '2'],
+      ['btn-auto', RIFLE.modes.auto.apCost + ' AP', '3'],
+      ['btn-ow', OVERWATCH_AP_COST + ' AP', 'O'],
+      ['btn-medkit', HEAL_AP_COST + ' AP', 'M'],
+      ['btn-grenade', GRENADE_AP_COST + ' AP', 'G'],
+      ['btn-end', null, 'E'],
+      ['btn-auto-battle', null, null],
+    ]);
+  });
+});
+
 describe('тулбар: перелік дій (П13.2, ADR-0066)', () => {
   it('плитки — усі чинні дії бою (id, підписи, іконки); клік → onAction; «Авто»/«Стоп» — перемикач авто-бою (П13.3)', () => {
     const onAction = vi.fn();

@@ -35,6 +35,7 @@ import { completeMission, createMission, missionOutcome, type Mission, type Miss
 import { createParty, type Party } from '../src/core/save';
 import { applyMissionResult, hospitalTick, missionSquad, readySoldiers } from '../src/core/squad';
 import { deployConsumables } from '../src/core/workshop';
+import { TURN_PLATE_DONE, summarizeAlienTurn } from '../src/ui/battle-feedback';
 
 export interface MoveOption {
   cell: Vec2;
@@ -109,6 +110,8 @@ export class CoreMirror {
     return this.mission;
   }
 
+  turnSummary = ''; // Т.33: підсумок останнього ходу демонів
+
   get state(): GameState {
     if (this.mission === null) throw new Error('Дзеркало: місію не запущено');
     return this.mission.state;
@@ -169,8 +172,12 @@ export class CoreMirror {
   // Кінець ходу гравця: передача ходу і синхронний хід демонів (input.ts
   // endPlayerTurn). Повертає кількість дій демонів — її показує підказка бою.
   endPlayerTurn(): number {
+    const from = this.state.log.length;
     endTurn(this.state);
-    return aliensTurn(this.state);
+    const actions = aliensTurn(this.state);
+    // Т.33: текст підсумку ходу демонів (#bturn) — за подіями цього ходу і туманом
+    this.turnSummary = TURN_PLATE_DONE + summarizeAlienTurn(this.state.log.slice(from), this.state.units, this.seen()).join('');
+    return actions;
   }
 
   // Чи бачить загін клітинку юніта (туман війни, battle.ts visibleCells).
