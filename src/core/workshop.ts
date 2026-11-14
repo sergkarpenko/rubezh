@@ -19,7 +19,7 @@
 // probe-симуляціями П11.8 (патерн П10.4), затверджує власник.
 
 import { spend, type EconomyState } from './economy';
-import { type DifficultyPreset, DEFAULT_PRESET, DIFFICULTY_MULTIPLIERS } from './campaign';
+import { type DifficultyPreset, DEFAULT_PRESET, sciencePrice } from './campaign';
 import type { ProjectId, ResearchState } from './research';
 import { HIT_CHANCE_CAP, type Unit, type UnitItems } from './combat';
 import type { InterceptState } from './intercept';
@@ -126,8 +126,7 @@ export function orderItem(
   if (!research.completed.includes(id)) {
     throw new Error('Предмет ще не досліджено: ' + itemName(id));
   }
-  const multipliers = DIFFICULTY_MULTIPLIERS[preset];
-  spend(econ, Math.round(def.cost * multipliers.economyMultiplier));
+  spend(econ, sciencePrice(def.cost, preset));
   const order: WorkshopOrder = { id, ticksLeft: def.ticks };
   workshop.queue.push(order);
   workshop.log.push({ type: 'order', id, ticks: def.ticks });

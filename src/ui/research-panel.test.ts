@@ -209,3 +209,19 @@ describe('ResearchPanel: помилки ядра — у журнал, без к�
     expect(party.research.active).toHaveLength(0); // стан ядра не змінився
   });
 });
+
+describe('ResearchPanel: ціни за пресетом (Т.29)', () => {
+  it('«легкий»: найм 50, утримання 5, протокол броні 48 — у списку, підказці і списанні', () => {
+    party = createParty(42, 'легкий');
+    const panel = createResearchPanel(makeDeps());
+    panel.render();
+    expect(el('btn-hire-scientist').textContent).toBe('Вербувати техноманта (50)');
+    expect(el('research').textContent).toContain('утримання 5/добу');
+    expect(el('research').textContent).toContain('Композитна броня · 48 · ');
+    const start = el('btn-start-0') as HTMLButtonElement;
+    expect(start.title).toBe('Почати протокол (−48)');
+    const before = party.econ.money;
+    start.click();
+    expect(party.econ.money).toBe(before - 48);
+  });
+});

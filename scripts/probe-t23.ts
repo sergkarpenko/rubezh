@@ -42,7 +42,7 @@ import { advanceTime, geoDay, missionTargets } from '../src/core/geo';
 import { economyTick, hirePrice } from '../src/core/economy';
 import { hospitalTick, isBankrupt, missionRisksBankruptcy, readySoldiers } from '../src/core/squad';
 import { interceptTick, repairTick } from '../src/core/intercept';
-import { DIFFICULTY_MULTIPLIERS, VICTORY_DAY, campaignScore, campaignTick, type DifficultyPreset } from '../src/core/campaign';
+import { VICTORY_DAY, sciencePrice, campaignScore, campaignTick, type DifficultyPreset } from '../src/core/campaign';
 import { createParty } from '../src/core/save';
 import { PROJECT_CATALOG, fireScientist, researchTick, type ProjectId } from '../src/core/research';
 import { WORKSHOP_CATALOG, equipItem, installGunModule, orderItem, workshopTick, type ItemId } from '../src/core/workshop';
@@ -161,7 +161,7 @@ function scienceTail(party: ReturnType<typeof createParty>, policy: PartyBotPoli
       const lacking =
         id === 'gun-module' ? (party.intercept.fighter.gunModule ? 0 : 1) : squad.filter((s) => !w.equipped[s.id]?.[id]).length;
       if (lacking - w.store[id] - w.queue.filter((o) => o.id === id).length <= 0) continue;
-      const price = Math.round(WORKSHOP_CATALOG[id].cost * DIFFICULTY_MULTIPLIERS[preset].economyMultiplier);
+      const price = sciencePrice(WORKSHOP_CATALOG[id].cost, preset);
       if (party.econ.money - price < policy.hireReserve) continue;
       orderItem(party.econ, w, party.research, id, preset);
       break;
