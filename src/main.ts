@@ -584,6 +584,13 @@ if (typeof document !== 'undefined') {
   for (const b of document.querySelectorAll<HTMLButtonElement>('#log-tabs button')) {
     b.onclick = () => journalUI.setFilter(b.dataset.filter as LogFilter);
   }
+  // Т.31: журнал-смуга розгортається поверх карти і згортається тією ж кнопкою
+  const logExpand = el('btn-log-expand');
+  logExpand.onclick = () => {
+    const open = el('journal').classList.toggle('expanded');
+    logExpand.textContent = open ? 'Згорнути' : 'Розгорнути';
+    logExpand.setAttribute('aria-expanded', String(open));
+  };
   const bc = el<HTMLCanvasElement>('battle');
   bc.addEventListener('click', input.battleCanvasClick);
   bc.addEventListener('mousemove', input.battleCanvasHover);

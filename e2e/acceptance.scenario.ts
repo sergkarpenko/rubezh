@@ -91,6 +91,40 @@ test('сценарій приймання ADR-0030: партія → місія 
     await expect(page.locator('#status-tab-base .tab-badge')).toBeVisible();
   });
 
+  // Т.31: геосцена, журнал і колонка стану — в одному екрані; сторінка не
+  // прокручується на жодній вкладці, журнал видно і він розгортається в межах вікна.
+  await test.step('геосцена: екран без прокрутки, журнал у вікні', async () => {
+    const fits = (): Promise<{ page: number; journal: number; log: number; win: number; map: number; gap: number }> =>
+      page.evaluate(() => ({
+        page: document.documentElement.scrollHeight,
+        journal: document.getElementById('journal')!.getBoundingClientRect().bottom,
+        log: document.getElementById('log')!.getBoundingClientRect().height,
+        win: window.innerHeight,
+        map: document.getElementById('geo')!.getBoundingClientRect().height,
+        gap:
+          document.getElementById('journal')!.getBoundingClientRect().top -
+          document.getElementById('geo-panel')!.getBoundingClientRect().bottom,
+      }));
+    for (const tab of ['squad', 'base', 'system']) {
+      await page.locator('#status-tab-' + tab).click();
+      const m = await fits();
+      expect(m.page, 'вкладка ' + tab + ': сторінка вища за вікно').toBeLessThanOrEqual(m.win);
+      expect(m.journal, 'вкладка ' + tab + ': журнал нижче вікна').toBeLessThanOrEqual(m.win);
+      expect(m.log, 'вкладка ' + tab + ': у журналі менше двох рядків').toBeGreaterThanOrEqual(40);
+      expect(m.map, 'вкладка ' + tab + ': карта нижча за половину вікна').toBeGreaterThanOrEqual(m.win / 2);
+      expect(m.gap, 'вкладка ' + tab + ': порожнеча між картою і журналом').toBeLessThanOrEqual(16);
+    }
+    await page.locator('#btn-log-expand').click();
+    await expect(page.locator('#log-tab-econ')).toBeVisible();
+    const open = await fits();
+    expect(open.page).toBeLessThanOrEqual(open.win);
+    expect(open.journal).toBeLessThanOrEqual(open.win);
+    expect(open.log).toBeGreaterThanOrEqual(200);
+    await page.locator('#btn-log-expand').click();
+    await expect(page.locator('#log-tab-econ')).toBeHidden();
+    await page.locator('#status-tab-squad').click();
+  });
+
   await test.step('запуск місії', async () => {
     const mission = mirror.launch(mirror.targets()[0].id);
     await page.locator('#status-tab-base').click();
