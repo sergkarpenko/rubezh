@@ -477,6 +477,8 @@ function renderAll(): void {
   // ADR-0027 (П6.3): у бою колонка стану приглушена й неактивна —
   // джерело стану тоді топбар і контекст-стрічка бою
   el('status').classList.toggle('dimmed', ui.mission !== null);
+  // Т.32: розкладка бою (index.html) — колонку вузла сховано, поле вписане у вікно
+  el('layout').classList.toggle('in-battle', ui.mission !== null);
   panels.renderCampaign();
   panels.renderGeo();
   panels.renderUfos();

@@ -47,6 +47,37 @@ async function tap(page: Page, cell: Vec2): Promise<void> {
   });
 }
 
+// Т.32: бій у межах вікна — поле, плитки дій, підказка і журнал видно без
+// прокрутки; minField — найменша сторона поля для цього розміру вікна.
+async function expectBattleFits(page: Page, label: string, minField: number): Promise<void> {
+  const m = await page.evaluate(() => {
+    const box = (id: string) => document.getElementById(id)!.getBoundingClientRect();
+    const focus = document.getElementById('focus')!;
+    return {
+      win: window.innerHeight,
+      winW: window.innerWidth,
+      page: document.documentElement.scrollHeight,
+      field: box('battle').width,
+      fieldH: box('battle').height,
+      bottoms: [box('battle').bottom, box('btoolbar').bottom, box('binfo').bottom, box('journal').bottom],
+      rights: [box('btoolbar').right, box('binfo').right, box('journal').right],
+      overlap: box('btoolbar').left - box('battle').right,
+      side: box('binfo').left - box('btoolbar').right,
+      log: box('log').height,
+      scroll: focus.scrollHeight - focus.clientHeight,
+    };
+  });
+  expect(m.page, label + ': сторінка вища за вікно').toBeLessThanOrEqual(m.win);
+  expect(Math.max(...m.bottoms), label + ': поле, плитки, підказка або журнал нижче вікна').toBeLessThanOrEqual(m.win);
+  expect(Math.max(...m.rights), label + ': плитки, підказка або журнал за правим краєм').toBeLessThanOrEqual(m.winW);
+  expect(m.scroll, label + ': фокусна зона прокручується').toBeLessThanOrEqual(0);
+  expect(m.field, label + ': поле менше за межу').toBeGreaterThanOrEqual(minField);
+  expect(Math.abs(m.field - m.fieldH), label + ': поле не квадратне').toBeLessThanOrEqual(1);
+  expect(m.overlap, label + ': плитки дій накладаються на поле').toBeGreaterThanOrEqual(0);
+  expect(m.side, label + ': плитки дій накладаються на підказку').toBeGreaterThanOrEqual(0);
+  expect(m.log, label + ': у журналі менше двох рядків').toBeGreaterThanOrEqual(40);
+}
+
 // Стан загону на сторінці = стан у дзеркалі: вибираємо кожного живого
 // оперативника і звіряємо його рядок HP/AP. Після ходу демонів це ловить
 // розбіжність у їхніх пострілах і реакційному вогні дозору.
@@ -133,6 +164,13 @@ test('сценарій приймання ADR-0030: партія → місія 
     await expect(page.locator('#bctx-kind')).toHaveText(mission.briefing.kind);
     await expect(page.locator('#bctx-turn')).toHaveText('хід 1 · загін');
     await expect(unit).toHaveText('не вибраний');
+    // Т.32: розкладка бою на трьох розмірах вікна (журнал збоку / смугою)
+    await expectBattleFits(page, '1440 × 900', 740);
+    await page.setViewportSize({ width: 1366, height: 768 });
+    await expectBattleFits(page, '1366 × 768', 640);
+    await page.setViewportSize({ width: 1024, height: 768 });
+    await expectBattleFits(page, '1024 × 768', 540);
+    await page.setViewportSize({ width: 1440, height: 900 });
   });
 
   await test.step('бій: вибрати юніта → рух (тап-тап)', async () => {
@@ -203,6 +241,7 @@ test('сценарій приймання ADR-0030: партія → місія 
     }
     const banner = mirror.finish();
     await expect(page.locator('#bresult .banner')).toHaveText(banner, { timeout: AUTO_BATTLE_TIMEOUT_MS });
+    await expectBattleFits(page, 'результат бою', 740);
     await page.locator('#btn-close').click();
     await expect(page.locator('#geo-panel')).toBeVisible();
     await expect(page.locator('#battle-panel')).toBeHidden();

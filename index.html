@@ -660,6 +660,8 @@
       #binfo {
         color: #9fb0c3;
         font-size: 12px;
+        margin: 8px 0 10px;
+        min-height: 18px;
       }
       /* П7.5 (ADR-0027): контекст-стрічка повітряного бою — той самий патерн, що й #bctx */
       #ictx {
@@ -801,6 +803,83 @@
         #journal.expanded #log-tabs {
           display: flex;
         }
+        /* Т.32: бій у межах вікна. Колонку вузла в бою сховано; поле — квадрат
+           у доступну висоту (одиниці контейнера #battle-stage; 74px — плитки
+           дій з проміжком); стрічка бою, результат і підказка — праворуч від поля */
+        #layout.in-battle {
+          grid-template-columns: minmax(0, 1fr);
+          grid-template-rows: minmax(0, 1fr) 88px;
+          grid-template-areas:
+            'focus'
+            'journal';
+        }
+        #layout.in-battle #status {
+          display: none;
+        }
+        #layout.in-battle #battle-panel {
+          flex: 1 0 auto;
+          box-sizing: border-box;
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) 280px;
+          grid-template-rows: auto auto minmax(0, 1fr);
+          column-gap: 12px;
+        }
+        #layout.in-battle #battle-panel.hidden {
+          display: none;
+        }
+        #layout.in-battle #battle-panel h2 {
+          display: none;
+        }
+        #layout.in-battle #battle-stage {
+          grid-column: 1;
+          grid-row: 1 / -1;
+          min-height: 506px; /* висота плиток дій: нижче вікно прокручує фокусну зону */
+          container-type: size;
+          justify-content: center;
+        }
+        #layout.in-battle #battle {
+          flex: none;
+          width: min(100cqw - 74px, 100cqh, 960px);
+        }
+        #layout.in-battle #bctx {
+          grid-column: 2;
+          flex-direction: column;
+          align-items: stretch;
+        }
+        #layout.in-battle #bresult {
+          grid-column: 2;
+        }
+        #layout.in-battle #binfo {
+          grid-column: 2;
+          margin: 0;
+          font-size: 13px;
+        }
+      }
+      /* Т.32: широке вікно — журнал у бою на всю висоту на місці колонки вузла */
+      @media (min-width: 1280px) and (min-height: 520px) and (min-aspect-ratio: 8/5) {
+        #layout.in-battle {
+          grid-template-columns: minmax(0, 1fr) 320px;
+          grid-template-rows: minmax(0, 1fr);
+          grid-template-areas: 'focus journal';
+        }
+        #layout.in-battle #battle-panel {
+          grid-template-columns: minmax(0, 1fr) 200px;
+        }
+        #layout.in-battle #journal,
+        #layout.in-battle #journal.expanded {
+          grid-area: journal;
+          align-self: stretch;
+          height: auto;
+          display: flex;
+          flex-direction: column;
+        }
+        #layout.in-battle #btn-log-expand {
+          display: none;
+        }
+        #layout.in-battle #log {
+          flex: 1 1 auto;
+          overflow-y: auto;
+        }
       }
       .hidden {
         display: none !important;
@@ -858,7 +937,7 @@
             <canvas id="battle" width="960" height="960"></canvas>
             <div id="btoolbar"></div>
           </div>
-          <div id="binfo" style="margin: 8px 0 10px; min-height: 18px">—</div>
+          <div id="binfo">—</div>
         </section>
       </div>
       <section class="panel" id="journal">
