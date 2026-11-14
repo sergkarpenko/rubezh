@@ -7,13 +7,20 @@
 #   approve — як і раніше: мерж лише після «схвалюю».
 #
 # «Не гра» (рішення власника 2026-11-14) — кожен змінений файл із переліку:
-#   docs/**                     крім docs/adr/** (ADR) і docs/prototypes/** (архів)
+#   docs/**                     крім docs/adr/** (ADR), docs/prototypes/** (архів)
+#                               і docs/workflow.md вище розділу «Поточний статус
+#                               проєкту» (правила процесу, уроки, рішення)
 #   src/**/*.test.ts, e2e/**    додані або змінені; видалений файл — approve
 #   scripts/**                  крім скриптів CI і хуків: сам цей скрипт і ті,
 #                               чиє ім'я згадано в .github/, .husky/,
 #                               package.json або scripts/pre-commit.sh
+# Файл тестів (*.test.*, *.spec.*) у docs/ чи scripts/ — approve: vitest його запустить.
 # Усе інше (код гри, AGENTS.md, ADR, workflow, конфігурація, ассети) — approve.
-# Порожній диф і будь-яка незвична зміна — approve (сумнів = approve).
+# Порожній диф, не звичайний файл (посилання, підмодуль) і помилка git під час
+# пошуку згадок — approve (сумнів = approve).
+#
+# Скрипт стереже від помилки, а не від зловмисності: тести і скрипти — це код,
+# який виконує CI; чи не пише тест поза тимчасову теку — питання аудиту.
 #
 # Режими:
 #   pr-class.sh <base> <head>  — рядок на файл і останній рядок «КЛАС: …»
@@ -22,6 +29,7 @@
 #   pr-class.sh --self-test    — перевірка скрипта на виписаних випадках
 #
 # Сесія агента перед мержем без «схвалюю» запускає версію з main:
+#   git fetch --depth=50 origin main
 #   git show origin/main:scripts/pr-class.sh > /tmp/pr-class.sh
 #   sh /tmp/pr-class.sh origin/main HEAD
 #
@@ -31,33 +39,58 @@ set -eu
 
 SELF='scripts/pr-class.sh'
 REFS='.github .husky package.json scripts/pre-commit.sh'
+WF='docs/workflow.md'
+WF_MARK='## Поточний статус проєкту'
 TAB="$(printf '\t')"
 
 # Скрипт CI або хуків: зміна такого скрипта міняє самі перевірки.
+# Помилка git grep (код не 0 і не 1) — теж «так»: сумнів = approve.
 is_machinery() {
     [ "$1" = "$SELF" ] && return 0
     name="${1##*/}"
     for ref in $REFS; do
         [ "$ref" = "$1" ] && return 0
         for rev in "$BASE" "$HEAD"; do
-            git grep -q -F -e "$name" "$rev" -- "$ref" < /dev/null 2> /dev/null && return 0
+            rc=0
+            git grep -q -F -e "$name" "$rev" -- ":(top)$ref" < /dev/null 2> /dev/null || rc=$?
+            [ "$rc" -eq 1 ] || return 0
         done
     done
     return 1
 }
 
-# $1 — статус git (A, M, D…), $2 — шлях; друкує «auto» або «approve<TAB>причина».
+# docs/workflow.md: зміна вище розділу статусу — правила процесу.
+# Розділу немає або git не відповів — теж «так».
+wf_rules_changed() {
+    mb="$(git merge-base "$BASE" "$HEAD")" || return 0
+    old_at="$(git show "$mb:$WF" 2> /dev/null | grep -n -x -F -e "$WF_MARK" | head -n 1 | cut -d: -f1)"
+    new_at="$(git show "$HEAD:$WF" 2> /dev/null | grep -n -x -F -e "$WF_MARK" | head -n 1 | cut -d: -f1)"
+    [ -n "$old_at" ] && [ -n "$new_at" ] || return 0
+    hunks="$(git diff -U0 "$mb" "$HEAD" -- ":(top)$WF")" || return 0
+    printf '%s\n' "$hunks" | awk -v o="$old_at" -v n="$new_at" '
+        /^@@ / {
+            split($2, a, ","); split($3, b, ",")
+            if ((a[2] == "" || a[2] > 0) && -a[1] < o) bad = 1
+            if ((b[2] == "" || b[2] > 0) && b[1] + 0 < n) bad = 1
+        }
+        END { exit bad ? 0 : 1 }'
+}
+
+# $1 — статус git (A, M, D), $2 — шлях; друкує «auto» або «approve<TAB>причина».
 rule() {
-    case "$1" in
-    A | M | D) ;;
-    *)
-        echo "approve${TAB}незвична зміна ($1)"
-        return 0
-        ;;
-    esac
     case "$2" in
     docs/adr/*) echo "approve${TAB}ADR" ;;
     docs/prototypes/*) echo "approve${TAB}архів прототипів" ;;
+    docs/*.test.* | docs/*.spec.* | scripts/*.test.* | scripts/*.spec.*)
+        echo "approve${TAB}тест поза src/ і e2e/"
+        ;;
+    "$WF")
+        if [ "$1" != M ] || wf_rules_changed; then
+            echo "approve${TAB}правила процесу"
+        else
+            echo auto
+        fi
+        ;;
     docs/*) echo auto ;;
     src/*.test.ts | e2e/*)
         if [ "$1" = D ]; then
@@ -78,18 +111,40 @@ rule() {
     esac
 }
 
+# Звичайний файл: режим 100644 або 100755 (000000 — файлу немає).
+plain_mode() {
+    case "$1" in
+    100644 | 100755 | 000000) return 0 ;;
+    esac
+    return 1
+}
+
 classify() {
     BASE="$1"
     HEAD="$2"
-    list="$(git -c core.quotepath=off diff --no-renames --name-status "$BASE...$HEAD")"
+    list="$(git -c core.quotepath=off diff --raw --no-renames --abbrev=7 "$BASE...$HEAD")"
     echo "Клас PR (ADR-0094): $BASE...$HEAD"
     if [ -z "$list" ]; then
         echo "  диф порожній"
         echo "КЛАС: approve — потрібне «схвалюю» власника (ADR-0052)"
         return 0
     fi
-    lines="$(printf '%s\n' "$list" | while IFS="$TAB" read -r st path; do
-        verdict="$(rule "$st" "$path")"
+    lines="$(printf '%s\n' "$list" | while IFS="$TAB" read -r meta path; do
+        old_mode="${meta%% *}"
+        old_mode="${old_mode#:}"
+        rest="${meta#* }"
+        new_mode="${rest%% *}"
+        st="${meta##* }"
+        case "$st" in
+        A | M | D)
+            if plain_mode "$old_mode" && plain_mode "$new_mode"; then
+                verdict="$(rule "$st" "$path")"
+            else
+                verdict="approve${TAB}не звичайний файл ($old_mode → $new_mode)"
+            fi
+            ;;
+        *) verdict="approve${TAB}незвична зміна ($st)" ;;
+        esac
         case "$verdict" in
         auto) printf '  auto     %s\n' "$path" ;;
         *) printf '  approve  %s — %s\n' "$path" "${verdict#*"$TAB"}" ;;
@@ -144,9 +199,9 @@ t_fail() {
 t_case() {
     T_COUNT=$((T_COUNT + 1))
     git checkout -q -B work main
-    git clean -qfdx
+    git clean -qffdx
     eval "$3"
-    git add -A
+    git add -A 2> /dev/null
     git commit -q --allow-empty -m work
     got="$(classify main work)"
     class="$(printf '%s\n' "$got" | sed -n '$s/^КЛАС: \([a-z]*\) .*/\1/p')"
@@ -181,6 +236,8 @@ self_test() {
         scripts/lint-helper.mjs scripts/hook-extra.sh scripts/pr-class.sh AGENTS.md README.md index.html assets/a.png; do
         echo base > "$f"
     done
+    printf 'правило\n## Поточний статус проєкту\nкрок\n' > docs/workflow.md
+    ln -s r.md docs/reports/link.md
     echo '"$(dirname "$0")/verify.sh"' > scripts/pre-commit.sh
     printf './scripts/pre-commit.sh\n./scripts/hook-extra.sh\n' > .husky/pre-commit
     printf 'run: ./scripts/pr-size.sh\nrun: node scripts/summary.mjs\n' > .github/workflows/ci.yml
@@ -190,7 +247,10 @@ self_test() {
 
     # «не гра» — auto
     t_case 'звіт' auto 'echo x > docs/reports/t.md' '  auto     docs/reports/t.md'
-    t_case 'workflow.md' auto 'echo x >> docs/workflow.md'
+    t_case 'workflow.md: запис кроку' auto 'echo x >> docs/workflow.md'
+    t_case 'шлях не ASCII' auto 'echo x > docs/reports/звіт.md' '  auto     docs/reports/звіт.md'
+    t_case 'запуск із підтеки' auto 'echo x > docs/reports/t.md; cd docs'
+    cd "$T/r"
     t_case 'знімок у docs' auto 'mkdir -p docs/reports/t/shots; echo x > docs/reports/t/shots/a.png'
     t_case 'видалений звіт' auto 'git rm -q docs/reports/r.md'
     t_case 'шлях із пробілом' auto 'echo x > "docs/reports/a b.md"' 'docs/reports/a b.md'
@@ -207,6 +267,28 @@ self_test() {
     t_case 'код UI' approve 'echo x >> src/main.ts'
     t_case 'не тест у src' approve 'echo x > src/core/a.test.ts.bak'
     t_case 'tsx не тест' approve 'echo x > src/core/a.test.tsx'
+    t_case 'workflow.md: правило' approve 'sed -i.bak 1s/правило/інше/ docs/workflow.md; rm docs/workflow.md.bak' 'правила процесу'
+    t_case 'workflow.md: рядок перед розділом' approve \
+        'printf "правило\nнове\n## Поточний статус проєкту\nкрок\n" > docs/workflow.md' 'правила процесу'
+    t_case 'workflow.md: правило видалено' approve \
+        'printf "## Поточний статус проєкту\nкрок\n" > docs/workflow.md' 'правила процесу'
+    t_case 'посилання стало файлом' approve 'rm docs/reports/link.md; echo x > docs/reports/link.md' 'незвична зміна'
+    t_case 'workflow.md: без розділу' approve 'printf "правило\nкрок\n" > docs/workflow.md'
+    t_case 'workflow.md: видалено' approve 'git rm -q docs/workflow.md'
+    t_case 'тест у docs' approve 'echo x > docs/reports/a.test.ts' 'тест поза src/ і e2e/'
+    t_case 'spec у scripts' approve 'echo x > scripts/a.spec.ts'
+    t_case 'тест поза src' approve 'echo x > .github/a.test.ts; echo x > b.test.ts'
+    t_case 'тека, схожа на e2e' approve 'mkdir e2e-extra; echo x > e2e-extra/a.ts'
+    t_case 'видалений ADR' approve 'git rm -q docs/adr/0001-a.md'
+    t_case 'видалений скрипт CI' approve 'git rm -q scripts/pr-size.sh' 'скрипт CI або хуків'
+    t_case 'скрипт CI, запуск із підтеки' approve 'echo x >> scripts/pr-size.sh; cd docs' 'скрипт CI або хуків'
+    cd "$T/r"
+    t_case 'нове посилання в docs' approve 'ln -s ../workflow.md docs/reports/l.md' 'не звичайний файл'
+    t_case 'підмодуль у docs' approve \
+        'git init -q docs/sub; git -C docs/sub -c user.email=a@b.invalid -c user.name=a commit -q --allow-empty -m s' \
+        'не звичайний файл'
+    git checkout -q main 2> /dev/null
+    rm -rf docs/sub
     t_case 'ADR' approve 'echo x > docs/adr/0002-b.md' 'docs/adr/0002-b.md — ADR'
     t_case 'архів прототипів' approve 'echo x >> docs/prototypes/p.md'
     t_case 'AGENTS.md' approve 'echo x >> AGENTS.md'
@@ -232,12 +314,12 @@ self_test() {
         'scripts/probe.ts — скрипт CI або хуків'
     t_case 'звіт + код' approve 'echo x > docs/reports/t.md; echo x >> src/core/a.ts' '  auto     docs/reports/t.md'
     t_case 'порожній диф' approve ':' 'диф порожній'
-    t_case 'файл став посиланням' approve 'rm docs/reports/r.md; ln -s ../workflow.md docs/reports/r.md' 'незвична зміна'
+    t_case 'файл став посиланням' approve 'rm docs/reports/r.md; ln -s ../workflow.md docs/reports/r.md'
 
     # main пішов уперед після відгалуження: рахується лише зміна гілки
     T_COUNT=$((T_COUNT + 1))
     git checkout -q -B work main
-    git clean -qfdx
+    git clean -qffdx
     echo x > docs/reports/t.md
     git add -A
     git commit -q -m work
@@ -248,19 +330,34 @@ self_test() {
     [ "$(printf '%s\n' "$got" | tail -n 1 | cut -d' ' -f2)" = auto ] ||
         t_fail "main попереду: чужа зміна потрапила в клас: «$got»"
 
+    # помилка git grep — не «згадки немає»
+    T_COUNT=$((T_COUNT + 1))
+    git checkout -q -B work main
+    git clean -qffdx
+    echo x >> scripts/probe.ts
+    git commit -q -am work
+    real_git="$(command -v git)"
+    mkdir -p "$T/bin"
+    printf '#!/bin/sh\n[ "$1" = grep ] && exit 128\nexec "%s" "$@"\n' "$real_git" > "$T/bin/git"
+    chmod +x "$T/bin/git"
+    got="$(PATH="$T/bin:$PATH" classify main work)"
+    [ "$(printf '%s\n' "$got" | tail -n 1 | cut -d' ' -f2)" = approve ] ||
+        t_fail "помилка git grep дала не approve: «$got»"
+
     # режим --ci: правило береться з бази PR
     T_COUNT=$((T_COUNT + 3))
     git checkout -q main
-    git clean -qfdx
+    git clean -qffdx
     echo 'echo "КЛАС: з-бази $1 $2"' > scripts/pr-class.sh
     git commit -q -am base-script
     git checkout -q -B work main
     echo x >> docs/workflow.md
     echo 'echo "КЛАС: auto — підмінено"' > scripts/pr-class.sh
     git commit -q -am work
-    got="$(BASE_SHA=main HEAD_SHA=work sh "$script" --ci)"
+    got="$(GITHUB_STEP_SUMMARY="$T/summary-base" BASE_SHA=main HEAD_SHA=work sh "$script" --ci)"
     [ "$(printf '%s\n' "$got" | tail -n 1)" = 'КЛАС: з-бази main work' ] ||
         t_fail "--ci: правило не з бази PR: «$got»"
+    grep -q -x 'КЛАС: з-бази main work' "$T/summary-base" || t_fail '--ci: з бази — підсумку немає'
     git checkout -q main
     git rm -q scripts/pr-class.sh
     git commit -q -m no-script
