@@ -1,6 +1,6 @@
 # Навмисні поломки scripts/mistral-audit.mjs (Т.37): кожна — одна заміна в копії скрипта в /tmp;
 # самоперевірка копії має стати червоною. Запуск з кореня репозиторію: python3 docs/reports/t37/mutations.py
-import subprocess,sys,shutil,os
+import subprocess,sys,shutil,os,tempfile
 src=open('scripts/mistral-audit.mjs',encoding='utf8').read()
 muts=[
 ("SKIP не діє","if (SKIP.test(file)) {","if (false) {"),
@@ -53,11 +53,13 @@ muts=[
 ("порожні записи лишаються","&& str(f.claim).trim() !== ''",""),
 ("github не перевіряє код","if (!res.ok) throw new Error(`GitHub ${method} ${path}: код ${res.status}`);",""),
 ]
-os.makedirs('/tmp/mut/scripts',exist_ok=True)
+tmp=tempfile.mkdtemp(prefix='mistral-audit-mut-')
+copy=os.path.join(tmp,'mistral-audit.mjs')
 surv=[]
 for name,a,b in muts:
     if src.count(a)!=1: print('НЕ ЗНАЙДЕНО',name,src.count(a)); continue
-    open('/tmp/mut/scripts/mistral-audit.mjs','w',encoding='utf8').write(src.replace(a,b))
-    r=subprocess.run(['node','/tmp/mut/scripts/mistral-audit.mjs','--self-test'],capture_output=True,text=True,timeout=120)
+    open(copy,'w',encoding='utf8').write(src.replace(a,b))
+    r=subprocess.run(['node',copy,'--self-test'],capture_output=True,text=True,timeout=120)
     if r.returncode==0: surv.append(name)
+shutil.rmtree(tmp)
 print('поломок',len(muts),'вижило',len(surv),surv)
