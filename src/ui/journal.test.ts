@@ -534,9 +534,13 @@ describe('workshopEventText: перетворювач подій цеху (П11.
     );
   });
 
-  it('втрата екіпірування загиблого — клас lose (перма-смерть)', () => {
-    expect(workshopEventText(evWorkshop({ type: 'equipment_lost', soldierId: 'с2', items: ['armor', 'medkit'] }))).toEqual({
-      text: '✗ Екіпірування с2 зникло разом із оперативником (armor, medkit)',
+  it('спорядження загиблого (Т.28): повернення на склад — без класу, втрата витратників — lose; назви з каталогу', () => {
+    expect(workshopEventText(evWorkshop({ type: 'equipment_returned', soldierId: 'с2', items: ['armor', 'optics'] }))).toEqual({
+      text: '⚑ Кузня: спорядження с2 повернуто на склад (Композитна броня, Кібернетичне око)',
+      cls: '',
+    });
+    expect(workshopEventText(evWorkshop({ type: 'equipment_lost', soldierId: 'с2', items: ['medkit', 'grenade'] }))).toEqual({
+      text: '✗ Витратники с2 втрачено разом із оперативником (Регенеративний гель, Імпульсна граната)',
       cls: 'lose',
     });
   });

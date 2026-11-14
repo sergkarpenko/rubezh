@@ -42,7 +42,15 @@ import {
 } from './campaign';
 import { createParty, type Party } from './save';
 // П11.8: наука (research.ts) і цех (workshop.ts) — публічне API ядра, ядро не змінюється.
-import { HIRE_SCIENTIST_PRICE, PROJECT_CATALOG, hireScientist, researchTick, startProject, type ProjectId } from './research';
+import {
+  HIRE_SCIENTIST_PRICE,
+  PROJECT_CATALOG,
+  fireScientist,
+  hireScientist,
+  researchTick,
+  startProject,
+  type ProjectId,
+} from './research';
 import {
   WORKSHOP_CATALOG,
   deployConsumables,
@@ -73,6 +81,7 @@ export interface PartyBotPolicy {
   projects: ProjectId[]; // порядок запуску проєктів (пріоритет; порожній = без проєктів)
   workshopOrders: ItemId[]; // порядок замовлень цеху (виготовляти за дефіцитом складу)
   equip: boolean; // екіпірувати готові предмети боєготових + гарматний модуль
+  fireScientistsWhenDone: boolean; // Т.28: усі протоколи політики завершено — звільнити штат і більше не наймати
 }
 
 // Стандартна політика (X-COM-стиль): перехоплення — balanced (intercept-bot),
@@ -88,19 +97,22 @@ export const DEFAULT_PARTY_POLICY: PartyBotPolicy = {
   projects: [],
   workshopOrders: [],
   equip: false,
+  fireScientistsWhenDone: false,
 };
 
-// П11.8: базова політика науки для probe-симуляцій (X-COM-стиль): штат трьох
-// вчених (3 точки/добу), проєкти за пріоритетом «виживання → точність →
-// винищувач», цех — за дефіцитом екіпірування. Числа стратегії — частина
-// probe-гріду (робити/не робити науку проти DEFAULT — перший стовпець звіту).
+// Політика науки (Т.28, ADR-0091; до того — П11.8: три вчені й усі шість
+// протоколів, починаючи з гелю): два техноманти, лише протокол броні, після
+// його завершення штат звільнено; цех виготовляє броню за дефіцитом. Виміряно
+// probe Т.23–Т.27 (docs/reports/t27-science-entry.md): броня — єдиний предмет,
+// що окуповується, а зарплата після протоколу — чиста витрата.
 export const SCIENCE_POLICY: PartyBotPolicy = {
   ...DEFAULT_PARTY_POLICY,
   name: 'science',
-  scientistsUpTo: 3,
-  projects: ['medkit', 'optics', 'armor', 'gun-module', 'grenade', 'lab-extension'],
-  workshopOrders: ['medkit', 'optics', 'armor', 'gun-module', 'grenade'],
+  scientistsUpTo: 2,
+  projects: ['armor'],
+  workshopOrders: ['armor'],
   equip: true,
+  fireScientistsWhenDone: true,
 };
 
 export type PartyOutcome = 'триває' | 'перемога' | 'банкрутство';
@@ -252,8 +264,13 @@ export function partyBotScienceStep(party: Party, policy: PartyBotPolicy): void 
   if (policy.scientistsUpTo <= 0 && policy.projects.length === 0 && policy.workshopOrders.length === 0 && !policy.equip) return;
   const preset = party.campaign.preset;
   const reserve = policy.hireReserve;
-  // 1) штат вчених: тримати не менше scientistsUpTo, лишаючи резерв.
+  // 1) штат вчених: тримати не менше scientistsUpTo, лишаючи резерв. Т.28:
+  // усі протоколи політики завершено — штат звільнити й більше не наймати.
+  const done =
+    policy.fireScientistsWhenDone && policy.projects.length > 0 && policy.projects.every((id) => party.research.completed.includes(id));
+  if (done) for (const sc of [...party.research.scientists]) fireScientist(party.research, sc.id);
   while (
+    !done &&
     party.research.scientists.length < policy.scientistsUpTo &&
     party.econ.money - presetPrice(HIRE_SCIENTIST_PRICE, preset) >= reserve
   ) {
@@ -331,7 +348,7 @@ export function partyBotMissionStep(party: Party, policy: PartyBotPolicy): Missi
   const outcome: 'перемога' | 'поразка' = battle.outcome === 'перемога' ? 'перемога' : 'поразка';
   completeMission(party.geo, mission.briefing.ufoId, outcome);
   const aftermath = applyMissionResult(party.roster, mission.state);
-  removeLostEquipment(party.workshop, aftermath.lost); // перма-смерть предметів (П11.3)
+  removeLostEquipment(party.workshop, aftermath.lost); // броня й око — на склад (ADR-0091)
   settleConsumables(party.workshop, aftermath.survivors, mission.state.items); // витратники (П11.4)
   if (outcome === 'перемога') {
     creditMissionBonus(party.econ, mission.briefing.kind, party.campaign.preset);

@@ -8,12 +8,14 @@
 //   npx -y vite-node scripts/probe-t23.ts -- --variants sci3,sci1,rh --presets норма --seeds 480 --out dist/t23.csv
 // Варіант — частини через «+»:
 //   none    — без науки (DEFAULT_PARTY_POLICY);
-//   sciN    — штат техномантів не більше N (чинна політика — sci3);
+//   sciN    — штат техномантів не більше N (чинна політика після Т.28 — sci2: лише протокол
+//             броні, потім звільнити; до Т.28 — sci3 з усіма протоколами без звільнення);
 //   afterN  — наука починається після N-ї завершеної доби, до того — політика без науки;
 //   resN    — резерв грошей для витрат на науку N кредитів (чинний — 50, спільний із наймом);
 //   rh, rh2 — резерв для науки = ціна найму оперативника (×2) за пресетом;
 //   p:a.b.c — протоколи лише ці й у цьому порядку (цех — ті самі предмети в тому ж порядку);
-//   fire    — щойно всі протоколи політики завершено, усіх техномантів звільнено;
+//   fire    — щойно всі протоколи політики завершено, усіх техномантів звільнено (після Т.28 —
+//             типово ввімкнено); nofire — не звільняти;
 //   done:a.b — ці протоколи завершено від першого тіку без техномантів і витрат (стан партії
 //             задає скрипт); предмети бот замовляє в цеху за гроші;
 //   gift    — верхня межа користі: склад повний (99 кожного предмета) від першого тіку,
@@ -22,7 +24,8 @@
 //   g:<предмет> — те саме для одного предмета (medkit, grenade, optics, armor, gun-module).
 // Т.25 — probe констант (ядро не змінюється; зарплату міряють у копії репозиторію з sed):
 //   c:<предмет>=N — ціна предмета в цеху N кредитів (на час варіанта міняє запис каталогу в пам'яті);
-//   keep    — броня й око загиблого повертаються на склад (скрипт читає журнал цеху після бою);
+//   keep    — броня й око загиблого повертаються на склад (після Т.28 це правило ядра,
+//             ADR-0091: частина нічого не міняє);
 //   eqN     — бот замовляє й екіпірує предмети лише для перших N боєготових (eq3 — загін місії);
 //             eq99 повторює чинну політику іншим кодом — звірка цього варіанта.
 // Т.27 — вхід у науку (ціну найму техноманта міряють у копії репозиторію з sed):
@@ -87,7 +90,7 @@ function parseVariant(name: string): Variant {
     science: true,
     gift: [],
     projects: null,
-    fire: false,
+    fire: SCIENCE_POLICY.fireScientistsWhenDone,
     done: [],
     scientists: SCIENCE_POLICY.scientistsUpTo,
     afterDay: 0,
@@ -104,6 +107,7 @@ function parseVariant(name: string): Variant {
     else if (part === 'gift') v.gift = Object.keys(WORKSHOP_CATALOG) as ItemId[];
     else if (part.startsWith('p:')) v.projects = part.slice(2).split('.') as ProjectId[];
     else if (part === 'fire') v.fire = true;
+    else if (part === 'nofire') v.fire = false;
     else if (part.startsWith('done:')) v.done = part.slice(5).split('.') as ProjectId[];
     else if (part.startsWith('g:')) v.gift = [part.slice(2) as ItemId];
     else if (part.startsWith('c:')) v.costs[part.slice(2).split('=')[0] as ItemId] = Number(part.split('=')[1]);
@@ -178,8 +182,8 @@ function scienceTail(party: ReturnType<typeof createParty>, policy: PartyBotPoli
 function run(name: string, v: Variant, preset: DifficultyPreset, seed: number): Rec {
   const party = createParty(seed, preset);
   const sci: PartyBotPolicy = v.gift.length
-    ? { ...SCIENCE_POLICY, scientistsUpTo: 0, projects: [], workshopOrders: [] }
-    : { ...SCIENCE_POLICY, scientistsUpTo: v.scientists };
+    ? { ...SCIENCE_POLICY, scientistsUpTo: 0, projects: [], workshopOrders: [], fireScientistsWhenDone: false }
+    : { ...SCIENCE_POLICY, scientistsUpTo: v.scientists, fireScientistsWhenDone: false };
   if (v.done.length) {
     party.research.completed = [...v.done];
     sci.scientistsUpTo = 0;
@@ -319,7 +323,7 @@ for (const name of variants) {
       const r = run(name, v, preset, seed);
       rs.push(r);
       if (!verify) continue;
-      if (name !== 'none' && name !== 'sci3') throw new Error('--verify — лише для варіантів none і sci3');
+      if (name !== 'none' && name !== 'sci2') throw new Error('--verify — лише для варіантів none і sci2');
       const ref = simulateParty(seed, preset, { policy: name === 'none' ? DEFAULT_PARTY_POLICY : SCIENCE_POLICY });
       const same =
         (ref.outcome === 'перемога') === r.won &&

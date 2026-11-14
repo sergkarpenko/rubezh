@@ -308,17 +308,44 @@ describe('передача ефектів у місію (критерій П11.3
   });
 });
 
-describe('перма-смерть предметів (критерій П11.3: загиблий — предмети зникають)', () => {
-  it('предмети загиблого не повертаються на склад, запис вилучається, подія в журналі', () => {
+describe('спорядження загиблого (Т.28, ADR-0091: броня й око — на склад, витратники зникають)', () => {
+  it('броня й око повертаються на склад, гель і граната зникають; запис вилучається, дві події', () => {
+    const workshop = stockedWorkshop();
+    const roster = createRoster(3);
+    for (const id of ['armor', 'optics', 'medkit', 'grenade'] as const) equipItem(workshop, roster.soldiers[0], id);
+    const s = { ...workshop.store };
+    const logBefore = workshop.log.length;
+    removeLostEquipment(workshop, [roster.soldiers[0]]);
+    expect(workshop.equipped).toEqual({});
+    expect(workshop.store).toEqual({ ...s, armor: s.armor + 1, optics: s.optics + 1 });
+    expect(workshop.log.slice(logBefore)).toEqual([
+      { type: 'equipment_returned', soldierId: 's1', items: ['armor', 'optics'] },
+      { type: 'equipment_lost', soldierId: 's1', items: ['medkit', 'grenade'] },
+    ]);
+  });
+
+  it('лише броня — одна подія повернення; лише гель — одна подія втрати, склад без змін', () => {
     const workshop = stockedWorkshop();
     const roster = createRoster(3);
     equipItem(workshop, roster.soldiers[0], 'armor');
-    equipItem(workshop, roster.soldiers[0], 'medkit');
-    const storeBefore = { ...workshop.store };
+    equipItem(workshop, roster.soldiers[1], 'medkit');
+    const s = { ...workshop.store };
+    const logBefore = workshop.log.length;
+    removeLostEquipment(workshop, [roster.soldiers[0], roster.soldiers[1]]);
+    expect(workshop.store).toEqual({ ...s, armor: s.armor + 1 });
+    expect(workshop.log.slice(logBefore)).toEqual([
+      { type: 'equipment_returned', soldierId: 's1', items: ['armor'] },
+      { type: 'equipment_lost', soldierId: 's2', items: ['medkit'] },
+    ]);
+  });
+
+  it('уцілілий зі спорядженням лишається при своєму', () => {
+    const workshop = stockedWorkshop();
+    const roster = createRoster(3);
+    equipItem(workshop, roster.soldiers[0], 'optics');
+    equipItem(workshop, roster.soldiers[1], 'armor');
     removeLostEquipment(workshop, [roster.soldiers[0]]);
-    expect(workshop.equipped).toEqual({});
-    expect(workshop.store).toEqual(storeBefore); // на склад НЕ повернулось
-    expect(workshop.log.at(-1)).toEqual({ type: 'equipment_lost', soldierId: 's1', items: ['armor', 'medkit'] });
+    expect(Object.keys(workshop.equipped)).toEqual([roster.soldiers[1].id]);
   });
 
   it('загиблий без предметів — no-op без події', () => {

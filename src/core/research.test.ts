@@ -242,7 +242,7 @@ describe('researchTick — зарплата і наукові точки на м
     expect(econ.money).toBe(5000);
   });
 
-  it('пресет множить лише кошти: найм ×1.2, зарплата 24; точки — без множника', () => {
+  it('пресет множить лише кошти: найм ×1.2, зарплата 12; точки — без множника', () => {
     const econ = richEcon();
     const research = createResearch();
     const geo = geoNoUfo();
@@ -250,7 +250,7 @@ describe('researchTick — зарплата і наукові точки на м
     expect(econ.money).toBe(5000 - Math.round(HIRE_SCIENTIST_PRICE * 1.2));
     advanceTime(geo, 48);
     researchTick(research, econ, geo, 'легкий');
-    expect(econ.log).toContainEqual({ type: 'spend', amount: 24 });
+    expect(econ.log).toContainEqual({ type: 'spend', amount: 12 });
     expect(research.pool).toBe(1);
   });
 });
@@ -306,7 +306,7 @@ describe('розподіл точок і завершення проєктів (
     const econ = richEcon();
     const research = withActive(createResearch(), [
       { id: 'optics', invested: 22 },
-      { id: 'armor', invested: 26 },
+      { id: 'armor', invested: 13 },
     ]);
     research.pool = 3;
     const geo = geoNoUfo();
@@ -315,6 +315,32 @@ describe('розподіл точок і завершення проєктів (
     expect(research.completed).toEqual(['optics', 'armor']);
     // обом бракувало по 1 точці — з 3 у пулі одна лишилась (пул спільний)
     expect(research.pool).toBe(1);
+  });
+
+  it('Т.28: прогрес понад потребу (сейв до зміни очок) — завершення на межі доби, надлишок у пул іншому протоколу', () => {
+    const econ = richEcon();
+    const research = withActive(createResearch(), [
+      { id: 'armor', invested: 20 }, // за старих 27 очок ще тривав; тепер потреба 14
+      { id: 'optics', invested: 0 },
+    ]);
+    const geo = geoNoUfo();
+    advanceTime(geo, 48);
+    researchTick(research, econ, geo); // техномантів немає — нових очок немає
+    expect(research.completed).toEqual(['armor']);
+    expect(research.active).toEqual([{ id: 'optics', invested: 6 }]);
+    expect(research.pool).toBe(0);
+    expect(research.log).toContainEqual({ type: 'project_completed', id: 'armor' });
+  });
+
+  it('Т.28: прогрес рівно на потребу завершує протокол без надлишку; розширення лабораторії відкриває слот', () => {
+    const econ = richEcon();
+    const research = withActive(createResearch(), [{ id: 'lab-extension', invested: 33 }]);
+    const geo = geoNoUfo();
+    advanceTime(geo, 48);
+    researchTick(research, econ, geo);
+    expect(research.completed).toEqual(['lab-extension']);
+    expect(research.pool).toBe(0);
+    expect(research.slots).toBe(MAX_LAB_SLOTS);
   });
 
   it('«Розширення лабораторії» відкриває третій слот — стартує третій проєкт', () => {
@@ -359,7 +385,7 @@ describe('ізоляція від геосцени (критерій П11.2: geo
 describe('Т.14: каталог, пул імен, звільнення, слоти', () => {
   it('каталог протоколів: назви, ціни, точки, передумови; назва невідомого ключа — сам ключ', () => {
     expect(PROJECTS.map((p) => [p.id, p.name, p.cost, p.points, p.prerequisite])).toEqual([
-      ['armor', 'Композитна броня', 96, 27, undefined],
+      ['armor', 'Композитна броня', 96, 14, undefined], // Т.28 (ADR-0091): 27 → 14
       ['optics', 'Кібернетичне око', 72, 23, undefined],
       ['medkit', 'Регенеративний гель', 80, 24, undefined],
       ['lab-extension', 'Розширення лабораторії', 64, 33, undefined],

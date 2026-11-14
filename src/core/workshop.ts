@@ -65,7 +65,8 @@ export type WorkshopEvent =
   | { type: 'produced'; id: ItemId } // предмет готовий → склад
   | { type: 'equip'; soldierId: string; id: SoldierItemId } // предмет зі складу на солдата
   | { type: 'unequip'; soldierId: string; id: SoldierItemId } // предмет з солдата назад на склад
-  | { type: 'equipment_lost'; soldierId: string; items: (keyof SoldierEquipment)[] } // предмети загиблого зникли (перма-смерть)
+  | { type: 'equipment_lost'; soldierId: string; items: (keyof SoldierEquipment)[] } // витратники загиблого зникли (до Т.28 — усі предмети)
+  | { type: 'equipment_returned'; soldierId: string; items: ('armor' | 'optics')[] } // броня й око загиблого — на склад (ADR-0091)
   | { type: 'gun_module_installed' } // модуль зі складу на винищувач
   | { type: 'gun_module_removed' }; // модуль з винищувача назад на склад
 
@@ -209,16 +210,22 @@ export function unequipItem(workshop: WorkshopState, soldier: Unit, id: ItemId):
   workshop.log.push({ type: 'unequip', soldierId: soldier.id, id });
 }
 
-// Предмети загиблих зникають разом з ними (ADR-0058: перма-смерть наскрізна,
-// на склад НЕ повертаються): запис екіпірування вилучається, подія в журналі.
+// Спорядження загиблого (Т.28, ADR-0091; змінює П11.3, ADR-0058): броня й око
+// повертаються на склад (подія equipment_returned), витратники — гель і
+// граната — зникають разом з оперативником (подія equipment_lost). Запис
+// екіпірування вилучається. Порядок предметів у подіях — порядок ключів запису.
 // Викликає шар застосунку після applyMissionResult з aftermath.lost.
 export function removeLostEquipment(workshop: WorkshopState, lost: Unit[]): void {
   for (const soldier of lost) {
     const eq = workshop.equipped[soldier.id];
     if (!eq) continue;
     const items = (Object.keys(eq) as (keyof SoldierEquipment)[]).filter((k) => eq[k]);
+    const returned = items.filter((k): k is 'armor' | 'optics' => k === 'armor' || k === 'optics');
+    const gone = items.filter((k) => k === 'medkit' || k === 'grenade');
     delete workshop.equipped[soldier.id];
-    workshop.log.push({ type: 'equipment_lost', soldierId: soldier.id, items });
+    for (const k of returned) workshop.store[k] += 1;
+    if (returned.length > 0) workshop.log.push({ type: 'equipment_returned', soldierId: soldier.id, items: returned });
+    if (gone.length > 0) workshop.log.push({ type: 'equipment_lost', soldierId: soldier.id, items: gone });
   }
 }
 

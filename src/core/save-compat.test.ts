@@ -154,7 +154,7 @@ describe('П12.6: продовження сіда 42 — види подій і 
     expect((p.geo.rng as unknown as { state: number }).state).toBe(-1677623680);
     expect((p.intercept.rng as unknown as { state: number }).state).toBe(42);
     // числа стану — як до перейменувань
-    expect(p.econ.money).toBe(3755);
+    expect(p.econ.money).toBe(3795); // Т.28 (ADR-0091): зарплата 20 → 10, два техноманти × дві доби
     expect(p.research.pool).toBe(0);
     expect(p.research.active).toEqual([{ id: 'grenade', invested: 8 }]);
     expect(p.workshop.queue).toEqual([]);

@@ -95,7 +95,7 @@ describe('ResearchPanel: каталог проєктів', () => {
     panel.render();
     (el('btn-start-0') as HTMLButtonElement).click(); // «легка броня»
     panel.render();
-    expect(el('research').textContent).toContain('у роботі: 0/27'); // П11.8: точки ×0.75 (36 → 27)
+    expect(el('research').textContent).toContain('у роботі: 0/14'); // Т.28 (ADR-0091): 27 → 14
     (el('btn-start-1') as HTMLButtonElement).click(); // «оптичний приціл»
     panel.render();
     expect(el('research').textContent).toContain('слоти 2/' + BASE_LAB_SLOTS);

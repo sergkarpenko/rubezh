@@ -18,7 +18,7 @@ import { spend, type EconomyState } from './economy';
 import { type DifficultyPreset, DEFAULT_PRESET, DIFFICULTY_MULTIPLIERS } from './campaign';
 
 export const HIRE_SCIENTIST_PRICE = 100; // кандидат (П11.8); прецедент найму солдата, ADR-0021
-export const SCIENTIST_SALARY = 20; // зарплата за добу за вченого — кандидат (П11.8)
+export const SCIENTIST_SALARY = 10; // зарплата за добу за вченого; Т.28 (ADR-0091): 20 → 10
 export const BASE_LAB_SLOTS = 2; // стартові слоти лабораторії (ADR-0058)
 export const MAX_LAB_SLOTS = 3; // після проєкту «Розширення лабораторії»
 
@@ -44,8 +44,10 @@ export interface ProjectDef {
 // Т.19 (ADR-0088, docs/reports/t19-tuning.md): ціни протоколів ×0,8
 // (120/90/100/80/140/160 → 96/72/80/64/112/128) — вердикт власника 2026-11-11
 // за probe на 480 сідах; точки й передумови без змін.
+// Т.28 (ADR-0091, docs/reports/t28-science-balance.md): точки протоколу броні
+// 27 → 14 — вердикт власника 2026-11-14 за probe Т.27.
 export const PROJECTS: ProjectDef[] = [
-  { id: 'armor', name: 'Композитна броня', cost: 96, points: 27 },
+  { id: 'armor', name: 'Композитна броня', cost: 96, points: 14 },
   { id: 'optics', name: 'Кібернетичне око', cost: 72, points: 23 },
   { id: 'medkit', name: 'Регенеративний гель', cost: 80, points: 24 },
   { id: 'lab-extension', name: 'Розширення лабораторії', cost: 64, points: 33 },
@@ -165,23 +167,32 @@ export function fireScientist(research: ResearchState, id: string): Scientist {
 // відкриває третій слот. Детермінізм: порядок фіксований, жодного RNG.
 function distributePool(research: ResearchState): void {
   let progressed = true;
+  // Т.28 (ADR-0091): протокол із прогресом понад потребу (сейв до зміни очок
+  // каталогу) завершується одразу, надлишок повертається в пул.
+  for (const project of [...research.active]) {
+    const extra = project.invested - PROJECT_CATALOG[project.id].points;
+    if (extra < 0) continue;
+    research.pool += extra;
+    completeProject(research, project);
+  }
   while (research.pool > 0 && progressed) {
     progressed = false;
     for (const project of [...research.active]) {
       if (research.pool <= 0) break;
-      if (project.invested >= PROJECT_CATALOG[project.id].points) continue;
       project.invested += 1;
       research.pool -= 1;
       progressed = true;
-      if (project.invested >= PROJECT_CATALOG[project.id].points) {
-        research.active = research.active.filter((p) => p !== project);
-        research.completed.push(project.id);
-        research.log.push({ type: 'project_completed', id: project.id });
-        if (project.id === LAB_EXTENSION_PROJECT) {
-          research.slots = MAX_LAB_SLOTS;
-        }
-      }
+      if (project.invested >= PROJECT_CATALOG[project.id].points) completeProject(research, project);
     }
+  }
+}
+
+function completeProject(research: ResearchState, project: ActiveProject): void {
+  research.active = research.active.filter((p) => p !== project);
+  research.completed.push(project.id);
+  research.log.push({ type: 'project_completed', id: project.id });
+  if (project.id === LAB_EXTENSION_PROJECT) {
+    research.slots = MAX_LAB_SLOTS;
   }
 }
 
