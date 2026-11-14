@@ -24,7 +24,7 @@ jobs:
   mistral-audit:
     if: github.event.pull_request.user.login != 'dependabot[bot]' && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
         with:
@@ -40,5 +40,6 @@ jobs:
         env:
           MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
           MISTRAL_MODEL: ${{ vars.MISTRAL_MODEL }}
+          MISTRAL_REASONING: ${{ vars.MISTRAL_REASONING }}
           GITHUB_TOKEN: ${{ github.token }}
         run: node scripts/mistral-audit.mjs

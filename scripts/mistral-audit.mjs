@@ -27,6 +27,9 @@ const MAX_COMMENT = 60_000;
 /** Файли самого аудитора: PR, що їх міняє, читає змінений аудитор — про це пише коментар. */
 const SELF = ['scripts/mistral-audit.mjs', '.github/workflows/mistral-audit.yml'];
 const ATTEMPTS = 3;
+/** Large 4 міркує завжди; відповідь на диф кроку з «medium» займає хвилини — тайм-аут на одну спробу. */
+const TIMEOUT_MS = 420_000;
+const EFFORTS = ['low', 'medium', 'high'];
 /** Файли, яких аудитору не показуємо: lockfile і бінарні ассети. */
 const SKIP = /(^|\/)package-lock\.json$|^assets\/|\.(png|webp|jpe?g|gif|ico|woff2?|zip)$/i;
 const SEVERITIES = ['висока', 'середня', 'низька'];
@@ -184,7 +187,7 @@ export function renderComment(r) {
 }
 
 /** Виклик API Mistral: повтор на 429, 5xx і помилку мережі; інший код — одразу виняток. Ключ у тексти помилок не потрапляє. */
-export async function callMistral({ fetch, key, model, messages, sleep }) {
+export async function callMistral({ fetch, key, model, messages, sleep, effort }) {
   let last = 'невідома помилка';
   for (let attempt = 1; attempt <= ATTEMPTS; attempt++) {
     if (attempt > 1) await sleep(attempt * 10_000);
@@ -193,8 +196,14 @@ export async function callMistral({ fetch, key, model, messages, sleep }) {
       res = await fetch(API_URL, {
         method: 'POST',
         headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model, messages, temperature: 0.1, max_tokens: 16_000, response_format: { type: 'json_object' } }),
-        signal: AbortSignal.timeout(180_000),
+        body: JSON.stringify({
+          model,
+          messages,
+          max_tokens: 32_000,
+          response_format: { type: 'json_object' },
+          ...(effort ? { reasoning_effort: effort } : {}),
+        }),
+        signal: AbortSignal.timeout(TIMEOUT_MS),
       });
     } catch (e) {
       last = `API Mistral недоступний (${e?.name ?? 'помилка мережі'})`;
@@ -263,7 +272,9 @@ export async function run({ env, event, git, fetch, sleep, log }) {
     const nonce = randomBytes(6).toString('hex');
     const rules = git('show', `${pr.base.sha}:AGENTS.md`);
     const messages = buildMessages({ title: pr.title, body: pr.body, rules, diff: diff.text, omitted: diff.omitted, nonce });
-    const reply = await callMistral({ fetch, key: env.MISTRAL_API_KEY, model, messages, sleep });
+    // глибина міркування: змінна MISTRAL_REASONING (low, medium, high; off — параметр не надсилати), типово medium
+    const effort = env.MISTRAL_REASONING === 'off' ? undefined : EFFORTS.includes(env.MISTRAL_REASONING) ? env.MISTRAL_REASONING : 'medium';
+    const reply = await callMistral({ fetch, key: env.MISTRAL_API_KEY, model, messages, sleep, effort });
     result = {
       ...result,
       ok: true,
@@ -468,7 +479,7 @@ async function selfTest() {
       ok: true,
       json: async () => ({ choices: [{ message: { content: JSON.stringify(obj) } }], usage: { prompt_tokens: 1, completion_tokens: 2 } }),
     });
-    const scenario = async ({ mistral, comments = [], key = KEY, ev = event, ghFail = false, model }) => {
+    const scenario = async ({ mistral, comments = [], key = KEY, ev = event, ghFail = false, model, reasoning }) => {
       const calls = { mistral: [], gh: [], logs: [], sleeps: 0 };
       const fetch = async (url, init) => {
         if (url === API_URL) {
@@ -482,7 +493,13 @@ async function selfTest() {
         const list = typeof comments === 'function' ? comments(url) : comments;
         return { ok: true, status: 200, json: async () => (init.method === 'GET' ? list : {}) };
       };
-      const env = { MISTRAL_API_KEY: key, GITHUB_TOKEN: 'ghs_x', GITHUB_REPOSITORY: 'o/r', MISTRAL_MODEL: model };
+      const env = {
+        MISTRAL_API_KEY: key,
+        GITHUB_TOKEN: 'ghs_x',
+        GITHUB_REPOSITORY: 'o/r',
+        MISTRAL_MODEL: model,
+        MISTRAL_REASONING: reasoning,
+      };
       const result = await run({ env, event: ev, git, fetch, sleep: async () => void calls.sleeps++, log: (s) => calls.logs.push(s) });
       return { result, ...calls, written: calls.gh.filter((g) => g.method !== 'GET') };
     };
@@ -495,7 +512,19 @@ async function selfTest() {
       s.written.length === 1 && s.written[0].method === 'POST' && s.written[0].url.endsWith('/repos/o/r/issues/7/comments')
     );
     ok('прохід: у коментарі знахідка', JSON.parse(s.written[0].body).body.includes('src/a.ts:1'));
-    ok('прохід: модель типова', s.mistral[0].model === DEFAULT_MODEL);
+    ok('прохід: модель типова, міркування medium', s.mistral[0].model === DEFAULT_MODEL && s.mistral[0].reasoning_effort === 'medium');
+    const efforts = [];
+    for (const reasoning of ['high', 'off', 'max; rm'])
+      efforts.push((await scenario({ mistral: [reply(good)], reasoning })).mistral[0].reasoning_effort);
+    ok('прохід: глибина міркування зі змінної; off — без параметра; недопустима — medium', efforts.join() === 'high,,medium');
+    const chunks = [
+      { type: 'thinking', thinking: [{ type: 'text', text: 'міркую' }] },
+      { type: 'text', text: JSON.stringify(good) },
+    ];
+    const chunked = await scenario({
+      mistral: [{ status: 200, ok: true, json: async () => ({ choices: [{ message: { content: chunks } }] }) }],
+    });
+    ok('прохід: відповідь частинами (міркування + текст)', chunked.result.ok && chunked.result.findings.length === 1);
     const sent = s.mistral[0].messages[1].content;
     const nonce = /^Код розділів: ([0-9a-f]{12})\n/.exec(sent)?.[1];
     ok(
