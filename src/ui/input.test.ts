@@ -39,6 +39,7 @@ function setupDom(): void {
     <div id="bresult"></div>
     <canvas id="battle" width="960" height="960"></canvas>
     <div id="binfo">—</div>
+    <div id="bturn" class="hidden"></div>
     <div id="bcontrols">
       <button id="btn-snap">Швидкий</button>
       <button id="btn-aimed">Прицільний</button>

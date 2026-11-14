@@ -278,6 +278,32 @@
         color: #9fb0c3;
         white-space: nowrap;
       }
+      /* Т.33: ціна в AP і клавіша — у кутках плитки; причина неактивності — замість підпису */
+      #btoolbar button {
+        position: relative;
+      }
+      #btoolbar .tb-ap,
+      #btoolbar .tb-key {
+        position: absolute;
+        top: 2px;
+        left: 3px;
+        font: 700 9px/1 monospace;
+        color: #00e5ff;
+      }
+      #btoolbar .tb-key {
+        left: auto;
+        right: 3px;
+        padding: 1px 3px;
+        border-radius: 3px;
+        background: #9fb0c3;
+        color: #0b0e14;
+      }
+      #btoolbar button .tb-cap.tb-why {
+        color: #ff9c9c;
+        font-size: 8.5px; /* «немає гранати» — у 58 px плитки */
+        line-height: 11px; /* як у підпису: плитка не міняє висоту */
+        letter-spacing: -0.3px;
+      }
       #btoolbar button.armed {
         background: #0f2c36;
         border-color: #00e5ff;
@@ -352,6 +378,42 @@
       .banner.lose {
         background: #341418;
         color: #ff9c9c;
+      }
+      /* Т.33: картка результату бою під банером; плашка ходу демонів Розриву і підсумок */
+      .rcard {
+        margin: 0 0 8px;
+        font-size: 13px;
+        line-height: 1.45;
+      }
+      .rrow {
+        display: flex;
+        justify-content: space-between;
+        gap: 8px;
+      }
+      .rwound {
+        color: #ffd28a;
+      }
+      #bturn {
+        margin: 8px 0;
+        padding: 8px 10px;
+        border: 1px solid #ff2e88;
+        border-radius: 6px;
+        background: #2a1020;
+        color: #ffb3d1;
+        font-size: 13px;
+        line-height: 1.35;
+      }
+      #bturn b {
+        display: block;
+        color: #ff2e88;
+      }
+      #bturn.done {
+        border-color: #3a4152;
+        background: #161a24;
+        color: #c9d4e3;
+      }
+      #bturn.done b {
+        color: #9fb0c3;
       }
       /* П8.3: Кампанія перемоги — екран з центром */
       #campaign-victory {
@@ -654,6 +716,7 @@
       #log li.win {
         color: #7fe2a0;
       }
+      .rcard .lose,
       #log li.lose {
         color: #ff9c9c;
       }
@@ -821,7 +884,7 @@
           box-sizing: border-box;
           display: grid;
           grid-template-columns: minmax(0, 1fr) 280px;
-          grid-template-rows: auto auto minmax(0, 1fr);
+          grid-template-rows: auto auto auto minmax(0, 1fr);
           column-gap: 12px;
         }
         #layout.in-battle #battle-panel.hidden {
@@ -849,8 +912,14 @@
         #layout.in-battle #bresult {
           grid-column: 2;
         }
+        #layout.in-battle #bturn {
+          grid-column: 2;
+          grid-row: 3; /* над підказкою: поява плашки поле не зсуває */
+          margin: 0 0 8px;
+        }
         #layout.in-battle #binfo {
           grid-column: 2;
+          grid-row: 4;
           margin: 0;
           font-size: 13px;
         }
@@ -938,6 +1007,8 @@
             <div id="btoolbar"></div>
           </div>
           <div id="binfo">—</div>
+          <!-- Т.33: плашка ходу демонів Розриву і підсумок ходу (src/ui/battle.ts) -->
+          <div id="bturn" class="hidden" role="status"></div>
         </section>
       </div>
       <section class="panel" id="journal">

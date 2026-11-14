@@ -81,6 +81,21 @@ async function expectBattleFits(page: Page, label: string, minField: number): Pr
 // Стан загону на сторінці = стан у дзеркалі: вибираємо кожного живого
 // оперативника і звіряємо його рядок HP/AP. Після ходу демонів це ловить
 // розбіжність у їхніх пострілах і реакційному вогні дозору.
+// Т.33: «Кінець» → плашка ходу демонів (хід гравця ще не починається) → підсумок ходу в правій частині панелі.
+async function endTurnOnPage(page: Page, mirror: CoreMirror): Promise<number> {
+  await page.locator('#btn-end').click();
+  const actions = mirror.endPlayerTurn();
+  if (mirror.outcome() !== 'триває') return actions;
+  const plate = page.locator('#bturn');
+  await expect(plate).toHaveText('ХІД ДЕМОНІВ РОЗРИВУ…Демони діють. Зачекайте.');
+  await expect(page.locator('#btn-end')).toBeDisabled();
+  await expect(page.locator('#bctx-turn')).toHaveText('хід демонів Розриву');
+  await expect(page.locator('#binfo')).toHaveText('');
+  await expect(plate).toHaveClass('done');
+  await expect(plate).toHaveText(mirror.turnSummary);
+  return actions;
+}
+
 async function expectSquad(page: Page, mirror: CoreMirror): Promise<void> {
   for (const soldier of mirror.squad()) {
     await tap(page, soldier.pos);
@@ -165,6 +180,9 @@ test('сценарій приймання ADR-0030: партія → місія 
     await expect(page.locator('#bctx-turn')).toHaveText('хід 1 · загін');
     await expect(unit).toHaveText('не вибраний');
     // Т.32: розкладка бою на трьох розмірах вікна (журнал збоку / смугою)
+    // Т.33: ціна в AP і клавіша — у кутках плиток дій
+    await expect(page.locator('#btoolbar .tb-key')).toHaveText(['1', '2', '3', 'O', 'M', 'G', 'E']);
+    await expect(page.locator('#btoolbar .tb-ap')).toHaveText(['3 AP', '5 AP', '4 AP', '3 AP', '4 AP', '4 AP']); // snap, aimed, auto, дозор, гель, граната
     await expectBattleFits(page, '1440 × 900', 740);
     await page.setViewportSize({ width: 1366, height: 768 });
     await expectBattleFits(page, '1366 × 768', 640);
@@ -177,6 +195,8 @@ test('сценарій приймання ADR-0030: партія → місія 
     const soldier = mirror.squad()[0];
     await tap(page, soldier.pos);
     await expect(unit).toHaveText(unitLine(soldier));
+    // Т.33: причина під неактивною плиткою — у загоні на старті немає гелю
+    await expect(page.locator('#btn-medkit .tb-cap')).toHaveText('немає гелю');
     // ADR-0081: демон у тумані не видає себе — тап по його клітинці дає те
     // саме прев'ю шляху, що й по порожній невидимій
     const probe = mirror.fogProbe(soldier);
@@ -200,19 +220,19 @@ test('сценарій приймання ADR-0030: партія → місія 
     await expect(info).toContainText(guard.name + ' у дозорі');
     await expect(unit).toHaveText(unitLine(guard));
 
-    await page.locator('#btn-end').click();
-    const actions = mirror.endPlayerTurn();
+    const actions = await endTurnOnPage(page, mirror);
     expect(mirror.outcome(), 'бій скінчився в перший хід демонів').toBe('триває');
+    await expectBattleFits(page, 'підсумок ходу демонів', 740);
     await expect(info).toContainText('Хід демонів Розриву відпрацьовано (' + actions + ' дій)');
     await expect(page.locator('#bctx-turn')).toHaveText('хід ' + mirror.state.turn + ' · загін');
     await expectSquad(page, mirror);
+    await expect(page.locator('#bturn')).toBeHidden(); // перша дія гравця прибирає підсумок
   });
 
   await test.step('бій: постріл у видиму ціль (тап-тап)', async () => {
     let shot = mirror.shotOption('snap');
     for (let i = 0; i < MAX_TURNS_TO_TARGET && shot === null; i++) {
-      await page.locator('#btn-end').click();
-      mirror.endPlayerTurn();
+      await endTurnOnPage(page, mirror);
       expect(mirror.outcome(), 'бій скінчився до першого пострілу загону').toBe('триває');
       await expectSquad(page, mirror);
       shot = mirror.shotOption('snap');
@@ -239,8 +259,15 @@ test('сценарій приймання ADR-0030: партія → місія 
       await page.locator('#btn-auto-battle').click();
       mirror.autoBattle();
     }
+    const turns = mirror.state.turn;
+    const aliens = mirror.state.units.filter((u) => u.side === 'alien');
     const banner = mirror.finish();
     await expect(page.locator('#bresult .banner')).toHaveText(banner, { timeout: AUTO_BATTLE_TIMEOUT_MS });
+    // Т.33: картка результату — хід і знищені демони, як у дзеркалі
+    await expect(page.locator('#bresult .rrow').nth(0)).toHaveText('Ходів' + turns);
+    await expect(page.locator('#bresult .rrow').nth(1)).toHaveText(
+      'Демонів знищено' + aliens.filter((u) => !u.alive).length + ' з ' + aliens.length
+    );
     await expectBattleFits(page, 'результат бою', 740);
     await page.locator('#btn-close').click();
     await expect(page.locator('#geo-panel')).toBeVisible();

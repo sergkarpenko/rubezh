@@ -38,6 +38,7 @@ function setupDom(): void {
       <div id="bresult"></div>
       <canvas id="battle" width="960" height="960"></canvas>
       <div id="binfo">—</div>
+      <div id="bturn" class="hidden"></div>
       <!-- П13.2 (ADR-0066): плитки дій генерує createToolbar (як в застосунку) -->
       <div id="btoolbar"></div>
     </section>`;
@@ -260,6 +261,93 @@ describe('battle: флоу місії (запуск/закриття/завер�
     const b = run('Іван', 'Олена', 1);
     expect(b).toContain('✝ Іван загинув у бою');
     expect(b).toContain('✚ Олена поранена — лікарня: 2 тіки');
+  });
+
+  it('Т.33: картка результату — хід, демони, премія, поранені й загиблі поіменно', () => {
+    const f = makeFixture();
+    f.battle.launch(firstTarget(f));
+    const st = f.ui.mission!.state;
+    const aliens = st.units.filter((u) => u.side === 'alien');
+    for (const u of aliens) u.alive = false;
+    const byName = (n: string) => st.units.find((u) => u.name === n)!;
+    byName('Олена').alive = false;
+    byName('Іван').hp = byName('Іван').maxHp - 4;
+    f.battle.finish('перемога');
+    const text = document.querySelector('#bresult .rcard')!.textContent;
+    expect(text).toContain('Ходів' + st.turn);
+    expect(text).toContain('Демонів знищено' + aliens.length + ' з ' + aliens.length);
+    expect(text).toMatch(/Премія\+\d+ кр\./);
+    expect(text).toContain('✚ Іван — лікарня: 8 тіків');
+    expect(text).toContain('✝ Олена — загинула');
+    const g = makeFixture();
+    g.battle.launch(firstTarget(g));
+    g.battle.finish('поразка');
+    const lostCard = document.querySelector('#bresult .rcard')!.textContent;
+    expect(lostCard).toContain('Преміянемає');
+    expect(lostCard).toContain('Демонів знищено0 з ' + g.ui.mission!.state.units.filter((u) => u.side === 'alien').length);
+  });
+
+  it('Т.33: плашка ходу демонів — поки грають анімації і не менше секунди; далі підсумок до першої дії', () => {
+    vi.useFakeTimers();
+    let queue: unknown[] = [{}];
+    const f = makeFixture({ hasRaf: () => true });
+    f.deps.anim.queued = () => queue as never;
+    f.battle.launch(firstTarget(f));
+    const plate = document.getElementById('bturn')!;
+    f.battle.alienTurnDone(f.ui.mission!.state.log.length, 'Ваш хід.');
+    f.battle.renderBattle();
+    expect(document.getElementById('binfo')!.textContent).toBe('');
+    expect(document.getElementById('bctx-turn')!.textContent).toBe('хід демонів Розриву');
+    expect(plate.classList.contains('hidden')).toBe(false);
+    expect(plate.classList.contains('done')).toBe(false);
+    expect(plate.textContent).toBe('ХІД ДЕМОНІВ РОЗРИВУ…Демони діють. Зачекайте.');
+    expect(f.battle.playerTurnActive()).toBe(false); // хід гравця не починається
+    expect((document.getElementById('btn-end') as HTMLButtonElement).disabled).toBe(true);
+    f.battle.dismissTurnPlate(); // дія гравця плашку ходу не прибирає
+    vi.advanceTimersByTime(1000); // секунда минула, анімації ще в черзі
+    expect(f.battle.playerTurnActive()).toBe(false);
+    queue = [];
+    vi.advanceTimersByTime(100);
+    f.battle.renderBattle();
+    expect(f.battle.playerTurnActive()).toBe(true);
+    expect(plate.classList.contains('done')).toBe(true);
+    expect(document.getElementById('binfo')!.textContent).toBe('Ваш хід.');
+    expect(document.getElementById('bctx-turn')!.textContent).toMatch(/^хід \d+ · загін$/);
+    expect(plate.textContent).toBe('ХІД ДЕМОНІВ РОЗРИВУ — ПІДСУМОКДемони не атакували.Демонів у полі зору: 0');
+    f.battle.dismissTurnPlate();
+    expect(plate.classList.contains('hidden')).toBe(true);
+    f.battle.alienTurnDone(f.ui.mission!.state.log.length, '');
+    f.battle.dismissTurnPlate(true);
+    expect(f.battle.playerTurnActive()).toBe(true);
+    f.battle.alienTurnDone(f.ui.mission!.state.log.length, '');
+    f.battle.close();
+    vi.advanceTimersByTime(5000);
+    f.battle.alienTurnDone(0, ''); // без місії — нічого
+    vi.useRealTimers();
+  });
+
+  it('Т.33: причина під неактивною плиткою — замість підпису; повертається з причиною', () => {
+    const f = makeFixture();
+    f.battle.launch(firstTarget(f));
+    const sel = f.ui.mission!.state.units.find((u) => u.side === 'player')!;
+    f.ui.selectedId = sel.id;
+    sel.ap = 0;
+    f.battle.renderBattle();
+    const cap = (id: string): HTMLElement => document.querySelector<HTMLElement>('#' + id + ' .tb-cap')!;
+    for (const id of ['btn-snap', 'btn-aimed', 'btn-auto', 'btn-ow']) {
+      expect(cap(id).textContent, id).toBe('мало AP');
+      expect(cap(id).classList.contains('tb-why')).toBe(true);
+    }
+    expect(cap('btn-medkit').textContent).toBe('немає гелю');
+    expect(cap('btn-grenade').textContent).toBe('немає гранати');
+    f.ui.mission!.state.items = { [sel.id]: { medkit: true, grenade: true } };
+    f.battle.renderBattle();
+    expect(cap('btn-medkit').textContent).toBe('мало AP');
+    sel.ap = sel.maxAp;
+    f.battle.renderBattle();
+    expect(cap('btn-snap').textContent).toBe('Швидкий');
+    expect(cap('btn-snap').classList.contains('tb-why')).toBe(false);
+    expect(cap('btn-grenade').textContent).toBe('Граната');
   });
 
   it('поразка: банер «загін втрачено», НЛО лишається активним', () => {

@@ -12,7 +12,7 @@ import { applyMissionResult, missionSquad } from '../core/squad';
 // Т.28 (ADR-0091): броня й око загиблих — на склад, витратники зникають.
 // П11.4 (ADR-0058): витратники загону — копія в бій і розрахунок після бою.
 import { deployConsumables, removeLostEquipment, settleConsumables } from '../core/workshop';
-import { creditMissionBonus } from '../core/economy';
+import { creditMissionBonus, missionBonus } from '../core/economy';
 import {
   GRENADE_AP_COST,
   HEAL_AP_COST,
@@ -44,6 +44,7 @@ import { el } from './dom';
 import { BCELL } from './grid';
 import { type LogCat } from './journal';
 import { byGender, ticksText } from './text';
+import { resultCardHtml, summarizeAlienTurn, TURN_PLATE_ACTING, TURN_PLATE_DONE, TURN_PLATE_MIN_MS } from './battle-feedback';
 import type { AmbientBattleScene, AmbientUnitView } from './ambient';
 
 // П15.2 (ADR-0075): третій результат бою «евакуйовано» — той самий виклик
@@ -108,6 +109,8 @@ export interface BattleUI {
   finish(outcome: BattleOutcome): void;
   checkOutcome(): boolean;
   enqueueAnims(prevLen: number): void; // П6.8: нові події логу бою → анімації
+  alienTurnDone(prevLen: number, info: string): void; // Т.33: плашка ходу демонів, потім підсумок і підказка info
+  dismissTurnPlate(force?: boolean): void; // Т.33: перша дія гравця прибирає підсумок
 }
 
 // П6.14: валідні цілі стрільця — живі видимі прибульці (туман, ADR-0006) у
@@ -153,8 +156,67 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
     el('binfo').textContent = text;
   }
 
+  // Т.33: плашка ходу демонів. acting — анімації ще грають, хід гравця не починається; далі — підсумок до першої дії.
+  let plate: { acting: boolean; lines: string[] } | null = null;
+  let plateTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function dropPlate(): void {
+    if (plateTimer !== null) clearTimeout(plateTimer);
+    plateTimer = null;
+    plate = null;
+  }
+
+  function dismissTurnPlate(force = false): void {
+    if (plate === null || (plate.acting && !force)) return;
+    dropPlate();
+    renderBattle();
+  }
+
+  // Хід демонів уже застосовано (події логу від prevLen): без rAF підсумок одразу; з rAF — плашка, поки черга анімацій не спорожніє.
+  function alienTurnDone(prevLen: number, info: string): void {
+    const mission = ui.mission;
+    if (!mission) return;
+    dropPlate();
+    const p = { acting: deps.hasRaf(), lines: summarizeAlienTurn(mission.state.log.slice(prevLen), mission.state.units, visibleCells()) };
+    plate = p;
+    const settle = (): void => {
+      if (deps.anim.active() !== null || deps.anim.queued().length > 0) {
+        plateTimer = setTimeout(settle, 100);
+        return;
+      }
+      plateTimer = null;
+      p.acting = false;
+      binfo(info);
+      deps.renderAll();
+    };
+    binfo(p.acting ? '' : info);
+    if (p.acting) plateTimer = setTimeout(settle, TURN_PLATE_MIN_MS);
+  }
+
+  function renderTurnPlate(): void {
+    const box = el('bturn');
+    box.classList.toggle('hidden', plate === null);
+    box.classList.toggle('done', plate !== null && !plate.acting);
+    const lines = plate === null ? [] : plate.acting ? [...TURN_PLATE_ACTING] : [TURN_PLATE_DONE, ...plate.lines];
+    box.replaceChildren(
+      ...lines.map((t, i) => {
+        const d = document.createElement(i === 0 ? 'b' : 'div');
+        d.textContent = t;
+        return d;
+      })
+    );
+  }
+
+  // Т.33: причина під неактивною плиткою — замість підпису (підпис — aria-label)
+  function tileReason(b: HTMLButtonElement, reason: string | null): void {
+    const cap = b.querySelector<HTMLElement>('.tb-cap');
+    if (cap === null) return;
+    cap.textContent = reason ?? b.getAttribute('aria-label');
+    cap.classList.toggle('tb-why', reason !== null);
+  }
+
   function playerTurnActive(): boolean {
-    return ui.mission !== null && ui.battleResult === null && ui.mission.state.activeSide === 'player';
+    return ui.mission !== null && ui.battleResult === null && ui.mission.state.activeSide === 'player' && plate?.acting !== true;
   }
 
   function selectedUnit(): Unit | undefined {
@@ -203,13 +265,17 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
     const mission = ui.mission;
     if (!mission) return;
     deps.drainBattle();
+    renderTurnPlate();
     // ADR-0027 (П6.3): контекст-стрічка бою — тип місії, заморожений час,
     // чий хід, активний юніт HP/AP. Час геосцени стоїть (ADR-0026: місія
     // не переривається) — показуємо його як «заморожено».
     el('bctx-kind').textContent = mission.briefing.kind;
     el('bctx-time').textContent = geoClock(deps.getParty().geo) + ' · заморожено';
+    // Т.33: поки плашка ходу демонів на екрані — хід ще їхній (стан ядра вже передав хід загону)
     el('bctx-turn').textContent =
-      'хід ' + mission.state.turn + ' · ' + (mission.state.activeSide === 'player' ? 'загін' : 'демони Розриву');
+      plate?.acting === true
+        ? 'хід демонів Розриву'
+        : 'хід ' + mission.state.turn + ' · ' + (mission.state.activeSide === 'player' ? 'загін' : 'демони Розриву');
     const selCtx = selectedUnit();
     el('bctx-unit').textContent = selCtx
       ? selCtx.name + ': HP ' + selCtx.hp + '/' + selCtx.maxHp + ' · AP ' + selCtx.ap + '/' + selCtx.maxAp
@@ -446,6 +512,7 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
       const hint = b.dataset.hint || b.title;
       b.dataset.hint = hint;
       b.title = noAp ? hint + ' — не вистачає AP (потрібно ' + cost + ')' : hint;
+      tileReason(b, noAp ? 'мало AP' : null);
       b.classList.toggle('armed', ui.fireMode === m);
     }
     const ow = el<HTMLButtonElement>('btn-ow');
@@ -454,6 +521,7 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
     const owHint = ow.dataset.hint || ow.title;
     ow.dataset.hint = owHint;
     ow.title = owNoAp ? owHint + ' — не вистачає AP (потрібно ' + OVERWATCH_AP_COST + ')' : owHint;
+    tileReason(ow, owNoAp ? 'мало AP' : null);
 
     // П11.6 (ADR-0058): кнопки витратників — аптечка і граната. Приглушені без
     // предмета у вибраного солдата або без AP (підказка причини, патерн П6.14).
@@ -472,6 +540,8 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
         : noAp
           ? hint + ' — не вистачає AP (потрібно ' + cost + ')'
           : hint;
+      const noItem = sel !== undefined && !hasItem;
+      tileReason(b, noItem ? (mode === 'medkit' ? 'немає гелю' : 'немає гранати') : noAp ? 'мало AP' : null);
       b.classList.toggle('armed', ui.itemMode === mode);
     }
   }
@@ -479,6 +549,7 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
   function close(): void {
     deps.stopAuto(); // П13.3: авто-бій міг тривати — таймер і стан драйвера скидаємо
     deps.anim.cancel(); // П6.8: бій закрито — чергу анімацій скидаємо
+    dropPlate(); // Т.33
     ui.mission = null;
     ui.battleResult = null;
     ui.selectedId = null;
@@ -507,6 +578,7 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
       return;
     }
     facing.clear(); // П14.3: новий бій — напрямки погляду з нуля (дефолти кадрів)
+    dropPlate(); // Т.33
     ui.battleResult = null;
     ui.selectedId = null;
     ui.fireMode = null;
@@ -536,6 +608,7 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
     const mission = ui.mission;
     if (!mission) return;
     ui.battleResult = outcome;
+    dropPlate(); // Т.33: бій скінчився — замість плашки ходу картка результату
     const party = deps.getParty();
     const aftermath = applyMissionResult(party.roster, mission.state);
     // Т.28 (ADR-0091): броня й око загиблих повертаються на склад, витратники зникають.
@@ -551,6 +624,16 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
         '',
         'battle'
       );
+    // Т.33: картка результату під банером — хід, демони, премія, поранені й загиблі поіменно
+    const aliens = mission.state.units.filter((u) => u.side === 'alien');
+    const card = resultCardHtml({
+      turns: mission.state.turn,
+      killed: aliens.filter((u) => !u.alive).length,
+      aliens: aliens.length,
+      bonus: outcome === 'перемога' ? missionBonus(mission.briefing.kind, party.campaign.preset) : null,
+      wounded: aftermath.wounded.map((s) => s.name + ' — лікарня: ' + ticksText(party.roster.hospital[s.id])),
+      lost: aftermath.lost.map((s) => s.name + ' — ' + byGender(s.name, 'загинув', 'загинула')),
+    });
     if (outcome === 'перемога') {
       // П4.5 (ADR-0021): премія за перемогу за тип НЛО; надходження — у журнал
       creditMissionBonus(party.econ, mission.briefing.kind, party.campaign.preset);
@@ -561,15 +644,18 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
         ' уцілілих' +
         woundedNote +
         ')</div>' +
+        card +
         '<button id="btn-close">← Повернутись на геосцену</button>';
     } else if (outcome === 'евакуйовано') {
       // П15.2 (ADR-0075): без премії (гілка перемоги вище), НЛО лишається активним
       el('bresult').innerHTML =
         '<div class="banner lose">ЗАГІН ЕВАКУЙОВАНО — врятовані на базі, зонд Розриву лишається активним</div>' +
+        card +
         '<button id="btn-close">← Повернутись на геосцену</button>';
     } else {
       el('bresult').innerHTML =
         '<div class="banner lose">ЗАГІН ВТРАЧЕНО ✗ — зонд Розриву лишається активним</div>' +
+        card +
         '<button id="btn-close">← Повернутись на геосцену</button>';
     }
     (document.getElementById('btn-close') as HTMLButtonElement).onclick = close;
@@ -589,5 +675,7 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
     finish,
     checkOutcome,
     enqueueAnims: enqueueBattleAnims,
+    alienTurnDone,
+    dismissTurnPlate,
   };
 }

@@ -377,6 +377,12 @@ describe('UI-флоу прев’ю: геосцена → місія → бій 
     expect($('bresult').textContent).toBe(''); // загін 3×10 HP виживає перший хід ШІ (сід 42)
     expect($('bctx-turn').textContent).toContain('хід 2'); // П6.3: стрічка відобразила хід 2
     expect($('binfo').textContent).toContain('Хід демонів Розриву відпрацьовано');
+    expect($('bturn').className).toBe('done'); // Т.33: підсумок ходу — до першої дії гравця (без rAF плашки «діють» немає)
+    expect($('bturn').textContent).toMatch(
+      /^ХІД ДЕМОНІВ РОЗРИВУ — ПІДСУМОК(Демони не атакували\.|Пострілів по загону: \d+, влучань: \d+).*Демонів у полі зору: \d+$/
+    );
+    btn('btn-ow').click();
+    expect($('bturn').className).toBe('hidden');
   });
 
   it('П13.3 (ADR-0067): флоу «Авто → Стоп → ручна дія → Авто» — бій доведено до результату (критерій 1)', async () => {

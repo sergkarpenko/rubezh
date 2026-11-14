@@ -242,6 +242,18 @@ export const TOOLBAR_ACTIONS: readonly ToolbarAction[] = [
   },
 ];
 
+// Т.33: клавіша і ціна в AP — у кутках плитки (висота плитки без змін); ціни — з констант ядра.
+const TILE_KEY: Partial<Record<ToolbarActionId, string>> = {
+  snap: '1',
+  aimed: '2',
+  auto: '3',
+  ow: 'O',
+  medkit: 'M',
+  grenade: 'G',
+  end: 'E',
+};
+const ITEM_AP: Partial<Record<ToolbarActionId, number>> = { ow: OVERWATCH_AP_COST, medkit: HEAL_AP_COST, grenade: GRENADE_AP_COST };
+
 export interface ToolbarDeps {
   onAction(id: ToolbarActionId): void;
 }
@@ -283,6 +295,14 @@ export function createToolbar(root: HTMLElement, deps: ToolbarDeps): void {
     cap.className = 'tb-cap';
     cap.textContent = a.label;
     b.append(icon, cap);
+    const ap = a.id === 'snap' || a.id === 'aimed' || a.id === 'auto' ? RIFLE.modes[a.id].apCost : ITEM_AP[a.id];
+    for (const [cls, text] of [['tb-ap', ap === undefined ? undefined : ap + ' AP'] as const, ['tb-key', TILE_KEY[a.id]] as const]) {
+      if (text === undefined) continue;
+      const c = document.createElement('span');
+      c.className = cls;
+      c.textContent = text;
+      b.append(c);
+    }
     b.onclick = () => deps.onAction(a.id);
     root.appendChild(b);
   }

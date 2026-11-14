@@ -569,6 +569,7 @@ if (typeof document !== 'undefined') {
   // іконки будує src/ui/toolbar.ts; стани/причини блокування — renderBattle).
   createToolbar(el('btoolbar'), {
     onAction: (id) => {
+      battle.dismissTurnPlate(id === 'auto-battle'); // Т.33: дія гравця прибирає підсумок ходу демонів
       if (id === 'snap' || id === 'aimed' || id === 'auto') input.armFire(id);
       else if (id === 'ow') input.armOverwatch();
       else if (id === 'medkit') input.armMedkit();
@@ -594,6 +595,7 @@ if (typeof document !== 'undefined') {
     logExpand.setAttribute('aria-expanded', String(open));
   };
   const bc = el<HTMLCanvasElement>('battle');
+  bc.addEventListener('click', () => battle.dismissTurnPlate()); // Т.33: до обробника кліку
   bc.addEventListener('click', input.battleCanvasClick);
   bc.addEventListener('mousemove', input.battleCanvasHover);
   bc.addEventListener('mouseleave', input.battleCanvasLeave);
