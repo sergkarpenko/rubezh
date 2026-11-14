@@ -177,7 +177,7 @@ export function partyBotInterceptStep(party: Party, policy: InterceptPolicy): vo
   } else if (f.status === 'бій' && ic.activeUfoId) {
     const ufo = party.geo.ufos.find((u) => u.id === ic.activeUfoId);
     if (ufo) {
-      interceptRound(ic, party.geo, policy.chooseRange(ufo.kind, f.hp), party.econ, party.campaign.preset);
+      interceptRound(ic, party.geo, policy.chooseRange(ufo.kind, f.hp), party.econ, party.campaign.preset, party.roster);
     }
   }
 }

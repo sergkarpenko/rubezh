@@ -12,6 +12,7 @@ import {
   RANGE_PROFILES,
   interceptRound,
   startIntercept,
+  repairRisksBankruptcy,
   startRepair,
   type InterceptChoice,
 } from '../core/intercept';
@@ -331,7 +332,7 @@ export function createPanels(deps: PanelsDeps): Panels {
         b.disabled = deps.inBattle();
         b.onclick = () => {
           try {
-            interceptRound(party.intercept, party.geo, c as InterceptChoice, party.econ, party.campaign.preset);
+            interceptRound(party.intercept, party.geo, c as InterceptChoice, party.econ, party.campaign.preset, party.roster);
           } catch (e) {
             deps.journal('✗ ' + (e as Error).message, 'lose');
           }
@@ -358,6 +359,21 @@ export function createPanels(deps: PanelsDeps): Panels {
         deps.renderAll();
       };
       box.appendChild(b);
+      // Т.26 (ADR-0090): авторемонт не почався, бо оплата доведе до банкрутства —
+      // рядок-попередження; ручна оплата лишається в один клік (як Т.24 для місії).
+      const preset = party.campaign.preset;
+      if (!b.disabled && repairRisksBankruptcy(party.econ, party.roster, preset)) {
+        const warn = document.createElement('div');
+        warn.className = 'mission-warn';
+        warn.id = 'repair-warn';
+        warn.textContent =
+          '⚠ Ремонт не почався сам: боєготових немає, а після ремонту не лишиться на вербування (' +
+          party.econ.money +
+          ' з ' +
+          (FIGHTER_REPAIR_COST + hirePrice(preset)) +
+          ').';
+        box.appendChild(warn);
+      }
     }
   }
 

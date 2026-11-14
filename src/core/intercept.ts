@@ -17,9 +17,10 @@
 // симуляціями — П7.6, тут початкові MVP-значення.
 
 import { mulberry32, type RNG, type StatefulRng, type Vec2 } from './combat';
-import { creditShotDownBonus, spend, type EconomyState } from './economy';
+import { creditShotDownBonus, hirePrice, spend, type EconomyState } from './economy';
 import { WORLD_W, chebyshevWrap, type GeoEvent, type GeoState } from './geo';
 import { DEFAULT_PRESET, type DifficultyPreset } from './campaign';
+import { readySoldiers, type Roster } from './squad';
 
 export const FIGHTER_MAX_HP = 4; // MVP: один винищувач, без озброєння/досліджень
 export const FIGHTER_STEPS_PER_TICK = 2; // до 2 клітин за тік — швидший за будь-який НЛО (1 кл./тік)
@@ -198,14 +199,17 @@ export function interceptTick(state: InterceptState, geo: GeoState): void {
 
 // Раунд бою — рішення гравця (дистанція або відступ); тіки геосцени не споживає.
 // Відступ: розрив контакту, винищувач повертається на базу (НЛО продовжує цикл).
-// П8.4a: пресет (борг П8.4) — лише для множника премії за збиття (campaign.ts);
-// дефолт «норма» — старі виклики без змін.
+// П8.4a: пресет (борг П8.4) — для множника премії за збиття (campaign.ts) і,
+// з Т.26, для ціни найму в умові авторемонту; дефолт «норма» — старі виклики без змін.
+// Т.26 (ADR-0090): roster — для умови авторемонту (repairRisksBankruptcy); без
+// ростера ремонт стартує за самими грошима, як до Т.26 (виклики без партії).
 export function interceptRound(
   state: InterceptState,
   geo: GeoState,
   choice: InterceptChoice,
   econ?: EconomyState,
-  preset: DifficultyPreset = DEFAULT_PRESET
+  preset: DifficultyPreset = DEFAULT_PRESET,
+  roster?: Roster
 ): void {
   const f = state.fighter;
   if (f.status !== 'бій') {
@@ -268,10 +272,21 @@ export function interceptRound(
     // П7.4: ремонт платний; за наявності грошей стартує автоматично (досвід X-COM),
     // без грошей — винищувач чекає пошкоджений, ремонт можна оплатити пізніше.
     // Неспроможність перехоплення — не провал (ADR-0021).
-    if (econ && econ.money >= FIGHTER_REPAIR_COST) {
+    // Т.26 (ADR-0090): ремонт не стартує сам, якщо боєготових немає і після оплати
+    // не лишиться на найм — інакше ядро саме доводить партію до банкрутства
+    // (третій шлях Т.22). Пізніше сам не стартує: оплата кнопкою або ботом.
+    if (econ && econ.money >= FIGHTER_REPAIR_COST && !(roster && repairRisksBankruptcy(econ, roster, preset))) {
       startRepair(state, geo, econ);
     }
   }
+}
+
+// Т.26 (ADR-0090): чи доведе оплата ремонту партію до банкрутства — боєготових
+// немає, а після ремонту грошей менше за ціну найму (тобто одразу настане
+// isBankrupt, squad.ts). Одна умова для авторемонту в interceptRound і для
+// рядка-попередження біля кнопки «Ремонт» в UI.
+export function repairRisksBankruptcy(econ: EconomyState, roster: Roster, preset: DifficultyPreset = DEFAULT_PRESET): boolean {
+  return readySoldiers(roster).length === 0 && econ.money - FIGHTER_REPAIR_COST < hirePrice(preset);
 }
 
 // Повернення на базу: миттєве (MVP-спрощення ADR-0032: без окремої фази дороги додому).
