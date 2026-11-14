@@ -25,17 +25,23 @@
 //   keep    — броня й око загиблого повертаються на склад (скрипт читає журнал цеху після бою);
 //   eqN     — бот замовляє й екіпірує предмети лише для перших N боєготових (eq3 — загін місії);
 //             eq99 повторює чинну політику іншим кодом — звірка цього варіанта.
+// Т.27 — вхід у науку (ціну найму техноманта міряють у копії репозиторію з sed):
+//   pc:<протокол>=N — ціна протоколу N кредитів; pp:<протокол>=N — очки протоколу N
+//             (обидві — запис каталогу в пам'яті на час варіанта).
+// Лічильники Т.27 у CSV: blockedTicks — тіки, коли ціль і повний загін є, а місію не пускає
+// запобіжник останнього загону (ADR-0089); noSquadTicks — ціль є, боєготових менше загону;
+// missionsFirstHalf — місії за перші 15 діб.
 // Детермінізм (ADR-0003): сіди 1..N. Зведення — docs/reports/t23-science-policies.md.
 
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
-import { advanceTime, geoDay } from '../src/core/geo';
+import { advanceTime, geoDay, missionTargets } from '../src/core/geo';
 import { economyTick, hirePrice } from '../src/core/economy';
-import { hospitalTick, isBankrupt, readySoldiers } from '../src/core/squad';
+import { hospitalTick, isBankrupt, missionRisksBankruptcy, readySoldiers } from '../src/core/squad';
 import { interceptTick, repairTick } from '../src/core/intercept';
 import { DIFFICULTY_MULTIPLIERS, VICTORY_DAY, campaignScore, campaignTick, type DifficultyPreset } from '../src/core/campaign';
 import { createParty } from '../src/core/save';
-import { fireScientist, researchTick, type ProjectId } from '../src/core/research';
+import { PROJECT_CATALOG, fireScientist, researchTick, type ProjectId } from '../src/core/research';
 import { WORKSHOP_CATALOG, equipItem, installGunModule, orderItem, workshopTick, type ItemId } from '../src/core/workshop';
 import {
   DEFAULT_PARTY_POLICY,
@@ -72,6 +78,8 @@ interface Variant {
   costs: Partial<Record<ItemId, number>>; // Т.25: ціни предметів на час варіанта
   keep: boolean; // Т.25: броня й око загиблого повертаються на склад
   equipFirst: number; // Т.25: замовляти й екіпірувати для перших N боєготових; 0 — крок бота
+  projectCosts: Partial<Record<ProjectId, number>>; // Т.27: ціни протоколів на час варіанта
+  projectPoints: Partial<Record<ProjectId, number>>; // Т.27: очки протоколів на час варіанта
 }
 
 function parseVariant(name: string): Variant {
@@ -87,6 +95,8 @@ function parseVariant(name: string): Variant {
     costs: {},
     keep: false,
     equipFirst: 0,
+    projectCosts: {},
+    projectPoints: {},
   };
   for (const part of name.split('+')) {
     const num = Number(part.replace(/^[a-z]+/, ''));
@@ -97,6 +107,8 @@ function parseVariant(name: string): Variant {
     else if (part.startsWith('done:')) v.done = part.slice(5).split('.') as ProjectId[];
     else if (part.startsWith('g:')) v.gift = [part.slice(2) as ItemId];
     else if (part.startsWith('c:')) v.costs[part.slice(2).split('=')[0] as ItemId] = Number(part.split('=')[1]);
+    else if (part.startsWith('pc:')) v.projectCosts[part.slice(3).split('=')[0] as ProjectId] = Number(part.split('=')[1]);
+    else if (part.startsWith('pp:')) v.projectPoints[part.slice(3).split('=')[0] as ProjectId] = Number(part.split('=')[1]);
     else if (part === 'keep') v.keep = true;
     else if (part.startsWith('eq')) v.equipFirst = num;
     else if (part.startsWith('sci')) v.scientists = num;
@@ -127,6 +139,9 @@ interface Rec {
   scientistDays: number; // сума штату техномантів за добами
   spentScience: number; // найм техномантів + протоколи + цех
   spentSalary: number;
+  blockedTicks: number; // Т.27: ціль і загін є, запобіжник останнього загону не пускає
+  noSquadTicks: number; // Т.27: ціль є, боєготових менше загону
+  missionsFirstHalf: number; // Т.27: місії за перші 15 діб
 }
 
 // Т.25: пункти 3–5 partyBotScienceStep (цех, екіпірування, гарматний модуль) для
@@ -196,6 +211,9 @@ function run(name: string, v: Variant, preset: DifficultyPreset, seed: number): 
     scientistDays: 0,
     spentScience: 0,
     spentSalary: 0,
+    blockedTicks: 0,
+    noSquadTicks: 0,
+    missionsFirstHalf: 0,
   };
   let lastDay = geoDay(party.geo);
   for (let t = 0; t < VICTORY_DAY * TICKS_PER_DAY; t++) {
@@ -224,6 +242,10 @@ function run(name: string, v: Variant, preset: DifficultyPreset, seed: number): 
     } else partyBotScienceStep(party, step);
     rec.spentScience += m1 - party.econ.money;
     const logFrom = party.workshop.log.length;
+    if (missionTargets(party.geo).length > 0) {
+      if (readySoldiers(party.roster).length < MISSION_SQUAD_SIZE) rec.noSquadTicks += 1;
+      else if (missionRisksBankruptcy(party.econ, party.roster, MISSION_SQUAD_SIZE, preset)) rec.blockedTicks += 1;
+    }
     const m = partyBotMissionStep(party, policy);
     if (v.keep) {
       for (const e of party.workshop.log.slice(logFrom)) {
@@ -233,6 +255,7 @@ function run(name: string, v: Variant, preset: DifficultyPreset, seed: number): 
     }
     if (m.launched) {
       rec.missions += 1;
+      if (rec.moneyByDay.length < 15) rec.missionsFirstHalf += 1;
       if (m.outcome === 'перемога') rec.missionsWon += 1;
       rec.lost += m.lost;
     }
@@ -274,6 +297,10 @@ const all: Rec[] = [];
 const ITEMS = Object.keys(WORKSHOP_CATALOG) as ItemId[];
 // Ціни каталогу до першого варіанта: кожен варіант стартує від них, а не від цін попереднього.
 const baseCosts = Object.fromEntries(ITEMS.map((id) => [id, WORKSHOP_CATALOG[id].cost]));
+const PROJECT_IDS = Object.keys(PROJECT_CATALOG) as ProjectId[];
+const baseProjects = Object.fromEntries(
+  PROJECT_IDS.map((id) => [id, { cost: PROJECT_CATALOG[id].cost, points: PROJECT_CATALOG[id].points }])
+);
 console.log(
   '| Варіант / пресет | Перемог, % | Виграно місій на партію | Частка виграних місій, % | Місій на добу | Діб без повного загону, % | Завершили 30-ту добу | Гроші на 30-ту добу | Ростер на 30-ту добу | Загиблих на партію | Протоколів | Техномантів у середньому | Витрати: наука / зарплата | Рахунок, медіана |'
 );
@@ -281,6 +308,10 @@ console.log('| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 for (const name of variants) {
   const v = parseVariant(name);
   for (const id of ITEMS) WORKSHOP_CATALOG[id].cost = v.costs[id] ?? baseCosts[id];
+  for (const id of PROJECT_IDS) {
+    PROJECT_CATALOG[id].cost = v.projectCosts[id] ?? baseProjects[id].cost;
+    PROJECT_CATALOG[id].points = v.projectPoints[id] ?? baseProjects[id].points;
+  }
   for (const preset of presets) {
     const rs: Rec[] = [];
     let mismatch = 0;
@@ -322,7 +353,7 @@ for (const name of variants) {
 if (out) {
   mkdirSync(dirname(out), { recursive: true });
   const header =
-    'variant,preset,seed,won,days,missions,missionsWon,lost,hired,daysNoFullSquad,money30,roster,score,projects,scientistDays,spentScience,spentSalary';
+    'variant,preset,seed,won,days,missions,missionsWon,lost,hired,daysNoFullSquad,money30,roster,score,projects,scientistDays,spentScience,spentSalary,blockedTicks,noSquadTicks,missionsFirstHalf';
   const lines = all.map((r) =>
     [
       r.variant,
@@ -342,6 +373,9 @@ if (out) {
       r.scientistDays,
       r.spentScience,
       r.spentSalary,
+      r.blockedTicks,
+      r.noSquadTicks,
+      r.missionsFirstHalf,
     ].join(',')
   );
   writeFileSync(out, [header, ...lines].join('\n'), 'utf8');
