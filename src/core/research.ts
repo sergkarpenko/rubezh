@@ -15,7 +15,7 @@
 
 import { geoDay, type GeoState } from './geo';
 import { spend, type EconomyState } from './economy';
-import { type DifficultyPreset, DEFAULT_PRESET, DIFFICULTY_MULTIPLIERS } from './campaign';
+import { type DifficultyPreset, DEFAULT_PRESET, sciencePrice } from './campaign';
 
 export const HIRE_SCIENTIST_PRICE = 100; // кандидат (П11.8); прецедент найму солдата, ADR-0021
 export const SCIENTIST_SALARY = 10; // зарплата за добу за вченого; Т.28 (ADR-0091): 20 → 10
@@ -139,8 +139,7 @@ function scientistName(index: number): string {
 // (недостатньо грошей → помилка, штат не змінюється). Без RNG: id та ім'я —
 // наступні за лічильником hired (прецедент hireSoldier, squad.ts).
 export function hireScientist(econ: EconomyState, research: ResearchState, preset: DifficultyPreset = DEFAULT_PRESET): Scientist {
-  const multipliers = DIFFICULTY_MULTIPLIERS[preset];
-  spend(econ, Math.round(HIRE_SCIENTIST_PRICE * multipliers.economyMultiplier));
+  spend(econ, sciencePrice(HIRE_SCIENTIST_PRICE, preset));
   const scientist: Scientist = { id: 'в' + (research.hired + 1), name: scientistName(research.hired) };
   research.hired += 1;
   research.scientists.push(scientist);
@@ -220,8 +219,7 @@ export function startProject(
   if (research.active.length >= research.slots) {
     throw new Error('Немає вільного слота лабораторії техномагії (' + research.slots + ')');
   }
-  const multipliers = DIFFICULTY_MULTIPLIERS[preset];
-  spend(econ, Math.round(def.cost * multipliers.economyMultiplier));
+  spend(econ, sciencePrice(def.cost, preset));
   const project: ActiveProject = { id, invested: 0 };
   research.active.push(project);
   research.log.push({ type: 'project_started', id });
@@ -238,8 +236,7 @@ export function startProject(
 // лише на коштовність (зарплата); наукові точки — без множників.
 export function researchTick(research: ResearchState, econ: EconomyState, geo: GeoState, preset: DifficultyPreset = DEFAULT_PRESET): void {
   const completedDays = geoDay(geo) - 1;
-  const multipliers = DIFFICULTY_MULTIPLIERS[preset];
-  const salaryPerScientist = Math.round(SCIENTIST_SALARY * multipliers.economyMultiplier);
+  const salaryPerScientist = sciencePrice(SCIENTIST_SALARY, preset);
   while (research.lastSalaryDay < completedDays) {
     research.lastSalaryDay += 1;
     const day = research.lastSalaryDay;

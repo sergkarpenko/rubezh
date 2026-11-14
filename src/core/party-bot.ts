@@ -33,7 +33,7 @@ import { autoBattle } from './ai-bot';
 import { completeMission, createMission } from './mission';
 import {
   DEFAULT_PRESET,
-  DIFFICULTY_MULTIPLIERS,
+  sciencePrice,
   VICTORY_DAY,
   campaignScore,
   campaignTick,
@@ -219,7 +219,7 @@ export function partyBotHireStep(party: Party, policy: PartyBotPolicy): number {
 // перевірок «заплатимо без резерву» до виклику (spend сам кидає помилку,
 // але бот не має «примх» — рішення лише за станом, ADR-0003).
 function presetPrice(base: number, preset: DifficultyPreset): number {
-  return Math.round(base * DIFFICULTY_MULTIPLIERS[preset].economyMultiplier);
+  return sciencePrice(base, preset);
 }
 
 // П11.8: дефіцит предмета цеху — скільки ще потрібно виготовити: готових на

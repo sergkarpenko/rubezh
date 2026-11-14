@@ -40,18 +40,30 @@ export const DIFFICULTY_MULTIPLIERS = {
     ufoSpawnMultiplier: 0.7,
     hpBonusMultiplier: 1.2,
     economyMultiplier: 1.2,
+    scienceMultiplier: 0.5,
   },
   норма: {
     ufoSpawnMultiplier: 1.0,
     hpBonusMultiplier: 1.0,
     economyMultiplier: 1.0,
+    scienceMultiplier: 1.0,
   },
   складний: {
     ufoSpawnMultiplier: 1.0,
     hpBonusMultiplier: 0.9,
     economyMultiplier: 0.9,
+    scienceMultiplier: 0.9,
   },
 } as const;
+
+// Т.29 (ADR-0092): ціни науки — найм і зарплата техноманта, протоколи, предмети
+// цеху — множаться на scienceMultiplier пресету, а не на economyMultiplier.
+// «Норма» і «складний» — ті самі числа, що й раніше (1.0 і 0.9); «легкий» —
+// 0.5 замість 1.2: втрат там мало, і за цінами ×1.2 броня не окуповувалась
+// (probe на 480 сідах — docs/reports/t29-easy-science.md).
+export function sciencePrice(base: number, preset: DifficultyPreset = DEFAULT_PRESET): number {
+  return Math.round(base * DIFFICULTY_MULTIPLIERS[preset].scienceMultiplier);
+}
 
 export type CampaignStatus = 'триває' | 'перемога';
 

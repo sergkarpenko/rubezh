@@ -94,6 +94,12 @@ describe('замовлення (ADR-0058: оплата при замовленн
     expect(workshop.queue[0].ticksLeft).toBe(WORKSHOP_CATALOG['medkit'].ticks);
   });
 
+  it('Т.29: на «легкому» броня в цеху — 30 кредитів (половина «норми»)', () => {
+    const econ = richEcon();
+    orderItem(econ, createWorkshop(), researchWith('armor'), 'armor', 'легкий');
+    expect(econ.money).toBe(5000 - 30);
+  });
+
   it('друге замовлення стає в кінець черги (одне активне — ADR-0058)', () => {
     const econ = richEcon();
     const workshop = createWorkshop();

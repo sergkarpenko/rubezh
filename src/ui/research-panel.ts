@@ -17,7 +17,7 @@ import {
   startProject,
   type ProjectDef,
 } from '../core/research';
-import { DIFFICULTY_MULTIPLIERS } from '../core/campaign';
+import { sciencePrice } from '../core/campaign';
 import type { Party } from '../core/save';
 import { projectEffect } from './effects';
 import { el } from './dom';
@@ -48,7 +48,7 @@ export function createResearchPanel(deps: ResearchPanelDeps): ResearchPanel {
     if (r.active.some((p) => p.id === def.id)) return 'у роботі';
     if (def.prerequisite !== undefined && !r.completed.includes(def.prerequisite)) return 'спершу: «' + projectName(def.prerequisite) + '»';
     if (r.active.length >= r.slots) return 'нема вільного слота (' + r.active.length + '/' + r.slots + ')';
-    const price = Math.round(def.cost * DIFFICULTY_MULTIPLIERS[party.campaign.preset].economyMultiplier);
+    const price = sciencePrice(def.cost, party.campaign.preset);
     if (party.econ.money < price) return 'недостатньо кредитів (ціна ' + price + ')';
     return null;
   }
@@ -60,9 +60,8 @@ export function createResearchPanel(deps: ResearchPanelDeps): ResearchPanel {
     const box = el('research');
     box.innerHTML = '';
     const busy = deps.inBattle() || deps.isGameOver();
-    const mult = DIFFICULTY_MULTIPLIERS[party.campaign.preset].economyMultiplier;
-    const hirePrice = Math.round(HIRE_SCIENTIST_PRICE * mult);
-    const salary = Math.round(SCIENTIST_SALARY * mult);
+    const hirePrice = sciencePrice(HIRE_SCIENTIST_PRICE, party.campaign.preset);
+    const salary = sciencePrice(SCIENTIST_SALARY, party.campaign.preset);
 
     // шапка: штат, утримання, слоти лабораторії техномагії, спільний пул потоку
     const head = document.createElement('div');
@@ -147,7 +146,7 @@ export function createResearchPanel(deps: ResearchPanelDeps): ResearchPanel {
       info.textContent =
         def.name +
         ' · ' +
-        def.cost +
+        sciencePrice(def.cost, party.campaign.preset) +
         ' · ' +
         def.points +
         ' потоку' +
@@ -172,7 +171,7 @@ export function createResearchPanel(deps: ResearchPanelDeps): ResearchPanel {
         start.textContent = 'Старт';
         const reason = startBlockReason(party, def);
         start.disabled = busy || reason !== null;
-        start.title = reason ?? 'Почати протокол (−' + def.cost + ')';
+        start.title = reason ?? 'Почати протокол (−' + sciencePrice(def.cost, party.campaign.preset) + ')';
         start.onclick = () => {
           try {
             startProject(party.econ, party.research, def.id, party.campaign.preset);

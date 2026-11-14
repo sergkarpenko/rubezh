@@ -242,16 +242,24 @@ describe('researchTick — зарплата і наукові точки на м
     expect(econ.money).toBe(5000);
   });
 
-  it('пресет множить лише кошти: найм ×1.2, зарплата 12; точки — без множника', () => {
+  it('пресет множить лише кошти (Т.29: scienceMultiplier): «легкий» — найм 50, зарплата 5; точки — без множника', () => {
     const econ = richEcon();
     const research = createResearch();
     const geo = geoNoUfo();
     hireScientist(econ, research, 'легкий');
-    expect(econ.money).toBe(5000 - Math.round(HIRE_SCIENTIST_PRICE * 1.2));
+    expect(econ.money).toBe(5000 - 50);
     advanceTime(geo, 48);
     researchTick(research, econ, geo, 'легкий');
-    expect(econ.log).toContainEqual({ type: 'spend', amount: 12 });
+    expect(econ.log).toContainEqual({ type: 'spend', amount: 5 });
     expect(research.pool).toBe(1);
+  });
+
+  it('Т.29: протокол броні на «легкому» — 48 кредитів, на «складному» — 86', () => {
+    const econ = richEcon();
+    startProject(econ, createResearch(), 'armor', 'легкий');
+    expect(econ.money).toBe(5000 - 48);
+    startProject(econ, createResearch(), 'armor', 'складний');
+    expect(econ.money).toBe(5000 - 48 - 86);
   });
 });
 

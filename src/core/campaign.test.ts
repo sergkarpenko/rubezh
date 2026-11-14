@@ -13,6 +13,7 @@ import {
   SCORE_PER_UFO_SHOT_DOWN,
   SCORE_PER_VETERAN_ALIVE,
   VICTORY_DAY,
+  sciencePrice,
   type CampaignContext,
 } from './campaign';
 import { createGeoGame, TICK_MINUTES, type GeoState } from './geo';
@@ -200,5 +201,17 @@ describe('campaign — сумісність сейвів (ADR-0026/0033)', () =>
       campaignTick({ geo: a, roster: createRoster(), econ: createEconomy() }, createCampaign());
     }
     expect(a.log).toEqual(b.log);
+  });
+});
+
+describe('ціни науки за пресетом (Т.29, ADR-0092)', () => {
+  it('«легкий» — половина «норми», «складний» — ×0.9; решта економіки «легкого» — ×1.2', () => {
+    // найм техноманта, зарплата, протокол броні, броня, найдорожчий протокол
+    const base = [100, 10, 96, 60, 128];
+    expect(base.map((b) => sciencePrice(b, 'легкий'))).toEqual([50, 5, 48, 30, 64]);
+    expect(base.map((b) => sciencePrice(b, 'норма'))).toEqual(base);
+    expect(base.map((b) => sciencePrice(b, 'складний'))).toEqual([90, 9, 86, 54, 115]);
+    expect(base.map((b) => sciencePrice(b))).toEqual(base);
+    expect(DIFFICULTY_MULTIPLIERS['легкий'].economyMultiplier).toBe(1.2);
   });
 });

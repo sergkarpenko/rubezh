@@ -161,3 +161,18 @@ describe('WorkshopPanel: критерій 1 — лише на геосцені',
     expect(party.workshop.queue).toHaveLength(0);
   });
 });
+
+describe('WorkshopPanel: ціни за пресетом (Т.29)', () => {
+  it('«легкий»: броня 30 — у списку, підказці і списанні', () => {
+    party = createParty(42, 'легкий');
+    party.research.completed.push('armor');
+    const panel = createWorkshopPanel(makeDeps());
+    panel.render();
+    expect(el('workshop').textContent).toContain('Композитна броня · 30 · ');
+    const b = el<HTMLButtonElement>('btn-order-armor');
+    expect(b.title).toContain('(−30, ');
+    const before = party.econ.money;
+    b.click();
+    expect(party.econ.money).toBe(before - 30);
+  });
+});

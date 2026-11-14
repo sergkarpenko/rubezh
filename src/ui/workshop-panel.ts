@@ -9,7 +9,7 @@
 // Детермінізм: панель лише читає стан ядра, жодного RNG.
 
 import { ITEM_IDS, WORKSHOP_CATALOG, itemName, orderItem } from '../core/workshop';
-import { DIFFICULTY_MULTIPLIERS } from '../core/campaign';
+import { sciencePrice } from '../core/campaign';
 import type { Party } from '../core/save';
 import { itemEffect } from './effects';
 import { el } from './dom';
@@ -38,7 +38,6 @@ export function createWorkshopPanel(deps: WorkshopPanelDeps): WorkshopPanel {
     const box = el('workshop');
     box.innerHTML = '';
     const busy = deps.inBattle() || deps.isGameOver();
-    const mult = DIFFICULTY_MULTIPLIERS[party.campaign.preset].economyMultiplier;
 
     // черга: одне активне замовлення (перше в черзі), решта чекає
     const active = w.queue[0];
@@ -71,7 +70,8 @@ export function createWorkshopPanel(deps: WorkshopPanelDeps): WorkshopPanel {
       row.className = 'ufo';
       row.style.marginBottom = '4px';
       const info = document.createElement('span');
-      info.textContent = def.name + ' · ' + def.cost + ' · ' + ticksText(def.ticks);
+      const price = sciencePrice(def.cost, party.campaign.preset);
+      info.textContent = def.name + ' · ' + price + ' · ' + ticksText(def.ticks);
       row.appendChild(info);
       const effect = document.createElement('span');
       effect.className = 'meta';
@@ -81,7 +81,6 @@ export function createWorkshopPanel(deps: WorkshopPanelDeps): WorkshopPanel {
       order.id = 'btn-order-' + id.replace(/ /g, '-'); // id без пробілів (HTML)
       order.className = 'research'; // той самий акцент, що й у панелі «Дослідження»
       order.textContent = 'Замовити';
-      const price = Math.round(def.cost * mult);
       const notResearched = !party.research.completed.includes(id);
       order.disabled = busy || notResearched || party.econ.money < price;
       order.title = notResearched
