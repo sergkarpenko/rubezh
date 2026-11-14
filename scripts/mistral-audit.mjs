@@ -193,7 +193,7 @@ export async function callMistral({ fetch, key, model, messages, sleep }) {
       res = await fetch(API_URL, {
         method: 'POST',
         headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model, messages, temperature: 0.1, max_tokens: 6000, response_format: { type: 'json_object' } }),
+        body: JSON.stringify({ model, messages, temperature: 0.1, max_tokens: 16_000, response_format: { type: 'json_object' } }),
         signal: AbortSignal.timeout(180_000),
       });
     } catch (e) {
@@ -211,7 +211,17 @@ export async function callMistral({ fetch, key, model, messages, sleep }) {
     } catch {
       throw new Error('відповідь API Mistral — не JSON');
     }
-    return { content: data?.choices?.[0]?.message?.content, usage: data?.usage };
+    const choice = data?.choices?.[0];
+    const content = choice?.message?.content;
+    const text = Array.isArray(content) ? content.map((c) => (c?.type === 'text' ? c.text : '')).join('') : content;
+    if (typeof text !== 'string' || text.trim() === '') {
+      // діагностика без змісту відповіді: чому порожньо (довжина, фільтр, інша форма відповіді)
+      const shape = Array.isArray(content) ? content.map((c) => c?.type).join('+') : typeof content;
+      throw new Error(
+        `порожня відповідь моделі (finish_reason: ${choice?.finish_reason ?? '?'}, вміст: ${shape}, вивід: ${data?.usage?.completion_tokens ?? '?'} токенів)`
+      );
+    }
+    return { content: text, usage: data?.usage };
   }
   throw new Error(`${last} — спроб: ${ATTEMPTS}`);
 }
@@ -546,7 +556,10 @@ async function selfTest() {
     s = await scenario({ mistral: [{ status: 200, ok: true, json: async () => ({ choices: [{ message: { content: 'вибачте' } }] }) }] });
     ok('прохід: зіпсована відповідь — збій', !s.result.ok && s.result.reason === 'відповідь моделі — не JSON');
     s = await scenario({ mistral: [{ status: 200, ok: true, json: async () => ({}) }] });
-    ok('прохід: відповідь без choices — збій', !s.result.ok && s.result.reason === 'порожня відповідь моделі');
+    ok(
+      'прохід: відповідь без choices — збій',
+      !s.result.ok && s.result.reason === 'порожня відповідь моделі (finish_reason: ?, вміст: undefined, вивід: ? токенів)'
+    );
     s = await scenario({ mistral: [reply(good)], ghFail: true });
     ok(
       'прохід: GitHub 403 — без винятку',
