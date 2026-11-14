@@ -1,0 +1,45 @@
+# Зовнішній аудит PR моделлю Mistral (ADR-0095, Т.37): на кожен пуш у PR — один
+# коментар зі знахідками (до десяти), наявний коментар оновлюється.
+# Уся логіка — у scripts/mistral-audit.mjs (--self-test проганяє повний прохід
+# на тимчасовому репозиторії з підставним API). Тут — лише виклики.
+# Чек не обов'язковий: збій API, зіпсована відповідь або відсутній секрет —
+# коментар «Аудиту не було» і зелений чек; червоний — лише самоперевірка.
+# PR з форку і Dependabot секрету не отримують — джоба пропускається.
+name: mistral-audit
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: mistral-audit-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  mistral-audit:
+    if: github.event.pull_request.user.login != 'dependabot[bot]' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # повна історія: спільний предок гілки і main для дифа base...head
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Самоперевірка скрипта
+        # зелений лише з рядком підсумку «помилок 0»: мовчазний вихід з кодом 0 — теж помилка
+        run: node scripts/mistral-audit.mjs --self-test | tee /dev/stderr | grep -q 'помилок 0$'
+      - name: Аудит
+        env:
+          MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
+          MISTRAL_MODEL: ${{ vars.MISTRAL_MODEL }}
+          MISTRAL_REASONING: ${{ vars.MISTRAL_REASONING }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/mistral-audit.mjs
