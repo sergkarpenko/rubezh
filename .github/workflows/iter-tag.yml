@@ -1,0 +1,122 @@
+# Тег кроку `iter-X.Y` — без дій власника (ADR-0093, Т.34).
+# Хмарна сесія агента тег не створить: її проксі відхиляє і пуш тегу, і
+# створення ref через API (урок Т.5/Т.6, перевірено знову в Т.34). Тому тег
+# ставить цей workflow на merge-коміті PR одразу після мержу.
+#
+# Назва тегу — рядок «Iter-Tag: iter-X.Y» в описі PR (розбір і перевірка —
+# scripts/iter-tag.sh). PR без такого рядка workflow не чіпає: рядки тегів,
+# Dependabot, перші PR серії (тег несе останній змістовний PR, урок П8.5).
+#
+# Джоби:
+#   check — на кожну зміну PR: самоперевірка скрипта і назва майбутнього тегу
+#           (недопустима або зайнята назва — червоний чек до мержу);
+#   tag   — після мержу PR або вручну (workflow_dispatch: tag + sha коміту
+#           в main) — запасний шлях, якщо подія мержу не спрацювала.
+# Наявний тег workflow не пересуває: той самий коміт — нічого не робить,
+# інший — червоний прогін.
+name: iter-tag
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, edited, closed]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Назва тегу (наприклад iter-T.34)'
+        required: true
+        type: string
+      sha:
+        description: 'Повний sha merge-коміту в main (40 знаків)'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    if: github.event_name == 'pull_request' && github.event.action != 'closed'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Самоперевірка скрипта
+        run: sh scripts/iter-tag.sh --self-test
+      - name: Назва майбутнього тегу
+        env:
+          # опис PR — недовірений текст: лише через змінну середовища
+          PR_BODY: ${{ github.event.pull_request.body }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="$(sh scripts/iter-tag.sh)"
+          if [ -z "$TAG" ]; then
+            echo "Рядка Iter-Tag в описі PR немає — після мержу тег не ставиться." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          if gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${TAG}" --jq .object.sha > /tmp/existing 2> /dev/null; then
+            echo "::error::Тег ${TAG} уже існує ($(cat /tmp/existing)) — workflow його не пересуне (ADR-0093)"
+            exit 1
+          fi
+          echo "Після мержу буде поставлено тег \`${TAG}\` на merge-коміт цього PR." >> "$GITHUB_STEP_SUMMARY"
+
+  tag:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.action == 'closed' && github.event.pull_request.merged == true)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      # код скрипта — з main після мержу, а не з гілки PR
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.merge_commit_sha || 'main' }}
+      - name: Назва тегу і коміт
+        id: plan
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+          MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+          INPUT_TAG: ${{ inputs.tag }}
+          INPUT_SHA: ${{ inputs.sha }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            TAG="$(sh scripts/iter-tag.sh --check "$INPUT_TAG")"
+            SHA="$INPUT_SHA"
+          else
+            TAG="$(sh scripts/iter-tag.sh)"
+            SHA="$MERGE_SHA"
+          fi
+          if [ -z "$TAG" ]; then
+            echo "Рядка Iter-Tag в описі PR немає — тег не ставиться." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          if ! printf '%s\n' "$SHA" | grep -Eq '^[0-9a-f]{40}$'; then
+            echo "::error::Очікується повний sha (40 знаків), отримано «${SHA}»"
+            exit 1
+          fi
+          # коміт має бути в історії main: main збігається з ним або попереду
+          STATUS="$(gh api "repos/${GITHUB_REPOSITORY}/compare/${SHA}...main" --jq .status)"
+          if [ "$STATUS" != "ahead" ] && [ "$STATUS" != "identical" ]; then
+            echo "::error::Коміт ${SHA} не в історії main (compare: ${STATUS})"
+            exit 1
+          fi
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "sha=${SHA}" >> "$GITHUB_OUTPUT"
+      - name: Поставити тег
+        if: steps.plan.outputs.tag != ''
+        env:
+          TAG: ${{ steps.plan.outputs.tag }}
+          SHA: ${{ steps.plan.outputs.sha }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if EXISTING="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${TAG}" --jq .object.sha 2> /dev/null)"; then
+            if [ "$EXISTING" = "$SHA" ]; then
+              echo "Тег \`${TAG}\` уже стоїть на \`${SHA}\` — без змін." >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            echo "::error::Тег ${TAG} уже існує на ${EXISTING}, а не на ${SHA} — workflow тегів не пересуває (ADR-0093)"
+            exit 1
+          fi
+          gh api "repos/${GITHUB_REPOSITORY}/git/refs" -f "ref=refs/tags/${TAG}" -f "sha=${SHA}" --jq .ref
+          echo "Поставлено тег \`${TAG}\` → \`${SHA}\`." >> "$GITHUB_STEP_SUMMARY"
