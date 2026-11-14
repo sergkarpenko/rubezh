@@ -668,6 +668,140 @@
         flex-wrap: wrap;
         margin: 10px 0 0;
       }
+      /* Т.31: журнал-смуга — кнопка розгортання потрібна лише в розкладці без прокрутки */
+      #btn-log-expand {
+        display: none;
+        padding: 4px 10px;
+        font-size: 12px;
+      }
+      /* Т.31 (огляд Т.30, знахідки 3, 4, 31): геосцена, журнал і колонка стану — в одному
+         екрані без прокрутки сторінки. Шапка і рамки тонші; карта вписується в доступну
+         висоту (object-fit); журнал — смуга під картою, кнопка розгортає його поверх карти;
+         колонка стану і фокусна зона (бій) прокручуються всередині себе. Вузькі (< 900px)
+         і низькі (< 520px) вікна лишаються з прокруткою сторінки */
+      @media (min-width: 900px) and (min-height: 520px) {
+        html,
+        body {
+          height: 100%;
+        }
+        body {
+          display: flex;
+          flex-direction: column;
+          overflow: hidden;
+        }
+        header#topbar {
+          padding: 4px 10px;
+        }
+        h1 {
+          font-size: 16px;
+        }
+        body.panel-frame header#topbar {
+          border-width: 8px 14px;
+          border-image-width: 8px 14px;
+        }
+        body.panel-frame section.panel {
+          border-width: 14px 18px;
+          border-image-width: 14px 18px;
+          padding: 6px;
+        }
+        body.panel-frame #status-tabs {
+          border-width: 10px 14px;
+          border-image-width: 10px 14px;
+          padding: 4px;
+        }
+        main#layout {
+          flex: 1 1 auto;
+          min-height: 0;
+          box-sizing: border-box;
+          gap: 8px;
+          padding: 8px;
+          grid-template-rows: minmax(0, auto) minmax(88px, 1fr);
+          align-items: stretch;
+        }
+        #focus {
+          min-height: 0;
+          overflow-y: auto;
+          scrollbar-width: thin;
+          scrollbar-color: #31435f transparent;
+        }
+        #geo-panel {
+          flex: 0 1 auto;
+          min-height: 0;
+          display: flex;
+          flex-direction: column;
+          box-sizing: border-box;
+        }
+        #geo {
+          flex: 0 1 auto;
+          min-height: 0;
+          object-fit: contain;
+          background: none;
+        }
+        #battle-panel,
+        #ictx {
+          flex: none;
+        }
+        aside#status {
+          min-height: 0;
+          overflow-y: auto;
+          scrollbar-width: thin;
+          scrollbar-color: #31435f transparent;
+        }
+        #status-tabs {
+          position: sticky;
+          top: 0;
+          z-index: 1;
+          background: #0d1017;
+        }
+        #journal {
+          min-height: 0;
+          box-sizing: border-box;
+          display: grid;
+          grid-template-columns: auto minmax(0, 1fr);
+          grid-template-rows: auto minmax(0, 1fr);
+          grid-template-areas:
+            'title log'
+            'expand log';
+          column-gap: 12px;
+        }
+        #journal h2 {
+          grid-area: title;
+          margin: 0 0 4px;
+        }
+        #btn-log-expand {
+          display: block;
+          grid-area: expand;
+          align-self: start;
+        }
+        #log-tabs {
+          display: none;
+          grid-area: tabs;
+          margin: 0;
+        }
+        #log {
+          grid-area: log;
+          max-height: none;
+          min-height: 0;
+          scrollbar-width: thin;
+          scrollbar-color: #31435f transparent;
+        }
+        #journal.expanded {
+          grid-area: auto;
+          grid-row: 1 / -1;
+          grid-column: 1;
+          align-self: end;
+          height: min(360px, 100%);
+          z-index: 3;
+          grid-template-columns: auto minmax(0, 1fr) auto;
+          grid-template-areas:
+            'title tabs expand'
+            'log log log';
+          row-gap: 6px;
+        }
+        #journal.expanded #log-tabs {
+          display: flex;
+        }
+      }
       .hidden {
         display: none !important;
       }
@@ -729,6 +863,8 @@
       </div>
       <section class="panel" id="journal">
         <h2>Журнал</h2>
+        <!-- Т.31: розгорнути журнал поверх карти (обробник — src/main.ts) -->
+        <button id="btn-log-expand" aria-expanded="false" title="Розгорнути журнал: усі записи і фільтри">Розгорнути</button>
         <div id="log-tabs">
           <button class="active" data-filter="all" id="log-tab-all">Усе</button>
           <button data-filter="geo" id="log-tab-geo">Геосцена</button>

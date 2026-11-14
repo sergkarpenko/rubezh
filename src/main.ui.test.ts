@@ -519,6 +519,20 @@ describe('журнал з фільтрами-вкладками (П6.2, ADR-0027
     expect(geoLi.style.display).toBe('');
   });
 
+  it('Т.31: кнопка розгортає журнал-смугу і згортає її назад', () => {
+    const journal = document.getElementById('journal') as HTMLElement;
+    const expand = btn('btn-log-expand');
+    expect(journal.classList.contains('expanded')).toBe(false);
+    expand.click();
+    expect(journal.classList.contains('expanded')).toBe(true);
+    expect(expand.textContent).toBe('Згорнути');
+    expect(expand.getAttribute('aria-expanded')).toBe('true');
+    expand.click();
+    expect(journal.classList.contains('expanded')).toBe(false);
+    expect(expand.textContent).toBe('Розгорнути');
+    expect(expand.getAttribute('aria-expanded')).toBe('false');
+  });
+
   it('новий запис під активним фільтром видимий, під іншим — приховується', () => {
     btn('log-tab-econ').click();
     btn('btn-hire').click(); // 385 → 285 (два записи: «Найм» + «Витрати»)
