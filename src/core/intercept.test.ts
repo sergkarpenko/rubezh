@@ -4,7 +4,8 @@
 
 import { describe, expect, it } from 'vitest';
 import type { RNG } from './combat';
-import { SHOT_DOWN_BONUS, createEconomy } from './economy';
+import { SHOT_DOWN_BONUS, createEconomy, hirePrice } from './economy';
+import { createRoster, isBankrupt } from './squad';
 import { advanceTime, createGeoGame, type GeoState, type Ufo } from './geo';
 import {
   FIGHTER_MAX_HP,
@@ -21,6 +22,7 @@ import {
   startRepair,
   shotDownUfos,
   interceptRngState,
+  repairRisksBankruptcy,
   type InterceptState,
 } from './intercept';
 
@@ -491,6 +493,109 @@ describe('intercept: ремонт — економіка (П7.4)', () => {
   it('стартові гроші партії покривають ремонт: 300 > 50', () => {
     const econ = createEconomy();
     expect(econ.money).toBeGreaterThan(FIGHTER_REPAIR_COST); // банкрутство не спрацює від одного ремонту
+  });
+});
+
+// Т.26 (ADR-0090, рішення власника за Т.23): ядро не починає ремонт саме, якщо
+// боєготових немає і після оплати не лишиться на найм — інакше одразу банкрутство.
+describe('intercept: авторемонт без боєготових (Т.26)', () => {
+  // Бій до пошкодження: зонд невразливий, раунди впритул, доки перехоплювач не на базі.
+  function damageWith(
+    econ: ReturnType<typeof createEconomy>,
+    roster?: ReturnType<typeof createRoster>,
+    preset?: 'легкий' | 'норма' | 'складний'
+  ): InterceptState {
+    const ic = createIntercept(3);
+    const geo = geoWith(mkUfo({ id: 'u1', pos: { x: 8, y: 4 }, target: { x: 15, y: 7 }, detected: true }));
+    startIntercept(ic, geo, 'u1');
+    ic.fighter.pos = { ...geo.ufos[0].pos };
+    interceptTick(ic, geo);
+    ic.ufoHp['u1'] = 999;
+    let guard = 0;
+    while (ic.fighter.status === 'бій' && guard++ < 2000) interceptRound(ic, geo, 'впритул', econ, preset, roster);
+    expect(ic.fighter.hp).toBe(0);
+    return ic;
+  }
+  // Ростер без боєготових: усі в лікарні.
+  function allWounded(size = 2): ReturnType<typeof createRoster> {
+    const roster = createRoster(size);
+    for (const s of roster.soldiers) roster.hospital[s.id] = 5;
+    return roster;
+  }
+
+  it('repairRisksBankruptcy: межа — після ремонту рівно ціна найму ще не банкрутство', () => {
+    const econ = createEconomy();
+    econ.money = FIGHTER_REPAIR_COST + hirePrice() - 1;
+    expect(repairRisksBankruptcy(econ, allWounded())).toBe(true);
+    expect(repairRisksBankruptcy(econ, { soldiers: [], hired: 4, hospital: {} })).toBe(true); // ростер порожній
+    expect(repairRisksBankruptcy(econ, createRoster(1))).toBe(false); // є боєготовий
+    econ.money += 1;
+    expect(repairRisksBankruptcy(econ, allWounded())).toBe(false);
+  });
+
+  it('repairRisksBankruptcy: ціна найму — за пресетом', () => {
+    const econ = createEconomy();
+    econ.money = FIGHTER_REPAIR_COST + hirePrice('норма') - 1;
+    expect(hirePrice('складний')).toBeLessThan(hirePrice('норма'));
+    expect(hirePrice('легкий')).toBeGreaterThan(hirePrice('норма'));
+    expect(repairRisksBankruptcy(econ, allWounded(), 'складний')).toBe(false);
+    expect(repairRisksBankruptcy(econ, allWounded(), 'норма')).toBe(true);
+    expect(repairRisksBankruptcy(econ, allWounded(), 'легкий')).toBe(true);
+  });
+
+  it('боєготових немає, після ремонту бракує на найм — ремонт не стартує, гроші цілі, не банкрут', () => {
+    const econ = createEconomy();
+    econ.money = FIGHTER_REPAIR_COST + hirePrice() - 1;
+    const roster = allWounded();
+    const ic = damageWith(econ, roster);
+    expect(ic.fighter.status).toBe('на базі');
+    expect(ic.fighter.repairTicksLeft).toBeUndefined();
+    expect(ic.log.some((e) => e.type === 'fighter_repair_start')).toBe(false);
+    expect(econ.money).toBe(FIGHTER_REPAIR_COST + hirePrice() - 1);
+    expect(isBankrupt(econ, roster)).toBe(false);
+  });
+
+  it('боєготових немає, але грошей на ремонт і найм — ремонт стартує сам', () => {
+    const econ = createEconomy();
+    econ.money = FIGHTER_REPAIR_COST + hirePrice();
+    const roster = allWounded();
+    const ic = damageWith(econ, roster);
+    expect(ic.fighter.status).toBe('ремонт');
+    expect(econ.money).toBe(hirePrice());
+    expect(isBankrupt(econ, roster)).toBe(false);
+  });
+
+  it('є боєготовий — ремонт стартує сам за самими грошима (як П7.4)', () => {
+    const econ = createEconomy();
+    econ.money = FIGHTER_REPAIR_COST;
+    const ic = damageWith(econ, createRoster(1));
+    expect(ic.fighter.status).toBe('ремонт');
+    expect(econ.money).toBe(0);
+  });
+
+  it('без ростера — правило П7.4 без змін (виклики без партії)', () => {
+    const econ = createEconomy();
+    econ.money = FIGHTER_REPAIR_COST;
+    expect(damageWith(econ).fighter.status).toBe('ремонт');
+  });
+
+  it('пресет партії: умова бере ціну найму пресету («легкий» 120, «норма» 100)', () => {
+    const econ = createEconomy('легкий');
+    econ.money = FIGHTER_REPAIR_COST + hirePrice('норма');
+    expect(damageWith(econ, allWounded(), 'легкий').fighter.status).toBe('на базі');
+    econ.money = FIGHTER_REPAIR_COST + hirePrice('легкий');
+    expect(damageWith(econ, allWounded(), 'легкий').fighter.status).toBe('ремонт');
+  });
+
+  it('відкладений ремонт можна оплатити вручну — і тоді банкрутство (рішення власника: кнопка активна)', () => {
+    const econ = createEconomy();
+    econ.money = FIGHTER_REPAIR_COST + hirePrice() - 1;
+    const roster = allWounded();
+    const ic = damageWith(econ, roster);
+    const geo = createGeoGame({ seed: 1, spawnChance: 0 });
+    startRepair(ic, geo, econ);
+    expect(ic.fighter.status).toBe('ремонт');
+    expect(isBankrupt(econ, roster)).toBe(true);
   });
 });
 

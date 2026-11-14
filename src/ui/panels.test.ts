@@ -333,6 +333,32 @@ describe('renderFighter: панель винищувача (П7.4)', () => {
     expect(f.deps.renderAll).toHaveBeenCalled();
   });
 
+  it('Т.26: боєготових немає, після ремонту бракує на вербування — рядок-попередження, кнопка активна', () => {
+    const f = makeFixture();
+    f.party.intercept.fighter.hp = 0;
+    f.party.econ.money = 149; // «норма»: ремонт 50 + вербування 100
+    f.panels.renderFighter();
+    expect(document.getElementById('repair-warn')).toBeNull(); // боєготові є — авторемонт не відкладається
+    for (const s of f.party.roster.soldiers) f.party.roster.hospital[s.id] = 3;
+    f.panels.renderFighter();
+    const warn = document.querySelector('#fighter .mission-warn');
+    expect(warn!.textContent).toBe('⚠ Ремонт не почався сам: боєготових немає, а після ремонту не лишиться на вербування (149 з 150).');
+    const b = document.getElementById('btn-repair') as HTMLButtonElement;
+    expect(b.disabled).toBe(false); // ручна оплата лишається в один клік
+    f.party.econ.money = 150; // на ремонт і вербування вистачає — без попередження
+    f.panels.renderFighter();
+    expect(document.getElementById('repair-warn')).toBeNull();
+    f.party.econ.money = 49; // кнопка вимкнена (на ремонт бракує) — рядка нема
+    f.panels.renderFighter();
+    expect(document.getElementById('repair-warn')).toBeNull();
+    f.party.econ.money = 149;
+    f.panels.renderFighter();
+    (document.getElementById('btn-repair') as HTMLButtonElement).click();
+    expect(f.party.intercept.fighter.status).toBe('ремонт');
+    f.panels.renderFighter();
+    expect(document.getElementById('repair-warn')).toBeNull();
+  });
+
   it('ремонт — статус з тіками, кнопки дій нема', () => {
     const f = makeFixture();
     f.party.intercept.fighter.status = 'ремонт';

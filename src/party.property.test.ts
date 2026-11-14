@@ -9,7 +9,7 @@ import fc from 'fast-check';
 import type { Vec2 } from './core/combat';
 import { WORLD_H, WORLD_W, advanceTime, geoDay, missionTargets, type Ufo } from './core/geo';
 import { createEconomy, creditMissionBonus, economyTick } from './core/economy';
-import { applyMissionResult, hireSoldier, hospitalTick, missionSquad } from './core/squad';
+import { applyMissionResult, hireSoldier, hospitalTick, isBankrupt, missionSquad } from './core/squad';
 import { PROJECTS, PROJECT_CATALOG, fireScientist, hireScientist, researchTick, startProject } from './core/research';
 import {
   ARMOR_MAX_HP_BONUS,
@@ -122,6 +122,15 @@ function apply(p: Party, c: Cmd): Party {
     for (let k = 0; k < count && !until(); k++) tick(p);
   };
   const finished = research.completed.length + workshop.queue.length;
+  // Раунд повітряного бою з ростером партії (як panels.ts і бот). Т.26 (ADR-0090):
+  // ремонт, що стартував сам у цьому раунді, не робить партію банкрутом.
+  const round = (choice: (typeof CHOICES)[number]): void => {
+    const starts = intercept.log.filter((e) => e.type === 'fighter_repair_start').length;
+    const solvent = !isBankrupt(econ, p.roster, preset);
+    interceptRound(intercept, geo, choice, econ, preset, p.roster);
+    const auto = intercept.log.filter((e) => e.type === 'fighter_repair_start').length > starts;
+    if (solvent && auto) expect(isBankrupt(econ, p.roster, preset), 'авторемонт довів до банкрутства').toBe(false);
+  };
   const commands: Record<Exclude<Kind, 'reload'>, () => void> = {
     tick: () => ticks(1 + (c.n % 12)),
     days: () => ticks(48 * (1 + (c.n % 3))),
@@ -144,9 +153,9 @@ function apply(p: Party, c: Cmd): Party {
       if (hunt && flying().length === 0) return;
       startIntercept(intercept, geo, (hunt ? flying()[0] : pick(flying(), geo.ufos))?.id ?? '');
       if (hunt) ticks(12, () => f.status !== 'погоня');
-      for (let k = c.n % 6; hunt && k > 0 && f.status === 'бій'; k--) interceptRound(intercept, geo, CHOICES[c.i % 3], econ, preset);
+      for (let k = c.n % 6; hunt && k > 0 && f.status === 'бій'; k--) round(CHOICES[c.i % 3]);
     },
-    round: () => interceptRound(intercept, geo, CHOICES[c.i % CHOICES.length], econ, preset),
+    round: () => round(CHOICES[c.i % CHOICES.length]),
     repair: () => startRepair(intercept, geo, econ),
     mission: () => mission(p, c.i),
   };
