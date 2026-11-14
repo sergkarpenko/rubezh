@@ -34,7 +34,8 @@ jobs:
         with:
           node-version: 22
       - name: Самоперевірка скрипта
-        run: node scripts/mistral-audit.mjs --self-test
+        # зелений лише з рядком підсумку «помилок 0»: мовчазний вихід з кодом 0 — теж помилка
+        run: node scripts/mistral-audit.mjs --self-test | tee /dev/stderr | grep -q 'помилок 0$'
       - name: Аудит
         env:
           MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
