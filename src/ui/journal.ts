@@ -324,7 +324,12 @@ export function workshopEventText(e: WorkshopEvent): { text: string; cls: string
     case 'unequip':
       return { text: '⚑ Кузня: з ' + e.soldierId + ' знято «' + itemName(e.id) + '» → склад', cls: '' };
     case 'equipment_lost':
-      return { text: '✗ Екіпірування ' + e.soldierId + ' зникло разом із оперативником (' + e.items.join(', ') + ')', cls: 'lose' };
+      return {
+        text: '✗ Витратники ' + e.soldierId + ' втрачено разом із оперативником (' + e.items.map(itemName).join(', ') + ')',
+        cls: 'lose',
+      };
+    case 'equipment_returned':
+      return { text: '⚑ Кузня: спорядження ' + e.soldierId + ' повернуто на склад (' + e.items.map(itemName).join(', ') + ')', cls: '' };
     case 'gun_module_installed':
       return { text: '⚑ Кузня: гарматний модуль перехоплювача на перехоплюачі', cls: '' };
     case 'gun_module_removed':

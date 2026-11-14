@@ -12,6 +12,7 @@ import { describe, expect, it } from 'vitest';
 import { createParty } from './save';
 import { fireSoldier, readySoldiers } from './squad';
 import { hirePrice } from './economy';
+import type { ProjectId } from './research';
 import { spend } from './economy';
 import { advanceTime, missionTargets } from './geo';
 import { BALANCED_POLICY, PASSIVE_POLICY } from './intercept-bot';
@@ -24,6 +25,7 @@ import {
   partyBotMissionStep,
   partyBotScienceStep,
   simulateParty,
+  type PartyBotPolicy,
 } from './party-bot';
 
 describe('П8.5: оркестратор — детермінізм (ADR-0003)', () => {
@@ -249,47 +251,95 @@ describe('П11.8: політика науки — ізоляція (критер
 describe('П11.8: політика науки — повний флоу (фіксовані сіди фіксують баланс)', () => {
   // WORLD_H 9 (фідбек П14.8) зсунув траєкторії: на сіді 42 наука тепер
   // банкрутує — переможний сід флоу науки перемірено probe-сканом (урок П8.5):
-  // сід 49 дає той самий візерунок (3 вчені, 3 проєкти у порядку комбо-B,
-  // цех, екіпірування, без звільнень).
+  // сід 49 дає той самий візерунок (вчені, проєкти, цех, екіпірування).
+  // Т.28 (ADR-0091): політика — два техноманти, лише протокол броні, потім штат
+  // звільнено; броня загиблих повертається на склад — числа перемірено.
   it('SCIENCE_POLICY: сід 49 «норма» — вчені, проєкти, цех, екіпірування; байт-у-байт', () => {
     const a = simulateParty(49, 'норма', { policy: SCIENCE_POLICY });
     const b = simulateParty(49, 'норма', { policy: SCIENCE_POLICY });
     expect(JSON.stringify(b)).toBe(JSON.stringify(a));
     expect(a.outcome).toBe('перемога');
-    expect(a.scientistsHired).toBe(3);
-    // П11.8 (тунінг ×0.75 точок, комбо-B): за 30 діб — 3 проєкти.
-    // Т.19 (ADR-0088, ціни протоколів ×0,8): числа перемірено — «око» завершується
-    // першим, цех встигає четвертий предмет.
-    expect(a.completedProjects).toEqual(['optics', 'medkit', 'lab-extension']);
-    expect(a.workshopProduced).toBe(4);
-    expect(a.equippedItems).toBe(4);
-    expect(a.salarySpent).toBe(1800);
-    expect(a.projectSpent).toBe(216); // 80 + 64 + 72
-    expect(a.workshopSpent).toBe(180);
-    expect(a.scientistsFired).toBe(0);
-    expect(a.scientistsByDay[a.scientistsByDay.length - 1]).toBe(3);
+    expect(a.scientistsHired).toBe(2);
+    expect(a.completedProjects).toEqual(['armor']);
+    expect(a.workshopProduced).toBe(7);
+    expect(a.equippedItems).toBe(41); // броня загиблих повертається на склад і йде наступним
+    expect(a.salarySpent).toBe(140); // 2 × 10 × 7 діб (14 очок, 2 очки на добу)
+    expect(a.projectSpent).toBe(96);
+    expect(a.workshopSpent).toBe(420);
+    expect(a.scientistsFired).toBe(0); // лічильник — лише авто-звільнення за невиплату
+    expect(Math.max(...a.scientistsByDay)).toBe(2);
+    expect(a.scientistsByDay[a.scientistsByDay.length - 1]).toBe(0); // штат звільнено після протоколу
+    expect(a.missionsLaunched).toBe(45);
+    expect(a.missionsWon).toBe(39);
   });
 
   it('спіраль зарплата→звільнення (урок П11.2): бідна партія звільняє вчених з кінця штату', () => {
-    const heavy = { ...SCIENCE_POLICY, name: 'sci-heavy', scientistsUpTo: 5 };
-    const r = simulateParty(42, 'норма', { policy: heavy }); // сід 42: спіраль за цін Т.19 (probe; до Т.19 — сід 44)
-    // Т.22 (ADR-0089): із запобіжником партія сидить без грошей довше — числа перемірено.
+    // Т.28 (ADR-0091): зарплата 10 — спіраль настає лише за восьми техномантів, усіх
+    // протоколів і без звільнення після завершення; сід 54 (probe; до Т.28 — сід 42, штат 5).
+    const heavy: PartyBotPolicy = {
+      ...SCIENCE_POLICY,
+      name: 'sci-heavy',
+      scientistsUpTo: 8,
+      projects: ['medkit', 'optics', 'armor', 'gun-module', 'grenade', 'lab-extension'],
+      fireScientistsWhenDone: false,
+    };
+    const r = simulateParty(54, 'норма', { policy: heavy });
     expect(r.salaryShortfallDays).toBe(3);
-    expect(r.scientistsFired).toBe(4);
-    // штат просідає 5 → 3 (наймані поверх звільнених) — метрики бачать спіраль
-    expect(Math.max(...r.scientistsByDay)).toBe(5);
-    expect(r.scientistsByDay[r.scientistsByDay.length - 1]).toBeLessThan(5);
+    expect(r.scientistsFired).toBe(3);
+    // штат просідає 8 → 7 (наймані поверх звільнених) — метрики бачать спіраль
+    expect(Math.max(...r.scientistsByDay)).toBe(8);
+    expect(r.scientistsByDay[r.scientistsByDay.length - 1]).toBe(7);
   });
 });
 
 describe('П11.8: partyBotScienceStep — детерміновані рішення за станом', () => {
-  const NO_SCIENCE_BASE = { ...SCIENCE_POLICY, projects: [], workshopOrders: [], equip: false };
+  const NO_SCIENCE_BASE = { ...SCIENCE_POLICY, scientistsUpTo: 3, projects: [], workshopOrders: [], equip: false };
 
   it('наймає вчених до scientistsUpTo, лишаючи резерв hireReserve', () => {
     const p = createParty(42, 'норма'); // старт 300, резерв 50: 2 найми (300−200), третій лишив би 0 < 50
     partyBotScienceStep(p, NO_SCIENCE_BASE);
     expect(p.research.scientists).toHaveLength(2);
     expect(p.econ.money).toBe(100);
+  });
+
+  it('Т.28: усі протоколи політики завершено — штат звільнено, нових не наймає; без прапорця штат лишається', () => {
+    const p = createParty(42, 'норма');
+    const policy = { ...NO_SCIENCE_BASE, scientistsUpTo: 2, projects: ['armor', 'optics'] as ProjectId[] };
+    partyBotScienceStep(p, policy); // два найми (300 − 200), протокол броні не по кишені з резервом
+    expect(p.research.scientists).toHaveLength(2);
+    p.research.completed.push('armor');
+    p.econ.money = 100; // «око» (72) з резервом 50 не стартує
+    partyBotScienceStep(p, policy);
+    expect(p.research.scientists).toHaveLength(2); // завершено не все — штат працює
+    p.research.completed.push('optics');
+    p.econ.money = 1000;
+    partyBotScienceStep(p, { ...policy, fireScientistsWhenDone: false });
+    expect(p.research.scientists).toHaveLength(2);
+    partyBotScienceStep(p, policy);
+    expect(p.research.scientists).toHaveLength(0);
+    expect(p.research.log.filter((e) => e.type === 'fire')).toHaveLength(2);
+    expect(p.econ.money).toBe(1000); // після звільнення не наймає
+    partyBotScienceStep(p, policy);
+    expect(p.research.scientists).toHaveLength(0);
+    expect(p.econ.money).toBe(1000);
+  });
+
+  it('Т.28: політика без протоколів штат не звільняє (порожній список — не «все завершено»)', () => {
+    const p = createParty(42, 'норма');
+    partyBotScienceStep(p, { ...NO_SCIENCE_BASE, fireScientistsWhenDone: true });
+    partyBotScienceStep(p, { ...NO_SCIENCE_BASE, fireScientistsWhenDone: true });
+    expect(p.research.scientists).toHaveLength(2);
+  });
+
+  it('SCIENCE_POLICY (Т.28, ADR-0091): два техноманти, лише протокол броні, цех — броня, звільнення після', () => {
+    expect(SCIENCE_POLICY).toMatchObject({
+      scientistsUpTo: 2,
+      projects: ['armor'],
+      workshopOrders: ['armor'],
+      equip: true,
+      fireScientistsWhenDone: true,
+    });
+    expect(DEFAULT_PARTY_POLICY.fireScientistsWhenDone).toBe(false);
   });
 
   it('стартує перший доступний проєкт за пріоритетом — один за крок', () => {

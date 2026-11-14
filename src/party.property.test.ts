@@ -226,7 +226,7 @@ function broken(p: Party): string[] {
   must(earned === placed, 'наукові точки: нараховано ' + earned + ', на обліку ' + placed);
 
   // Цех: кожен виготовлений предмет — на складі, на оперативникові, на перехоплювачі
-  // або втрачений із загиблим; витратники ще й витрачаються в бою.
+  // або (лише витратник) втрачений із загиблим; витратники ще й витрачаються в бою.
   for (const id of ITEM_IDS) {
     const made = workshop.log.filter((e) => e.type === 'produced' && e.id === id).length;
     const slot = id as keyof SoldierEquipment;
@@ -239,6 +239,11 @@ function broken(p: Party): string[] {
     const usedUp = id === 'medkit' || id === 'grenade';
     must(workshop.store[id] >= 0 && (usedUp ? kept <= made : kept === made), id + ': виготовлено ' + made + ', на обліку ' + kept);
   }
+  // Т.28 (ADR-0091): броня й око із загиблим не гинуть — у подіях втрати лише витратники.
+  must(
+    workshop.log.every((e) => e.type !== 'equipment_lost' || e.items.every((k) => k === 'medkit' || k === 'grenade')),
+    'броня чи око загинули разом з оперативником'
+  );
   must(
     workshop.queue.every((o) => o.ticksLeft >= 1),
     'замовлення цеху з нулем тіків'

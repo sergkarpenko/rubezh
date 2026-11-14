@@ -9,7 +9,7 @@
 
 import { ALIEN_SPAWN, SQUAD_SPAWN, completeMission, createMission, missionOutcome, type Mission } from '../core/mission';
 import { applyMissionResult, missionSquad } from '../core/squad';
-// П11.3 (ADR-0058): предмети загиблих зникають разом з ними (перма-смерть).
+// Т.28 (ADR-0091): броня й око загиблих — на склад, витратники зникають.
 // П11.4 (ADR-0058): витратники загону — копія в бій і розрахунок після бою.
 import { deployConsumables, removeLostEquipment, settleConsumables } from '../core/workshop';
 import { creditMissionBonus } from '../core/economy';
@@ -538,7 +538,7 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
     ui.battleResult = outcome;
     const party = deps.getParty();
     const aftermath = applyMissionResult(party.roster, mission.state);
-    // П11.3 (ADR-0058): предмети загиблих на склад не повертаються (перма-смерть).
+    // Т.28 (ADR-0091): броня й око загиблих повертаються на склад, витратники зникають.
     removeLostEquipment(party.workshop, aftermath.lost);
     // П11.4 (ADR-0058): витратники уцілілих — використані зникають, невикористані лишаються.
     settleConsumables(party.workshop, aftermath.survivors, mission.state.items);
