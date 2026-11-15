@@ -77,6 +77,36 @@ export class CoreMirror {
     }
   }
 
+  // Т.43: кнопки «+1 доба» і «До події» зупиняються на подіях. Правило записане
+  // тут окремо від src/ui/time-control.ts — дзеркало лишається незалежним
+  // оракулом. Дзеркало веде лише геосцену і лікарню, тож із шести подій тут
+  // можливі три: зонд виявлено, виявлений зонд приземлився, оперативник одужав
+  // (наука, «Кузня» і ремонт у сценарії не запускаються). Повертає число тіків.
+  private runWithStops(stopOnRecovery: boolean): number {
+    const geo = this.party.geo;
+    for (let done = 1; done <= 48; done++) {
+      const seen = geo.log.length;
+      const wounded = Object.keys(this.party.roster.hospital);
+      this.tick();
+      const probe = geo.log
+        .slice(seen)
+        .some((e) => e.type === 'ufo_detected' || (e.type === 'ufo_landed' && geo.ufos.some((u) => u.id === e.ufoId && u.detected)));
+      const recovered = wounded.some((id) => this.party.roster.hospital[id] === undefined);
+      if (probe || (stopOnRecovery && recovered)) return done;
+    }
+    return 48;
+  }
+
+  // клік «+1 доба»: до 48 тіків, зупинка на виявленні чи приземленні виявленого зонда
+  dayWithStops(): number {
+    return this.runWithStops(false);
+  }
+
+  // клік «До події»: до 48 тіків, зупинка на першій події
+  toEvent(): number {
+    return this.runWithStops(true);
+  }
+
   clock(): string {
     return geoClock(this.party.geo);
   }

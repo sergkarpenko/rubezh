@@ -34,6 +34,8 @@ import { createAmbient } from './ui/ambient';
 // пR.2 (ADR-0037): панелі стану і топбара — модуль src/ui/panels.ts; масштаб сітки — src/ui/grid.ts.
 import { createPanels, inAirCombat, readyToIssue } from './ui/panels';
 import { GCELL } from './ui/grid';
+// Т.43: зупинки кнопок часу («До події», «+1 доба») — модуль src/ui/time-control.ts.
+import { isSpaceForEvent, runTime, type RunMode } from './ui/time-control';
 // пR.2 (ADR-0037): бойовище і флоу бою — модуль src/ui/battle.ts.
 import { createBattleUI, type BattleUIState } from './ui/battle';
 // П13.2 (ADR-0066): вертикальний тулбар бойових дій збоку — модуль src/ui/toolbar.ts.
@@ -188,6 +190,8 @@ const journalUI = createJournal({
 });
 const journal = journalUI.add; // виклики journal(text, cls, cat) у шарі застосунку без змін
 
+// Т.43: вікна поверх гри — поки хоч одне відкрите, пробіл час не рухає.
+const OVERLAY_IDS = ['help-screen', 'game-menu', 'settings-dialog', 'new-game-dialog'];
 let gameOver = false; // банкрутство (ADR-0021): боєготових немає і грошей на найм немає
 let victoryDismissed = false; // П8.3a: endless — гравець закрив екран перемоги і продовжує гру
 // П12.2 (ADR-0065): партія створюється лише вибором гравця на стартовому
@@ -533,12 +537,27 @@ if (typeof document !== 'undefined') {
       renderAll();
     }
   };
-  el('btn-day').onclick = () => {
-    if (!ui.mission) {
-      for (let i = 0; i < 48; i++) partyTick();
-      renderAll();
-    }
+  // Т.43 (рішення власника 15.11.2026): «+1 доба» зупиняється на виявленні й
+  // приземленні зонда, «До події» — на всіх шести подіях (src/ui/time-control.ts).
+  const runClock = (mode: RunMode): void => {
+    if (ui.mission || party === null) return;
+    const p = party;
+    runTime(mode, p, partyTick, () => ui.mission !== null || gameOver || inAirCombat(p));
+    renderAll();
   };
+  el('btn-day').onclick = () => runClock('day');
+  el('btn-event').onclick = () => runClock('event');
+  // Пробіл на геосцені = «До події»: лише коли кнопка активна (не бій, не
+  // повітряний бій, не кінець гри) і поверх гри немає вікна чи стартового екрана.
+  document.addEventListener('keydown', (ev) => {
+    if (!isSpaceForEvent(ev)) return;
+    if (party === null || screens?.current() !== 'гра') return;
+    if (OVERLAY_IDS.some((id) => !el(id).classList.contains('hidden'))) return;
+    const b = el<HTMLButtonElement>('btn-event');
+    if (b.disabled) return;
+    ev.preventDefault();
+    b.click();
+  });
   // П8.3: кнопка "Грати знов" для перезапуску кампанії
   // П12.2 (ADR-0065): інпути сіду/пресету мігрували з топбара в діалог
   // нової партії; «Грати знов» — рестарт з дефолтами 42/«норма» (контракт П8.3a)

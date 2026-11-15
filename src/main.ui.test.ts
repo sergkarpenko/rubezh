@@ -54,6 +54,13 @@ async function runAutoBattle(): Promise<void> {
 // діалог нової партії (інпути сіду/пресету мігрували з топбара в діалог).
 // Заміняє прямий старт btn-new: ті самі сід/складність, твердження-контракти
 // флоу не послаблює.
+// Т.43: «+1 доба» тепер зупиняється на виявленні й приземленні зонда, тож
+// «минула рівно доба» в тестах — 48 кліків «+1 тік» (той самий стан, що давав
+// один клік «+1 доба» до Т.43); твердження тестів не змінено.
+function passDay(): void {
+  for (let i = 0; i < 48; i++) btn('btn-tick').click();
+}
+
 function startParty(seed = '42', preset = 'норма'): void {
   btn('btn-start-new').click();
   ($('new-game-seed') as HTMLInputElement).value = seed;
@@ -289,11 +296,17 @@ describe('UI-флоу прев’ю: геосцена → місія → бій 
     expect($('help-screen').classList.contains('hidden')).toBe(true);
   });
 
-  it('btn-tick: +30 хв; btn-day: +1 доба', () => {
+  it('btn-tick: +30 хв; btn-day: +1 доба із зупинкою на виявленні зонда (Т.43)', () => {
     btn('btn-tick').click();
     expect($('clock').textContent).toBe('Д1 00:30');
+    expect(document.querySelectorAll('#ufos .ufo').length).toBe(0);
+    // сід 42: перший зонд виявлено о 09:30 першої доби — «+1 доба» стає тут
     btn('btn-day').click();
-    expect($('clock').textContent).toBe('Д2 00:30');
+    expect($('clock').textContent).toBe('Д1 09:30');
+    expect(document.querySelectorAll('#ufos .ufo').length).toBe(1);
+    // наступний клік іде далі від місця зупинки
+    btn('btn-day').click();
+    expect($('clock').textContent).not.toBe('Д1 09:30');
   });
 
   it('нова партія зі сідом: годинник і журнал', () => {
@@ -598,7 +611,7 @@ describe('панель збереження: 3 слоти, лише на гео�
   });
 
   it('розбіжність і відкат: тики після сейву → завантаження повертає стан точки збереження', () => {
-    btn('btn-day').click(); // доба вперед: дотація +75 (П8.6)
+    passDay(); // доба вперед: дотація +75 (П8.6)
     expect($('clock').textContent).toBe('Д2 09:00');
     expect($('money').textContent).toBe('375');
     btn('btn-load-1').click();
@@ -1028,12 +1041,12 @@ describe('П8.3a: перемога кампанії — 30 діб → екран
   });
 
   it('30 діб: настала доба 31 — екран перемоги з підсумковим рахунком', () => {
-    for (let i = 0; i < 30; i++) btn('btn-day').click();
+    for (let i = 0; i < 30; i++) passDay();
     expect($('clock').textContent).toBe('Д31 00:00');
     expect($('campaign-status').textContent).toBe('кампанія: перемога');
     expect($('campaign-victory').classList.contains('hidden')).toBe(false);
     expect($('campaign-score').textContent).toMatch(/^\d+$/); // рахунок зафіксовано на межі 30-ї доби (П8.2)
-  });
+  }, 30_000); // Т.43: 1440 кліків «+1 тік» замість 30 кліків «+1 доба» — явний тайм-аут
 
   it('«Грати далі» (endless): екран зникає, час іде далі, рахунок не змінюється', () => {
     const score = $('campaign-score').textContent;
@@ -1041,7 +1054,7 @@ describe('П8.3a: перемога кампанії — 30 діб → екран
     expect($('campaign-victory').classList.contains('hidden')).toBe(true);
     expect($('log').textContent).toContain('Партію продовжено');
     // партія жива після перемоги: тік часу працює, статус і рахунок зафіксовані (EARS Фази 8)
-    btn('btn-day').click();
+    passDay();
     expect($('clock').textContent).toBe('Д32 00:00');
     expect($('campaign-status').textContent).toBe('кампанія: перемога');
     expect($('campaign-score').textContent).toBe(score);
@@ -1097,7 +1110,7 @@ describe('П11.6: критичний флоу «дослідити → виро�
     // 2. ВИРОБИТИ: замовлення обох предметів; одна доба (48 тіків) покриває 12+16
     btn('btn-order-medkit').click();
     btn('btn-order-grenade').click();
-    btn('btn-day').click();
+    passDay();
     expect($('workshop').textContent).toContain('Регенеративний гель 1');
     expect($('workshop').textContent).toContain('Імпульсна граната 1');
 
@@ -1298,5 +1311,86 @@ describe('П12.5: зрозумілість розвитку — числові �
       '+' + GUN_MODULE_DAMAGE + ' пошкодження за раунд повітряного бою'
     );
     expect(btn('btn-order-medkit').disabled).toBe(true); // ще не досліджено — ефект усе одно показано
+  });
+});
+
+describe('Т.43: «До події», зупинки «+1 доба» і пробіл', () => {
+  const clock = (): string | null => $('clock').textContent;
+  const ufoCount = (): number => document.querySelectorAll('#ufos .ufo').length;
+  const space = (target: EventTarget = document): void => {
+    target.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', code: 'Space', bubbles: true, cancelable: true }));
+  };
+  let firstDetection: string | null = null;
+
+  it('еталон: кліками «+1 тік» до першого виявлення зонда (сід 42)', () => {
+    startParty();
+    for (let i = 0; i < 48 && ufoCount() === 0; i++) btn('btn-tick').click();
+    expect(ufoCount()).toBe(1);
+    firstDetection = clock();
+    expect(firstDetection).toBe('Д1 09:30');
+  });
+
+  it('«До події» з нової партії стає на тому самому тіку, що й еталон', () => {
+    startParty();
+    expect(btn('btn-event').disabled).toBe(false);
+    expect(btn('btn-event').textContent).toBe('До події');
+    expect(btn('btn-event').title).toBe('Час іде до першої події, найдовше 1 добу (пробіл)');
+    btn('btn-event').click();
+    expect(clock()).toBe(firstDetection);
+    expect(ufoCount()).toBe(1);
+  });
+
+  it('пробіл на геосцені — те саме, що клік «До події»', () => {
+    startParty();
+    space();
+    expect(clock()).toBe(firstDetection);
+  });
+
+  it('пробіл не діє з фокусом на кнопці чи в полі вводу і з відкритим «Як грати»', () => {
+    const before = clock();
+    space(btn('btn-tick'));
+    space($('new-game-seed'));
+    expect(clock()).toBe(before);
+    btn('btn-help').click();
+    space();
+    expect(clock()).toBe(before);
+    btn('btn-help-close').click();
+    space();
+    expect(clock()).not.toBe(before);
+  });
+
+  it('одужання зупиняє «До події», але не «+1 доба» (поранений через правку сейва)', () => {
+    startParty();
+    btn('btn-save-1').click();
+    const save = JSON.parse(localStorage.getItem('rubezh.save.1')!) as {
+      state: { roster: { soldiers: { id: string }[]; hospital: Record<string, number> } };
+    };
+    save.state.roster.hospital[save.state.roster.soldiers[0].id] = 2; // одужає за 2 тіки
+    localStorage.setItem('rubezh.save.1', JSON.stringify(save));
+    btn('btn-load-1').click();
+    expect($('ready').textContent).toBe('5/6');
+    btn('btn-event').click();
+    expect(clock()).toBe('Д1 01:00');
+    expect($('ready').textContent).toBe('6/6');
+    btn('btn-load-1').click();
+    btn('btn-day').click();
+    expect(clock()).toBe(firstDetection);
+  });
+
+  it('у бою «До події» неактивна, пробіл і клік в обхід disabled часу не рухають', () => {
+    let launched = false;
+    for (let i = 0; i < 1500 && !launched; i++) {
+      const m = document.querySelector<HTMLButtonElement>('button.mission');
+      if (m && !m.disabled) {
+        m.click();
+        launched = true;
+      } else btn('btn-tick').click();
+    }
+    expect(launched).toBe(true);
+    expect(btn('btn-event').disabled).toBe(true);
+    const before = clock();
+    space();
+    btn('btn-event').onclick!(new MouseEvent('click') as PointerEvent);
+    expect(clock()).toBe(before);
   });
 });
