@@ -276,8 +276,11 @@ test('сценарій приймання ADR-0030: партія → місія 
     await page.locator('#status-tab-system').click();
     await page.locator('#btn-save-1').click();
     await expect(page.locator('#log')).toContainText('Збережено: слот 1.');
+    // тік і бій — лише на сторінці: дзеркало лишається на точці сейву, а годинник покинутої партії йде далі
+    await page.locator('#btn-tick').click();
+    await expect(clock).not.toHaveText(saved);
     await page.locator('#status-tab-base').click();
-    await page.locator('#ufos button.mission').first().click(); // бій лише на сторінці: дзеркало лишається на точці сейву
+    await page.locator('#ufos button.mission').first().click();
     await expect(page.locator('#battle-panel')).toBeVisible();
     await page.locator('#btn-menu').click();
     await page.locator('#btn-menu-exit').click();

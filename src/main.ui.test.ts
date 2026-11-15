@@ -680,10 +680,11 @@ describe('панель збереження: 3 слоти, лише на гео�
     expect($('battle-panel').classList.contains('hidden')).toBe(false);
     return money;
   };
-  const exitToStart = (): void => {
+  const exitToStart = (unsaved: boolean): void => {
     btn('btn-menu').click();
     btn('btn-menu-exit').click();
-    if (!$('exit-confirm').classList.contains('hidden')) btn('btn-exit-yes').click();
+    expect($('exit-confirm').classList.contains('hidden')).toBe(!unsaved); // підтвердження — лише коли є що втрачати
+    if (unsaved) btn('btn-exit-yes').click();
     expect($('start-screen').classList.contains('hidden')).toBe(false);
   };
   const expectLoadedGeo = (money: string): void => {
@@ -700,23 +701,23 @@ describe('панель збереження: 3 слоти, лише на гео�
 
   it('Т.47: «Продовжити» після виходу з бою, що триває, завантажує сейв і закриває бій', () => {
     const money = saveTickAndLaunch();
-    exitToStart();
+    exitToStart(true);
     btn('btn-start-continue').click();
     expectLoadedGeo(money);
     // місія з сейву на місці: новий бій починається з першого ходу
     (document.querySelector('button.mission') as HTMLButtonElement).click();
     expect($('bctx-turn').textContent).toBe('хід 1 · загін');
-    exitToStart();
+    exitToStart(true);
   });
 
   it('Т.47: «Продовжити» після виходу з екрана результату бою — банера результату немає', async () => {
     const money = saveTickAndLaunch();
     await runAutoBattle();
     expect($('bresult').textContent).toMatch(/ЗАЧИЩЕНО|ЗАГІН ВТРАЧЕНО/);
-    exitToStart();
+    exitToStart(true);
     btn('btn-start-continue').click();
     expectLoadedGeo(money);
-    exitToStart();
+    exitToStart(false);
   });
 });
 
