@@ -65,10 +65,13 @@ describe('Т.43: вісім рядків «Наступний крок» — д�
     expect(text(p)).toBe('Наступний крок: на складі є спорядження — видайте оперативникам');
   });
 
-  it('7. перехоплювач пошкоджений', () => {
+  it('7. перехоплювач пошкоджений і кредитів на ремонт вистачає (50); без кредитів — рядок 8', () => {
     const p = createParty(42);
     p.intercept.fighter.hp = 1;
+    p.econ.money = 50;
     expect(text(p)).toBe('Наступний крок: перехоплювач пошкоджений — замовте ремонт');
+    p.econ.money = 49;
+    expect(text(p)).toBe('Наступний крок: рухайте час — сенсорна сітка шукає зонди');
   });
 });
 
@@ -136,6 +139,35 @@ describe('Т.43: пріоритети і межі умов', () => {
     expect(text(p)).toContain('рухайте час');
     p.intercept.fighter.gunModule = false;
     expect(text(p)).toContain('замовте предмет');
+  });
+
+  it('без боєготових рядок 4 — раніше за 5, 6 і 7; збитий зонд без боєготових — теж рядок 4', () => {
+    const p = createParty(42);
+    woundAll(p);
+    p.econ.money = 10_000;
+    p.intercept.fighter.hp = 1;
+    p.workshop.store.armor = 1;
+    p.research.completed.push('medkit');
+    addUfo(p, 'збитий');
+    expect(text(p)).toContain('немає боєготових');
+  });
+
+  it('предмет уже на складі — не «замовте», а «видайте»', () => {
+    const p = createParty(42);
+    p.econ.money = 10_000;
+    p.research.completed.push('armor');
+    expect(text(p)).toContain('замовте предмет');
+    p.workshop.store.armor = 1;
+    expect(text(p)).toContain('видайте оперативникам');
+  });
+
+  it('банкрутство ще до тіку (боєготових немає, на вербування бракує) — рядок прихований, а не «вербуйте»', () => {
+    const p = createParty(42);
+    woundAll(p);
+    p.econ.money = 100; // вербування на «нормі» — 100
+    expect(text(p)).toContain('немає боєготових');
+    p.econ.money = 99;
+    expect(text(p)).toBeNull();
   });
 
   it('рядок прихований: бій, банкрутство, повітряний бій, кампанію завершено', () => {

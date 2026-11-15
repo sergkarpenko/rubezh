@@ -1086,6 +1086,12 @@
         overflow: hidden;
         text-overflow: ellipsis;
       }
+      /* вузьке вікно (телефон): сторінка і так прокручується — порада переноситься, а не обрізається */
+      @media (max-width: 899px) {
+        #next-step {
+          white-space: normal;
+        }
+      }
       /* Т.43: третя кнопка часу («До події») — на вікні завширшки з iPad (1024 px)
          шапка лишається в один рядок: щільніші проміжки чипів і кнопок */
       @media (min-width: 900px) and (max-width: 1180px) {
@@ -1102,6 +1108,10 @@
         #topbar .actions button {
           padding-left: 8px;
           padding-right: 8px;
+        }
+        /* проміжок рядів тут 4 px — від'ємне поле рядка «Наступний крок» налазило б на чипи */
+        #next-step {
+          margin-top: 0;
         }
       }
       .hidden {

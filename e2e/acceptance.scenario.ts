@@ -241,6 +241,20 @@ test('сценарій приймання ADR-0030: партія → місія 
       };
     });
     expect(Math.abs(bar.event - bar.chips), 'кнопки часу з’їхали в другий рядок шапки на 1024×768').toBeLessThanOrEqual(8);
+    // рядок «Наступний крок» на 1024 × 768: видимий, під кнопками й чипами, не обрізаний
+    const stepSmall = await page.evaluate(() => {
+      const s = document.getElementById('next-step')!;
+      const bottom = (sel: string): number => document.querySelector(sel)!.getBoundingClientRect().bottom;
+      const r = s.getBoundingClientRect();
+      return {
+        h: r.height,
+        gap: r.top - Math.max(bottom('#topbar .chips'), bottom('#topbar .actions')),
+        fits: s.scrollWidth <= s.clientWidth,
+      };
+    });
+    expect(stepSmall.h, 'рядок «Наступний крок» не видно на 1024×768').toBeGreaterThan(0);
+    expect(stepSmall.gap, 'рядок «Наступний крок» налазить на перший ряд шапки на 1024×768').toBeGreaterThanOrEqual(0);
+    expect(stepSmall.fits, 'текст рядка «Наступний крок» обрізано на 1024×768').toBe(true);
     expect(bar.page, 'сторінка довша за вікно на 1024×768').toBeLessThanOrEqual(bar.win);
     await page.setViewportSize({ width: 1440, height: 900 });
   });
