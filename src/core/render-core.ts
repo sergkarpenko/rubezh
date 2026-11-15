@@ -148,6 +148,28 @@ export function hasVisibleNeighbor(vis: ReadonlySet<string>, x: number, y: numbe
   return vis.has(x - 1 + ',' + y) || vis.has(x + 1 + ',' + y) || vis.has(x + ',' + (y - 1)) || vis.has(x + ',' + (y + 1));
 }
 
+// Т.44: межа зору — відрізки на спільній стороні пари «видима клітинка —
+// невидима сусідка» (4 напрямки). Координати — у клітинках (вузли сітки);
+// край поля межею не є: сусідки поза переліком клітинок немає.
+export interface CellEdge {
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+}
+export function fogBorderSegments(cells: readonly TerrainCell[]): CellEdge[] {
+  const fog = new Set(cells.filter((c) => !c.visible).map((c) => c.x + ',' + c.y));
+  const out: CellEdge[] = [];
+  for (const c of cells) {
+    if (!c.visible) continue;
+    if (fog.has(c.x + 1 + ',' + c.y)) out.push({ x1: c.x + 1, y1: c.y, x2: c.x + 1, y2: c.y + 1 });
+    if (fog.has(c.x - 1 + ',' + c.y)) out.push({ x1: c.x, y1: c.y, x2: c.x, y2: c.y + 1 });
+    if (fog.has(c.x + ',' + (c.y + 1))) out.push({ x1: c.x, y1: c.y + 1, x2: c.x + 1, y2: c.y + 1 });
+    if (fog.has(c.x + ',' + (c.y - 1))) out.push({ x1: c.x, y1: c.y, x2: c.x + 1, y2: c.y });
+  }
+  return out;
+}
+
 // --- П6.8 (ADR-0029): анімаційний рушій — черга + rAF лише під час активних анімацій ---
 
 // Тривалості фаз (мс): стримана анімація, без поспіху (дизайн-сесія 6b).

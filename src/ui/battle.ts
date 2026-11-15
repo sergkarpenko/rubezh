@@ -7,7 +7,7 @@
 // застосунок (замість глобальних let — мітигація плану рефакторингу);
 // обробники вводу (модуль input) працюють із тим самим об'єктом.
 
-import { ALIEN_SPAWN, SQUAD_SPAWN, completeMission, createMission, missionOutcome, type Mission } from '../core/mission';
+import { SQUAD_SPAWN, completeMission, createMission, missionOutcome, type Mission } from '../core/mission';
 import { applyMissionResult, missionSquad } from '../core/squad';
 // Т.28 (ADR-0091): броня й око загиблих — на склад, витратники зникають.
 // П11.4 (ADR-0058): витратники загону — копія в бій і розрахунок після бою.
@@ -345,8 +345,6 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
     ctx.setLineDash([3, 3]);
     ctx.strokeStyle = 'rgba(110,168,255,0.5)';
     for (const p of SQUAD_SPAWN) ctx.strokeRect(p.x * BCELL + 2, p.y * BCELL + 2, BCELL - 5, BCELL - 5);
-    ctx.strokeStyle = 'rgba(255,107,107,0.5)';
-    for (const p of ALIEN_SPAWN) ctx.strokeRect(p.x * BCELL + 2, p.y * BCELL + 2, BCELL - 5, BCELL - 5);
     ctx.setLineDash([]);
 
     // прев'ю шляху під курсором: зелені крапки — вистачає AP, червоні — ні

@@ -16,6 +16,7 @@ import { expect, test, type Page } from '@playwright/test';
 import { TICK_MINUTES } from '../src/core/geo';
 import { MISSION_MAP_H, MISSION_MAP_W } from '../src/core/mission';
 import type { Vec2 } from '../src/core/combat';
+import { cellHash } from '../src/core/render-core';
 import { CoreMirror, enemyLine, unitLine } from './mirror';
 
 const SEED = 42;
@@ -283,6 +284,41 @@ test('сценарій приймання ADR-0030: партія → місія 
     // Т.33: ціна в AP і клавіша — у кутках плиток дій
     await expect(page.locator('#btoolbar .tb-key')).toHaveText(['1', '2', '3', 'O', 'M', 'G', 'E']);
     await expect(page.locator('#btoolbar .tb-ap')).toHaveText(['3 AP', '5 AP', '4 AP', '3 AP', '4 AP', '4 AP']); // snap, aimed, auto, дозор, гель, граната
+    // Т.44: туман знебарвлено — у клітинках туману (без стіни, декору, юніта і м'якого краю) середній розкид
+    // каналів max(R,G,B) − min(R,G,B) у центральній ділянці 24 × 24 px не більший за 9 (до Т.44 — 13,6–18,3);
+    // видимі клітинки кольорові. Пікселі канви від шрифту машини не залежать.
+    const seen = mirror.seen();
+    const st = mirror.state;
+    const plain = (x: number, y: number): boolean =>
+      !st.map.blocked.has(x + ',' + y) && cellHash(x, y) % 37 > 2 && !st.units.some((u) => u.pos.x === x && u.pos.y === y);
+    const inSeen = (x: number, y: number): boolean => seen.has(x + ',' + y);
+    const fogCells: Vec2[] = [];
+    const seenCells: Vec2[] = [];
+    for (let y = 0; y < MISSION_MAP_H; y++)
+      for (let x = 0; x < MISSION_MAP_W; x++) {
+        if (!plain(x, y)) continue;
+        if (inSeen(x, y)) seenCells.push({ x, y });
+        else if (!inSeen(x - 1, y) && !inSeen(x + 1, y) && !inSeen(x, y - 1) && !inSeen(x, y + 1)) fogCells.push({ x, y });
+      }
+    expect(fogCells.length).toBeGreaterThan(20);
+    expect(seenCells.length).toBeGreaterThan(20);
+    const spread = (cells: Vec2[]): Promise<number[]> =>
+      page.evaluate((cs) => {
+        const cv = document.getElementById('battle') as HTMLCanvasElement;
+        const d = cv.getContext('2d')!.getImageData(0, 0, cv.width, cv.height).data;
+        return cs.map((c) => {
+          let sum = 0;
+          for (let y = c.y * 48 + 12; y < c.y * 48 + 36; y++)
+            for (let x = c.x * 48 + 12; x < c.x * 48 + 36; x++) {
+              const i = (y * cv.width + x) * 4;
+              sum += Math.max(d[i]!, d[i + 1]!, d[i + 2]!) - Math.min(d[i]!, d[i + 1]!, d[i + 2]!);
+            }
+          return sum / (24 * 24);
+        });
+      }, cells);
+    await expect.poll(async () => Math.max(...(await spread(fogCells))), { message: 'Т.44: туман знебарвлено' }).toBeLessThanOrEqual(9);
+    const seenSpread = await spread(seenCells);
+    expect(seenSpread.reduce((a, v) => a + v, 0) / seenSpread.length, 'Т.44: видимі клітинки кольорові').toBeGreaterThan(12);
     await expectBattleFits(page, '1440 × 900', 740);
     await page.setViewportSize({ width: 1366, height: 768 });
     await expectBattleFits(page, '1366 × 768', 640);

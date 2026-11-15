@@ -834,6 +834,10 @@ describe('П6.14: UX прицілювання — обведення цілей,
     tap(4, 2); // перший тап — прев'ю шляху (1 AP)
     tap(4, 2); // повторний тап — хід
     expect($('bctx-unit').textContent).toContain('AP 9/10');
+    // Т.44 (рішення власника): синій пунктир зони висадки лишився, червоного пунктиру старту демонів немає
+    expect(canvasOps.includes('set:strokeStyle=rgba(110,168,255,0.5)')).toBe(true);
+    expect(canvasOps.some((o) => /^strokeRect\(\d+,\d+,43,43\)$/.test(o))).toBe(true);
+    expect(canvasOps.some((o) => o.includes('255,107,107'))).toBe(false);
     // до зведення режиму цілі не обведені
     expect(canvasOps.includes(frame(16, 2))).toBe(false);
   });
