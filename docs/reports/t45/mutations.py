@@ -2,12 +2,13 @@
 """Т.45: навмисні поломки прев'ю шляху в режимах.
 
 Запуск із кореня репозиторію: python3 docs/reports/t45/mutations.py [--no-e2e]
-Працює над копією репозиторію в тимчасовій теці (node_modules — посиланням), репозиторію не змінює.
+Працює над копією репозиторію в тимчасовій теці (node_modules — посиланням); відстежуваних файлів
+репозиторію не змінює, але vitest через посилання пише свій кеш у node_modules/.vite вихідного клону.
 Для e2e потрібен E2E_CHROME (або встановлений браузер Playwright) і вільний порт 4173.
 """
 import os, shutil, subprocess, sys, tempfile, time
 
-if len(sys.argv) > 1 and sys.argv[1] not in ("--no-e2e",):
+if any(arg != "--no-e2e" for arg in sys.argv[1:]):
     sys.exit(__doc__)
 WITH_E2E = "--no-e2e" not in sys.argv
 ROOT = os.getcwd()
@@ -27,6 +28,7 @@ HOVER = """  function battleCanvasHover(ev: MouseEvent): void {
 # назва, файл, було, стало, чи ганяти e2e
 MUTATIONS = [
     ("наведення: умова без режиму пострілу", INPUT, GUARD, GUARD.replace("ui.fireMode !== null || ", ""), True),
+    ("наведення: з режимів пострілу лише швидкий", INPUT, GUARD, GUARD.replace("ui.fireMode !== null", "ui.fireMode === 'snap'"), True),
     ("наведення: умова без витратників", INPUT, GUARD, GUARD.replace(" || ui.itemMode !== null", ""), False),
     ("наведення: з витратників лише граната", INPUT, GUARD, GUARD.replace("ui.itemMode !== null", "ui.itemMode === 'grenade'"), False),
     ("наведення: з витратників лише гель", INPUT, GUARD, GUARD.replace("ui.itemMode !== null", "ui.itemMode === 'medkit'"), False),
@@ -37,8 +39,11 @@ MUTATIONS = [
     ("наведення: умова спрацьовує і без режиму", INPUT, GUARD, GUARD.replace("ui.fireMode !== null || ui.itemMode !== null", "true"), True),
     ("авто-бій: #binfo переписується", INPUT, "if (path && !deps.autoBusy()) {", "if (path) {", False),
     ("авто-бій: #binfo лише в авто-бої", INPUT, "if (path && !deps.autoBusy()) {", "if (path && deps.autoBusy()) {", True),
+    ("авто-бій: «Не вистачає AP» переписує #binfo", INPUT, "if (path && !deps.autoBusy()) {", "if (path && (!deps.autoBusy() || ui.hoverAp > sel.ap)) {", False),
     ("авто-бій: наведення вимкнено зовсім", INPUT, HOVER, HOVER + "    if (deps.autoBusy()) return;\n", False),
     ("малювання: умова без режиму пострілу", BATTLE, COND, COND.replace(" && ui.fireMode === null", ""), True),
+    ("малювання: з режимів пострілу лише швидкий", BATTLE, COND, COND.replace("ui.fireMode === null", "ui.fireMode !== 'snap'"), True),
+    ("малювання: в авто-бої прев'ю сховано", BATTLE, COND, COND.replace(") {", " && !deps.autoBusy()) {"), False),
     ("малювання: умова без витратників", BATTLE, COND, COND.replace(" && ui.itemMode === null", ""), False),
     ("малювання: з витратників лише граната", BATTLE, COND, COND.replace("ui.itemMode === null", "ui.itemMode !== 'grenade'"), False),
     ("малювання: з витратників лише гель", BATTLE, COND, COND.replace("ui.itemMode === null", "ui.itemMode !== 'medkit'"), False),

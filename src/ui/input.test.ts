@@ -512,14 +512,16 @@ describe('Т.45: прев\u2019ю шляху під курсором у режи
   });
 
   it('зведений постріл: наведення на порожню клітинку шляху не дає і підказку режиму не переписує', () => {
-    const { f, hover } = hoverFixture();
-    f.input.armFire('snap');
-    expect(f.ui.fireMode).toBe('snap');
-    const hint = f.binfo();
-    hover();
-    expect(f.ui.hoverPath).toBeNull();
-    expect(f.binfo()).toBe(hint);
-    expect(hint).not.toMatch(PATH_HINT);
+    for (const mode of ['snap', 'aimed', 'auto'] as const) {
+      const { f, hover } = hoverFixture();
+      f.input.armFire(mode);
+      expect(f.ui.fireMode).toBe(mode);
+      const hint = f.binfo();
+      hover();
+      expect(f.ui.hoverPath).toBeNull();
+      expect(f.binfo()).toBe(hint);
+      expect(hint).not.toMatch(PATH_HINT);
+    }
   });
 
   it('граната і гель: наведення шляху не дає, підказка режиму лишається', () => {
@@ -557,6 +559,15 @@ describe('Т.45: прев\u2019ю шляху під курсором у режи
     f.battle.binfo('Авто-бій триває.');
     hover();
     expect(f.ui.hoverPath).not.toBeNull();
+    expect(f.binfo()).toBe('Авто-бій триває.');
+  });
+
+  it('авто-бій: і коли AP на шлях не вистачає, #binfo не переписується', () => {
+    const { f, s, hover } = hoverFixture(true);
+    s.ap = 0;
+    f.battle.binfo('Авто-бій триває.');
+    hover();
+    expect(f.ui.hoverAp).toBeGreaterThan(s.ap);
     expect(f.binfo()).toBe('Авто-бій триває.');
   });
 });

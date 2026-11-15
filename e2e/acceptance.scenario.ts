@@ -402,6 +402,8 @@ test('сценарій приймання ADR-0030: партія → місія 
     await page.keyboard.press('Digit1');
     await expect(page.locator('#btn-snap')).toHaveClass(/armed/);
     const armedHint = await info.textContent();
+    // миша ще стоїть на цілі після тапу: шлях ховає сама умова малювання, без жодного наведення
+    await expect.poll(greenAt, { message: 'Т.45: одразу після зведення шляху немає' }).toEqual(points.map(() => false));
     await page.locator('#battle').hover({ position: { x: 3, y: 3 } });
     const box = (await page.locator('#battle').boundingBox())!;
     const goalCell = option.path[option.path.length - 1]!;
