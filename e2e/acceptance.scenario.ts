@@ -239,6 +239,20 @@ test('сценарій приймання ADR-0030: партія → місія 
       };
     });
     expect(Math.abs(bar.event - bar.chips), 'кнопки часу з’їхали в другий рядок шапки на 1024×768').toBeLessThanOrEqual(8);
+    // рядок «Наступний крок» на 1024 × 768: видимий, під кнопками й чипами, не обрізаний
+    const stepSmall = await page.evaluate(() => {
+      const s = document.getElementById('next-step')!;
+      const bottom = (sel: string): number => document.querySelector(sel)!.getBoundingClientRect().bottom;
+      const r = s.getBoundingClientRect();
+      return {
+        h: r.height,
+        gap: r.top - Math.max(bottom('#topbar .chips'), bottom('#topbar .actions')),
+        fits: s.scrollWidth <= s.clientWidth,
+      };
+    });
+    expect(stepSmall.h, 'рядок «Наступний крок» не видно на 1024×768').toBeGreaterThan(0);
+    expect(stepSmall.gap, 'рядок «Наступний крок» налазить на перший ряд шапки на 1024×768').toBeGreaterThanOrEqual(0);
+    expect(stepSmall.fits, 'текст рядка «Наступний крок» обрізано на 1024×768').toBe(true);
     expect(bar.page, 'сторінка довша за вікно на 1024×768').toBeLessThanOrEqual(bar.win);
     await page.setViewportSize({ width: 1440, height: 900 });
   });
@@ -249,6 +263,7 @@ test('сценарій приймання ADR-0030: партія → місія 
     await page.locator('#ufos button.mission').first().click();
     await expect(page.locator('#battle-panel')).toBeVisible();
     await expect(page.locator('#bctx-kind')).toHaveText(mission.briefing.kind);
+    await expect(page.locator('#next-step')).toBeHidden(); // Т.43: у бою рядка «Наступний крок» немає
     await expect(page.locator('#bctx-turn')).toHaveText('хід 1 · загін');
     await expect(unit).toHaveText('не вибраний');
     // Т.32: розкладка бою на трьох розмірах вікна (журнал збоку / смугою)
@@ -355,8 +370,35 @@ test('сценарій приймання ADR-0030: партія → місія 
     await expect(clock).toHaveText(mirror.clock());
     // Т.43: «+1 доба» зупиняється на виявленні й приземленні зонда, «До події» —
     // на першій події; дзеркало рухається за тим самим правилом (mirror.ts).
+    // Т.43: рядок «Наступний крок» — текст за станом дзеркала (цілі місії, зонди в повітрі)
+    const stepText = (): string => {
+      const landed = mirror.targets().filter((u) => u.status === 'приземлився');
+      if (landed.length > 0) {
+        const hours = (Math.min(...landed.map((u) => u.landedTicksLeft)) * TICK_MINUTES) / 60;
+        return 'Наступний крок: зонд приземлився — запустіть місію (вікно ' + hours + ' год)';
+      }
+      if (mirror.detected().some((u) => u.status === 'летить'))
+        return 'Наступний крок: зонд у повітрі — перехопіть або чекайте приземлення';
+      return 'Наступний крок: рухайте час — сенсорна сітка шукає зонди';
+    };
+    await expect(page.locator('#next-step')).toHaveText(stepText());
+    // рядок — другим рядком шапки на всю її ширину, текст не обрізано
+    const stepBox = await page.evaluate(() => {
+      const s = document.getElementById('next-step')!;
+      const r = s.getBoundingClientRect();
+      const chips = document.querySelector('#topbar .chips')!.getBoundingClientRect();
+      return {
+        below: r.top >= chips.bottom,
+        wide: r.width / document.getElementById('topbar')!.getBoundingClientRect().width,
+        fits: s.scrollWidth <= s.clientWidth,
+      };
+    });
+    expect(stepBox.below, 'рядок «Наступний крок» має бути під чипами шапки').toBe(true);
+    expect(stepBox.wide, 'рядок «Наступний крок» — на всю ширину шапки').toBeGreaterThan(0.9);
+    expect(stepBox.fits, 'текст рядка «Наступний крок» обрізано').toBe(true);
     await page.locator('#btn-day').click();
     const dayTicks = mirror.dayWithStops();
+    await expect(page.locator('#next-step')).toHaveText(stepText());
     await expect(clock).toHaveText(mirror.clock());
     await expect(page.locator('#btn-event')).toHaveText('До події');
     await page.locator('#btn-event').click();
