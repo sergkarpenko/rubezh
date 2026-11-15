@@ -329,8 +329,40 @@ test('сценарій приймання ADR-0030: партія → місія 
 
   await test.step('бій: вибрати юніта → рух (тап-тап)', async () => {
     const soldier = mirror.squad()[0];
+    // Т.44: зона ходу — на пікселях канви. Середній зелений канал центральної ділянки 24 × 24 px кожної клітинки
+    // до і після вибору оперативника: заливка зони rgba(127,226,160,0.09) піднімає його щонайменше на 2 (на сіді сценарію — від 9,2),
+    // поза зоною він не міняється. Множина таких клітинок дорівнює зоні з дзеркала (findPath до кожної клітинки).
+    const greens = (): Promise<number[]> =>
+      page.evaluate(() => {
+        const cv = document.getElementById('battle') as HTMLCanvasElement;
+        const d = cv.getContext('2d')!.getImageData(0, 0, cv.width, cv.height).data;
+        const out: number[] = [];
+        for (let cy = 0; cy < cv.height / 48; cy++)
+          for (let cx = 0; cx < cv.width / 48; cx++) {
+            let sum = 0;
+            for (let y = cy * 48 + 12; y < cy * 48 + 36; y++)
+              for (let x = cx * 48 + 12; x < cx * 48 + 36; x++) sum += d[(y * cv.width + x) * 4 + 1]!;
+            out.push(sum / (24 * 24));
+          }
+        return out;
+      });
+    const before = await greens();
     await tap(page, soldier.pos);
     await expect(unit).toHaveText(unitLine(soldier));
+    const reach = mirror.reach(soldier);
+    expect(reach.size, 'Т.44: зона першого оперативника на старті (сід сценарію, 10 AP)').toBeGreaterThan(40);
+    const drawn = async (): Promise<string> => {
+      const after = await greens();
+      const cells: string[] = [];
+      after.forEach((g, i) => {
+        const x = i % MISSION_MAP_W;
+        const y = Math.floor(i / MISSION_MAP_W);
+        // клітинки загону не рахуються: рамка вибору і спрайт міняють їхні пікселі, у зоні їх немає
+        if (g - before[i]! >= 2 && !mirror.squad().some((u) => u.pos.x === x && u.pos.y === y)) cells.push(x + ',' + y);
+      });
+      return cells.sort().join(' ');
+    };
+    await expect.poll(drawn, { message: 'Т.44: зона ходу на канві = зона з дзеркала' }).toBe([...reach].sort().join(' '));
     // Т.33: причина під неактивною плиткою — у загоні на старті немає гелю
     await expect(page.locator('#btn-medkit .tb-cap')).toHaveText('немає гелю');
     // ADR-0081: демон у тумані не видає себе — тап по його клітинці дає те

@@ -175,6 +175,20 @@ export class CoreMirror {
     throw new Error('Дзеркало: біля ' + u.name + ' немає вільної клітинки для ходу');
   }
 
+  // Т.44: зона ходу юніта — клітинки, до яких findPath за видимим дає шлях не
+  // дорожчий за його AP. Порахована окремо від reachableCells ядра (пошук шляху
+  // до кожної клітинки) — дзеркало лишається незалежним оракулом для сторінки.
+  reach(u: Unit): Set<string> {
+    const seen = this.seen();
+    const zone = new Set<string>();
+    for (let y = 0; y < this.state.map.height; y++)
+      for (let x = 0; x < this.state.map.width; x++) {
+        const path = findPath(this.state, u.pos, { x, y }, undefined, seen);
+        if (path !== null && path.length > 0 && pathApCost(path) <= u.ap) zone.add(x + ',' + y);
+      }
+    return zone;
+  }
+
   move(u: Unit, option: MoveOption): void {
     moveUnit(this.state, u.id, option.path, true);
   }

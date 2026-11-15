@@ -5,7 +5,7 @@
 // детермінованій партії (сід 42). DOM-флоу застосунку — у main.ui.test.ts.
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { advanceTime, missionTargets } from '../core/geo';
-import { createGame, makeUnit, type GameState, type Unit } from '../core/combat';
+import { createGame, makeUnit, moveUnit, type GameState, type Unit } from '../core/combat';
 import { createParty, type Party } from '../core/save';
 import { initPixelSprites } from '../render';
 import { makeDeathAnim, makeTracerAnim } from '../core/render-core';
@@ -556,5 +556,138 @@ describe('Фікс П14.8 (фідбек валідації): смерть у ч�
     const ops2 = withRecCtx(() => f.battle.renderBattle());
     // віддзеркалене дуло: round(264−22)+(44−1−5) = 280
     expect(ops2).toContain('moveTo(280,266)');
+  });
+});
+
+describe('Т.44: зона ходу вибраного оперативника на канві бою', () => {
+  // журнал операцій з кольором заливки й обведення: клітинка зони — fillRect(x·48+1, y·48+1, 46, 46)
+  const render = (f: Fixture): string[] => {
+    const ops: string[] = [];
+    const ctx = new Proxy(
+      {},
+      {
+        get:
+          (_t, p) =>
+          (...args: unknown[]) => {
+            ops.push(String(p) + '(' + args.map(String).join(',') + ')');
+            return undefined;
+          },
+        set: (_t, p, v) => {
+          ops.push('set:' + String(p) + '=' + String(v));
+          return true;
+        },
+      }
+    ) as unknown as CanvasRenderingContext2D;
+    const proto = HTMLCanvasElement.prototype as unknown as { getContext: () => CanvasRenderingContext2D };
+    const prev = proto.getContext;
+    proto.getContext = () => ctx;
+    try {
+      f.battle.renderBattle();
+    } finally {
+      proto.getContext = prev;
+    }
+    return ops;
+  };
+  // клітинки зони в порядку малювання: заливки кольором зони
+  const zone = (ops: string[]): string[] => {
+    const out: string[] = [];
+    let fill = '';
+    for (const o of ops) {
+      if (o.startsWith('set:fillStyle=')) fill = o.slice(14);
+      const m = /^fillRect\((\d+),(\d+),46,46\)$/.exec(o);
+      if (m && fill === 'rgba(127,226,160,0.09)') out.push((Number(m[1]) - 1) / 48 + ',' + (Number(m[2]) - 1) / 48);
+    }
+    return out;
+  };
+  const outlined = (ops: string[]): boolean => ops.includes('set:strokeStyle=rgba(127,226,160,0.75)');
+
+  // керований бій: відкрита мапа зі стіною (6,5); оперативник (5,5) з 2 AP, демон далеко
+  function setup(ap = 2, alien = { x: 15, y: 15 }, over: Partial<BattleDeps> = {}): { f: Fixture; g: GameState } {
+    const f = makeFixture(over);
+    f.battle.launch(firstTarget(f));
+    const g = createGame({
+      map: { width: 20, height: 20, blocked: new Set(['6,5']) },
+      units: [
+        makeUnit({ id: 's1', side: 'player', name: 'Гарт', pos: { x: 5, y: 5 }, ap, maxAp: ap }), // createGame видає стороні, що ходить, maxAp
+        makeUnit({ id: 'a1', side: 'alien', name: 'Морок', pos: alien }),
+      ],
+    });
+    f.ui.mission!.state = g;
+    f.ui.selectedId = 's1';
+    return { f, g };
+  }
+
+  it('після вибору оперативника — зона за його AP і контур; стіна в зону не входить', () => {
+    const { f } = setup();
+    const ops = render(f);
+    // ромб на 2 AP — 12 клітинок, мінус стіна (6,5) і клітинка (7,5) за нею
+    expect(zone(ops).sort()).toEqual(['3,5', '4,4', '4,5', '4,6', '5,3', '5,4', '5,6', '5,7', '6,4', '6,6']);
+    expect(outlined(ops)).toBe(true);
+  });
+
+  it('зони немає: без вибору, у зведеному режимі пострілу, у режимі витратника, під час ходу демонів, після бою, при 0 AP', () => {
+    const none = (prep: (f: Fixture, g: GameState) => void, ap = 2): void => {
+      const { f, g } = setup(ap);
+      prep(f, g);
+      const ops = render(f);
+      expect(zone(ops)).toEqual([]);
+      expect(outlined(ops)).toBe(false);
+    };
+    none((f) => (f.ui.selectedId = null));
+    none((f) => (f.ui.fireMode = 'snap'));
+    none((f) => (f.ui.itemMode = 'grenade'));
+    none((f) => (f.ui.itemMode = 'medkit'));
+    none((_f, g) => (g.activeSide = 'alien'));
+    none((f) => (f.ui.battleResult = 'перемога'));
+    none(() => {}, 0);
+  });
+
+  it('шар зони — після синіх квадратів висадки, до крапок шляху і під юнітами', () => {
+    const { f } = setup();
+    f.ui.hoverPath = [{ x: 5, y: 4 }];
+    f.ui.hoverAp = 1;
+    const ops = render(f);
+    const fills = ops.map((o, i) => (/^fillRect\(\d+,\d+,46,46\)$/.test(o) ? i : -1)).filter((i) => i >= 0);
+    expect(fills).toHaveLength(10);
+    const squares = ops.indexOf('set:strokeStyle=rgba(110,168,255,0.5)');
+    const outline = ops.indexOf('set:strokeStyle=rgba(127,226,160,0.75)');
+    const path = ops.findIndex((o) => o.startsWith('arc(264,216,3,')); // крапка прев'ю шляху в клітинці (5,4)
+    const unitHp = ops.findIndex((o) => o.startsWith('fillText(10,')); // плашка HP юніта
+    expect(squares).toBeGreaterThan(-1);
+    expect(fills[0]).toBeGreaterThan(squares);
+    expect(outline).toBeGreaterThan(fills[9]!);
+    expect(path).toBeGreaterThan(outline);
+    expect(unitHp).toBeGreaterThan(path);
+  });
+
+  it('поки грає плашка ходу демонів (хід уже гравця, анімації ще йдуть), зони немає; після неї — є', () => {
+    vi.useFakeTimers();
+    try {
+      const { f, g } = setup(2, { x: 15, y: 15 }, { hasRaf: () => true });
+      f.battle.alienTurnDone(g.log.length, '');
+      expect(g.activeSide).toBe('player');
+      expect(f.battle.playerTurnActive()).toBe(false);
+      expect(zone(render(f))).toEqual([]);
+      f.battle.dismissTurnPlate(true);
+      expect(f.battle.playerTurnActive()).toBe(true);
+      expect(zone(render(f))).toHaveLength(10);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('після руху зона перерахована від нової клітинки з новим AP', () => {
+    const { f, g } = setup();
+    moveUnit(g, 's1', [{ x: 5, y: 4 }]);
+    expect(zone(render(f)).sort()).toEqual(['4,4', '5,3', '5,5', '6,4']); // 1 AP від (5,4)
+  });
+
+  it('видимий демон обрізає зону, демон у тумані — ні (ADR-0081)', () => {
+    expect(zone(render(setup(1, { x: 5, y: 4 }).f)).sort()).toEqual(['4,5', '5,6']);
+    // демон (7,5) за стіною (6,5) — у тумані; з 4 AP його клітинка в зоні (обхід 5,4 → 6,4 → 7,4 → 7,5)
+    const { f, g } = setup(4, { x: 7, y: 5 });
+    expect(zone(render(f))).toContain('7,5');
+    (g.map.blocked as Set<string>).delete('6,5'); // стіни немає — демона видно, клітинка зайнята
+    expect(zone(render(f))).not.toContain('7,5');
   });
 });
