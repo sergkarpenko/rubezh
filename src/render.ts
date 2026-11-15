@@ -692,8 +692,8 @@ export function drawReachZone(
   ctx.lineWidth = REACH_OUTLINE_W;
   ctx.beginPath();
   for (const e of zoneOutlineSegments(zone)) {
-    ctx.moveTo(e.x1 * cell + e.nx, e.y1 * cell + e.ny);
-    ctx.lineTo(e.x2 * cell + e.nx, e.y2 * cell + e.ny);
+    ctx.moveTo(e.x1 * cell + e.nx, e.y1 * cell + e.ny - e.e1);
+    ctx.lineTo(e.x2 * cell + e.nx, e.y2 * cell + e.ny + e.e2);
   }
   ctx.stroke();
   ctx.restore();

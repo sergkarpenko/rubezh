@@ -214,7 +214,7 @@ describe('Т.44: reachableCells — зона ходу', () => {
     expect(reachableCells(g, from, 1).has('3,2')).toBe(true);
   });
 
-  it('звірка з findPath на кожній клітинці: чотири сіди мапи, шість значень AP, з туманом і без', () => {
+  it('звірка з findPath на кожній клітинці: чотири сіди мапи, сім значень AP (одне дробове), з туманом і без', () => {
     for (const [seed, density] of [
       [1, 0.08],
       [7, 0.2],
@@ -239,7 +239,7 @@ describe('Т.44: reachableCells — зона ходу', () => {
             const p = findPath(g, from, { x, y }, undefined, seen);
             if (p !== null && p.length > 0) cost.set(x + ',' + y, pathApCost(p));
           }
-        for (const ap of [0, 1, 3, 6, 10, 40]) {
+        for (const ap of [0, 1, 2.5, 3, 6, 10, 40]) {
           const expected = new Set([...cost].filter(([, c]) => c <= ap).map(([k]) => k));
           expect(sorted(reachableCells(g, from, ap, seen)), 'сід ' + seed + ', ap ' + ap).toBe(sorted(expected));
         }

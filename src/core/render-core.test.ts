@@ -724,10 +724,10 @@ describe('Т.44: zoneOutlineSegments — контур зони ходу', () => 
   it('порожня множина — без відрізків; одна клітинка — чотири сторони зі зсувом усередину', () => {
     expect(zoneOutlineSegments(new Set())).toEqual([]);
     expect(zoneOutlineSegments(new Set(['3,5']))).toEqual([
-      { x1: 4, y1: 5, x2: 4, y2: 6, nx: -1, ny: 0 },
-      { x1: 3, y1: 5, x2: 3, y2: 6, nx: 1, ny: 0 },
-      { x1: 3, y1: 6, x2: 4, y2: 6, nx: 0, ny: -1 },
-      { x1: 3, y1: 5, x2: 4, y2: 5, nx: 0, ny: 1 },
+      { x1: 4, y1: 5, x2: 4, y2: 6, nx: -1, ny: 0, e1: 0, e2: 0 },
+      { x1: 3, y1: 5, x2: 3, y2: 6, nx: 1, ny: 0, e1: 0, e2: 0 },
+      { x1: 3, y1: 6, x2: 4, y2: 6, nx: 0, ny: -1, e1: 0, e2: 0 },
+      { x1: 3, y1: 5, x2: 4, y2: 5, nx: 0, ny: 1, e1: 0, e2: 0 },
     ]);
   });
 
@@ -735,7 +735,7 @@ describe('Т.44: zoneOutlineSegments — контур зони ходу', () => 
     const edges = zoneOutlineSegments(new Set(['0,0', '1,0']));
     expect(edges).toHaveLength(6);
     expect(edges.some((e) => e.x1 === 1 && e.x2 === 1)).toBe(false);
-    expect(edges).toContainEqual({ x1: 0, y1: 0, x2: 0, y2: 1, nx: 1, ny: 0 });
+    expect(edges).toContainEqual({ x1: 0, y1: 0, x2: 0, y2: 1, nx: 1, ny: 0, e1: 0, e2: 0 });
   });
 
   it('кожен відрізок лежить між клітинкою множини і клітинкою поза нею; зсув показує в бік множини', () => {
@@ -750,5 +750,25 @@ describe('Т.44: zoneOutlineSegments — контур зони ходу', () => 
       // нормаль: +1 — множина праворуч чи знизу від лінії (клітинка b), −1 — ліворуч чи згори (клітинка a)
       expect(vertical ? [e.nx, e.ny] : [e.ny, e.nx]).toEqual([keys.has(b) ? 1 : -1, 0]);
     }
+  });
+
+  it('увігнутий кут: вертикальний відрізок подовжено на 2 px у бік кута, опуклі кути й горизонтальні відрізки — без подовження', () => {
+    // «Г»: (0,0), (0,1), (1,1) — увігнутий кут у точці (1,1) між правою стороною (0,0) і верхом (1,1)
+    const edges = zoneOutlineSegments(new Set(['0,0', '0,1', '1,1']));
+    const ext = edges.filter((e) => e.e1 !== 0 || e.e2 !== 0);
+    expect(ext).toEqual([{ x1: 1, y1: 0, x2: 1, y2: 1, nx: -1, ny: 0, e1: 0, e2: 2 }]);
+    // дзеркально: (1,0), (0,1), (1,1) — ліва сторона (1,0) подовжена вниз; (0,0), (1,0), (1,1) — ліва сторона (1,1) вгору
+    expect(zoneOutlineSegments(new Set(['1,0', '0,1', '1,1'])).filter((e) => e.e1 + e.e2 > 0)).toEqual([
+      { x1: 1, y1: 0, x2: 1, y2: 1, nx: 1, ny: 0, e1: 0, e2: 2 },
+    ]);
+    expect(zoneOutlineSegments(new Set(['0,0', '1,0', '1,1'])).filter((e) => e.e1 + e.e2 > 0)).toEqual([
+      { x1: 1, y1: 1, x2: 1, y2: 2, nx: 1, ny: 0, e1: 2, e2: 0 },
+    ]);
+    expect(zoneOutlineSegments(new Set(['0,0', '1,0', '0,1'])).filter((e) => e.e1 + e.e2 > 0)).toEqual([
+      { x1: 1, y1: 1, x2: 1, y2: 2, nx: -1, ny: 0, e1: 2, e2: 0 },
+    ]);
+    // квадрат 2 × 2 і пряма смуга — увігнутих кутів немає
+    expect(zoneOutlineSegments(new Set(['0,0', '1,0', '0,1', '1,1'])).every((e) => e.e1 === 0 && e.e2 === 0)).toBe(true);
+    expect(zoneOutlineSegments(new Set(['0,0', '0,1', '0,2'])).every((e) => e.e1 === 0 && e.e2 === 0)).toBe(true);
   });
 });

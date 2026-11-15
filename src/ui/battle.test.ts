@@ -602,8 +602,8 @@ describe('Т.44: зона ходу вибраного оперативника �
   const outlined = (ops: string[]): boolean => ops.includes('set:strokeStyle=rgba(127,226,160,0.75)');
 
   // керований бій: відкрита мапа зі стіною (6,5); оперативник (5,5) з 2 AP, демон далеко
-  function setup(ap = 2, alien = { x: 15, y: 15 }): { f: Fixture; g: GameState } {
-    const f = makeFixture();
+  function setup(ap = 2, alien = { x: 15, y: 15 }, over: Partial<BattleDeps> = {}): { f: Fixture; g: GameState } {
+    const f = makeFixture(over);
     f.battle.launch(firstTarget(f));
     const g = createGame({
       map: { width: 20, height: 20, blocked: new Set(['6,5']) },
@@ -640,6 +640,40 @@ describe('Т.44: зона ходу вибраного оперативника �
     none((_f, g) => (g.activeSide = 'alien'));
     none((f) => (f.ui.battleResult = 'перемога'));
     none(() => {}, 0);
+  });
+
+  it('шар зони — після синіх квадратів висадки, до крапок шляху і під юнітами', () => {
+    const { f } = setup();
+    f.ui.hoverPath = [{ x: 5, y: 4 }];
+    f.ui.hoverAp = 1;
+    const ops = render(f);
+    const fills = ops.map((o, i) => (/^fillRect\(\d+,\d+,46,46\)$/.test(o) ? i : -1)).filter((i) => i >= 0);
+    expect(fills).toHaveLength(10);
+    const squares = ops.indexOf('set:strokeStyle=rgba(110,168,255,0.5)');
+    const outline = ops.indexOf('set:strokeStyle=rgba(127,226,160,0.75)');
+    const path = ops.findIndex((o) => o.startsWith('arc(264,216,3,')); // крапка прев'ю шляху в клітинці (5,4)
+    const unitHp = ops.findIndex((o) => o.startsWith('fillText(10,')); // плашка HP юніта
+    expect(squares).toBeGreaterThan(-1);
+    expect(fills[0]).toBeGreaterThan(squares);
+    expect(outline).toBeGreaterThan(fills[9]!);
+    expect(path).toBeGreaterThan(outline);
+    expect(unitHp).toBeGreaterThan(path);
+  });
+
+  it('поки грає плашка ходу демонів (хід уже гравця, анімації ще йдуть), зони немає; після неї — є', () => {
+    vi.useFakeTimers();
+    try {
+      const { f, g } = setup(2, { x: 15, y: 15 }, { hasRaf: () => true });
+      f.battle.alienTurnDone(g.log.length, '');
+      expect(g.activeSide).toBe('player');
+      expect(f.battle.playerTurnActive()).toBe(false);
+      expect(zone(render(f))).toEqual([]);
+      f.battle.dismissTurnPlate(true);
+      expect(f.battle.playerTurnActive()).toBe(true);
+      expect(zone(render(f))).toHaveLength(10);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('після руху зона перерахована від нової клітинки з новим AP', () => {
