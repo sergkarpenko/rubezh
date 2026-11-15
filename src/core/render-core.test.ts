@@ -8,6 +8,8 @@
 
 import { describe, expect, it } from 'vitest';
 import {
+  fogBorderSegments,
+  type TerrainCell,
   AnimEngine,
   BOOM_MS,
   BOOM_PARTICLES,
@@ -647,5 +649,72 @@ describe('П14.5: хвіст перехоплення — точки з поді
     expect(a.dur).toBe(RADAR_PULSE_MS);
     expect(a.maxR).toBe(216);
     expect(a.start).toBeNull();
+  });
+});
+
+// Т.44: межа зору — відрізки між видимою клітинкою і туманом
+describe('Т.44: fogBorderSegments — межа зору', () => {
+  const field = (w: number, h: number, visible: (x: number, y: number) => boolean): TerrainCell[] =>
+    Array.from({ length: w * h }, (_v, i) => ({
+      x: i % w,
+      y: Math.floor(i / w),
+      blocked: false,
+      visible: visible(i % w, Math.floor(i / w)),
+    }));
+
+  it('усе видно або все в тумані — межі немає; край поля межею не є', () => {
+    expect(fogBorderSegments(field(3, 3, () => true))).toEqual([]);
+    expect(fogBorderSegments(field(3, 3, () => false))).toEqual([]);
+    expect(fogBorderSegments([])).toEqual([]);
+  });
+
+  it('видимий лівий стовпець поля 3×2 — два вертикальні відрізки на x = 1', () => {
+    expect(fogBorderSegments(field(3, 2, (x) => x === 0))).toEqual([
+      { x1: 1, y1: 0, x2: 1, y2: 1 },
+      { x1: 1, y1: 1, x2: 1, y2: 2 },
+    ]);
+  });
+
+  it('видима клітинка в центрі 3×3 — чотири сторони: права, ліва, нижня, верхня', () => {
+    expect(fogBorderSegments(field(3, 3, (x, y) => x === 1 && y === 1))).toEqual([
+      { x1: 2, y1: 1, x2: 2, y2: 2 },
+      { x1: 1, y1: 1, x2: 1, y2: 2 },
+      { x1: 1, y1: 2, x2: 2, y2: 2 },
+      { x1: 1, y1: 1, x2: 2, y2: 1 },
+    ]);
+  });
+
+  it('видима клітинка в куті — лише дві сторони всередину поля; стіна в тумані теж дає межу', () => {
+    const cells = field(3, 3, (x, y) => x === 0 && y === 0);
+    cells[1]!.blocked = true;
+    expect(fogBorderSegments(cells)).toEqual([
+      { x1: 1, y1: 0, x2: 1, y2: 1 },
+      { x1: 0, y1: 1, x2: 1, y2: 1 },
+    ]);
+  });
+
+  it('кожен відрізок одиничної довжини і лежить між видимою і невидимою клітинкою', () => {
+    const cells = field(6, 5, (x, y) => (x * 7 + y * 3) % 4 < 2);
+    const vis = new Set(cells.filter((c) => c.visible).map((c) => c.x + ',' + c.y));
+    const fog = new Set(cells.filter((c) => !c.visible).map((c) => c.x + ',' + c.y));
+    const segs = fogBorderSegments(cells);
+    let pairs = 0;
+    for (const c of cells) {
+      if (!c.visible) continue;
+      for (const [dx, dy] of [
+        [1, 0],
+        [-1, 0],
+        [0, 1],
+        [0, -1],
+      ] as const)
+        if (fog.has(c.x + dx + ',' + (c.y + dy))) pairs++;
+    }
+    expect(segs.length).toBe(pairs);
+    for (const e of segs) {
+      expect(Math.abs(e.x2 - e.x1) + Math.abs(e.y2 - e.y1)).toBe(1);
+      const sides = e.x1 === e.x2 ? [e.x1 - 1 + ',' + e.y1, e.x1 + ',' + e.y1] : [e.x1 + ',' + (e.y1 - 1), e.x1 + ',' + e.y1];
+      expect(sides.filter((k) => vis.has(k)).length).toBe(1);
+      expect(sides.filter((k) => fog.has(k)).length).toBe(1);
+    }
   });
 });

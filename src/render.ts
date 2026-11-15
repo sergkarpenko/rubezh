@@ -17,6 +17,7 @@
 import {
   BOOM_PARTICLES,
   FOG_EDGE,
+  fogBorderSegments,
   GEO_CELL_A,
   GEO_CELL_B,
   GEO_GRID_COLOR,
@@ -214,7 +215,8 @@ export function isUnitAtlasReady(): boolean {
 // 2026-10-22): фон бою — ОДНА картина assets/metro-bg.webp (1024×1024,
 // нічна вулиця згори) cover-кропом на весь buffer канви 960×960; стіна —
 // спрайт з assets/metro-tiles.png (192×48, тайли 48×48: кол. 0 стіна з
-// ціановим кантом, 1 лампа, 2 голограма, 3 уламки) на blocked-клітинках;
+// ціановим кантом, 1 пляма світла, 2 решітка в підлозі — пласкі деталі
+// Т.44 замість лампи й голограми, схожих на юнітів; 3 уламки) на blocked-клітинках;
 // декори — за хешем координат (~8% відкритих, чинний контракт П14.3
 // cellHash % 37); туман — чинне приглушення rgba(5,8,15,0.55) поверх
 // фону (рельєф видно, вміст не розкривається — ADR-0006), м'який край —
@@ -223,15 +225,15 @@ export function isUnitAtlasReady(): boolean {
 // ADR-0026). Подієві ефекти/тряска/HP-бейджі П14.4 — без змін.
 export const METRO_TILE = 48; // сторона тайла, px (= BCELL, 1:1)
 export const METRO_WALL_COL = 0; // стіна блоку з ціановим кантом
-export const METRO_DECOR_COL = { лампа: 1, голограма: 2, уламки: 3 } as const;
+export const METRO_DECOR_COL = { світло: 1, решітка: 2, уламки: 3 } as const;
 
 // Розклад декорів — чиста функція координат (детермінований хеш, без RNG —
 // ADR-0003/0072; чинний контракт П14.3): рідкі декори на відкритих
 // клітинках, мозаїка стабільна між кадрами. ~3/37 відкритих (~8%).
 export function decorCol(x: number, y: number): number | null {
   const h = cellHash(x, y) % 37;
-  if (h === 0) return METRO_DECOR_COL['лампа'];
-  if (h === 1) return METRO_DECOR_COL['голограма'];
+  if (h === 0) return METRO_DECOR_COL['світло'];
+  if (h === 1) return METRO_DECOR_COL['решітка'];
   if (h === 2) return METRO_DECOR_COL['уламки'];
   return null;
 }
@@ -239,6 +241,14 @@ export function decorCol(x: number, y: number): number | null {
 // Приглушення фону у тумані (рельєф видно, вміст не розкривається —
 // ADR-0006): напівпрозоре перекриття поверх картини, патерн фолбеку.
 const TILE_FOG = 'rgba(5,8,15,0.55)';
+// Т.44 (рішення власника 15.11.2026): туман відрізняється від тіні підлоги —
+// клітинки туману знебарвлено (накладання 'saturation' сірим) і злегка
+// заштриховано діагоналями, межу зору обведено лінією.
+const FOG_GREY = '#808080';
+const FOG_HATCH = 'rgba(150,170,190,0.16)';
+const FOG_HATCH_STEP = 8; // px між діагоналями штриха
+const FOG_BORDER = 'rgba(125,215,255,0.6)';
+const FOG_BORDER_W = 2;
 
 // Ліниве завантаження ассетів «Мегаполісу» — той самий патерн, що
 // initUnitAtlas (ADR-0072 п.3): фабрика інжектиться, невдача — тихий
@@ -531,11 +541,36 @@ export function drawNightTerrain(ctx: CanvasRenderingContext2D, w: number, h: nu
       if (dcol === null) continue;
       ctx.drawImage(metroTilesImg, dcol * METRO_TILE, 0, METRO_TILE, METRO_TILE, c.x * cell, c.y * cell, cell, cell);
     }
+    // Т.44: знебарвлення клітинок туману — до приглушення; режим накладання
+    // повертає restore
+    ctx.save();
+    ctx.globalCompositeOperation = 'saturation';
+    ctx.fillStyle = FOG_GREY;
+    for (const c of cells) {
+      if (!c.visible) ctx.fillRect(c.x * cell, c.y * cell, cell, cell);
+    }
+    ctx.restore();
     // туман: приглушення клітинок поза зоною видимості (вміст не розкривається)
     ctx.fillStyle = TILE_FOG;
     for (const c of cells) {
       if (!c.visible) ctx.fillRect(c.x * cell, c.y * cell, cell, cell);
     }
+    // Т.44: штрих — діагоналі в межах кожної клітинки туману
+    ctx.save();
+    ctx.strokeStyle = FOG_HATCH;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (const c of cells) {
+      if (c.visible) continue;
+      const x0 = c.x * cell;
+      const y0 = c.y * cell;
+      for (let d = 0; d < 2 * cell; d += FOG_HATCH_STEP) {
+        ctx.moveTo(x0 + Math.max(0, d - cell), y0 + Math.min(d, cell));
+        ctx.lineTo(x0 + Math.min(d, cell), y0 + Math.max(0, d - cell));
+      }
+    }
+    ctx.stroke();
+    ctx.restore();
   } else {
     // фолбек: два тони (відкритий / завалений) × туман/видимо, відтінок — хеш
     for (const c of cells) {
@@ -554,6 +589,20 @@ export function drawNightTerrain(ctx: CanvasRenderingContext2D, w: number, h: nu
   for (const c of cells) {
     if (c.visible) continue;
     if (hasVisibleNeighbor(vis, c.x, c.y)) ctx.fillRect(c.x * cell, c.y * cell, cell - 1, cell - 1);
+  }
+  // Т.44: межа зору — лінія між видимою клітинкою і туманом (з ассетами і у фолбеку)
+  const border = fogBorderSegments(cells);
+  if (border.length > 0) {
+    ctx.save();
+    ctx.strokeStyle = FOG_BORDER;
+    ctx.lineWidth = FOG_BORDER_W;
+    ctx.beginPath();
+    for (const e of border) {
+      ctx.moveTo(e.x1 * cell, e.y1 * cell);
+      ctx.lineTo(e.x2 * cell, e.y2 * cell);
+    }
+    ctx.stroke();
+    ctx.restore();
   }
 }
 

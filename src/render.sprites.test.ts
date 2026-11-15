@@ -66,6 +66,7 @@ import {
   GEO_LAND_ROWS,
   terrainShade,
   type TerrainCell,
+  fogBorderSegments,
 } from './core/render-core';
 import {
   ALIEN_STAND,
@@ -640,6 +641,20 @@ describe('П6.13: нічна палітра — терен і фон', () => {
     expect(cellHash(5, 5)).not.toBe(cellHash(6, 5));
   });
 
+  it('Т.44: фолбек без ассетів — межа зору є, знебарвлення і штриха немає', () => {
+    const cells = grid(3, 3, 'fog');
+    cells[4] = { x: 1, y: 1, blocked: false, visible: true }; // центр видимий
+    const s = seqCtx();
+    drawNightTerrain(s.ctx, 78, 78, cells, 26);
+    expect(s.ops.some((o) => 'set' in o && o.set === 'globalCompositeOperation')).toBe(false);
+    expect(s.ops.some((o) => 'set' in o && o.set === 'strokeStyle' && o.v === 'rgba(150,170,190,0.16)')).toBe(false);
+    const border = s.ops.findIndex((o) => 'set' in o && o.set === 'strokeStyle' && o.v === 'rgba(125,215,255,0.6)');
+    expect(border).toBeGreaterThan(-1);
+    // чотири сторони видимої клітинки (1,1), клітинка 26 px
+    expect(s.ops.slice(border).filter((o) => 'm' in o && o.m === 'moveTo').length).toBe(4);
+    expect(s.ops.slice(border).filter((o) => 'm' in o && o.m === 'lineTo').length).toBe(4);
+  });
+
   it('детермінізм (ADR-0003): той самий терен → той самий потік операцій', () => {
     const cells = grid(4, 4, 'open').concat(grid(4, 4, 'fog'));
     const a = seqCtx();
@@ -944,7 +959,7 @@ describe('позафазна лінія «Мегаполіс»: цілісна �
     expect(s.ops.filter((o) => 'set' in o && o.set === 'imageSmoothingEnabled' && o.v === false).length).toBe(1);
   });
 
-  it('стіна — за мапою (blocked), тайл кол. 0; декори — детермінований рідкий розклад decorCol (лампа/голограма/уламки), лише на відкритих', () => {
+  it('стіна — за мапою (blocked), тайл кол. 0; декори — детермінований рідкий розклад decorCol (світло/решітка/уламки), лише на відкритих', () => {
     readyMetro();
     const s = seqCtx();
     drawNightTerrain(s.ctx, 144, 96, cells, 48);
@@ -964,8 +979,11 @@ describe('позафазна лінія «Мегаполіс»: цілісна �
         if (d !== null && !found.has(d)) found.set(d, { x, y, blocked: false, visible: true });
       }
     }
-    expect([...found.keys()].sort()).toEqual([METRO_DECOR_COL['лампа'], METRO_DECOR_COL['голограма'], METRO_DECOR_COL['уламки']].sort());
+    expect([...found.keys()].sort()).toEqual([METRO_DECOR_COL['світло'], METRO_DECOR_COL['решітка'], METRO_DECOR_COL['уламки']].sort());
     for (const c of found.values()) expect(decorCol(c.x, c.y)).toBe(decorCol(c.x, c.y)); // стабільний (без RNG)
+    // Т.44: колонки атласа — пляма світла 1, решітка 2, уламки 3; хеш % 37: 0 → світло, 1 → решітка, 2 → уламки
+    expect(METRO_DECOR_COL).toEqual({ світло: 1, решітка: 2, уламки: 3 });
+    for (const c of found.values()) expect(decorCol(c.x, c.y)).toBe((cellHash(c.x, c.y) % 37) + 1);
     // розклад рідкий: ~3/37 відкритих (~8%), три типи
     let dec = 0;
     const kinds = new Set<number>();
@@ -990,12 +1008,78 @@ describe('позафазна лінія «Мегаполіс»: цілісна �
     const fogFills = s.ops.filter(
       (o): o is { m: string; args: unknown[] } => 'm' in o && o.m === 'fillRect' && o.args[2] === 48 && o.args[3] === 48
     );
-    expect(fogFills.length).toBe(4); // 4 клітинки туману (з 6); фон 144×96 і край туману 47×47 не рахуються
+    // 4 клітинки туману (з 6) × два шари (Т.44: знебарвлення, потім приглушення); фон 144×96 і край туману 47×47 не рахуються
+    expect(fogFills.length).toBe(8);
     const before = s.ops.findIndex((o) => 'm' in o && o.m === 'drawImage');
     const fogStyle = s.ops.findIndex((o) => 'set' in o && o.set === 'fillStyle' && o.v === 'rgba(5,8,15,0.55)');
     expect(fogStyle).toBeGreaterThan(-1);
     expect(s.ops[fogStyle + 1]).toEqual({ m: 'fillRect', args: [48, 0, 48, 48] }); // перша клітинка туману (1,0)
     expect(fogStyle).toBeGreaterThan(before); // туман — ПОВЕРХ фону і об'єктів
+  });
+
+  it('Т.44: туман знебарвлено до приглушення — лише клітинки туману, режим накладання повертає restore', () => {
+    readyMetro();
+    const fogged = cells.map((c) => ({ ...c, visible: c.x === 0 }));
+    const s = seqCtx();
+    drawNightTerrain(s.ctx, 144, 96, fogged, 48);
+    const sat = s.ops.findIndex((o) => 'set' in o && o.set === 'globalCompositeOperation');
+    const fogStyle = s.ops.findIndex((o) => 'set' in o && o.set === 'fillStyle' && o.v === 'rgba(5,8,15,0.55)');
+    expect(s.ops[sat]).toEqual({ set: 'globalCompositeOperation', v: 'saturation' });
+    expect(s.ops[sat - 1]).toEqual({ m: 'save', args: [] });
+    expect(s.ops[sat + 1]).toEqual({ set: 'fillStyle', v: '#808080' });
+    // чотири клітинки туману (x = 1, 2) і одразу restore — видимий стовпець x = 0 не знебарвлюється
+    const grey = s.ops.slice(sat + 2, sat + 6);
+    expect(grey.map((o) => ('m' in o ? o.m : ''))).toEqual(['fillRect', 'fillRect', 'fillRect', 'fillRect']);
+    expect(grey.every((o) => 'm' in o && (o.args[0] as number) >= 48)).toBe(true);
+    expect(s.ops[sat + 6]).toEqual({ m: 'restore', args: [] });
+    expect(sat + 6).toBeLessThan(fogStyle);
+    expect(s.ops.filter((o) => 'set' in o && o.set === 'globalCompositeOperation').length).toBe(1);
+  });
+
+  it('Т.44: штрих туману — діагоналі кроком 8 px у межах клітинок туману; межа зору — відрізки fogBorderSegments', () => {
+    readyMetro();
+    const fogged = cells.map((c) => ({ ...c, visible: c.x === 0 }));
+    const s = seqCtx();
+    drawNightTerrain(s.ctx, 144, 96, fogged, 48);
+    const hatch = s.ops.findIndex((o) => 'set' in o && o.set === 'strokeStyle' && o.v === 'rgba(150,170,190,0.16)');
+    const border = s.ops.findIndex((o) => 'set' in o && o.set === 'strokeStyle' && o.v === 'rgba(125,215,255,0.6)');
+    expect(hatch).toBeGreaterThan(-1);
+    expect(border).toBeGreaterThan(hatch);
+    const lines = (from: number, to: number): number[][] =>
+      s.ops.slice(from, to).flatMap((o) => ('m' in o && (o.m === 'moveTo' || o.m === 'lineTo') ? [o.args as number[]] : []));
+    const hatchPts = lines(hatch, border);
+    expect(hatchPts.length).toBe(4 * 12 * 2); // 4 клітинки × 12 діагоналей (d = 0…88) × два кінці
+    expect(hatchPts.every(([x, y]) => x! >= 48 && x! <= 144 && y! >= 0 && y! <= 96)).toBe(true); // видимий стовпець без штриха
+    // кожна діагональ лежить в одній клітинці: обидва кінці — в межах тієї самої клітинки 48×48
+    for (let i = 0; i < hatchPts.length; i += 2) {
+      const [ax, ay] = hatchPts[i]!;
+      const [bx, by] = hatchPts[i + 1]!;
+      for (const [a, b] of [
+        [ax!, bx!],
+        [ay!, by!],
+      ]) {
+        const c = Math.floor((a! + b!) / 2 / 48);
+        expect(Math.min(a!, b!)).toBeGreaterThanOrEqual(c * 48);
+        expect(Math.max(a!, b!)).toBeLessThanOrEqual((c + 1) * 48);
+      }
+    }
+    // межа: два відрізки між стовпцями x = 0 і x = 1 (рядки 0 і 1), товщина 2
+    expect(fogBorderSegments(fogged).length).toBe(2);
+    expect(lines(border, s.ops.length)).toEqual([
+      [48, 0],
+      [48, 48],
+      [48, 48],
+      [48, 96],
+    ]);
+    expect(s.ops[border + 1]).toEqual({ set: 'lineWidth', v: 2 });
+  });
+
+  it('Т.44: без туману — ні знебарвлення клітинок, ні межі; у фолбеку без ассетів — лише межа', () => {
+    readyMetro();
+    const clear = seqCtx();
+    drawNightTerrain(clear.ctx, 144, 96, cells, 48);
+    expect(clear.ops.some((o) => 'set' in o && o.set === 'strokeStyle' && o.v === 'rgba(125,215,255,0.6)')).toBe(false);
+    expect(clear.ops.some((o) => 'm' in o && o.m === 'moveTo')).toBe(false);
   });
 
   it('фолбек без ассетів — чинні два тони terrainShade (загальний випадок покривають тести П6.13)', () => {
