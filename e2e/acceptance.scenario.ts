@@ -397,6 +397,25 @@ test('сценарій приймання ADR-0030: партія → місія 
         });
       }, points);
     await expect.poll(greenAt, { message: 'Т.44: шлях лінією — точки ' + JSON.stringify(points) }).toEqual(points.map(() => true));
+    // Т.45: зведений постріл ховає прев'ю шляху — ті самі точки більше не зелені, наведення на ціль
+    // його не повертає і підказку режиму не переписує; Esc знімає режим, тап знову дає прев'ю
+    await page.keyboard.press('Digit1');
+    await expect(page.locator('#btn-snap')).toHaveClass(/armed/);
+    const armedHint = await info.textContent();
+    // миша ще стоїть на цілі після тапу: шлях ховає сама умова малювання, без жодного наведення
+    await expect.poll(greenAt, { message: 'Т.45: одразу після зведення шляху немає' }).toEqual(points.map(() => false));
+    await page.locator('#battle').hover({ position: { x: 3, y: 3 } });
+    const box = (await page.locator('#battle').boundingBox())!;
+    const goalCell = option.path[option.path.length - 1]!;
+    await page.locator('#battle').hover({
+      position: { x: ((goalCell.x + 0.5) * box.width) / MISSION_MAP_W, y: ((goalCell.y + 0.5) * box.height) / MISSION_MAP_H },
+    });
+    await expect.poll(greenAt, { message: 'Т.45: у режимі пострілу шляху немає' }).toEqual(points.map(() => false));
+    await expect(info).toHaveText(armedHint ?? '');
+    await page.keyboard.press('Escape');
+    await tap(page, option.cell); // режим знято: перший тап — знову прев'ю
+    await expect(info).toContainText('Шлях: ' + option.cost + ' AP');
+    await expect.poll(greenAt, { message: 'Т.45: після Esc шлях повернувся' }).toEqual(points.map(() => true));
     await tap(page, option.cell); // повторний тап — хід
     mirror.move(soldier, option);
     await expect(info).toContainText(soldier.name + ': рух.');
