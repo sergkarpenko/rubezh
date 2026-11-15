@@ -176,3 +176,30 @@ describe('WorkshopPanel: ціни за пресетом (Т.29)', () => {
     expect(party.econ.money).toBe(before - 30);
   });
 });
+
+// Т.43 (знахідка 14): причина неактивної кнопки — рядком під нею, текст = title.
+describe('Т.43: причина під «Замовити» в «Кузні»', () => {
+  const why = (b: Element): string | null => {
+    const n = b.nextElementSibling;
+    return n?.classList.contains('btn-why') ? n.textContent : null;
+  };
+
+  it('не досліджено / бракує кредитів — рядок = title; можна замовити або лише бій — рядка немає', () => {
+    party = createParty(42, 'легкий');
+    const order = (): HTMLButtonElement => el<HTMLButtonElement>('btn-order-armor');
+    createWorkshopPanel(makeDeps()).render();
+    expect(why(order())).toBe('Ще не досліджено');
+    expect(why(order())).toBe(order().title);
+    party.research.completed.push('armor');
+    party.econ.money = 29; // броня на «легкому» — 30
+    createWorkshopPanel(makeDeps()).render();
+    expect(why(order())).toBe('Недостатньо кредитів (ціна 30)');
+    party.econ.money = 30;
+    createWorkshopPanel(makeDeps()).render();
+    expect(order().disabled).toBe(false);
+    expect(why(order())).toBeNull();
+    createWorkshopPanel(makeDeps({ inBattle: () => true })).render();
+    expect(order().disabled).toBe(true);
+    expect(why(order())).toBeNull();
+  });
+});

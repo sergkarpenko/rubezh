@@ -571,3 +571,127 @@ describe('T.39: readyToIssue — лічильник на вкладці «Заг
     expect(readyToIssue(party)).toBe(soldiers); // без зміни від модуля
   });
 });
+
+// Т.43 (знахідка 14): причина неактивної кнопки — рядком під нею, текст = title.
+describe('Т.43: причини під неактивними кнопками і остання подія перехоплювача', () => {
+  const why = (b: Element | null): string | null => {
+    const n = b?.nextElementSibling;
+    return n?.classList.contains('btn-why') ? n.textContent : null;
+  };
+  // пресет «легкий»: вербування 120 (множник не 1 — урок Т.29)
+  function easy(over: Partial<PanelsDeps> = {}): Fixture {
+    const party = createParty(42, 'легкий');
+    const f = makeFixture({ getParty: () => party, ...over });
+    return { ...f, party };
+  }
+  const woundAll = (p: Party): void => p.roster.soldiers.forEach((s) => (p.roster.hospital[s.id] = 10));
+
+  it('«Вербувати оперативника»: рядок = title без кредитів; з кредитами рядка немає; повторний рендер не дублює', () => {
+    const f = easy();
+    const b = document.getElementById('btn-hire') as HTMLButtonElement;
+    f.party.econ.money = 119;
+    f.panels.renderFinances();
+    f.panels.renderFinances();
+    expect(why(b)).toBe('Недостатньо кредитів (ціна вербування 120)');
+    expect(why(b)).toBe(b.title);
+    expect(document.querySelectorAll('.btn-why').length).toBe(1);
+    f.party.econ.money = 120;
+    f.panels.renderFinances();
+    expect(b.disabled).toBe(false);
+    expect(why(b)).toBeNull();
+  });
+
+  it('«Запустити місію»: поранені — рядок = title; боєготові — рядка немає; у бою з боєготовими — неактивна без рядка', () => {
+    const f = easy();
+    expect(tickUntil(f.party, () => missionTargets(f.party.geo).length > 0)).toBe(true);
+    const mission = (): HTMLButtonElement => document.querySelector('#ufos button.mission') as HTMLButtonElement;
+    f.panels.renderUfos();
+    expect(mission().disabled).toBe(false);
+    expect(why(mission())).toBeNull();
+    woundAll(f.party);
+    f.panels.renderUfos();
+    expect(mission().disabled).toBe(true);
+    expect(why(mission())).toBe('Усі оперативники поранені — чекайте одужання або вербуйте');
+    expect(why(mission())).toBe(mission().title);
+    const battle = easy({ inBattle: () => true });
+    tickUntil(battle.party, () => missionTargets(battle.party.geo).length > 0);
+    battle.panels.renderUfos();
+    expect(mission().disabled).toBe(true);
+    expect(why(mission())).toBeNull();
+  });
+
+  it('«Перехопити»: пошкоджений перехоплювач — рядок = title; справний — рядка немає', () => {
+    const f = easy();
+    expect(tickUntil(f.party, () => detectedUfos(f.party.geo).some((u) => u.status === 'летить'))).toBe(true);
+    const ib = (): HTMLButtonElement => document.querySelector('#ufos button.intercept') as HTMLButtonElement;
+    f.panels.renderUfos();
+    expect(ib().title).toBe('Підняти перехоплювач на перехоплення');
+    expect(why(ib())).toBeNull();
+    f.party.intercept.fighter.hp = 1;
+    f.panels.renderUfos();
+    expect(ib().disabled).toBe(true);
+    expect(why(ib())).toBe('Перехоплювач пошкоджений — спочатку ремонт');
+    expect(why(ib())).toBe(ib().title);
+  });
+
+  it('«Ремонт»: без кредитів — рядок = title; з кредитами — рядка немає', () => {
+    const f = easy();
+    const rb = (): HTMLButtonElement => document.getElementById('btn-repair') as HTMLButtonElement;
+    f.party.intercept.fighter.hp = 1;
+    f.party.econ.money = 49;
+    f.panels.renderFighter();
+    expect(why(rb())).toBe('Недостатньо кредитів (ціна ремонту 50)');
+    expect(why(rb())).toBe(rb().title);
+    f.party.econ.money = 50; // рівно ціна — кнопка активна, рядка немає
+    f.panels.renderFighter();
+    expect(rb().disabled).toBe(false);
+    expect(why(rb())).toBeNull();
+  });
+
+  it('банкрутство: під «Запустити місію» — «Партію програно — банкрутство»; у бою під справною «Перехопити» рядка немає', () => {
+    const over = easy({ isGameOver: () => true });
+    expect(tickUntil(over.party, () => missionTargets(over.party.geo).length > 0)).toBe(true);
+    over.panels.renderUfos();
+    const mission = document.querySelector('#ufos button.mission') as HTMLButtonElement;
+    expect(mission.disabled).toBe(true);
+    expect(why(mission)).toBe('Партію програно — банкрутство');
+    const battle = easy({ inBattle: () => true });
+    expect(tickUntil(battle.party, () => detectedUfos(battle.party.geo).some((u) => u.status === 'летить'))).toBe(true);
+    battle.panels.renderUfos();
+    const ib = document.querySelector('#ufos button.intercept') as HTMLButtonElement;
+    expect(ib.disabled).toBe(true);
+    expect(why(ib)).toBeNull();
+  });
+
+  it('#fighter-last: текст журналу після перерваного перехоплення; зникає після нового старту і після розриву контакту', () => {
+    const f = easy();
+    const last = (): string | null => document.getElementById('fighter-last')?.textContent ?? null;
+    f.panels.renderFighter();
+    expect(last()).toBeNull();
+    const pos = { x: 1, y: 1 };
+    f.party.geo.log.push({ type: 'intercept_start', ufoId: 'ufo2', pos, minute: 0 });
+    f.party.geo.log.push({ type: 'intercept_aborted', ufoId: 'ufo2', reason: 'ufo_lost', pos, minute: 30 });
+    f.party.geo.log.push({ type: 'fighter_returned', pos, minute: 60 });
+    f.panels.renderFighter();
+    expect(last()).toBe('✦ Зонд Розриву ufo2 зник з трекінгу — перехоплення перервано');
+    f.party.geo.log.push({ type: 'intercept_start', ufoId: 'ufo3', pos, minute: 90 });
+    f.panels.renderFighter();
+    expect(last()).toBeNull();
+    f.party.geo.log.push({ type: 'intercept_aborted', ufoId: 'ufo3', reason: 'fighter_damaged', pos, minute: 120 });
+    f.party.intercept.fighter.hp = 1;
+    f.panels.renderFighter();
+    expect(last()).toBe('✦ Перехоплювач пошкоджений — вимушене переривання бою');
+    f.party.intercept.fighter.hp = FIGHTER_MAX_HP; // пошкодження вже відремонтовано — рядок застарів
+    f.panels.renderFighter();
+    expect(last()).toBeNull();
+    f.party.intercept.fighter.hp = 1;
+    f.party.geo.log.push({ type: 'intercept_break_off', ufoId: 'ufo3', minute: 150 });
+    f.panels.renderFighter();
+    expect(last()).toBeNull();
+    // зонд приземлився під час погоні: текст журналу «зник з трекінгу» тут неправдивий — рядка немає
+    f.party.geo.log.push({ type: 'intercept_start', ufoId: 'ufo4', pos, minute: 180 });
+    f.party.geo.log.push({ type: 'intercept_aborted', ufoId: 'ufo4', reason: 'ufo_landed', pos, minute: 210 });
+    f.panels.renderFighter();
+    expect(last()).toBeNull();
+  });
+});

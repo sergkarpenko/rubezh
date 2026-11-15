@@ -29,7 +29,7 @@ import { sciencePrice } from '../core/campaign';
 import type { Party } from '../core/save';
 import { plainProjectEffect } from './effects';
 import { orderButtonState } from './workshop-panel';
-import { el } from './dom';
+import { el, setWhy } from './dom';
 import type { LogCat } from './journal';
 import { daysText, ticksText } from './text';
 
@@ -157,6 +157,7 @@ export function createResearchPanel(deps: ResearchPanelDeps): ResearchPanel {
       deps.renderAll();
     };
     box.appendChild(hire);
+    setWhy(hire, party.econ.money < hirePrice ? hire.title : null); // Т.43
 
     // штат вчених — по рядку на вченого з кнопкою звільнення
     if (r.scientists.length > 0) {
@@ -238,6 +239,7 @@ export function createResearchPanel(deps: ResearchPanelDeps): ResearchPanel {
             deps.renderAll();
           };
           card.appendChild(forge);
+          setWhy(forge, st.why); // Т.43
           // під кнопкою — що з предметом зараз: в «Кузні» і/або на складі
           // (для гарматного модуля ручного встановлення в UI немає — лише «На складі: N»)
           const notes: string[] = [];
@@ -301,6 +303,7 @@ export function createResearchPanel(deps: ResearchPanelDeps): ResearchPanel {
           deps.renderAll();
         };
         card.appendChild(start);
+        setWhy(start, reason); // Т.43: reason — той самий рядок, що в title
       }
       catalog.appendChild(card);
     }

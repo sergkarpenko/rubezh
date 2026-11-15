@@ -198,10 +198,17 @@
         background: #3a2f10;
         border-color: #8a6d1d;
       }
-      .mission-warn {
+      .mission-warn,
+      .btn-why {
         margin-top: 4px;
         color: #e0a63a;
         font-size: 12px;
+      }
+      /* Т.43: у рядку каталогу «Кузні» причина стоїть у рядку з кнопкою — панель не росте */
+      #workshop .btn-why {
+        display: inline;
+        margin: 0 0 0 6px;
+        white-space: nowrap;
       }
       /* П11.6 (ADR-0058): кнопки панелі «Дослідження» — той самий акцент, окремий
          клас (клас .mission — семантика запуску місії, не плутати у селекторах) */
