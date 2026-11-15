@@ -1313,6 +1313,12 @@ describe('Т.44: drawPathPreview — шлях лінією і ціна біля 
     expect(sets(s.ops, 'lineCap')).toEqual(['round']);
     // у кінці — одне коло радіусом 7 у центрі цілі; крапок радіусом 3 немає
     expect(calls(s.ops, 'arc')).toEqual([[312, 168, 7, 0, Math.PI * 2]]);
+    // два окремі шляхи: beginPath перед ламаною (контур зони до неї не домальовується) і перед колом
+    // (заливка кола не зачіпає ламану)
+    const names = s.ops.flatMap((o) => ('m' in o ? [o.m] : []));
+    expect(names.slice(0, 3)).toEqual(['save', 'beginPath', 'moveTo']);
+    expect(names.slice(names.indexOf('stroke'), names.indexOf('stroke') + 4)).toEqual(['stroke', 'beginPath', 'arc', 'fill']);
+    expect(names.filter((n) => n === 'beginPath')).toHaveLength(2);
     // лінія — до кола і плашки
     const idx = (m: string): number => s.ops.findIndex((o) => 'm' in o && o.m === m);
     expect(idx('stroke')).toBeLessThan(idx('arc'));

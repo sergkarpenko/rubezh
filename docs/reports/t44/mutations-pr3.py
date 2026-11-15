@@ -33,6 +33,9 @@ MUT = [
     ('текст не по центру плашки', 'src/render.ts', "  ctx.textAlign = 'center';\n", '', False),
     ('шрифт плашки 10px', 'src/render.ts', "ctx.font = 'bold 15px monospace';\n  ctx.textAlign", "ctx.font = '10px monospace';\n  ctx.textAlign", False),
     ('рамка плашки товщиною лінії (4)', 'src/render.ts', '  ctx.lineWidth = 1;\n  ctx.strokeRect(box.x + 0.5', '  ctx.strokeRect(box.x + 0.5', False),
+    ('«вистачає» від максимального AP', 'src/ui/battle.ts', 'affordable: ui.hoverAp <= sel.ap,', 'affordable: ui.hoverAp <= sel.maxAp,', False),
+    ('ламана без beginPath', 'src/render.ts', '  ctx.beginPath();\n  ctx.moveTo(...mid(p.from));', '  ctx.moveTo(...mid(p.from));', False),
+    ('коло без beginPath', 'src/render.ts', '  ctx.beginPath();\n  ctx.arc(gx, gy,', '  ctx.arc(gx, gy,', False),
 ]
 
 ENV = {k: v for k, v in os.environ.items() if k != 'E2E_URL'}  # e2e має міряти збірку копії, а не зовнішню

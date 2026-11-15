@@ -704,6 +704,20 @@ describe('Т.44: зона ходу вибраного оперативника �
     expect(green).not.toContain('set:strokeStyle=rgba(255,156,156,0.95)');
   });
 
+  it('«вистачає» рахується від поточного AP, а не від максимального: після витрати AP той самий шлях червоний', () => {
+    const { f, g } = setup(3);
+    f.ui.hoverPath = [
+      { x: 5, y: 4 },
+      { x: 5, y: 3 },
+    ];
+    f.ui.hoverAp = 2;
+    expect(render(f)).toContain('set:strokeStyle=rgba(127,226,160,0.95)'); // 2 з 3 AP
+    g.units.find((u) => u.id === 's1')!.ap = 1; // maxAp лишився 3
+    const ops = render(f);
+    expect(ops).toContain('set:strokeStyle=rgba(255,156,156,0.95)');
+    expect(ops).not.toContain('set:strokeStyle=rgba(127,226,160,0.95)');
+  });
+
   it('прев\u2019ю шляху немає: без шляху, з порожнім шляхом, без вибору, під час ходу демонів', () => {
     const none = (prep: (f: Fixture, g: GameState) => void): void => {
       const { f, g } = setup();
