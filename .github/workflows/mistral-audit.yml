@@ -40,8 +40,9 @@ jobs:
         with:
           node-version: 22
       - name: Самоперевірка скрипта
-        # зелений лише з рядком підсумку «помилок 0»: мовчазний вихід з кодом 0 — теж помилка
-        run: node scripts/mistral-audit-selftest.mjs | tee /dev/stderr | grep -q 'помилок 0$'
+        # зелений лише з кодом 0 і рядком підсумку «помилок 0»: мовчазний вихід з кодом 0 — теж помилка.
+        # pipefail — явно: крок без `shell:` іде під `bash -e`, і код виходу node губився б у конвеєрі
+        run: set -o pipefail; node scripts/mistral-audit-selftest.mjs | tee /dev/stderr | grep -q 'помилок 0$'
       - name: Аудит
         env:
           MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // scripts/mistral-audit-selftest.mjs — самоперевірка scripts/mistral-audit.mjs (ADR-0095, ADR-0098).
-// Винесена з основного скрипта в Т.42 (ADR-0099), зміст перевірок не змінено: повний прохід на
+// Винесена з основного скрипта в Т.42 (ADR-0099); наявні перевірки перенесено без змін, додано дві
+// (файл самоперевірки — файл аудитора; межі числами): повний прохід на
 // тимчасовому репозиторії (mkdtemp) з підставними API Mistral і GitHub; у мережу не ходить,
 // поза тимчасову теку не пише. Перший крок джоби `mistral-audit`: зелений лише з рядком
 // «помилок 0».
@@ -113,6 +114,16 @@ export async function selfTest() {
     put('src/other.ts', 'ЗМІНА-В-MAIN\n');
     const base2 = commit('main пішов далі');
 
+    // межі — числами (урок Т.41): після поділу (ADR-0099) вони приходять сюди через internals,
+    // тож і зміна константи, і розбіжність internals із кодом мусять бути видні тут
+    const limits = { ATTEMPTS, CHECK_PAUSE_MS, CHECK_POLLS, MAX_ADR, MAX_ADRS, MAX_DIFF, MAX_FIELD, MAX_FILE };
+    Object.assign(limits, { MAX_FINDINGS, MAX_HANDBOOKS, MAX_RECORD, MAX_REPORT, MAX_REPORTS, MAX_STEPS });
+    ok(
+      'межі: значення, з якими працюють перевірки, — ті самі числа',
+      JSON.stringify(limits) ===
+        '{"ATTEMPTS":3,"CHECK_PAUSE_MS":20000,"CHECK_POLLS":15,"MAX_ADR":10000,"MAX_ADRS":6,"MAX_DIFF":240000,"MAX_FIELD":600,"MAX_FILE":60000,' +
+          '"MAX_FINDINGS":10,"MAX_HANDBOOKS":60000,"MAX_RECORD":12000,"MAX_REPORT":12000,"MAX_REPORTS":2,"MAX_STEPS":5}'
+    );
     const d = collectDiff(git, base, head);
     ok('диф: зміна коду є', d.text.includes('+export const a = 2;'));
     ok('диф: файл з пробілом і кирилицею є', d.text.includes('+export const b = 3;'));
