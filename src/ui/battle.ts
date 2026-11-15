@@ -29,7 +29,15 @@ import {
 import { computeVisibleCells, reachableCells } from '../core/map';
 import { geoClock } from '../core/geo';
 import type { Party } from '../core/save';
-import { drawAnimFrame, drawChanceLabel, drawNightTerrain, drawReachZone, drawTargetFrame, drawUnitSprite } from '../render';
+import {
+  drawAnimFrame,
+  drawChanceLabel,
+  drawNightTerrain,
+  drawPathPreview,
+  drawReachZone,
+  drawTargetFrame,
+  drawUnitSprite,
+} from '../render';
 import {
   animT,
   animsFromEvents,
@@ -354,15 +362,17 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
       drawReachZone(ctx, reachableCells(st, sel.pos, sel.ap, vis), sel.pos, BCELL);
     }
 
-    // прев'ю шляху під курсором: зелені крапки — вистачає AP, червоні — ні
+    // Т.44: прев'ю шляху під курсором — лінія від оперативника і ціна «<число> AP» біля цілі:
+    // зелені — вистачає AP, червоні — ні
     if (ui.hoverPath && sel && playerTurnActive()) {
-      const affordable = ui.hoverAp <= sel.ap;
-      ctx.fillStyle = affordable ? 'rgba(127,226,160,0.9)' : 'rgba(255,156,156,0.9)';
-      for (const p of ui.hoverPath) {
-        ctx.beginPath();
-        ctx.arc(p.x * BCELL + BCELL / 2, p.y * BCELL + BCELL / 2, 3, 0, Math.PI * 2);
-        ctx.fill();
-      }
+      drawPathPreview(ctx, {
+        from: sel.pos,
+        path: ui.hoverPath,
+        ap: ui.hoverAp,
+        affordable: ui.hoverAp <= sel.ap,
+        cell: BCELL,
+        cw: cv.width,
+      });
     }
 
     // П6.14: у зведеному режимі пострілу — обведення всіх валідних цілей

@@ -373,6 +373,30 @@ test('сценарій приймання ADR-0030: партія → місія 
     const option = mirror.moveOption(soldier);
     await tap(page, option.cell); // перший тап — прев'ю шляху
     await expect(info).toContainText('Шлях: ' + option.cost + ' AP');
+    // Т.44: шлях — лінією на пікселях канви. Зелені (G помітно більший за R і B; колір лінії rgba(127,226,160,0.95)):
+    // центр цілі (коло) і середина кожного відрізка від оперативника через клітинки шляху — крім точок під плашкою ціни
+    // (над ціллю, а у верхньому рядку — під нею). Від шрифту не залежить.
+    const centers = [soldier.pos, ...option.path].map((c) => ({ x: c.x * 48 + 24, y: c.y * 48 + 24 }));
+    const goal = centers[centers.length - 1]!;
+    const underLabel = (p: { x: number; y: number }): boolean => {
+      const top = goal.y - 34 < 2 ? goal.y + 12 : goal.y - 34;
+      return Math.abs(p.x - goal.x) <= 40 && p.y >= top - 2 && p.y <= top + 23;
+    };
+    const points = [goal];
+    for (let i = 1; i < centers.length; i++) {
+      const m = { x: (centers[i - 1]!.x + centers[i]!.x) / 2, y: (centers[i - 1]!.y + centers[i]!.y) / 2 };
+      if (!underLabel(m)) points.push(m);
+    }
+    const greenAt = (): Promise<boolean[]> =>
+      page.evaluate((ps) => {
+        const cv = document.getElementById('battle') as HTMLCanvasElement;
+        const cx = cv.getContext('2d')!;
+        return ps.map((p) => {
+          const d = cx.getImageData(p.x, p.y, 1, 1).data;
+          return d[1]! - d[0]! > 40 && d[1]! - d[2]! > 25;
+        });
+      }, points);
+    await expect.poll(greenAt, { message: 'Т.44: шлях лінією — точки ' + JSON.stringify(points) }).toEqual(points.map(() => true));
     await tap(page, option.cell); // повторний тап — хід
     mirror.move(soldier, option);
     await expect(info).toContainText(soldier.name + ': рух.');

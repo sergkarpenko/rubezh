@@ -198,6 +198,28 @@ export function zoneOutlineSegments(keys: ReadonlySet<string>): ZoneEdge[] {
   return out;
 }
 
+// Т.44: плашка ціни шляху «<число> AP» біля цілі. Ширина — ширина тексту + 10 px, висота 21 px;
+// над ціллю (верх плашки — центр клітинки − 34 px), а якщо зверху не вміщується (ближче 2 px до
+// краю канви) — під нею (центр + 12 px); по горизонталі — по центру клітинки, притиснута в межі
+// канви з відступом 2 px. Координати — px канви, цілі.
+export const PATH_LABEL_H = 21;
+export const PATH_LABEL_PAD = 10; // сумарний запас ширини навколо тексту, px
+export const PATH_LABEL_CHAR_W = 9; // ширина знака bold 15px monospace (0,6 em)
+export interface LabelBox {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+export function pathLabelBox(goal: { x: number; y: number }, cell: number, textW: number, cw: number): LabelBox {
+  const cx = goal.x * cell + cell / 2;
+  const cy = goal.y * cell + cell / 2;
+  const w = Math.ceil(textW) + PATH_LABEL_PAD;
+  const x = Math.round(Math.min(Math.max(cx - w / 2, 2), cw - w - 2));
+  const y = cy - 34 < 2 ? cy + 12 : cy - 34;
+  return { x, y, w, h: PATH_LABEL_H };
+}
+
 // --- П6.8 (ADR-0029): анімаційний рушій — черга + rAF лише під час активних анімацій ---
 
 // Тривалості фаз (мс): стримана анімація, без поспіху (дизайн-сесія 6b).
