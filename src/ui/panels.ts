@@ -337,7 +337,10 @@ export function createPanels(deps: PanelsDeps): Panels {
     let i = log.length - 1;
     while (i >= 0 && !['intercept_start', 'intercept_aborted', 'intercept_break_off'].includes(log[i].type)) i--;
     const last = log[i];
-    if (last?.type === 'intercept_aborted') {
+    // Не показуємо: зонд приземлився під час погоні (текст журналу «зник з трекінгу» тут
+    // неправдивий — зонд видно в переліку) і пошкодження, яке вже відремонтовано (аудит PR #340).
+    const stale = last?.type === 'intercept_aborted' && last.reason === 'fighter_damaged' && f.hp === FIGHTER_MAX_HP;
+    if (last?.type === 'intercept_aborted' && last.reason !== 'ufo_landed' && !stale) {
       const note = document.createElement('div');
       note.id = 'fighter-last';
       note.className = 'meta';

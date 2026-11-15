@@ -25,6 +25,15 @@ MUTS = [
     ('фокус із кнопки не знімається', MAIN, "    if (ev.target instanceof HTMLButtonElement) ev.target.blur();\n", ""),
     ('причина в «Кузні» — окремим рядком (панель росте)', HTML, "        display: inline;\n        margin: 0 0 0 6px;", "        margin: 4px 0 0 0;"),
     ('стиль рядка-причини прибрано', HTML, "      .mission-warn,\n      .btn-why {", "      .mission-warn {"),
+    # після аудиту PR #340 (поломки аудитора A, B, C, G, H і поломки нового коду)
+    ('рядок під «Вербувати техноманта» при кредитах рівно на ціну', R, "setWhy(hire, party.econ.money < hirePrice ? hire.title : null)", "setWhy(hire, party.econ.money <= hirePrice ? hire.title : null)"),
+    ('рядок під «Ремонт» при кредитах рівно на ціну', P, "setWhy(b, party.econ.money < FIGHTER_REPAIR_COST ? b.title : null)", "setWhy(b, party.econ.money <= FIGHTER_REPAIR_COST ? b.title : null)"),
+    ('рядок під «Дослідити» в бою без причини', R, "setWhy(start, reason)", "setWhy(start, start.disabled ? start.title : null)"),
+    ('немає рядка під «Запустити місію» при банкрутстві', P, "btn.disabled && btn.title !== '' ? btn.title : null", "ready === 0 ? btn.title : null"),
+    ('рядок під «Перехопити» в бою без причини', P, "setWhy(ib, !readyFighter ? ib.title : null)", "setWhy(ib, ib.disabled ? ib.title : null)"),
+    ('#fighter-last для зонда, що приземлився', P, " && last.reason !== 'ufo_landed' && !stale", " && !stale"),
+    ('#fighter-last про пошкодження після ремонту', P, "last.reason === 'fighter_damaged' && f.hp === FIGHTER_MAX_HP", "false"),
+    ('текст причини в «Кузні» розривається між рядками', HTML, "        margin: 0 0 0 6px;\n        white-space: nowrap;", "        margin: 0 0 0 6px;"),
 ]
 
 def run(cmd):
@@ -32,6 +41,7 @@ def run(cmd):
 
 def main():
     assert os.environ.get('E2E_CHROME'), 'потрібен E2E_CHROME=/шлях/до/chrome'
+    assert run('npx vitest run src/ui src/main.ui.test.ts') == 0, 'тести червоні без поломок'
     assert run('npm run test:e2e') == 0, 'сценарій приймання червоний без поломок'
     res = lambda c: 'червоний' if c else 'зелений'
     caught = 0

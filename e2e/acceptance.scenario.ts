@@ -198,13 +198,16 @@ test('сценарій приймання ADR-0030: партія → місія 
     expect(workshopInView, '#workshop має бути у видимій частині колонки після кроку 2').toBe(true);
     // Т.43: причина неактивної кнопки — рядком під нею (на iPad підказки title не видно)
     await expect(page.locator('#btn-order-armor + .btn-why')).toHaveText('Ще не досліджено');
-    // у «Кузні» причина стоїть у рядку з кнопкою (панель не росте), кольором попередження Т.24
+    // у «Кузні» причина — рядковий елемент одразу після кнопки (панель не росте на рядок
+    // за кожну кнопку), кольором попередження Т.24. Чи вмістився текст на лінії кнопки,
+    // залежить від шрифту машини (у CI переноситься) — тому перевіряється display, а не лінія.
     const whyBox = await page.evaluate(() => {
-      const b = document.getElementById('btn-order-armor')!.getBoundingClientRect();
       const w = document.querySelector<HTMLElement>('#btn-order-armor + .btn-why')!;
-      return { sameLine: w.getBoundingClientRect().top < b.bottom, color: getComputedStyle(w).color };
+      const st = getComputedStyle(w);
+      return { display: st.display, color: st.color, pieces: w.getClientRects().length };
     });
-    expect(whyBox.sameLine, 'причина в «Кузні» має стояти в рядку з кнопкою «Замовити»').toBe(true);
+    expect(whyBox.display, 'причина в «Кузні» має бути рядковим елементом після кнопки «Замовити»').toBe('inline');
+    expect(whyBox.pieces, 'текст причини в «Кузні» розірвано між рядками').toBe(1);
     expect(whyBox.color, 'колір рядка-причини — як у попередження .mission-warn').toBe('rgb(224, 166, 58)');
     await page.locator('#btn-sci-step-3').click();
     await expect(page.locator('#status-tab-squad')).toHaveClass(/active/);

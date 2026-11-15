@@ -444,12 +444,18 @@ describe('Т.43: причини під неактивними кнопками �
     expect(btn('btn-start-0').disabled).toBe(true);
     expect(why(btn('btn-start-0'))).not.toBeNull();
     expect(why(btn('btn-start-0'))).toBe(btn('btn-start-0').title);
-    party.econ.money = 1000;
+    party.econ.money = 50; // рівно ціна вербування — кнопка активна, рядка немає
     panel.render();
+    expect(btn('btn-hire-scientist').disabled).toBe(false);
     expect(why(btn('btn-hire-scientist'))).toBeNull();
+    party.econ.money = 1000;
     btn('btn-hire-scientist').click();
     panel.render();
     expect(btn('btn-start-0').disabled).toBe(false);
+    expect(why(btn('btn-start-0'))).toBeNull();
+    // у бою «Дослідити» неактивна, але причини немає — рядка немає
+    createResearchPanel(makeDeps({ inBattle: () => true })).render();
+    expect(btn('btn-start-0').disabled).toBe(true);
     expect(why(btn('btn-start-0'))).toBeNull();
   });
 
