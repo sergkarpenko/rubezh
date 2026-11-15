@@ -131,6 +131,19 @@ export function cellHash(x: number, y: number): number {
   return (h ^ (h >>> 16)) >>> 0;
 }
 
+// T.44, PR 1: імена колонок декору тайлсету metro-tiles.png (колонка 1 — світло, 2 — решітка, 3 — уламки; 0 — стіна, METRO_WALL_COL у render.ts).
+export const METRO_DECOR_COL = { світло: 1, решітка: 2, уламки: 3 } as const;
+
+// Розклад декору — чиста функція координат (детермінований хеш, без RNG — ADR-0003/0072; чесний контракт П14.3):
+// редкий декор на відкритих клітинках, моє Tickets між стінами. ~3/37 відкритих клітинок (~8%).
+export function decorCol(x: number, y: number): number | null {
+  const h = cellHash(x, y) % 37;
+  if (h === 0) return METRO_DECOR_COL['світло'];
+  if (h === 1) return METRO_DECOR_COL['решітка'];
+  if (h === 2) return METRO_DECOR_COL['уламки'];
+  return null;
+}
+
 // Відтінок клітинки терену (чисте перетворення стану → колір, без Canvas):
 // два тони (відкритий / завалений) × туман/видимо, варіація — хеш клітинки.
 export function terrainShade(x: number, y: number, blocked: boolean, visible: boolean): string {
@@ -146,6 +159,30 @@ export function visibleKeys(cells: readonly TerrainCell[]): Set<string> {
 // Чи є у клітинки туману видимий сусід по прямій (4 напрямки, без діагоналей).
 export function hasVisibleNeighbor(vis: ReadonlySet<string>, x: number, y: number): boolean {
   return vis.has(x - 1 + ',' + y) || vis.has(x + 1 + ',' + y) || vis.has(x + ',' + (y - 1)) || vis.has(x + ',' + (y + 1));
+}
+
+// Т.44, PR 1: межа туману — відрізки стику «видима клітинка — невидима сусідка» (4 напрямки);
+// край поля (сусід за межами мапи) теж вважається туманом. Координати — в клітинній сітці.
+export interface FogBorderSegment {
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+}
+
+export function fogBorderSegments(cells: readonly TerrainCell[]): FogBorderSegment[] {
+  const all = new Set(cells.map((c) => c.x + ',' + c.y));
+  const vis = visibleKeys(cells);
+  const fog = (x: number, y: number): boolean => !all.has(x + ',' + y) || !vis.has(x + ',' + y);
+  const segs: FogBorderSegment[] = [];
+  for (const c of cells) {
+    if (!c.visible) continue;
+    if (fog(c.x + 1, c.y)) segs.push({ x1: c.x + 1, y1: c.y, x2: c.x + 1, y2: c.y + 1 });
+    if (fog(c.x - 1, c.y)) segs.push({ x1: c.x, y1: c.y, x2: c.x, y2: c.y + 1 });
+    if (fog(c.x, c.y + 1)) segs.push({ x1: c.x, y1: c.y + 1, x2: c.x + 1, y2: c.y + 1 });
+    if (fog(c.x, c.y - 1)) segs.push({ x1: c.x, y1: c.y, x2: c.x + 1, y2: c.y });
+  }
+  return segs;
 }
 
 // --- П6.8 (ADR-0029): анімаційний рушій — черга + rAF лише під час активних анімацій ---

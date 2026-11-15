@@ -7,6 +7,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { advanceTime, missionTargets } from '../core/geo';
 import { createGame, makeUnit, type GameState, type Unit } from '../core/combat';
 import { createParty, type Party } from '../core/save';
+import { ALIEN_SPAWN, SQUAD_SPAWN } from '../core/mission';
+import { BCELL } from './grid';
 import { initPixelSprites } from '../render';
 import { makeDeathAnim, makeTracerAnim } from '../core/render-core';
 import { createBattleUI, validFireTargets, validHealTargets, type BattleDeps, type BattleUIState } from './battle';
@@ -556,5 +558,61 @@ describe('Фікс П14.8 (фідбек валідації): смерть у ч�
     const ops2 = withRecCtx(() => f.battle.renderBattle());
     // віддзеркалене дуло: round(264−22)+(44−1−5) = 280
     expect(ops2).toContain('moveTo(280,266)');
+  });
+});
+
+// Записуючий 2D-контекст: методи → ops, властивості → sets (як seqCtx у render.sprites.test.ts).
+function recCtx(): { ctx: CanvasRenderingContext2D; ops: { m: string; args: unknown[] }[]; sets: { p: string; v: unknown }[] } {
+  const ops: { m: string; args: unknown[] }[] = [];
+  const sets: { p: string; v: unknown }[] = [];
+  const ctx = new Proxy(
+    {},
+    {
+      get: (_t, p) => {
+        if (typeof p !== 'string') return undefined;
+        if (p === 'measureText') return () => ({ width: 0 });
+        return (...args: unknown[]): void => {
+          ops.push({ m: p, args });
+        };
+      },
+      set: (_t, p, v) => {
+        sets.push({ p: String(p), v });
+        return true;
+      },
+    }
+  );
+  return { ctx: ctx as unknown as CanvasRenderingContext2D, ops, sets };
+}
+
+// --- Т.44, PR 1: стартові квадрати спавну (синій SQUAD_SPAWN, червоний ALIEN_SPAWN) у renderBattle ---
+describe('Т.44, PR 1: стартові квадрати спавну', () => {
+  it('синій rgba(110,168,255,0.5) для SQUAD_SPAWN і червоний rgba(255,107,107,0.5) для ALIEN_SPAWN — поверх шару терену/туману', () => {
+    const rec = recCtx();
+    const proto = HTMLCanvasElement.prototype as unknown as { getContext: () => CanvasRenderingContext2D };
+    const prev = proto.getContext;
+    proto.getContext = () => rec.ctx;
+    try {
+      const f = makeFixture();
+      f.battle.launch(firstTarget(f));
+      f.battle.renderBattle();
+    } finally {
+      proto.getContext = prev;
+    }
+    expect(rec.sets.some((s) => s.p === 'strokeStyle' && s.v === 'rgba(110,168,255,0.5)')).toBe(true); // синій — є
+    expect(rec.sets.some((s) => s.p === 'strokeStyle' && s.v === 'rgba(255,107,107,0.5)')).toBe(true); // червоний — є
+    const rects = rec.ops.filter((o) => o.m === 'strokeRect').map((o) => o.args);
+    for (const p of SQUAD_SPAWN) expect(rects).toContainEqual([p.x * BCELL + 2, p.y * BCELL + 2, BCELL - 5, BCELL - 5]);
+    for (const p of ALIEN_SPAWN) expect(rects).toContainEqual([p.x * BCELL + 2, p.y * BCELL + 2, BCELL - 5, BCELL - 5]);
+    // поверх терену/туману: індекси strokeRect спавнів — після першого fillRect(0,0,960,960) (фон drawNightTerrain)
+    const bgIdx = rec.ops.findIndex(
+      (o) => o.m === 'fillRect' && o.args[0] === 0 && o.args[1] === 0 && o.args[2] === 960 && o.args[3] === 960
+    );
+    expect(bgIdx).toBeGreaterThan(-1);
+    const spawnIdx = rec.ops.findIndex((o) => o.m === 'strokeRect' && rects.some((r) => r[0] === o.args[0] && r[1] === o.args[1]));
+    expect(spawnIdx).toBeGreaterThan(bgIdx);
+    // Т.44, PR 1: квадрати спавну — ПІД юнітами (до першого fillText юнітів), не поверх
+    const firstUnit = rec.ops.findIndex((o) => o.m === 'fillText'); // HP-бейдж юнітів (малюються після спавн-квадратів)
+    expect(firstUnit).toBeGreaterThan(-1);
+    expect(spawnIdx).toBeLessThan(firstUnit);
   });
 });

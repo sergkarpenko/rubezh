@@ -62,6 +62,7 @@ import {
   GEO_GRID_COLOR,
   NIGHT_BG,
   cellHash,
+  fogBorderSegments,
   geoIsLand,
   GEO_LAND_ROWS,
   terrainShade,
@@ -882,6 +883,21 @@ describe('П14.2/П14.3 (ADR-0072): атлас спрайтів юнітів —
 // --- Позафазна лінія «візуальні порівняння» (кандидат «Мегаполіс», крок 2,
 // ADR-0072): цілісна підлога + згенеровані стіна і декори ---
 
+// --- Т.44, PR 1: межа туману у фолбеку без ассетів (в обох випадках) ---
+describe('Т.44, PR 1: межа туману без ассетів', () => {
+  it('фолбек: межа малюється і без ассетів; число = fogBorderSegments', () => {
+    const cs = grid(3, 3, 'fog');
+    cs[4] = { x: 1, y: 1, blocked: false, visible: true }; // центр видимий
+    const s = seqCtx();
+    drawNightTerrain(s.ctx, 78, 78, cs, 26);
+    const bIdx = s.ops.findIndex((o) => 'set' in o && o.set === 'strokeStyle' && o.v === 'rgba(125,215,255,0.6)');
+    expect(bIdx).toBeGreaterThan(-1);
+    const moves = s.ops.slice(bIdx).filter((o) => 'm' in o && o.m === 'moveTo').length;
+    expect(moves).toBe(fogBorderSegments(cs).length);
+    expect(moves).toBe(4); // 4 напрямки навколо видимого центру
+  });
+});
+
 describe('позафазна лінія «Мегаполіс»: цілісна підлога cover, стіна, декори', () => {
   // Мок-ассети: завантажувачі кличуть onLoad синхронно з фіктивними джерелами
   // (фон 1024×1024 — як ассет; атлас 192×48 — 4 тайли 48).
@@ -944,7 +960,7 @@ describe('позафазна лінія «Мегаполіс»: цілісна �
     expect(s.ops.filter((o) => 'set' in o && o.set === 'imageSmoothingEnabled' && o.v === false).length).toBe(1);
   });
 
-  it('стіна — за мапою (blocked), тайл кол. 0; декори — детермінований рідкий розклад decorCol (лампа/голограма/уламки), лише на відкритих', () => {
+  it('стіна — за мапою (blocked), тайл кол. 0; декори — детермінований рідкий розклад decorCol (світло/решітка/уламки), лише на відкритих', () => {
     readyMetro();
     const s = seqCtx();
     drawNightTerrain(s.ctx, 144, 96, cells, 48);
@@ -964,7 +980,11 @@ describe('позафазна лінія «Мегаполіс»: цілісна �
         if (d !== null && !found.has(d)) found.set(d, { x, y, blocked: false, visible: true });
       }
     }
-    expect([...found.keys()].sort()).toEqual([METRO_DECOR_COL['лампа'], METRO_DECOR_COL['голограма'], METRO_DECOR_COL['уламки']].sort());
+    expect([...found.keys()].sort()).toEqual([METRO_DECOR_COL['світло'], METRO_DECOR_COL['решітка'], METRO_DECOR_COL['уламки']].sort());
+    // Т.44, PR 1: колонки ассету фіксовані (metro-tiles.png): світло=1, решітка=2, уламки=3
+    expect(METRO_DECOR_COL['світло']).toBe(1);
+    expect(METRO_DECOR_COL['решітка']).toBe(2);
+    expect(METRO_DECOR_COL['уламки']).toBe(3);
     for (const c of found.values()) expect(decorCol(c.x, c.y)).toBe(decorCol(c.x, c.y)); // стабільний (без RNG)
     // розклад рідкий: ~3/37 відкритих (~8%), три типи
     let dec = 0;
@@ -987,15 +1007,101 @@ describe('позафазна лінія «Мегаполіс»: цілісна �
     const fogged = cells.map((c) => ({ ...c, visible: c.x === 0 })); // видимий лише стовпець x=0
     const s = seqCtx();
     drawNightTerrain(s.ctx, 144, 96, fogged, 48);
-    const fogFills = s.ops.filter(
-      (o): o is { m: string; args: unknown[] } => 'm' in o && o.m === 'fillRect' && o.args[2] === 48 && o.args[3] === 48
-    );
-    expect(fogFills.length).toBe(4); // 4 клітинки туману (з 6); фон 144×96 і край туману 47×47 не рахуються
     const before = s.ops.findIndex((o) => 'm' in o && o.m === 'drawImage');
     const fogStyle = s.ops.findIndex((o) => 'set' in o && o.set === 'fillStyle' && o.v === 'rgba(5,8,15,0.55)');
+    // Т.44, PR 1: шар TILE_FOG — після знебарвлення; повноклітинні fillRect рахуємо лише у шарі туману
+    const fogFills = s.ops.filter(
+      (o, i): o is { m: string; args: unknown[] } => i > fogStyle && 'm' in o && o.m === 'fillRect' && o.args[2] === 48 && o.args[3] === 48
+    );
+    expect(fogFills.length).toBe(4); // 4 клітинки туману (з 6); фон 144×96 і край туману 47×47 не рахуються
     expect(fogStyle).toBeGreaterThan(-1);
     expect(s.ops[fogStyle + 1]).toEqual({ m: 'fillRect', args: [48, 0, 48, 48] }); // перша клітинка туману (1,0)
     expect(fogStyle).toBeGreaterThan(before); // туман — ПОВЕРХ фону і об'єктів
+  });
+
+  it('Т.44, PR 1: знебарвлення невидимих клітинок (saturation #808080) перед TILE_FOG; TILE_FOG і FOG_EDGE лишаються', () => {
+    readyMetro();
+    const fogged = cells.map((c) => ({ ...c, visible: c.x === 0 })); // видимий лише стовпець x=0
+    const s = seqCtx();
+    drawNightTerrain(s.ctx, 144, 96, fogged, 48);
+    const satIdx = s.ops.findIndex((o) => 'set' in o && o.set === 'globalCompositeOperation' && o.v === 'saturation');
+    expect(satIdx).toBeGreaterThan(-1);
+    expect(s.ops[satIdx + 1]).toEqual({ set: 'fillStyle', v: '#808080' });
+    const restIdx = s.ops.findIndex((o, i) => i > satIdx && 'm' in o && o.m === 'restore');
+    const satFills = s.ops
+      .slice(satIdx, restIdx)
+      .filter((o) => 'm' in o && o.m === 'fillRect' && o.args[2] === 48 && o.args[3] === 48)
+      .map((o) => (o as { args: unknown[] }).args);
+    expect(satFills.length).toBe(4); // 4 невидимі клітинки (x>0)
+    expect(satFills.every((a) => (a[0] as number) > 0 && (a[0] as number) % 48 === 0)).toBe(true);
+    // порядок: знебарвлення після останнього drawImage (стіни/декор) і перед шаром TILE_FOG
+    const lastImg = s.ops.reduce((m, o, i) => ('m' in o && o.m === 'drawImage' ? i : m), -1);
+    const fogIdx = s.ops.findIndex((o) => 'set' in o && o.set === 'fillStyle' && o.v === 'rgba(5,8,15,0.55)');
+    expect(satIdx).toBeGreaterThan(lastImg);
+    expect(fogIdx).toBeGreaterThan(satIdx);
+    expect(s.ops.some((o) => 'set' in o && o.set === 'fillStyle' && o.v === FOG_EDGE)).toBe(true);
+  });
+
+  it('Т.44, PR 1: штриховка лише невидимих клітинок — діагоналі кроком 8px в межах клітинки', () => {
+    readyMetro();
+    const fogged = cells.map((c) => ({ ...c, visible: c.x === 0 }));
+    const s = seqCtx();
+    drawNightTerrain(s.ctx, 144, 96, fogged, 48);
+    const hatchIdx = s.ops.findIndex((o) => 'set' in o && o.set === 'strokeStyle' && o.v === 'rgba(150,170,190,0.16)');
+    expect(hatchIdx).toBeGreaterThan(-1);
+    expect(s.ops[hatchIdx + 1]).toEqual({ set: 'lineWidth', v: 1 });
+    // Т.44, PR 1: штрихи поза блоком saturation (не знебарвлені): між останнім globalCompositeOperation і штрихом є restore
+    const gcoIdxs = s.ops
+      .map((o, i) => ({ o, i }))
+      .filter((x) => 'set' in x.o && x.o.set === 'globalCompositeOperation')
+      .map((x) => x.i);
+    expect(gcoIdxs.length).toBeGreaterThan(0);
+    const lastGco = gcoIdxs[gcoIdxs.length - 1]!;
+    expect(s.ops.slice(lastGco, hatchIdx).some((o) => 'm' in o && o.m === 'restore')).toBe(true);
+    const restIdx = s.ops.findIndex((o, i) => i > hatchIdx && 'm' in o && o.m === 'restore');
+    const block = s.ops.slice(hatchIdx, restIdx);
+    expect(block.filter((o) => 'm' in o && o.m === 'beginPath').length).toBe(4); // по одному штриху на невидиму клітинку
+    const segs: number[][] = [];
+    let cur: number[] | null = null;
+    for (const o of block) {
+      if (!('m' in o)) continue;
+      if (o.m === 'moveTo') cur = o.args as number[];
+      if (o.m === 'lineTo' && cur !== null) {
+        segs.push([...cur, ...(o.args as number[])]);
+        cur = null;
+      }
+    }
+    expect(segs.length).toBe(4 * 12); // d = 0,8,…,<2*48 → 12 ліній на клітинку
+    for (const [x1, y1, x2, y2] of segs) {
+      const cx = Math.floor(Math.min(x1, x2) / 48);
+      const cy = Math.floor(Math.min(y1, y2) / 48);
+      expect(cx).toBeGreaterThan(0); // лише невидимі клітинки (x>0)
+      expect(x1).toBeGreaterThanOrEqual(cx * 48);
+      expect(x1).toBeLessThanOrEqual(cx * 48 + 48);
+      expect(x2).toBeGreaterThanOrEqual(cx * 48);
+      expect(x2).toBeLessThanOrEqual(cx * 48 + 48);
+      expect(y1).toBeGreaterThanOrEqual(cy * 48);
+      expect(y1).toBeLessThanOrEqual(cy * 48 + 48);
+      expect(y2).toBeGreaterThanOrEqual(cy * 48);
+      expect(y2).toBeLessThanOrEqual(cy * 48 + 48);
+    }
+  });
+
+  it('Т.44, PR 1: межа туману — один beginPath, число відрізків = fogBorderSegments(cells).length', () => {
+    readyMetro();
+    const fogged = cells.map((c) => ({ ...c, visible: c.x === 0 }));
+    const s = seqCtx();
+    drawNightTerrain(s.ctx, 144, 96, fogged, 48);
+    const bIdx = s.ops.findIndex((o) => 'set' in o && o.set === 'strokeStyle' && o.v === 'rgba(125,215,255,0.6)');
+    expect(bIdx).toBeGreaterThan(-1);
+    expect(s.ops[bIdx + 1]).toEqual({ set: 'lineWidth', v: 2 });
+    const restIdx = s.ops.findIndex((o, i) => i > bIdx && 'm' in o && o.m === 'restore');
+    const block = s.ops.slice(bIdx, restIdx);
+    expect(block.filter((o) => 'm' in o && o.m === 'beginPath').length).toBe(1);
+    expect(block.filter((o) => 'm' in o && o.m === 'stroke').length).toBe(1);
+    const moves = block.filter((o) => 'm' in o && o.m === 'moveTo').length;
+    expect(moves).toBe(fogBorderSegments(fogged).length);
+    expect(moves).toBeGreaterThan(0);
   });
 
   it('фолбек без ассетів — чинні два тони terrainShade (загальний випадок покривають тести П6.13)', () => {

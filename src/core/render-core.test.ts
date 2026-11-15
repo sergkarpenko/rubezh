@@ -25,6 +25,7 @@ import {
   animT,
   animsFromEvents,
   boomParticleOffset,
+  fogBorderSegments,
   geoIsLand,
   GEO_LAND_ROWS,
   GEO_LAYOUT,
@@ -41,6 +42,7 @@ import {
   pendingDeathStarts,
   shakeOffset,
   type Anim,
+  type TerrainCell,
 } from './render-core';
 import { makeUnit, type GameEvent, type Unit } from './combat';
 import { createGeoGame, type GeoEvent } from './geo';
@@ -647,5 +649,44 @@ describe('П14.5: хвіст перехоплення — точки з поді
     expect(a.dur).toBe(RADAR_PULSE_MS);
     expect(a.maxR).toBe(216);
     expect(a.start).toBeNull();
+  });
+});
+
+// --- Т.44, PR 1: межа туману fogBorderSegments (чиста функція, координати в клітинній сітці) ---
+describe('Т.44, PR 1: fogBorderSegments — межа «видима клітинка — невидима сусідка» + край поля', () => {
+  const grid = (w: number, h: number, vis: ReadonlySet<string>): TerrainCell[] => {
+    const cells: TerrainCell[] = [];
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) cells.push({ x, y, blocked: false, visible: vis.has(x + ',' + y) });
+    return cells;
+  };
+  const keys = (segs: { x1: number; y1: number; x2: number; y2: number }[]): string[] =>
+    segs.map((s) => s.x1 + ',' + s.y1 + '>' + s.x2 + ',' + s.y2).sort();
+
+  it('порожньо: без клітинок і у повністю невидимій тумані — порожньо', () => {
+    expect(fogBorderSegments([])).toEqual([]);
+    expect(fogBorderSegments(grid(3, 3, new Set()))).toEqual([]);
+  });
+
+  it('мала мапа вручну: 3×3, видимий лише центр (1,1) — 4 відрізки (4 напрямки)', () => {
+    const segs = fogBorderSegments(grid(3, 3, new Set(['1,1'])));
+    expect(segs.length).toBe(4);
+    expect(keys(segs)).toEqual(['1,1>1,2', '1,1>2,1', '1,2>2,2', '2,1>2,2']);
+  });
+
+  it('край поля теж дає відрізок: 2×2, видима лише (0,0) — 4 відрізки (праворуч/знизу туман + ліворуч/зверху край поля)', () => {
+    const segs = fogBorderSegments(grid(2, 2, new Set(['0,0'])));
+    expect(segs.length).toBe(4);
+    expect(keys(segs)).toEqual(['0,0>0,1', '0,0>1,0', '0,1>1,1', '1,0>1,1']);
+  });
+
+  it('видима сусідня клітинка — без відрізка між ними: 2×1, обидві видимі — 6 відрізків, вертикальної межі x=1 немає', () => {
+    const segs = fogBorderSegments(grid(2, 1, new Set(['0,0', '1,0'])));
+    expect(segs.length).toBe(6); // (0,0): ліво/зверху/знизу край; (1,0): право/зверху/знизу край
+    expect(segs.some((s) => s.x1 === 1 && s.x2 === 1 && s.y1 === 0 && s.y2 === 1)).toBe(false);
+  });
+
+  it('детермінізм (ADR-0003): той самий вхід → той самий порядок відрізків', () => {
+    const cs = grid(4, 4, new Set(['1,1', '2,1', '1,2']));
+    expect(fogBorderSegments(cs)).toEqual(fogBorderSegments(cs));
   });
 });

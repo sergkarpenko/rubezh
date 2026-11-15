@@ -15,7 +15,9 @@
 import { expect, test, type Page } from '@playwright/test';
 import { TICK_MINUTES } from '../src/core/geo';
 import { MISSION_MAP_H, MISSION_MAP_W } from '../src/core/mission';
+import { BCELL } from '../src/ui/grid';
 import type { Vec2 } from '../src/core/combat';
+import { decorCol } from '../src/core/render-core';
 import { CoreMirror, enemyLine, unitLine } from './mirror';
 
 const SEED = 42;
@@ -289,6 +291,58 @@ test('сценарій приймання ADR-0030: партія → місія 
     await page.setViewportSize({ width: 1024, height: 768 });
     await expectBattleFits(page, '1024 × 768', 540);
     await page.setViewportSize({ width: 1440, height: 900 });
+
+    // Т.44, PR 1: гейт туману — пікселі канвасу #battle (внутрішній розмір 960×960, клітинка 48) через getImageData;
+    // для центральної ділянки 24×24 px клітинки — середню per-pixel max(R,G,B)−min(R,G,B). У невидимих клітинках без стіни,
+    // декору й видимого сусіда (чистий туман: знебарвлення + TILE_FOG + штрихи; край із FOG_EDGE — окремий незмінний шар)
+    // ≤ 9 (на прототипі: 5,8 проти 13,6–18,3 без знебарвлення), у видимих — без знебарвлення (> 9).
+    // Кліки — як у сценарії (tap), видимість — з mirror (e2e/mirror.ts); стіни — map.blocked, декор — decorCol (render-core).
+    const seenSet = mirror.seen();
+    const fogSkip = new Set<string>();
+    for (let y = 0; y < MISSION_MAP_H; y++)
+      for (let x = 0; x < MISSION_MAP_W; x++) {
+        const k = x + ',' + y;
+        if (mirror.state.map.blocked.has(k) || decorCol(x, y) !== null) {
+          fogSkip.add(k);
+          continue;
+        }
+        const nearVis =
+          seenSet.has(x + 1 + ',' + y) || seenSet.has(x - 1 + ',' + y) || seenSet.has(x + ',' + (y + 1)) || seenSet.has(x + ',' + (y - 1));
+        if (!seenSet.has(k) && nearVis) fogSkip.add(k); // FOG_EDGE-клітинка на межі видимості — не чистий туман
+      }
+    const fogSpread = await page.evaluate(
+      ({ seen, skip, w, h, cell }) => {
+        const vis = new Set(seen);
+        const sk = new Set(skip);
+        const cv = document.getElementById('battle') as HTMLCanvasElement;
+        const ctx = cv.getContext('2d');
+        if (!ctx) throw new Error('немає 2d-контексту #battle');
+        const meanSpread = (cx: number, cy: number): number => {
+          const d = ctx.getImageData(cx * cell + 12, cy * cell + 12, 24, 24).data;
+          let sum = 0;
+          for (let i = 0; i < d.length; i += 4) {
+            sum += Math.max(d[i]!, d[i + 1]!, d[i + 2]!) - Math.min(d[i]!, d[i + 1]!, d[i + 2]!);
+          }
+          return sum / (d.length / 4);
+        };
+        let fogMax = -1;
+        let visMax = -1;
+        for (let y = 0; y < h; y++)
+          for (let x = 0; x < w; x++) {
+            const k = x + ',' + y;
+            const sp = meanSpread(x, y);
+            if (vis.has(k)) visMax = Math.max(visMax, sp);
+            else if (!sk.has(k)) fogMax = Math.max(fogMax, sp);
+          }
+        return { fogMax, visMax };
+      },
+      { seen: [...seenSet], skip: [...fogSkip], w: MISSION_MAP_W, h: MISSION_MAP_H, cell: BCELL }
+    );
+    expect(
+      fogSpread.fogMax,
+      'Т.44: туман знебарвлений у невидимих клітинках без стіни/декору/краю (середній spread ≤ 9)'
+    ).toBeLessThanOrEqual(9);
+    expect(fogSpread.visMax, 'Т.44: видимі клітинки без знебарвлення (середній spread > 9)').toBeGreaterThan(9);
   });
 
   await test.step('бій: вибрати юніта → рух (тап-тап)', async () => {
