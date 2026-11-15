@@ -1400,6 +1400,21 @@ describe('Т.43: «До події», зупинки «+1 доба» і проб
     expect(clock()).toBe(firstDetection);
   });
 
+  it('рядок «Наступний крок»: час → зонд у повітрі → зонд приземлився; у бою прихований', () => {
+    startParty();
+    const step = $('next-step');
+    expect(step.classList.contains('hidden')).toBe(false);
+    expect(step.textContent).toBe('Наступний крок: рухайте час — сенсорна сітка шукає зонди');
+    btn('btn-event').click(); // Д1 09:30 — зонд виявлено в повітрі
+    expect(step.textContent).toBe('Наступний крок: зонд у повітрі — перехопіть або чекайте приземлення');
+    btn('btn-event').click(); // Д1 11:00 — приземлився
+    const win = /вікно ([\d.]+) год/.exec(document.querySelector('#ufos .ufo')!.textContent)![1];
+    expect(step.textContent).toBe('Наступний крок: зонд приземлився — запустіть місію (вікно ' + win + ' год)');
+    document.querySelector<HTMLButtonElement>('button.mission')!.click();
+    expect(step.classList.contains('hidden')).toBe(true);
+    expect(step.textContent).toBe('');
+  });
+
   it('у бою «До події» неактивна, пробіл і клік в обхід disabled часу не рухають', () => {
     startParty();
     let launched = false;

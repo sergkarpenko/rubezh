@@ -36,6 +36,8 @@ import { createPanels, inAirCombat, readyToIssue } from './ui/panels';
 import { GCELL } from './ui/grid';
 // Т.43: зупинки кнопок часу («До події», «+1 доба») — модуль src/ui/time-control.ts.
 import { isSpaceForEvent, runTime, type RunMode } from './ui/time-control';
+// Т.43: рядок «Наступний крок» у шапці — модуль src/ui/next-step.ts.
+import { nextStepText } from './ui/next-step';
 // пR.2 (ADR-0037): бойовище і флоу бою — модуль src/ui/battle.ts.
 import { createBattleUI, type BattleUIState } from './ui/battle';
 // П13.2 (ADR-0066): вертикальний тулбар бойових дій збоку — модуль src/ui/toolbar.ts.
@@ -487,6 +489,10 @@ function renderAll(): void {
   el('status').classList.toggle('dimmed', ui.mission !== null);
   // Т.32: розкладка бою (index.html) — колонку вузла сховано, поле вписане у вікно
   el('layout').classList.toggle('in-battle', ui.mission !== null);
+  // Т.43: одна порада за станом партії; у бою і після кінця гри рядок прихований
+  const step = nextStepText(party, { inBattle: ui.mission !== null, gameOver });
+  el('next-step').textContent = step ?? '';
+  el('next-step').classList.toggle('hidden', step === null);
   panels.renderCampaign();
   panels.renderGeo();
   panels.renderUfos();

@@ -1069,6 +1069,17 @@
           overflow-y: auto;
         }
       }
+      /* Т.43: рядок «Наступний крок» — другий рядок шапки на всю ширину, один рядок тексту */
+      #next-step {
+        flex-basis: 100%;
+        margin-top: -8px;
+        font-size: 12px;
+        line-height: 16px;
+        color: #9aa7b5;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
       /* Т.43: третя кнопка часу («До події») — на вікні завширшки з iPad (1024 px)
          шапка лишається в один рядок: щільніші проміжки чипів і кнопок */
       @media (min-width: 900px) and (max-width: 1180px) {
@@ -1113,6 +1124,8 @@
         <button id="btn-menu" title="Меню: налаштування, «Як грати», вихід на стартовий екран">Меню</button>
         <button id="btn-help" title="Як грати: легенда, мета кампанії, керування">?</button>
       </div>
+      <!-- Т.43: рядок «Наступний крок» — другим рядком шапки; у бою прихований -->
+      <div id="next-step" class="hidden"></div>
     </header>
     <main id="layout">
       <div id="focus">
