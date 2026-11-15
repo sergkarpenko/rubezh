@@ -38,6 +38,7 @@ import {
   drawGeoBaseSprite,
   drawGeoTerrain,
   drawNightTerrain,
+  drawPathPreview,
   drawReachZone,
   drawSoldierSprite,
   drawTargetFrame,
@@ -1278,5 +1279,74 @@ describe('Т.44: drawReachZone — зона ходу (заливка і конт
     // стан контексту відновлено: save на початку, restore наприкінці
     expect(s.ops[0]).toEqual({ m: 'save', args: [] });
     expect(s.ops[s.ops.length - 1]).toEqual({ m: 'restore', args: [] });
+  });
+});
+
+describe('Т.44: drawPathPreview — шлях лінією і ціна біля цілі', () => {
+  const base = { from: { x: 5, y: 5 }, cell: 48, cw: 960 };
+  const calls = (ops: Op[], m: string): unknown[][] => ops.flatMap((o) => ('m' in o && o.m === m ? [o.args] : []));
+  const sets = (ops: Op[], k: string): unknown[] => ops.flatMap((o) => ('set' in o && o.set === k ? [o.v] : []));
+
+  it('порожній шлях — жодної операції', () => {
+    const s = seqCtx();
+    drawPathPreview(s.ctx, { ...base, path: [], ap: 0, affordable: true });
+    expect(s.ops).toEqual([]);
+  });
+
+  it('ламана від клітинки оперативника через центри клітинок шляху: товщина 4, круглі стики й кінці, один шлях', () => {
+    const s = seqCtx();
+    const path = [
+      { x: 5, y: 4 },
+      { x: 6, y: 4 },
+      { x: 6, y: 3 },
+    ];
+    drawPathPreview(s.ctx, { ...base, path, ap: 3, affordable: true });
+    expect(calls(s.ops, 'moveTo')).toEqual([[264, 264]]);
+    expect(calls(s.ops, 'lineTo')).toEqual([
+      [264, 216],
+      [312, 216],
+      [312, 168],
+    ]);
+    expect(calls(s.ops, 'stroke')).toHaveLength(1);
+    expect(sets(s.ops, 'lineWidth')).toEqual([4, 1]); // лінія, потім рамка плашки
+    expect(sets(s.ops, 'lineJoin')).toEqual(['round']);
+    expect(sets(s.ops, 'lineCap')).toEqual(['round']);
+    // у кінці — одне коло радіусом 7 у центрі цілі; крапок радіусом 3 немає
+    expect(calls(s.ops, 'arc')).toEqual([[312, 168, 7, 0, Math.PI * 2]]);
+    // лінія — до кола і плашки
+    const idx = (m: string): number => s.ops.findIndex((o) => 'm' in o && o.m === m);
+    expect(idx('stroke')).toBeLessThan(idx('arc'));
+    expect(idx('arc')).toBeLessThan(idx('fillRect'));
+    expect(s.ops[0]).toEqual({ m: 'save', args: [] });
+    expect(s.ops[s.ops.length - 1]).toEqual({ m: 'restore', args: [] });
+  });
+
+  it('плашка: текст «<число> AP» шрифтом bold 15px monospace по центру, фон і рамка 1 px кольором лінії', () => {
+    const s = seqCtx();
+    drawPathPreview(s.ctx, { ...base, path: [{ x: 5, y: 4 }], ap: 9, affordable: true });
+    // «9 AP»: 4 знаки × 9 + 10 = 46 × 21, над ціллю (5,4): (241, 182)
+    expect(calls(s.ops, 'fillRect')).toEqual([[241, 182, 46, 21]]);
+    expect(calls(s.ops, 'strokeRect')).toEqual([[241.5, 182.5, 45, 20]]);
+    expect(calls(s.ops, 'fillText')).toEqual([['9 AP', 264, 193]]);
+    expect(sets(s.ops, 'font')).toEqual(['bold 15px monospace']);
+    expect(sets(s.ops, 'textAlign')).toEqual(['center']);
+    expect(sets(s.ops, 'textBaseline')).toEqual(['middle']);
+    expect(sets(s.ops, 'strokeStyle')).toEqual(['rgba(127,226,160,0.95)']);
+    expect(sets(s.ops, 'fillStyle')).toEqual(['rgba(127,226,160,0.95)', 'rgba(6,10,20,0.9)', 'rgba(127,226,160,0.95)']);
+  });
+
+  it('AP не вистачає — лінія, коло, рамка і текст червоні; число — ціна шляху, а не довжина', () => {
+    const s = seqCtx();
+    drawPathPreview(s.ctx, { ...base, path: [{ x: 5, y: 4 }], ap: 12, affordable: false });
+    expect(sets(s.ops, 'strokeStyle')).toEqual(['rgba(255,156,156,0.95)']);
+    expect(sets(s.ops, 'fillStyle')).toEqual(['rgba(255,156,156,0.95)', 'rgba(6,10,20,0.9)', 'rgba(255,156,156,0.95)']);
+    expect(calls(s.ops, 'fillText')[0]![0]).toBe('12 AP');
+  });
+
+  it('ціль у верхньому рядку — плашка під нею; біля правого краю — притиснута в межі канви', () => {
+    const s = seqCtx();
+    drawPathPreview(s.ctx, { from: { x: 19, y: 1 }, path: [{ x: 19, y: 0 }], ap: 1, affordable: true, cell: 48, cw: 960 });
+    expect(calls(s.ops, 'fillRect')).toEqual([[912, 36, 46, 21]]);
+    expect(calls(s.ops, 'fillText')).toEqual([['1 AP', 935, 47]]);
   });
 });

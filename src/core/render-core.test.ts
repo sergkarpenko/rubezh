@@ -9,6 +9,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   fogBorderSegments,
+  pathLabelBox,
   zoneOutlineSegments,
   type TerrainCell,
   AnimEngine,
@@ -770,5 +771,31 @@ describe('Т.44: zoneOutlineSegments — контур зони ходу', () => 
     // квадрат 2 × 2 і пряма смуга — увігнутих кутів немає
     expect(zoneOutlineSegments(new Set(['0,0', '1,0', '0,1', '1,1'])).every((e) => e.e1 === 0 && e.e2 === 0)).toBe(true);
     expect(zoneOutlineSegments(new Set(['0,0', '0,1', '0,2'])).every((e) => e.e1 === 0 && e.e2 === 0)).toBe(true);
+  });
+});
+
+describe('Т.44: pathLabelBox — положення плашки ціни шляху', () => {
+  it('над ціллю: ширина — текст + 10, висота 21, верх — центр клітинки − 34, по центру клітинки', () => {
+    // ціль (5,4), клітинка 48: центр (264, 216); «9 AP» — 36 px
+    expect(pathLabelBox({ x: 5, y: 4 }, 48, 36, 960)).toEqual({ x: 241, y: 182, w: 46, h: 21 });
+    // ширший текст «10 AP» — 45 px: плашка 55, лівий край 236,5 → 237
+    expect(pathLabelBox({ x: 5, y: 4 }, 48, 45, 960)).toEqual({ x: 237, y: 182, w: 55, h: 21 });
+    // дробова ширина тексту округлюється вгору
+    expect(pathLabelBox({ x: 5, y: 4 }, 48, 36.2, 960).w).toBe(47);
+  });
+
+  it('у верхньому рядку зверху не вміщується — плашка під ціллю (центр + 12); у другому рядку — вже над нею', () => {
+    expect(pathLabelBox({ x: 5, y: 0 }, 48, 36, 960).y).toBe(36);
+    expect(pathLabelBox({ x: 5, y: 1 }, 48, 36, 960).y).toBe(38);
+    // межа «не вміщується»: верх ближче 2 px до краю канви (клітинка 70: центр 35, верх 1 → під ціллю; 72: верх 2 → над)
+    expect(pathLabelBox({ x: 0, y: 0 }, 70, 36, 960).y).toBe(47);
+    expect(pathLabelBox({ x: 0, y: 0 }, 72, 36, 960).y).toBe(2);
+  });
+
+  it('притискання до країв канви з відступом 2 px: лівий стовпчик і правий стовпчик', () => {
+    expect(pathLabelBox({ x: 0, y: 3 }, 48, 36, 960).x).toBe(2);
+    const right = pathLabelBox({ x: 19, y: 3 }, 48, 36, 960);
+    expect(right.x).toBe(912);
+    expect(right.x + right.w).toBe(958);
   });
 });

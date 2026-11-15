@@ -642,7 +642,7 @@ describe('Т.44: зона ходу вибраного оперативника �
     none(() => {}, 0);
   });
 
-  it('шар зони — після синіх квадратів висадки, до крапок шляху і під юнітами', () => {
+  it('шар зони — після синіх квадратів висадки, до лінії шляху і під юнітами', () => {
     const { f } = setup();
     f.ui.hoverPath = [{ x: 5, y: 4 }];
     f.ui.hoverAp = 1;
@@ -651,13 +651,73 @@ describe('Т.44: зона ходу вибраного оперативника �
     expect(fills).toHaveLength(10);
     const squares = ops.indexOf('set:strokeStyle=rgba(110,168,255,0.5)');
     const outline = ops.indexOf('set:strokeStyle=rgba(127,226,160,0.75)');
-    const path = ops.findIndex((o) => o.startsWith('arc(264,216,3,')); // крапка прев'ю шляху в клітинці (5,4)
+    const path = ops.indexOf('set:strokeStyle=rgba(127,226,160,0.95)'); // лінія прев'ю шляху до клітинки (5,4)
+    expect(ops.slice(path, path + 8)).toContain('lineTo(264,216)');
+    const label = ops.findIndex((o) => o.startsWith('fillText(1 AP,')); // плашка ціни шляху
     const unitHp = ops.findIndex((o) => o.startsWith('fillText(10,')); // плашка HP юніта
     expect(squares).toBeGreaterThan(-1);
     expect(fills[0]).toBeGreaterThan(squares);
     expect(outline).toBeGreaterThan(fills[9]!);
     expect(path).toBeGreaterThan(outline);
-    expect(unitHp).toBeGreaterThan(path);
+    expect(label).toBeGreaterThan(path);
+    expect(unitHp).toBeGreaterThan(label);
+  });
+
+  it('прев\u2019ю шляху — лінія від оперативника і ціна «N AP» біля цілі; крапок радіусом 3 немає', () => {
+    const { f } = setup();
+    f.ui.hoverPath = [
+      { x: 5, y: 4 },
+      { x: 5, y: 3 },
+    ];
+    f.ui.hoverAp = 2;
+    const ops = render(f);
+    const at = ops.indexOf('set:strokeStyle=rgba(127,226,160,0.95)');
+    expect(at).toBeGreaterThan(-1);
+    // від клітинки оперативника (5,5) через (5,4) до (5,3), коло в цілі, ціна над нею
+    const line = ops.slice(at).filter((o) => /^(moveTo|lineTo|arc)\(/.test(o));
+    expect(line.slice(0, 4)).toEqual([
+      'moveTo(264,264)',
+      'lineTo(264,216)',
+      'lineTo(264,168)',
+      'arc(264,168,7,0,' + String(Math.PI * 2) + ')',
+    ]);
+    expect(ops).toContain('fillText(2 AP,264,145)');
+    expect(ops.some((o) => /^arc\(\d+,\d+,3,/.test(o))).toBe(false);
+    expect(ops).not.toContain('set:strokeStyle=rgba(255,156,156,0.95)');
+  });
+
+  it('шлях дорожчий за AP оперативника — лінія і ціна червоні; рівно стільки, скільки є, — зелені', () => {
+    const { f } = setup();
+    f.ui.hoverPath = [
+      { x: 5, y: 4 },
+      { x: 5, y: 3 },
+      { x: 5, y: 2 },
+    ];
+    f.ui.hoverAp = 5; // проти 2 AP; число на плашці — ціна шляху, а не число клітинок (їх три)
+    const red = render(f);
+    expect(red).toContain('set:strokeStyle=rgba(255,156,156,0.95)');
+    expect(red).not.toContain('set:strokeStyle=rgba(127,226,160,0.95)');
+    expect(red.some((o) => o.startsWith('fillText(5 AP,'))).toBe(true);
+    f.ui.hoverAp = 2;
+    const green = render(f);
+    expect(green).toContain('set:strokeStyle=rgba(127,226,160,0.95)');
+    expect(green).not.toContain('set:strokeStyle=rgba(255,156,156,0.95)');
+  });
+
+  it('прев\u2019ю шляху немає: без шляху, з порожнім шляхом, без вибору, під час ходу демонів', () => {
+    const none = (prep: (f: Fixture, g: GameState) => void): void => {
+      const { f, g } = setup();
+      f.ui.hoverPath = [{ x: 5, y: 4 }];
+      f.ui.hoverAp = 1;
+      prep(f, g);
+      const ops = render(f);
+      expect(ops.some((o) => o.includes(' AP,'))).toBe(false);
+      expect(ops).not.toContain('set:strokeStyle=rgba(127,226,160,0.95)');
+    };
+    none((f) => (f.ui.hoverPath = null));
+    none((f) => (f.ui.hoverPath = []));
+    none((f) => (f.ui.selectedId = null));
+    none((_f, g) => (g.activeSide = 'alien'));
   });
 
   it('поки грає плашка ходу демонів (хід уже гравця, анімації ще йдуть), зони немає; після неї — є', () => {

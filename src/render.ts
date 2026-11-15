@@ -18,6 +18,8 @@ import {
   BOOM_PARTICLES,
   FOG_EDGE,
   fogBorderSegments,
+  PATH_LABEL_CHAR_W,
+  pathLabelBox,
   zoneOutlineSegments,
   GEO_CELL_A,
   GEO_CELL_B,
@@ -696,6 +698,57 @@ export function drawReachZone(
     ctx.lineTo(e.x2 * cell + e.nx, e.y2 * cell + e.ny + e.e2);
   }
   ctx.stroke();
+  ctx.restore();
+}
+
+// Т.44: прев'ю шляху — ламана через центри клітинок від оперативника до цілі, коло в кінці
+// і плашка ціни «<число> AP» біля цілі. Колір: AP вистачає — зелений, не вистачає — червоний.
+// Ширина тексту — оцінка 9 px на знак (як у drawChanceLabel: без measureText, якого немає
+// в мок-контексті jsdom); текст вирівняно по центру плашки, тож похибка оцінки симетрична.
+// Порожній шлях — нічого не малюється.
+export const PATH_OK = 'rgba(127,226,160,0.95)';
+export const PATH_SHORT = 'rgba(255,156,156,0.95)';
+export const PATH_LABEL_BG = 'rgba(6,10,20,0.9)';
+const PATH_W = 4;
+const PATH_END_R = 7;
+export interface PathPreview {
+  from: { x: number; y: number }; // клітинка оперативника
+  path: ReadonlyArray<{ x: number; y: number }>; // клітинки шляху без стартової
+  ap: number; // ціна шляху
+  affordable: boolean;
+  cell: number;
+  cw: number; // ширина buffer'а канви, px
+}
+export function drawPathPreview(ctx: CanvasRenderingContext2D, p: PathPreview): void {
+  const goal = p.path[p.path.length - 1];
+  if (!goal) return;
+  const mid = (c: { x: number; y: number }): [number, number] => [c.x * p.cell + p.cell / 2, c.y * p.cell + p.cell / 2];
+  const color = p.affordable ? PATH_OK : PATH_SHORT;
+  ctx.save();
+  ctx.strokeStyle = color;
+  ctx.lineWidth = PATH_W;
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(...mid(p.from));
+  for (const c of p.path) ctx.lineTo(...mid(c));
+  ctx.stroke();
+  const [gx, gy] = mid(goal);
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.arc(gx, gy, PATH_END_R, 0, Math.PI * 2);
+  ctx.fill();
+  const text = p.ap + ' AP';
+  const box = pathLabelBox(goal, p.cell, text.length * PATH_LABEL_CHAR_W, p.cw);
+  ctx.fillStyle = PATH_LABEL_BG;
+  ctx.fillRect(box.x, box.y, box.w, box.h);
+  ctx.lineWidth = 1;
+  ctx.strokeRect(box.x + 0.5, box.y + 0.5, box.w - 1, box.h - 1);
+  ctx.fillStyle = color;
+  ctx.font = 'bold 15px monospace';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, box.x + box.w / 2, box.y + 11);
   ctx.restore();
 }
 
