@@ -734,6 +734,21 @@ describe('Т.44: зона ходу вибраного оперативника �
     none((_f, g) => (g.activeSide = 'alien'));
   });
 
+  it('Т.45: прев\u2019ю шляху немає у зведеному режимі пострілу, гранати і гелю; без режиму — є', () => {
+    const draw = (prep: (f: Fixture) => void): string[] => {
+      const { f } = setup();
+      f.ui.hoverPath = [{ x: 5, y: 4 }];
+      f.ui.hoverAp = 1;
+      prep(f);
+      return render(f);
+    };
+    const drawn = (ops: string[]): boolean => ops.some((o) => o.includes(' AP,')) || ops.includes('set:strokeStyle=rgba(127,226,160,0.95)');
+    expect(drawn(draw(() => undefined))).toBe(true); // контроль: та сама фікстура без режиму малює
+    expect(drawn(draw((f) => (f.ui.fireMode = 'snap')))).toBe(false);
+    expect(drawn(draw((f) => (f.ui.itemMode = 'grenade')))).toBe(false);
+    expect(drawn(draw((f) => (f.ui.itemMode = 'medkit')))).toBe(false);
+  });
+
   it('поки грає плашка ходу демонів (хід уже гравця, анімації ще йдуть), зони немає; після неї — є', () => {
     vi.useFakeTimers();
     try {

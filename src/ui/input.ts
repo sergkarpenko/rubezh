@@ -371,7 +371,15 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
         if (next !== null) ui.hoverPath = null;
         battle.renderBattle();
       }
-      if (ui.aimCell !== null) return;
+    }
+    // Т.45: поки зведено постріл, гранату чи гель, клік по клітинці — не хід: прев'ю шляху
+    // не показуємо (як і зону ходу), підказку режиму в #binfo не переписуємо
+    if (ui.fireMode !== null || ui.itemMode !== null) {
+      if (ui.hoverPath !== null) {
+        ui.hoverPath = null;
+        battle.renderBattle();
+      }
+      return;
     }
     if (cell.x === sel.pos.x && cell.y === sel.pos.y) {
       if (ui.hoverPath !== null) {
@@ -384,7 +392,8 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
     if (samePath(path, ui.hoverPath)) return; // без перемальовки на кожен піксель
     ui.hoverPath = path;
     ui.hoverAp = path ? pathApCost(path) : 0;
-    if (path) {
+    // Т.45: в авто-бої прев'ю малюється, але рядок #binfo лишається за авто-боєм
+    if (path && !deps.autoBusy()) {
       if (ui.hoverAp > sel.ap)
         battle.binfo('Не вистачає AP: шлях ' + ui.hoverAp + ' проти ' + sel.ap + ' (клавіша скасує — просто не клікайте).');
       else battle.binfo('Шлях: ' + ui.hoverAp + ' AP — клікніть, щоб рухатись.');

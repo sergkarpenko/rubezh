@@ -7,6 +7,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { advanceTime, missionTargets } from '../core/geo';
 import { distance, hasLineOfSight, type Unit } from '../core/combat';
+import { findPath } from '../core/map';
 import { makeMoveAnim, type Anim } from '../core/render-core';
 import { createParty, type Party } from '../core/save';
 import { initPixelSprites } from '../render';
@@ -478,6 +479,85 @@ describe('П14.4: характеристики демона Розриву по 
     expect(f.binfo()).toContain('зброя «' + alien.weapon.name + '»'); // клік знаходить відображуваного демона
     // бойові гілки незмінні: фактична позиція демона — у тумані, постріл у
     // відображувану клітинку з недієвою зброєю не приводить до дії
+  });
+});
+
+describe('Т.45: прев\u2019ю шляху під курсором у режимах', () => {
+  const PATH_HINT = /^(Шлях: \d+ AP|Не вистачає AP: шлях \d+)/;
+  // Вибраний оперативник і порожня клітинка поруч, до якої є шлях.
+  function hoverFixture(autoBusy = false): { f: Fixture; s: Unit; hover: () => void } {
+    const f = makeFixture(autoBusy);
+    launchMission(f);
+    const st = f.ui.mission!.state;
+    const s = st.units.find((u) => u.side === 'player' && u.alive)!;
+    f.ui.selectedId = s.id;
+    const to = [1, 2, 3, 4, 5, 6]
+      .flatMap((d) => [
+        { x: s.pos.x + d, y: s.pos.y },
+        { x: s.pos.x, y: s.pos.y + d },
+        { x: s.pos.x - d, y: s.pos.y },
+        { x: s.pos.x, y: s.pos.y - d },
+      ])
+      .find((c) => !st.units.some((u) => u.alive && u.pos.x === c.x && u.pos.y === c.y) && findPath(st, s.pos, c) !== null)!;
+    const hover = (): void => f.input.battleCanvasHover({ clientX: to.x * 48 + 24, clientY: to.y * 48 + 24 } as MouseEvent);
+    return { f, s, hover };
+  }
+
+  it('без режиму наведення дає шлях, ціну і підказку в #binfo', () => {
+    const { f, hover } = hoverFixture();
+    hover();
+    expect(f.ui.hoverPath).not.toBeNull();
+    expect(f.ui.hoverAp).toBeGreaterThan(0);
+    expect(f.binfo()).toMatch(PATH_HINT);
+  });
+
+  it('зведений постріл: наведення на порожню клітинку шляху не дає і підказку режиму не переписує', () => {
+    const { f, hover } = hoverFixture();
+    f.input.armFire('snap');
+    expect(f.ui.fireMode).toBe('snap');
+    const hint = f.binfo();
+    hover();
+    expect(f.ui.hoverPath).toBeNull();
+    expect(f.binfo()).toBe(hint);
+    expect(hint).not.toMatch(PATH_HINT);
+  });
+
+  it('граната і гель: наведення шляху не дає, підказка режиму лишається', () => {
+    for (const mode of ['grenade', 'medkit'] as const) {
+      const { f, s, hover } = hoverFixture();
+      f.ui.mission!.state.items = { [s.id]: { medkit: true, grenade: true } };
+      if (mode === 'grenade') f.input.armGrenade();
+      else f.input.armMedkit();
+      expect(f.ui.itemMode).toBe(mode);
+      const hint = f.binfo();
+      hover();
+      expect(f.ui.hoverPath).toBeNull();
+      expect(f.binfo()).toBe(hint);
+    }
+  });
+
+  it('шлях, наведений до зведення, наведення в режимі прибирає і перемальовує поле', () => {
+    for (const arm of [(f: Fixture) => f.input.armFire('snap'), (f: Fixture) => f.input.armGrenade()]) {
+      const { f, s, hover } = hoverFixture();
+      f.ui.mission!.state.items = { [s.id]: { medkit: false, grenade: true } };
+      hover();
+      expect(f.ui.hoverPath).not.toBeNull();
+      arm(f);
+      const spy = vi.spyOn(f.battle, 'renderBattle');
+      hover();
+      expect(f.ui.hoverPath).toBeNull();
+      expect(spy).toHaveBeenCalledTimes(1);
+      hover(); // шляху вже немає — зайвої перемальовки теж
+      expect(spy).toHaveBeenCalledTimes(1);
+    }
+  });
+
+  it('авто-бій: наведення малює шлях, але #binfo не переписує', () => {
+    const { f, hover } = hoverFixture(true);
+    f.battle.binfo('Авто-бій триває.');
+    hover();
+    expect(f.ui.hoverPath).not.toBeNull();
+    expect(f.binfo()).toBe('Авто-бій триває.');
   });
 });
 

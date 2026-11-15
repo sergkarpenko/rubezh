@@ -363,8 +363,9 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
     }
 
     // Т.44: прев'ю шляху під курсором — лінія від оперативника і ціна «<число> AP» біля цілі:
-    // зелені — вистачає AP, червоні — ні
-    if (ui.hoverPath && sel && playerTurnActive()) {
+    // зелені — вистачає AP, червоні — ні. Т.45: у зведеному режимі пострілу, гранати чи гелю
+    // прев'ю не малюється (шлях міг лишитись від наведення до зведення) — як і зона ходу
+    if (ui.hoverPath && sel && playerTurnActive() && ui.fireMode === null && ui.itemMode === null) {
       drawPathPreview(ctx, {
         from: sel.pos,
         path: ui.hoverPath,
