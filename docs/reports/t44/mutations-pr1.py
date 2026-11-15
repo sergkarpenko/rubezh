@@ -18,11 +18,17 @@ MUT = [
     ('межа на краю поля', 'src/core/render-core.ts', "  const fog = new Set(cells.filter((c) => !c.visible).map((c) => c.x + ',' + c.y));", "  const seen = new Set(cells.filter((c) => c.visible).map((c) => c.x + ',' + c.y));\n  const fog = { has: (k: string): boolean => !seen.has(k) };", False),
     ('червоні квадрати повернено', 'src/ui/battle.ts', "    ctx.setLineDash([]);\n\n    // прев'ю шляху", "    ctx.strokeStyle = 'rgba(255,107,107,0.5)';\n    for (const p of SQUAD_SPAWN) ctx.strokeRect(p.x * BCELL + 2, p.y * BCELL + 2, BCELL - 5, BCELL - 5);\n    ctx.setLineDash([]);\n\n    // прев'ю шляху", False),
     ('синіх квадратів немає', 'src/ui/battle.ts', "    ctx.strokeStyle = 'rgba(110,168,255,0.5)';\n", '', False),
+    ('межа до м\'якого краю', 'src/render.ts', "  ctx.fillStyle = FOG_EDGE;\n", "  ctx.strokeStyle = FOG_BORDER;\n  ctx.fillStyle = FOG_EDGE;\n", False),
+    ('штрих без restore', 'src/render.ts', "    ctx.stroke();\n    ctx.restore();\n  } else {", "    ctx.stroke();\n  } else {", False),
+    ('межа без restore', 'src/render.ts', "    ctx.stroke();\n    ctx.restore();\n  }\n}", "    ctx.stroke();\n  }\n}", False),
     ('ключі декору переплутано', 'src/render.ts', "{ світло: 1, решітка: 2, уламки: 3 }", "{ світло: 2, решітка: 1, уламки: 3 }", False),
 ]
 
+ENV = {k: v for k, v in os.environ.items() if k != 'E2E_URL'}  # e2e має міряти збірку копії, а не зовнішню
+
+
 def run(cmd, cwd):
-    return subprocess.run(cmd, cwd=cwd, capture_output=True, text=True).returncode
+    return subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, env=ENV).returncode
 
 tmp = tempfile.mkdtemp(prefix='t44-mut-')
 work = os.path.join(tmp, 'repo')

@@ -1072,9 +1072,21 @@ describe('позафазна лінія «Мегаполіс»: цілісна �
       [48, 96],
     ]);
     expect(s.ops[border + 1]).toEqual({ set: 'lineWidth', v: 2 });
+    // стан контексту відновлено: штрих і межа — кожен у своїй парі save … restore, restore одразу після stroke
+    const strokes = s.ops.flatMap((o, i) => ('m' in o && o.m === 'stroke' ? [i] : []));
+    expect(strokes.length).toBe(2);
+    for (const i of strokes) expect(s.ops[i + 1]).toEqual({ m: 'restore', args: [] });
+    expect(s.ops[hatch - 1]).toEqual({ m: 'save', args: [] });
+    expect(s.ops[border - 1]).toEqual({ m: 'save', args: [] });
+    expect(s.ops.filter((o) => 'm' in o && o.m === 'save').length).toBe(s.ops.filter((o) => 'm' in o && o.m === 'restore').length);
+    expect(strokes[1]! + 1).toBe(s.ops.length - 1); // межа — останній шар терену
+    // межа — після м'якого краю туману
+    const edge = s.ops.findIndex((o) => 'set' in o && o.set === 'fillStyle' && o.v === FOG_EDGE);
+    expect(edge).toBeGreaterThan(hatch);
+    expect(edge).toBeLessThan(border);
   });
 
-  it('Т.44: без туману — ні знебарвлення клітинок, ні межі; у фолбеку без ассетів — лише межа', () => {
+  it('Т.44: без туману — ні штриха, ні межі', () => {
     readyMetro();
     const clear = seqCtx();
     drawNightTerrain(clear.ctx, 144, 96, cells, 48);

@@ -1,3 +1,11 @@
+"""Т.44: прототип для ескізів власникові — НЕ код гри. Переписує src/render.ts і src/ui/battle.ts
+варіантами за прапорцем globalThis.__v, тому працює лише в копії репозиторію:
+    python3 docs/reports/t44/prototype-patch.py /шлях/до/копії
+Без аргументу або в теці з .git — відмова (щоб не зіпсувати робоче дерево)."""
+import os, sys
+if len(sys.argv) != 2 or os.path.exists(os.path.join(sys.argv[1], '.git')):
+    sys.exit('Потрібна копія репозиторію без .git: python3 prototype-patch.py /шлях/до/копії')
+os.chdir(sys.argv[1])
 p='src/render.ts'; s=open(p).read()
 a="""      const dcol = decorCol(c.x, c.y);
       if (dcol === null) continue;

@@ -1,3 +1,5 @@
+// Т.44: знімки ескізів із прототипу (prototype-patch.py у копії репозиторію). Чекає прев'ю прототипу на порту 4175
+// і пише знімки в теку out/ поруч із місцем запуску — запускати поза репозиторієм (тека з посиланням node_modules).
 import { chromium } from '@playwright/test';
 const b = await chromium.launch({ executablePath: process.env.E2E_CHROME });
 for (const [name, w, h] of [['d1366', 1366, 768], ['ipad', 1024, 768]]) {
