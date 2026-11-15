@@ -309,4 +309,4 @@
 
 ### Чекліст (локально, перед пушем)
 
-`tsc` (три конфігурації), lint, `format:check` — без зауважень; `npm test` — 47 файлів, 1108 тестів; `npm run docs` — 0 помилок; `npm run test:e2e` — 1 passed.
+`tsc` (три конфігурації), lint, `format:check` — без зауважень; `npm test` — 47 файлів, 1108 тестів; `npm run docs` — 0 помилок; `npm run test:e2e` — 1 passed. Розмір за `pr-size.sh` — 273 рядків із 500; клас — `approve`.
