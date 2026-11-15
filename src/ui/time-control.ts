@@ -72,13 +72,15 @@ export function runTime(mode: RunMode, party: Party, tick: () => void, halted: (
   return done;
 }
 
-// Пробіл на геосцені = «До події». Не діє з поля вводу і з кнопки у фокусі
-// (пробіл на кнопці вже натискає її саму — подвійного спрацювання не буде).
+// Пробіл на геосцені = «До події» — завжди, і з фокусом на кнопці (рішення
+// власника 15.11.2026: після кліку мишею фокус лишається на кнопці, і пробіл
+// не має її повторювати; фокус із кнопки знімає обробник у main.ts). З поля
+// вводу, переліку чи текстового поля пробіл лишається звичайним символом.
 export function isSpaceForEvent(ev: KeyboardEvent): boolean {
   if (ev.code !== 'Space' && ev.key !== ' ') return false;
   if (ev.repeat || ev.ctrlKey || ev.metaKey || ev.altKey) return false;
   const t = ev.target;
   if (!(t instanceof HTMLElement)) return true;
   const tag = t.tagName;
-  return !(tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || tag === 'BUTTON' || t.isContentEditable);
+  return !(tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || t.isContentEditable);
 }

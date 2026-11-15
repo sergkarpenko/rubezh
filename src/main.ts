@@ -561,6 +561,8 @@ if (typeof document !== 'undefined') {
     const b = el<HTMLButtonElement>('btn-event');
     if (b.disabled) return;
     ev.preventDefault();
+    // фокус на кнопці (після кліку мишею): зняти, щоб відпускання пробілу її не натисло
+    if (ev.target instanceof HTMLButtonElement) ev.target.blur();
     b.click();
   });
   // П8.3: кнопка "Грати знов" для перезапуску кампанії

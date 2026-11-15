@@ -1350,12 +1350,16 @@ describe('Т.43: «До події», зупинки «+1 доба» і проб
     expect(clock()).toBe(firstDetection);
   });
 
-  it('пробіл не діє з фокусом на кнопці чи в полі вводу', () => {
+  it('пробіл із поля вводу не діє; з фокусом на кнопці — «До події», а не ця кнопка (фокус знято)', () => {
     startParty();
     const before = clock();
-    expect(space(btn('btn-tick'))).toBe(false);
     expect(space($('new-game-seed'))).toBe(false);
     expect(clock()).toBe(before);
+    btn('btn-tick').focus();
+    expect(document.activeElement).toBe(btn('btn-tick'));
+    expect(space(btn('btn-tick'))).toBe(true);
+    expect(clock()).toBe(firstDetection); // не +30 хв від «+1 тік»
+    expect(document.activeElement).not.toBe(btn('btn-tick'));
   });
 
   it.each(['help-screen', 'game-menu', 'settings-dialog', 'new-game-dialog', 'exit-confirm', 'campaign-victory'])(

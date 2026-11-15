@@ -196,6 +196,8 @@ test('сценарій приймання ADR-0030: партія → місія 
       return w.top >= col.top - 1 && w.bottom <= col.bottom + 1;
     });
     expect(workshopInView, '#workshop має бути у видимій частині колонки після кроку 2').toBe(true);
+    // Т.43: причина неактивної кнопки — рядком під нею (на iPad підказки title не видно)
+    await expect(page.locator('#btn-order-armor + .btn-why')).toHaveText('Ще не досліджено');
     await page.locator('#btn-sci-step-3').click();
     await expect(page.locator('#status-tab-squad')).toHaveClass(/active/);
     // лічильник «Загін»: склад порожній — бейджа нема
@@ -390,11 +392,17 @@ test('сценарій приймання ADR-0030: партія → місія 
     await page.locator('#btn-event').click();
     const eventTicks = mirror.toEvent();
     await expect(clock).toHaveText(mirror.clock());
-    // пробіл на геосцені — те саме, що клік «До події» (фокус знято з кнопки)
-    await page.locator('#btn-event').blur();
+    // пробіл на геосцені — завжди «До події»: і з фокусом на «До події» (один раз, не двічі),
+    // і після кліку «+1 тік», коли фокус лишився на ній (не ще один тік)
     await page.keyboard.press('Space');
     mirror.toEvent();
     await expect(clock).toHaveText(mirror.clock());
+    await page.locator('#btn-tick').click();
+    mirror.tick();
+    await page.keyboard.press('Space');
+    const spaceTicks = mirror.toEvent();
+    await expect(clock).toHaveText(mirror.clock());
+    expect(spaceTicks, 'пробіл після «+1 тік» має пройти більше одного тіку — інакше крок не відрізняє його від кнопки').toBeGreaterThan(1);
     // на сіді сценарію хоч одна з двох кнопок стає раніше за добу — інакше крок нічого не перевіряє
     expect(Math.min(dayTicks, eventTicks), 'зупинка на події раніше за 48 тіків').toBeLessThan(TICKS_PER_DAY);
     await expect(page.locator('#ufos .ufo')).toHaveCount(mirror.detected().length);

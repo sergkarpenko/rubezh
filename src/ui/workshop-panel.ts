@@ -12,7 +12,7 @@ import { ITEM_IDS, WORKSHOP_CATALOG, itemName, orderItem, type ItemId } from '..
 import { sciencePrice } from '../core/campaign';
 import type { Party } from '../core/save';
 import { itemEffect } from './effects';
-import { el } from './dom';
+import { el, setWhy } from './dom';
 import type { LogCat } from './journal';
 import { ticksText } from './text';
 
@@ -36,6 +36,7 @@ export interface WorkshopPanel {
 export interface OrderButtonState {
   disabled: boolean;
   title: string;
+  why: string | null; // Т.43: причина неактивності (той самий текст, що title) або null
 }
 
 export function orderButtonState(party: Party, id: ItemId, busy: boolean): OrderButtonState {
@@ -43,11 +44,12 @@ export function orderButtonState(party: Party, id: ItemId, busy: boolean): Order
   const price = sciencePrice(def.cost, party.campaign.preset);
   const notResearched = !party.research.completed.includes(id);
   const title = notResearched
-    ? 'Ще не досліджено (панель «Дослідження»)'
+    ? 'Ще не досліджено'
     : party.econ.money < price
       ? 'Недостатньо кредитів (ціна ' + price + ')'
       : 'Замовити в «Кузні» (−' + price + ', готовність через ' + ticksText(def.ticks) + ')';
-  return { disabled: busy || notResearched || party.econ.money < price, title };
+  const blocked = notResearched || party.econ.money < price;
+  return { disabled: busy || blocked, title, why: blocked ? title : null };
 }
 
 export function createWorkshopPanel(deps: WorkshopPanelDeps): WorkshopPanel {
@@ -114,6 +116,7 @@ export function createWorkshopPanel(deps: WorkshopPanelDeps): WorkshopPanel {
         deps.renderAll();
       };
       row.appendChild(order);
+      setWhy(order, ob.why); // Т.43
       catalog.appendChild(row);
     }
     box.appendChild(catalog);

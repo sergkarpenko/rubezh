@@ -26,9 +26,9 @@ import type { Party } from '../core/save';
 import { itemEffect } from './effects';
 import { drawAnimFrame, drawFighterSprite, drawGeoBaseSprite, drawGeoTerrain, drawUfoSprite } from '../render';
 import type { Anim } from '../core/render-core';
-import { el } from './dom';
+import { el, setWhy } from './dom';
 import { GCELL } from './grid';
-import type { LogCat } from './journal';
+import { geoEventText, type LogCat } from './journal';
 import { ticksText } from './text';
 import type { AmbientGeoScene } from './ambient';
 
@@ -210,7 +210,7 @@ export function createPanels(deps: PanelsDeps): Panels {
         ib.textContent = '✦ Перехопити';
         const readyFighter = party.intercept.fighter.hp === FIGHTER_MAX_HP;
         ib.disabled = deps.inBattle() || deps.isGameOver() || !readyFighter;
-        ib.title = !readyFighter ? 'Перехоплювач пошкоджений — спочатку ремонт' : 'Підняти перехоплюач на перехоплення';
+        ib.title = !readyFighter ? 'Перехоплювач пошкоджений — спочатку ремонт' : 'Підняти перехоплювач на перехоплення';
         ib.onclick = () => {
           if (deps.inBattle()) return;
           try {
@@ -221,6 +221,7 @@ export function createPanels(deps: PanelsDeps): Panels {
           deps.renderAll();
         };
         div.appendChild(ib);
+        setWhy(ib, !readyFighter ? ib.title : null); // Т.43
       }
       if (targets.has(u.id)) {
         const btn = document.createElement('button');
@@ -237,6 +238,7 @@ export function createPanels(deps: PanelsDeps): Panels {
               : 'Усі оперативники поранені — чекайте одужання або вербуйте';
         btn.onclick = () => deps.launchMission(u.id);
         div.appendChild(btn);
+        setWhy(btn, btn.disabled && btn.title !== '' ? btn.title : null); // Т.43
         // Т.24 (рішення власника за Т.20): у бій іде останній боєготовий загін, а на
         // вербування не вистачає — рядок-попередження; запуск лишається в один клік.
         // Умова — та сама, що в боті партії (missionRisksBankruptcy, ADR-0089);
@@ -279,6 +281,7 @@ export function createPanels(deps: PanelsDeps): Panels {
     hire.title = hire.disabled
       ? 'Недостатньо кредитів (ціна вербування ' + hireCost + ')'
       : 'Новий оперативник у кінець ростеру (−' + hireCost + ')';
+    setWhy(hire, party.econ.money < hireCost ? hire.title : null); // Т.43
   }
 
   // П7.5 (ADR-0032/0027): контекст-стрічка повітряного бою у фокусній зоні — видима лише
@@ -328,6 +331,19 @@ export function createPanels(deps: PanelsDeps): Panels {
       FIGHTER_MAX_HP +
       '</span>';
     box.appendChild(head);
+    // Т.43 (знахідка 15): перерване перехоплення лишається рядком на панелі до
+    // наступного старту — той самий текст, що в журналі; стан береться з журналу геосцени.
+    const log = party.geo.log;
+    let i = log.length - 1;
+    while (i >= 0 && !['intercept_start', 'intercept_aborted', 'intercept_break_off'].includes(log[i].type)) i--;
+    const last = log[i];
+    if (last?.type === 'intercept_aborted') {
+      const note = document.createElement('div');
+      note.id = 'fighter-last';
+      note.className = 'meta';
+      note.textContent = geoEventText(last, new Set())?.text ?? '';
+      box.appendChild(note);
+    }
     if (f.status === 'бій') {
       const ufo = party.geo.ufos.find((u) => u.id === party.intercept.activeUfoId);
       const ctx = document.createElement('div');
@@ -373,6 +389,7 @@ export function createPanels(deps: PanelsDeps): Panels {
         deps.renderAll();
       };
       box.appendChild(b);
+      setWhy(b, party.econ.money < FIGHTER_REPAIR_COST ? b.title : null); // Т.43
       // Т.26 (ADR-0090): авторемонт не почався, бо оплата доведе до банкрутства —
       // рядок-попередження; ручна оплата лишається в один клік (як Т.24 для місії).
       const preset = party.campaign.preset;

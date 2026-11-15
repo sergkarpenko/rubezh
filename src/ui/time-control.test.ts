@@ -160,10 +160,15 @@ describe('Т.43: пробіл (isSpaceForEvent)', () => {
     expect(isSpaceForEvent(ev({ key: ' ', code: 'Space', ctrlKey: true }))).toBe(false);
   });
 
-  it.each(['input', 'textarea', 'select', 'button'])('пробіл із фокусом на <%s> — ні', (tag) => {
+  it.each([
+    ['input', false],
+    ['textarea', false],
+    ['select', false],
+    ['button', true], // рішення власника 15.11.2026: пробіл — «До події» і з фокусом на кнопці
+  ] as const)('пробіл із фокусом на <%s> — %s', (tag, expected) => {
     const t = document.createElement(tag);
     document.body.appendChild(t);
-    expect(isSpaceForEvent(ev({ key: ' ', code: 'Space' }, t))).toBe(false);
+    expect(isSpaceForEvent(ev({ key: ' ', code: 'Space' }, t))).toBe(expected);
     t.remove();
   });
 });
