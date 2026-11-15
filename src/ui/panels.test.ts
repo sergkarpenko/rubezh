@@ -123,6 +123,7 @@ describe('renderGeo: годинник, кнопки часу, анімаційн
     f.panels.renderGeo();
     expect((document.getElementById('btn-tick') as HTMLButtonElement).disabled).toBe(true);
     expect((document.getElementById('btn-day') as HTMLButtonElement).disabled).toBe(true);
+    expect((document.getElementById('btn-event') as HTMLButtonElement).disabled).toBe(true); // Т.43
     expect(f.deps.activeGeoAnim).toHaveBeenCalled();
   });
 });

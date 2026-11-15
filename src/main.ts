@@ -191,7 +191,7 @@ const journalUI = createJournal({
 const journal = journalUI.add; // виклики journal(text, cls, cat) у шарі застосунку без змін
 
 // Т.43: вікна поверх гри — поки хоч одне відкрите, пробіл час не рухає.
-const OVERLAY_IDS = ['help-screen', 'game-menu', 'settings-dialog', 'new-game-dialog'];
+const OVERLAY_IDS = ['help-screen', 'game-menu', 'settings-dialog', 'new-game-dialog', 'exit-confirm', 'campaign-victory'];
 let gameOver = false; // банкрутство (ADR-0021): боєготових немає і грошей на найм немає
 let victoryDismissed = false; // П8.3a: endless — гравець закрив екран перемоги і продовжує гру
 // П12.2 (ADR-0065): партія створюється лише вибором гравця на стартовому

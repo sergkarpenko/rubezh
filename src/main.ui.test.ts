@@ -304,9 +304,10 @@ describe('UI-флоу прев’ю: геосцена → місія → бій 
     btn('btn-day').click();
     expect($('clock').textContent).toBe('Д1 09:30');
     expect(document.querySelectorAll('#ufos .ufo').length).toBe(1);
-    // наступний клік іде далі від місця зупинки
+    // наступний клік іде далі й стає на приземленні цього зонда (вікно місії відкрите)
     btn('btn-day').click();
-    expect($('clock').textContent).not.toBe('Д1 09:30');
+    expect($('clock').textContent).toBe('Д1 11:00');
+    expect(document.querySelector('#ufos button.mission')).not.toBeNull();
   });
 
   it('нова партія зі сідом: годинник і журнал', () => {
@@ -1317,8 +1318,11 @@ describe('П12.5: зрозумілість розвитку — числові �
 describe('Т.43: «До події», зупинки «+1 доба» і пробіл', () => {
   const clock = (): string | null => $('clock').textContent;
   const ufoCount = (): number => document.querySelectorAll('#ufos .ufo').length;
-  const space = (target: EventTarget = document): void => {
-    target.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', code: 'Space', bubbles: true, cancelable: true }));
+  // повертає defaultPrevented: істина лише для пробілу, що зрушив час
+  const space = (target: EventTarget = document): boolean => {
+    const ev = new KeyboardEvent('keydown', { key: ' ', code: 'Space', bubbles: true, cancelable: true });
+    target.dispatchEvent(ev);
+    return ev.defaultPrevented;
   };
   let firstDetection: string | null = null;
 
@@ -1342,21 +1346,40 @@ describe('Т.43: «До події», зупинки «+1 доба» і проб
 
   it('пробіл на геосцені — те саме, що клік «До події»', () => {
     startParty();
-    space();
+    expect(space()).toBe(true); // preventDefault — сторінка не прокручується
     expect(clock()).toBe(firstDetection);
   });
 
-  it('пробіл не діє з фокусом на кнопці чи в полі вводу і з відкритим «Як грати»', () => {
+  it('пробіл не діє з фокусом на кнопці чи в полі вводу', () => {
+    startParty();
     const before = clock();
-    space(btn('btn-tick'));
-    space($('new-game-seed'));
+    expect(space(btn('btn-tick'))).toBe(false);
+    expect(space($('new-game-seed'))).toBe(false);
     expect(clock()).toBe(before);
-    btn('btn-help').click();
-    space();
-    expect(clock()).toBe(before);
-    btn('btn-help-close').click();
-    space();
-    expect(clock()).not.toBe(before);
+  });
+
+  it.each(['help-screen', 'game-menu', 'settings-dialog', 'new-game-dialog', 'exit-confirm', 'campaign-victory'])(
+    'пробіл не діє під відкритим вікном #%s',
+    (id) => {
+      startParty();
+      const before = clock();
+      $(id).classList.remove('hidden');
+      expect(space()).toBe(false);
+      expect(clock()).toBe(before);
+      $(id).classList.add('hidden');
+      expect(space()).toBe(true);
+      expect(clock()).toBe(firstDetection);
+    }
+  );
+
+  it('пробіл не діє на стартовому екрані після виходу з гри', () => {
+    startParty();
+    btn('btn-menu').click();
+    btn('btn-menu-exit').click();
+    if (!$('exit-confirm').classList.contains('hidden')) btn('btn-exit-yes').click();
+    expect($('start-screen').classList.contains('hidden')).toBe(false);
+    expect(space()).toBe(false);
+    expect(clock()).toBe('Д1 00:00');
   });
 
   it('одужання зупиняє «До події», але не «+1 доба» (поранений через правку сейва)', () => {
@@ -1378,6 +1401,7 @@ describe('Т.43: «До події», зупинки «+1 доба» і проб
   });
 
   it('у бою «До події» неактивна, пробіл і клік в обхід disabled часу не рухають', () => {
+    startParty();
     let launched = false;
     for (let i = 0; i < 1500 && !launched; i++) {
       const m = document.querySelector<HTMLButtonElement>('button.mission');
@@ -1389,7 +1413,7 @@ describe('Т.43: «До події», зупинки «+1 доба» і проб
     expect(launched).toBe(true);
     expect(btn('btn-event').disabled).toBe(true);
     const before = clock();
-    space();
+    expect(space()).toBe(false);
     btn('btn-event').onclick!(new MouseEvent('click') as PointerEvent);
     expect(clock()).toBe(before);
   });
