@@ -2,6 +2,9 @@
 # коментар зі знахідками (до десяти), наявний коментар оновлюється.
 # Уся логіка — у scripts/mistral-audit.mjs (--self-test проганяє повний прохід
 # на тимчасовому репозиторії з підставним API). Тут — лише виклики.
+# ADR-0098 (Т.41): аудитор читає опис PR через API під час прогону, отримує довідники,
+# згадані записи кроків і ADR з бази та результати чеків (дозвіл checks: read); подія
+# `edited` моделі не викликає — скрипт лише мітить коментар, якщо опис PR змінено.
 # Чек не обов'язковий: збій API, зіпсована відповідь або відсутній секрет —
 # коментар «Аудиту не було» і зелений чек; червоний — лише самоперевірка.
 # PR з форку і Dependabot секрету не отримують — джоба пропускається.
@@ -10,14 +13,16 @@ name: mistral-audit
 on:
   pull_request:
     branches: [main]
-    types: [opened, synchronize, reopened]
+    types: [opened, synchronize, reopened, edited]
 
 permissions:
   contents: read
   pull-requests: write
+  checks: read
 
 concurrency:
-  group: mistral-audit-${{ github.ref }}
+  # правка опису не скасовує аудит, що йде: у неї своя група
+  group: mistral-audit-${{ github.ref }}-${{ github.event.action == 'edited' && 'edited' || 'audit' }}
   cancel-in-progress: true
 
 jobs:
