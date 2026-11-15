@@ -72,6 +72,7 @@ export interface InputUI {
   armOverwatch(): void;
   armMedkit(): void; // П11.6 (ADR-0058): зведення аптечки (клавіша M)
   armGrenade(): void; // П11.6 (ADR-0058): зведення гранати (клавіша G)
+  disarm(): void; // Т.46: старт авто-бою знімає зведений постріл і витратник
   endPlayerTurn(): void;
   onKeyDown(ev: KeyboardEvent): void;
 }
@@ -410,6 +411,18 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
     }
   }
 
+  // Т.46 (рішення власника 16.11.2026): старт авто-бою знімає зведений постріл
+  // і витратник разом із ціллю тап-тапу та плашкою шансу — плитка не лишається
+  // зведеною ні під час авто-бою, ні після «Стоп». Вибір оперативника і шлях
+  // під курсором не чіпаємо; #binfo пише сам драйвер, поле малює його перший крок.
+  function disarm(): void {
+    if (ui.fireMode === null && ui.itemMode === null) return;
+    ui.fireMode = null;
+    ui.itemMode = null;
+    ui.tapCell = null;
+    ui.aimCell = null;
+  }
+
   function armFire(mode: ShotMode): void {
     if (!battle.playerTurnActive() || !ui.mission) return;
     if (deps.autoBusy()) return; // П13.3: триває авто-бій — керування заблоковано
@@ -590,6 +603,7 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
     armOverwatch,
     armMedkit,
     armGrenade,
+    disarm,
     endPlayerTurn,
     onKeyDown,
   };

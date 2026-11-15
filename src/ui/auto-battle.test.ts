@@ -119,6 +119,42 @@ describe('AutoBattleDriver: гейти запуску', () => {
   });
 });
 
+describe('Т.46: onStart — авто-бій знімає зведений режим до першого кроку', () => {
+  it('успішний старт викликає onStart один раз — до стартового повідомлення і першого renderBattle', () => {
+    const onStart = vi.fn();
+    const deps = makeDeps(ongoingMission(), { onStart });
+    const d = new AutoBattleDriver(deps);
+    d.start();
+    expect(onStart).toHaveBeenCalledTimes(1);
+    const at = onStart.mock.invocationCallOrder[0]!;
+    expect(at).toBeLessThan(vi.mocked(deps.binfo).mock.invocationCallOrder[0]!);
+    expect(at).toBeLessThan(vi.mocked(deps.renderBattle).mock.invocationCallOrder[0]!);
+    vi.advanceTimersByTime(160 * 3); // наступні кроки onStart не повторюють
+    expect(onStart).toHaveBeenCalledTimes(1);
+  });
+
+  it('«Стоп» onStart не викликає; «Авто» знову — викликає ще раз', () => {
+    const onStart = vi.fn();
+    const d = new AutoBattleDriver(makeDeps(ongoingMission(), { onStart }));
+    d.toggle();
+    d.toggle(); // стоп
+    expect(onStart).toHaveBeenCalledTimes(1);
+    d.toggle();
+    expect(onStart).toHaveBeenCalledTimes(2);
+  });
+
+  it('гейти запуску: без місії, з результатом бою і під час авто-бою onStart не викликається', () => {
+    const onStart = vi.fn();
+    new AutoBattleDriver(makeDeps(null, { onStart })).start();
+    new AutoBattleDriver(makeDeps(ongoingMission(), { onStart, battleFinished: () => true })).start();
+    expect(onStart).not.toHaveBeenCalled();
+    const d = new AutoBattleDriver(makeDeps(ongoingMission(), { onStart }));
+    d.start();
+    d.start(); // уже триває
+    expect(onStart).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('AutoBattleDriver: перемикач «Авто»/«Стоп» (критерій 1, механіка)', () => {
   it('toggle: запуск → дія виконана; повторний toggle — стоп, таймер не крокує', () => {
     const mission = ongoingMission();

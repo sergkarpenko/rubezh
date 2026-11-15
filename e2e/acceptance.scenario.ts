@@ -467,7 +467,11 @@ test('сценарій приймання ADR-0030: партія → місія 
 
   await test.step('бій: авто-бій до результату → повернення на геосцену', async () => {
     if (mirror.outcome() === 'триває') {
+      // Т.46: зведений постріл авто-бій знімає — плитка не лишається зведеною (стан бою зведення не міняє)
+      await page.keyboard.press('Digit1');
+      await expect(page.locator('#btn-snap')).toHaveClass(/armed/);
       await page.locator('#btn-auto-battle').click();
+      await expect(page.locator('#btn-snap')).not.toHaveClass(/armed/);
       mirror.autoBattle();
     }
     const turns = mirror.state.turn;
