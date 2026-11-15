@@ -23,9 +23,8 @@ import { beforeAll, describe, expect, it, vi } from 'vitest';
 import htmlRaw from '../index.html?raw';
 // П12.5 (ADR-0065): числа тверджень — з констант каталогів ядра (одне місце
 // правди), не дублі руками.
-import { ARMOR_MAX_HP_BONUS, OPTICS_ACCURACY_BONUS } from './core/workshop';
-import { BASE_LAB_SLOTS, MAX_LAB_SLOTS } from './core/research';
-import { GRENADE_DAMAGE, HEAL_AMOUNT, HIT_CHANCE_CAP } from './core/combat';
+import { ARMOR_MAX_HP_BONUS } from './core/workshop';
+import { GRENADE_DAMAGE, HEAL_AMOUNT } from './core/combat';
 import { GUN_MODULE_DAMAGE } from './core/intercept';
 
 const $ = (id: string): HTMLElement => document.getElementById(id) as HTMLElement;
@@ -1068,7 +1067,7 @@ describe('П11.6: критичний флоу «дослідити → виро�
     $('battle').dispatchEvent(new MouseEvent('click', { clientX: x * 48 + 24, clientY: y * 48 + 24 }));
   };
   const researchDone = (id: string): boolean =>
-    [...document.querySelectorAll('#research .ufo')].some((r) => r.textContent!.includes(id) && r.textContent!.includes('завершено'));
+    [...document.querySelectorAll('#research .sci-card')].some((r) => r.textContent!.includes(id) && r.textContent!.includes('завершено'));
 
   it('дослідити → виробити → екіпірувати → граната і лікування в бою', () => {
     // чиста партія: сід 42, «норма» (баланс 300, ростер 6)
@@ -1233,7 +1232,7 @@ describe('П12.4: вкладки статус-колонки «Загін»/«Б
 
 describe('П12.5: зрозумілість розвитку — числові ефекти до дії (ADR-0065)', () => {
   const rowText = (root: string, name: string): string =>
-    Array.from(document.querySelectorAll('#' + root + ' .ufo'))
+    Array.from(document.querySelectorAll('#' + root + ' .ufo, #' + root + ' .sci-card'))
       .map((r) => r.textContent ?? '')
       .find((t) => t.includes(name)) ?? '';
 
@@ -1241,16 +1240,15 @@ describe('П12.5: зрозумілість розвитку — числові �
     startParty();
     btn('status-tab-base').click();
     // дослідження: кожен протокол картки — числовий ефект до старту
-    const research = $('research').textContent ?? '';
-    expect(rowText('research', 'Композитна броня')).toContain('+' + ARMOR_MAX_HP_BONUS + ' макс. HP'); // «зараз → стане» від першого солдата
-    expect(rowText('research', 'Композитна броня')).toContain('→');
-    expect(rowText('research', 'Кібернетичне око')).toContain('+' + OPTICS_ACCURACY_BONUS * 100 + '% точності');
-    expect(rowText('research', 'Кібернетичне око')).toContain('кап ' + HIT_CHANCE_CAP * 100 + '%');
-    expect(rowText('research', 'Регенеративний гель')).toContain('+' + HEAL_AMOUNT + ' HP');
-    expect(rowText('research', 'Імпульсна граната')).toContain('пошкодження ' + GRENADE_DAMAGE[0] + '–' + GRENADE_DAMAGE[1]);
-    expect(rowText('research', 'Розширення лабораторії')).toContain('(' + BASE_LAB_SLOTS + ' → ' + MAX_LAB_SLOTS + ')');
-    expect(rowText('research', 'Гарматний модуль перехоплювача')).toContain('+' + GUN_MODULE_DAMAGE + ' пошкодження за раунд');
-    expect(research).not.toContain('у роботі'); // жоден проєкт не запущено — ефекти самі «до дії»
+    expect(rowText('research', 'Композитна броня')).toContain('HP замість'); // T.39: plain tekst, «замість» vid pershoho soldata
+    expect(rowText('research', 'Кібернетичне око')).toContain('% замість');
+    expect(rowText('research', 'Регенеративний гель')).toContain('Лікує ' + HEAL_AMOUNT + ' HP');
+    expect(rowText('research', 'Імпульсна граната')).toContain('Пошкодження ' + GRENADE_DAMAGE[0] + '–' + GRENADE_DAMAGE[1]);
+    expect(rowText('research', 'Імпульсна граната')).toContain('зачіпає і своїх');
+    expect(rowText('research', 'Розширення лабораторії')).toContain('протоколи в роботі одночасно замість');
+    expect(rowText('research', 'Гарматний модуль перехоплювача')).toContain('на ' + GUN_MODULE_DAMAGE + ' пошкодження більше за раунд');
+    // T.39: zhoden proyekt ne zapushcheno — plashok «у роботі» нема (efekty sami «do diyi»)
+    expect(document.querySelectorAll('#research .sci-badge.run')).toHaveLength(0);
   });
 
   it('флоу: вкладка «База» — ефекти предметів цеху видимі ДО замовлення (критерії 1–2)', () => {

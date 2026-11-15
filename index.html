@@ -348,6 +348,105 @@
         padding: 3px 0;
         font-variant-numeric: tabular-nums;
       }
+      /* T.39: панель «Дослідження» — смуга кроків і картки протоколів
+         (ескіз: docs/reports/t39/sketch.webp) */
+      .sci-steps {
+        display: flex;
+        gap: 4px;
+        margin: 0 0 8px;
+        align-items: stretch;
+      }
+      .sci-steps button {
+        flex: 1;
+        padding: 5px 4px;
+        font-size: 11px;
+        line-height: 1.25;
+        text-align: left;
+      }
+      .sci-steps button b {
+        display: block;
+        font-size: 12px;
+      }
+      .sci-steps .arr {
+        align-self: center;
+        color: #7d8794;
+        font-size: 12px;
+      }
+      .sci-head {
+        font-size: 12px;
+        color: #aab3bf;
+        margin-bottom: 6px;
+        line-height: 1.5;
+      }
+      .sci-card {
+        margin: 6px 0;
+        padding: 8px;
+        border: 1px solid #232a36;
+        border-radius: 6px;
+      }
+      .sci-top {
+        display: flex;
+        justify-content: space-between;
+        gap: 6px;
+        align-items: baseline;
+      }
+      .sci-name {
+        font-size: 14px;
+        color: #e6e9ee;
+        font-weight: 600;
+      }
+      .sci-badge {
+        font-size: 11px;
+        padding: 1px 6px;
+        border-radius: 9px;
+        white-space: nowrap;
+        border: 1px solid #3a4352;
+        color: #aab3bf;
+      }
+      .sci-badge.ok {
+        border-color: #2f7d4a;
+        color: #7fd69b;
+        background: #12301d;
+      }
+      .sci-badge.run {
+        border-color: #8a6d1d;
+        color: #e0a63a;
+        background: #2a220c;
+      }
+      .sci-badge.lock {
+        border-color: #3a4352;
+        color: #7d8794;
+      }
+      .sci-eff {
+        font-size: 13px;
+        color: #c8ced6;
+        margin: 4px 0;
+      }
+      .sci-row {
+        font-size: 12px;
+        color: #aab3bf;
+        line-height: 1.5;
+      }
+      .sci-row b {
+        color: #e6e9ee;
+      }
+      .sci-bar {
+        height: 8px;
+        border-radius: 4px;
+        background: #1a202b;
+        border: 1px solid #232a36;
+        margin: 5px 0 2px;
+        overflow: hidden;
+      }
+      .sci-bar i {
+        display: block;
+        height: 100%;
+        background: #e0a63a;
+      }
+      .sci-card button.wide {
+        width: 100%;
+        margin-top: 6px;
+      }
       .save-row {
         display: flex;
         gap: 6px;
@@ -470,10 +569,30 @@
       #help-screen .help-box {
         max-width: 880px;
       }
+      /* T.39: чотири блоки довідки у три колонки: «Легенда» — високий (рядки 1–2,
+         колонка 1), «Наука і спорядження» — під «Метою»/«Керуванням» (рядок 2,
+         колонки 2–3); вузький екран — одна колонка */
       .help-cols {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+        grid-template-columns: repeat(3, 1fr);
         gap: 8px 28px;
+      }
+      .help-cols > div:first-child {
+        grid-row: 1 / 3;
+      }
+      .help-cols > div:nth-child(4) {
+        grid-column: 2 / 4;
+      }
+      @media (max-width: 760px) {
+        .help-cols {
+          grid-template-columns: 1fr;
+        }
+        .help-cols > div:first-child {
+          grid-row: auto;
+        }
+        .help-cols > div:nth-child(4) {
+          grid-column: auto;
+        }
       }
       .help-cols h3 {
         font-size: 12px;

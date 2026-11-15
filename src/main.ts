@@ -32,7 +32,7 @@ import { createSound } from './ui/audio';
 // П14.8 (ADR-0073): ambient-шар — модуль src/ui/ambient.ts.
 import { createAmbient } from './ui/ambient';
 // пR.2 (ADR-0037): панелі стану і топбара — модуль src/ui/panels.ts; масштаб сітки — src/ui/grid.ts.
-import { createPanels, inAirCombat } from './ui/panels';
+import { createPanels, inAirCombat, readyToIssue } from './ui/panels';
 import { GCELL } from './ui/grid';
 // пR.2 (ADR-0037): бойовище і флоу бою — модуль src/ui/battle.ts.
 import { createBattleUI, type BattleUIState } from './ui/battle';
@@ -335,6 +335,10 @@ const researchPanel = createResearchPanel({
   journal,
   drainResearch: () => journalUI.drainResearch(),
   renderAll,
+  // T.39: смуга кроків панелі «Дослідження» — чиста навігація (стан гри не змінюється)
+  scrollToResearch: () => el('research').scrollIntoView({ block: 'nearest' }),
+  scrollToWorkshop: () => el('workshop').scrollIntoView({ block: 'nearest' }),
+  showSquadTab: () => statusTabs?.set('squad'),
 });
 
 // П11.6 (ADR-0058/0037): панель «Цех» — тут лише зв'язування зі станом
@@ -490,6 +494,8 @@ function renderAll(): void {
   savePanel.render();
   // Т.7: сигнал на вкладці «Вузол» — скільки дій чекає там гравця
   statusTabs?.setAttention('base', panels.nodeActions());
+  // T.39: сигнал на вкладці «Загін» — скільки предметів зі складу можна видати зараз (у бою/банкрутстві — 0)
+  statusTabs?.setAttention('squad', ui.mission !== null || gameOver ? 0 : readyToIssue(party));
   if (ui.mission) battle.renderBattle();
 }
 

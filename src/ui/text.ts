@@ -27,3 +27,22 @@ export function isFeminineName(name: string): boolean {
 export function byGender(name: string, masc: string, fem: string): string {
   return isFeminineName(name) ? fem : masc;
 }
+
+// T.39: «1 доба», «2 доби», «5 діб», «21 доба» — узгодження слова «доба» з
+// числом (те саме українське правило, що й у ticksText для «тик»).
+export function daysText(n: number): string {
+  const d = n % 10;
+  const dd = n % 100;
+  if (d === 1 && dd !== 11) return n + ' доба';
+  if (d >= 2 && d <= 4 && (dd < 12 || dd > 14)) return n + ' доби';
+  return n + ' діб';
+}
+
+// T.39: число + іменник у відмінку: plural(2, 'техномант', 'техноманти', 'техномантів').
+export function plural(n: number, one: string, few: string, many: string): string {
+  const d = n % 10;
+  const dd = n % 100;
+  if (d === 1 && dd !== 11) return n + ' ' + one;
+  if (d >= 2 && d <= 4 && (dd < 12 || dd > 14)) return n + ' ' + few;
+  return n + ' ' + many;
+}

@@ -171,6 +171,43 @@ test('сценарій приймання ADR-0030: партія → місія 
     await page.locator('#status-tab-squad').click();
   });
 
+  // T.39 «Зрозуміла наука»: картка протоколу (назва, плашка, «Ціна», «Час ≈»), смуга кроків
+  // («3. Видати» перемикає на «Загін»), лічильник на вкладці «Загін», розмір «Як грати» на 1366 × 768.
+  await test.step('T.39: панель «Дослідження», крок «3. Видати», довідка на 1366 × 768', async () => {
+    await page.locator('#status-tab-base').click();
+    const cards = page.locator('#research .sci-card');
+    await expect(cards).toHaveCount(6);
+    const armor = cards.first();
+    await expect(armor.locator('.sci-name')).toHaveText('Композитна броня');
+    await expect(armor.locator('.sci-badge')).toHaveText('потрібен техномант'); // техномантів 0, кредитів вистачає
+    await expect(armor).toContainText('Ціна 96 кр.');
+    await expect(armor).toContainText('Час ≈ 14 діб з одним техномантом, 7 діб — з двома'); // K = 0
+    await expect(armor.locator('#btn-start-0')).toHaveText('Дослідити — 96 кр.');
+    await expect(page.locator('#btn-hire-scientist')).toHaveText('Вербувати техноманта — 100 кр.');
+    // смуга кроків: три кнопки; «3. Видати» перемикає вкладку на «Загін»
+    await expect(page.locator('#btn-sci-step-1')).toBeEnabled();
+    await expect(page.locator('#btn-sci-step-2')).toBeEnabled();
+    await page.locator('#btn-sci-step-3').click();
+    await expect(page.locator('#status-tab-squad')).toHaveClass(/active/);
+    // лічильник «Загін»: склад порожній — бейджа нема
+    await expect(page.locator('#status-tab-squad .tab-badge')).toHaveCount(0);
+    await page.locator('#status-tab-base').click();
+    // «Як грати» на 1366 × 768: блок «Наука і спорядження» вміщується без прокрутки
+    await page.setViewportSize({ width: 1366, height: 768 });
+    await page.locator('#btn-menu').click();
+    await page.locator('#btn-menu-help').click();
+    await expect(page.locator('#help-screen')).toBeVisible();
+    await expect(page.locator('#help-screen')).toContainText('Наука і спорядження');
+    const help = await page.evaluate(() => {
+      const r = document.querySelector<HTMLElement>('#help-screen .help-box')!.getBoundingClientRect();
+      return { h: Math.round(r.height), w: Math.round(r.width), win: window.innerHeight, page: document.documentElement.scrollHeight };
+    });
+    expect(help.h, 'екран «Як грати» вищий за вікно на 1366×768').toBeLessThanOrEqual(help.win - 32);
+    expect(help.page, 'сторінка з довідкою довша за вікно на 1366×768').toBeLessThanOrEqual(help.win);
+    await page.locator('#btn-help-close').click();
+    await page.setViewportSize({ width: 1440, height: 900 });
+  });
+
   await test.step('запуск місії', async () => {
     const mission = mirror.launch(mirror.targets()[0].id);
     await page.locator('#status-tab-base').click();

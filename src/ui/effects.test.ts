@@ -26,6 +26,7 @@ import {
   medkitEffect,
   opticsEffect,
   pct,
+  plainProjectEffect,
   projectEffect,
 } from './effects';
 
@@ -92,5 +93,28 @@ describe('effects: диспетчери каталогів', () => {
       expect(itemEffect(id, soldier(10, 0.6))).not.toBe('');
     }
     expect(itemEffect('armor')).toBe(armorEffect(undefined));
+  });
+});
+
+describe('T.39: plainProjectEffect — tekst kartky protokolu v paneli «Дослідження»', () => {
+  it('bronya/oko: «має X HP замість Y» / «… % замість … %» vid soldata; chysla z konstant', () => {
+    expect(plainProjectEffect('armor', soldier(10, 0.6))).toBe('Оперативник у броні має ' + (10 + ARMOR_MAX_HP_BONUS) + ' HP замість 10');
+    expect(plainProjectEffect('optics', soldier(10, 0.6))).toBe(
+      'Точність оператора з оком — ' + Math.round(Math.min(HIT_CHANCE_CAP, 0.6 + OPTICS_ACCURACY_BONUS) * 100) + ' % замість 60 %'
+    );
+  });
+
+  it('bez soldata — bez porivnyannya («замість» нема)', () => {
+    expect(plainProjectEffect('armor')).toBe('Оперативник у броні має +' + ARMOR_MAX_HP_BONUS + ' HP');
+    expect(plainProjectEffect('optics')).not.toContain('замість');
+  });
+
+  it('hel/hranata/lab/modul — teksty za planom, chysla z konstant', () => {
+    expect(plainProjectEffect('medkit')).toBe('Лікує ' + HEAL_AMOUNT + ' HP за ' + HEAL_AP_COST + ' AP; одна штука на місію');
+    expect(plainProjectEffect('grenade')).toBe(
+      'Пошкодження ' + GRENADE_DAMAGE[0] + '–' + GRENADE_DAMAGE[1] + ' у зоні хреста, дальність ' + GRENADE_RANGE + '; зачіпає і своїх'
+    );
+    expect(plainProjectEffect('lab-extension')).toBe('Три протоколи в роботі одночасно замість двох'); // NUM_NOM[MAX_LAB_SLOTS]/NUM_GEN[BASE_LAB_SLOTS]
+    expect(plainProjectEffect('gun-module')).toBe('Перехоплювач завдає на ' + GUN_MODULE_DAMAGE + ' пошкодження більше за раунд');
   });
 });

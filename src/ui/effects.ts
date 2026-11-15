@@ -85,3 +85,37 @@ export function projectEffect(id: ProjectId, soldier?: Unit): string {
 export function itemEffect(id: ItemId, soldier?: Unit): string {
   return projectEffect(id, soldier);
 }
+
+// T.39: «простий» текст ефекту для картки протоколу в панелі «Дослідження»
+// (тексти затверджені в плані Т.39): числа — з тих самих констант ядра;
+// «зараз → стане» — від першого оперативника загону (як у projectEffect),
+// без ростеру — без порівняння.
+const NUM_NOM: Record<number, string> = { 1: 'Один', 2: 'Два', 3: 'Три', 4: 'Чотири', 5: "П'ять" };
+const NUM_GEN: Record<number, string> = { 1: 'одного', 2: 'двох', 3: 'трьох', 4: 'чотирьох', 5: "п'ятьох" };
+
+export function plainProjectEffect(id: ProjectId, soldier?: Unit): string {
+  switch (id) {
+    case 'armor':
+      return soldier === undefined
+        ? 'Оперативник у броні має +' + ARMOR_MAX_HP_BONUS + ' HP'
+        : 'Оперативник у броні має ' + (soldier.maxHp + ARMOR_MAX_HP_BONUS) + ' HP замість ' + soldier.maxHp;
+    case 'optics':
+      return soldier === undefined
+        ? 'Точність оператора з оком — +' + Math.round(OPTICS_ACCURACY_BONUS * 100) + ' %'
+        : 'Точність оператора з оком — ' +
+            Math.round(Math.min(HIT_CHANCE_CAP, soldier.firingAccuracy + OPTICS_ACCURACY_BONUS) * 100) +
+            ' % замість ' +
+            Math.round(soldier.firingAccuracy * 100) +
+            ' %';
+    case 'medkit':
+      return 'Лікує ' + HEAL_AMOUNT + ' HP за ' + HEAL_AP_COST + ' AP; одна штука на місію';
+    case 'grenade':
+      return (
+        'Пошкодження ' + GRENADE_DAMAGE[0] + '–' + GRENADE_DAMAGE[1] + ' у зоні хреста, дальність ' + GRENADE_RANGE + '; зачіпає і своїх'
+      );
+    case 'lab-extension':
+      return NUM_NOM[MAX_LAB_SLOTS] + ' протоколи в роботі одночасно замість ' + NUM_GEN[BASE_LAB_SLOTS];
+    case 'gun-module':
+      return 'Перехоплювач завдає на ' + GUN_MODULE_DAMAGE + ' пошкодження більше за раунд';
+  }
+}
