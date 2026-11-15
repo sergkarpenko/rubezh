@@ -547,8 +547,7 @@ if (typeof document !== 'undefined') {
   };
   el('btn-day').onclick = () => runClock('day');
   el('btn-event').onclick = () => runClock('event');
-  // Пробіл на геосцені = «До події»: лише коли кнопка активна (не бій, не
-  // повітряний бій, не кінець гри) і поверх гри немає вікна чи стартового екрана.
+  // Пробіл на геосцені = «До події»: кнопка активна, поверх гри немає вікна чи стартового екрана.
   document.addEventListener('keydown', (ev) => {
     if (!isSpaceForEvent(ev)) return;
     if (party === null || screens?.current() !== 'гра') return;
