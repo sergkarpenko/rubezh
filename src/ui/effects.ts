@@ -101,8 +101,8 @@ export function plainProjectEffect(id: ProjectId, soldier?: Unit): string {
         : 'Оперативник у броні має ' + (soldier.maxHp + ARMOR_MAX_HP_BONUS) + ' HP замість ' + soldier.maxHp;
     case 'optics':
       return soldier === undefined
-        ? 'Точність оператора з оком — +' + Math.round(OPTICS_ACCURACY_BONUS * 100) + ' %'
-        : 'Точність оператора з оком — ' +
+        ? 'Точність оперативника з оком — +' + Math.round(OPTICS_ACCURACY_BONUS * 100) + ' %'
+        : 'Точність оперативника з оком — ' +
             Math.round(Math.min(HIT_CHANCE_CAP, soldier.firingAccuracy + OPTICS_ACCURACY_BONUS) * 100) +
             ' % замість ' +
             Math.round(soldier.firingAccuracy * 100) +

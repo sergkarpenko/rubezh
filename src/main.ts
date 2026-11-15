@@ -494,7 +494,9 @@ function renderAll(): void {
   savePanel.render();
   // Т.7: сигнал на вкладці «Вузол» — скільки дій чекає там гравця
   statusTabs?.setAttention('base', panels.nodeActions());
-  // T.39: сигнал на вкладці «Загін» — скільки предметів зі складу можна видати зараз (у бою/банкрутстві — 0)
+  // T.39: сигнал на вкладці «Загін» — скільки предметів зі складу можна видати зараз;
+  // 0 за тієї самої умови busy, що вимикає кнопки видачі в renderRoster (panels.ts):
+  // deps.inBattle() || deps.isGameOver() тут тотожне (ui.mission !== null || gameOver)
   statusTabs?.setAttention('squad', ui.mission !== null || gameOver ? 0 : readyToIssue(party));
   if (ui.mission) battle.renderBattle();
 }

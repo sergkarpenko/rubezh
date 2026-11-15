@@ -96,20 +96,26 @@ describe('effects: диспетчери каталогів', () => {
   });
 });
 
-describe('T.39: plainProjectEffect — tekst kartky protokolu v paneli «Дослідження»', () => {
-  it('bronya/oko: «має X HP замість Y» / «… % замість … %» vid soldata; chysla z konstant', () => {
+describe('T.39: plainProjectEffect — текст картки протоколу в панелі «Дослідження»', () => {
+  it('броня/око: «має X HP замість Y» / «… % замість … %» від солдата; числа з констант', () => {
     expect(plainProjectEffect('armor', soldier(10, 0.6))).toBe('Оперативник у броні має ' + (10 + ARMOR_MAX_HP_BONUS) + ' HP замість 10');
     expect(plainProjectEffect('optics', soldier(10, 0.6))).toBe(
-      'Точність оператора з оком — ' + Math.round(Math.min(HIT_CHANCE_CAP, 0.6 + OPTICS_ACCURACY_BONUS) * 100) + ' % замість 60 %'
+      'Точність оперативника з оком — ' + Math.round(Math.min(HIT_CHANCE_CAP, 0.6 + OPTICS_ACCURACY_BONUS) * 100) + ' % замість 60 %'
     );
   });
 
-  it('bez soldata — bez porivnyannya («замість» нема)', () => {
+  it('стеля точності ока: оперативник із 93 % -> 95 % (кап HIT_CHANCE_CAP)', () => {
+    expect(plainProjectEffect('optics', soldier(10, 0.93))).toBe(
+      'Точність оперативника з оком — ' + Math.round(HIT_CHANCE_CAP * 100) + ' % замість ' + Math.round(0.93 * 100) + ' %'
+    );
+  });
+
+  it('без солдата — без порівняння («замість» немає)', () => {
     expect(plainProjectEffect('armor')).toBe('Оперативник у броні має +' + ARMOR_MAX_HP_BONUS + ' HP');
     expect(plainProjectEffect('optics')).not.toContain('замість');
   });
 
-  it('hel/hranata/lab/modul — teksty za planom, chysla z konstant', () => {
+  it('гель/граната/лаб/модуль — тексти за планом, числа з констант', () => {
     expect(plainProjectEffect('medkit')).toBe('Лікує ' + HEAL_AMOUNT + ' HP за ' + HEAL_AP_COST + ' AP; одна штука на місію');
     expect(plainProjectEffect('grenade')).toBe(
       'Пошкодження ' + GRENADE_DAMAGE[0] + '–' + GRENADE_DAMAGE[1] + ' у зоні хреста, дальність ' + GRENADE_RANGE + '; зачіпає і своїх'

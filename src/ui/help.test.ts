@@ -70,7 +70,7 @@ describe('П9.1: екран «Як грати» — контент з конст
     expect(text).toContain('E');
     expect(text).toContain('Esc');
   });
-  it('T.39: blok «Наука і спорядження» — chysla z konstant yadra (zarplata, sloty laboratoriyi)', () => {
+  it('T.39: блок «Наука і спорядження» — числа з констант ядра (зарплата, слоти лабораторії)', () => {
     freshHelp();
     const text = $('help-screen').textContent ?? '';
     expect(text).toContain('Наука і спорядження');

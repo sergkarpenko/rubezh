@@ -23,8 +23,8 @@ import { beforeAll, describe, expect, it, vi } from 'vitest';
 import htmlRaw from '../index.html?raw';
 // П12.5 (ADR-0065): числа тверджень — з констант каталогів ядра (одне місце
 // правди), не дублі руками.
-import { ARMOR_MAX_HP_BONUS } from './core/workshop';
-import { GRENADE_DAMAGE, HEAL_AMOUNT } from './core/combat';
+import { ARMOR_MAX_HP_BONUS, OPTICS_ACCURACY_BONUS } from './core/workshop';
+import { GRENADE_DAMAGE, HEAL_AMOUNT, HIT_CHANCE_CAP } from './core/combat';
 import { GUN_MODULE_DAMAGE } from './core/intercept';
 
 const $ = (id: string): HTMLElement => document.getElementById(id) as HTMLElement;
@@ -1228,6 +1228,29 @@ describe('П12.4: вкладки статус-колонки «Загін»/«Б
     expect($('status').classList.contains('dimmed')).toBe(false);
     expect(visibleTitles()).toEqual(['Фінанси', 'Ростер загону']); // вкладка «Загін» активна після бою
   });
+  it('T.39: лічильник «Загін» — скільки предметів зі складу можна видати зараз; у бою — 0 (та сама умова, що й кнопки видачі в panels.ts)', async () => {
+    startParty();
+    expect(btn('status-tab-squad').querySelector('.tab-badge')).toBeNull(); // склад порожній
+    btn('btn-save-1').click();
+    const raw = JSON.parse(localStorage.getItem('rubezh.save.1')!) as { state: { workshop: { store: Record<string, number> } } };
+    raw.state.workshop.store.medkit = 2;
+    raw.state.workshop.store.armor = 1;
+    localStorage.setItem('rubezh.save.1', JSON.stringify(raw));
+    btn('btn-load-1').click();
+    expect(btn('status-tab-squad').querySelector('.tab-badge')?.textContent).toBe('3'); // 2 гелі + 1 броня
+    // у бою лічильник 0 — та сама умова (busy), що вимикає кнопки видачі спорядження в panels.ts
+    let found = false;
+    for (let i = 0; i < 1500 && !found; i++) {
+      btn('btn-tick').click();
+      found = document.querySelector('button.mission') !== null;
+    }
+    expect(found).toBe(true);
+    (document.querySelector('button.mission') as HTMLButtonElement).click();
+    expect($('status').classList.contains('dimmed')).toBe(true);
+    expect(btn('status-tab-squad').querySelector('.tab-badge')).toBeNull(); // 0 — бейдж не показується
+    await runAutoBattle();
+    btn('btn-close').click();
+  });
 });
 
 describe('П12.5: зрозумілість розвитку — числові ефекти до дії (ADR-0065)', () => {
@@ -1239,15 +1262,27 @@ describe('П12.5: зрозумілість розвитку — числові �
   it('флоу: вкладка «База» — ефекти протоколів видимі ДО старту (критерії 1–2)', () => {
     startParty();
     btn('status-tab-base').click();
+    btn('btn-save-1').click(); // сейв — беремо реальні характеристики першого солдата
+    const s0 = (
+      JSON.parse(localStorage.getItem('rubezh.save.1')!).state as { roster: { soldiers: { maxHp: number; firingAccuracy: number }[] } }
+    ).roster.soldiers[0];
     // дослідження: кожен протокол картки — числовий ефект до старту
-    expect(rowText('research', 'Композитна броня')).toContain('HP замість'); // T.39: plain tekst, «замість» vid pershoho soldata
-    expect(rowText('research', 'Кібернетичне око')).toContain('% замість');
+    expect(rowText('research', 'Композитна броня')).toContain(
+      'Оперативник у броні має ' + (s0.maxHp + ARMOR_MAX_HP_BONUS) + ' HP замість ' + s0.maxHp
+    ); // T.39: простий текст, «замість» від першого солдата
+    expect(rowText('research', 'Кібернетичне око')).toContain(
+      'Точність оперативника з оком — ' +
+        Math.round(Math.min(HIT_CHANCE_CAP, s0.firingAccuracy + OPTICS_ACCURACY_BONUS) * 100) +
+        ' % замість ' +
+        Math.round(s0.firingAccuracy * 100) +
+        ' %'
+    );
     expect(rowText('research', 'Регенеративний гель')).toContain('Лікує ' + HEAL_AMOUNT + ' HP');
     expect(rowText('research', 'Імпульсна граната')).toContain('Пошкодження ' + GRENADE_DAMAGE[0] + '–' + GRENADE_DAMAGE[1]);
     expect(rowText('research', 'Імпульсна граната')).toContain('зачіпає і своїх');
     expect(rowText('research', 'Розширення лабораторії')).toContain('протоколи в роботі одночасно замість');
     expect(rowText('research', 'Гарматний модуль перехоплювача')).toContain('на ' + GUN_MODULE_DAMAGE + ' пошкодження більше за раунд');
-    // T.39: zhoden proyekt ne zapushcheno — plashok «у роботі» нема (efekty sami «do diyi»)
+    // T.39: жоден проєкт не запущено — плашка «у роботі» немає (ефекти самі «до дії»)
     expect(document.querySelectorAll('#research .sci-badge.run')).toHaveLength(0);
   });
 

@@ -47,7 +47,7 @@ describe('рід за іменем: пул імен ядра (SOLDIER_NAMES)', (
   });
 });
 
-describe('T.39: daysText — uzhodzhennya «доба» z chyslom (yak «тик»)', () => {
+describe('T.39: daysText — узгодження «доба» з числом (як «тик»)', () => {
   it('1 доба; 2–4 доби; 5–20, 11–14 діб; 21 доба, 22 доби, 25 діб', () => {
     expect(daysText(1)).toBe('1 доба');
     expect([2, 3, 4].map(daysText)).toEqual(['2 доби', '3 доби', '4 доби']);
@@ -58,7 +58,7 @@ describe('T.39: daysText — uzhodzhennya «доба» z chyslom (yak «тик»
   });
 });
 
-describe('T.39: plural — chyslo + imenivnyk (техноманти у «Час ≈ …»)', () => {
+describe('T.39: plural — число + іменівник (техноманти у «Час ≈ …»)', () => {
   it('1 техномант; 2–4 техноманти; 5+ техномантів; 21 техномант', () => {
     const w: [string, string, string] = ['техномант', 'техноманти', 'техномантів'];
     expect(plural(1, ...w)).toBe('1 техномант');

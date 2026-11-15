@@ -30,9 +30,9 @@ export interface WorkshopPanel {
   render(): void;
 }
 
-// T.39: spilnyy stan knopky zamovlennya - odna umova aktivnosti i odyn title
-// dlya «Кузні» (btn-order-<id>) i kartky zavershenoho protokolu v paneli
-// «Дослідження» (btn-forge-<id>); dzherelo pravdy - orderItem (yadro).
+// T.39: спільний стан кнопки замовлення — одна умова активності і один title
+// для «Кузні» (btn-order-<id>) і картки завершеного протоколу в панелі
+// «Дослідження» (btn-forge-<id>); джерело правди — orderItem (ядро).
 export interface OrderButtonState {
   disabled: boolean;
   title: string;
@@ -101,7 +101,7 @@ export function createWorkshopPanel(deps: WorkshopPanelDeps): WorkshopPanel {
       order.id = 'btn-order-' + id.replace(/ /g, '-'); // id без пробілів (HTML)
       order.className = 'research'; // той самий акцент, що й у панелі «Дослідження»
       order.textContent = 'Замовити';
-      // T.39: ta sama umova/title, shcho u kartki protokolu (btn-forge-<id>)
+      // T.39: та сама умова/title, що у картки протоколу (btn-forge-<id>)
       const ob = orderButtonState(party, id, busy);
       order.disabled = ob.disabled;
       order.title = ob.title;

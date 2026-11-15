@@ -1,16 +1,17 @@
-// P11.6 (Faza 11, ADR-0058/0037): panel «Дослідження» у колонці стану
+// П11.6 (Фаза 11, ADR-0058/0037): панель «Дослідження» у колонці стану
 // геострени. Тут — штат вчених (найм/звільнення, зарплата), слоти лабораторії,
 // каталог проєктів (старт/прогрес/завершення) і пул наукових точок. Логіка —
 // виклики src/core/research (ADR-0002), DOM — через хелпер el (src/ui/dom.ts).
-// Панель активна лише на геострені (прецедент панелі збереження, P5.3):
+// Панель активна лише на геострені (прецедент панелі збереження, П5.3):
 // у тактичному бою кнопки вимкнені — бій не переривається (ADR-0026).
-// Вимір детермінізму: жодного RNG, все відображення стану ядра.
+// Вімір детермінізму: жодного RNG, все відображення стану ядра.
 //
 // T.39 «Зрозуміла наука» (docs/plans/t39-clear-science.md, тексти затверджені
-// власником): смуга кроків «дослідити → виготовити → видати» (чиста навігація),
-// шапка у три рядки, картка протоколу з плашкою стану, ціною «Ціна … кр.» і
-// часом «Час ≈ …» простими словами, кнопка «Замовити в «Кузні»» на картці
-// завершеного протоколу-предмета. Ядро src/core не змінюється.
+// власником): смуга кроків «дослідити → виготовити → видати» (чиста навігація,
+// кнопки смуги завжди активні, коли панель видима), шапка у три рядки, картка
+// протоколу з плашкою стану, ціною «Ціна … кр.» і часом «Час ≈ …» простими
+// словами, кнопка «Замовити в «Кузні»» на картці завершеного протоколу-предмета.
+// Ядро src/core не змінюється.
 
 import {
   HIRE_SCIENTIST_PRICE,
@@ -30,7 +31,7 @@ import { plainProjectEffect } from './effects';
 import { orderButtonState } from './workshop-panel';
 import { el } from './dom';
 import type { LogCat } from './journal';
-import { daysText, plural, ticksText } from './text';
+import { daysText, ticksText } from './text';
 
 // Залежності від шару застосунку (main.ts): читання стану і дії панелі.
 // Панель не знає, як саме стан зберігається у застосунку.
@@ -54,7 +55,7 @@ export interface ResearchPanel {
 export function createResearchPanel(deps: ResearchPanelDeps): ResearchPanel {
   // Причина, чому проєкт не можна стартувати зараз (підказка на кнопці);
   // null — можна. Перевірки дублюють правила ядра лише для підказки —
-  // джерело правди лишається throw'ю startProject (ядро не дублюється).
+  // джерело правди лишається throw'и startProject (ядро не дублюється).
   function startBlockReason(party: Party, def: ProjectDef): string | null {
     const r = party.research;
     if (r.completed.includes(def.id)) return 'завершено';
@@ -83,13 +84,11 @@ export function createResearchPanel(deps: ResearchPanelDeps): ResearchPanel {
   function timeTextNotStarted(points: number, scientists: number): string {
     if (scientists >= 1) {
       const d = Math.ceil(points / scientists);
-      return (
-        'Час ≈ ' +
-        daysText(d) +
-        (scientists === 1 ? ' з вашим техномантом' : ' з вашими ' + plural(scientists, 'техномант', 'техноманти', 'техномантів'))
-      );
+      // K = 1 — «з вашим техномантом»; K ≥ 2 — орудний відмінок «з вашими N техномантами»
+      return 'Час ≈ ' + daysText(d) + (scientists === 1 ? ' з вашим техномантом' : ' з вашими ' + scientists + ' техномантами');
     }
-    return 'Час ≈ ' + daysText(points) + ' з одним техномантом, ' + daysText(Math.ceil(points / 2)) + ' — з двома';
+    // K = 0 — затверджений текст плану: друге число без слова «діб»
+    return 'Час ≈ ' + daysText(points) + ' з одним техномантом, ' + Math.ceil(points / 2) + ' — з двома';
   }
 
   function renderResearchPanel(): void {
@@ -104,11 +103,12 @@ export function createResearchPanel(deps: ResearchPanelDeps): ResearchPanel {
     const salary = sciencePrice(SCIENTIST_SALARY, preset);
     const scientists = r.scientists.length;
 
-    // T.39: смуга кроків «1. Дослідити → 2. Виготовити → 3. Видати» — навігація
+    // T.39: смуга кроків «1. Дослідити → 2. Виготовити → 3. Видати» — навігація;
+    // кнопки смуги завжди активні, коли панель видима (стан гри не змінюється)
     const steps = document.createElement('div');
     steps.className = 'sci-steps';
     const stepDefs: [string, string, string, () => void][] = [
-      ['btn-sci-step-1', '1. Дослідити', 'протоколи тут', () => deps.scrollToResearch()],
+      ['btn-sci-step-1', '1. Дослідити', 'протокол тут', () => deps.scrollToResearch()],
       ['btn-sci-step-2', '2. Виготовити', 'у «Кузні»', () => deps.scrollToWorkshop()],
       ['btn-sci-step-3', '3. Видати', 'вкладка «Загін»', () => deps.showSquadTab()],
     ];
@@ -123,7 +123,6 @@ export function createResearchPanel(deps: ResearchPanelDeps): ResearchPanel {
       const b = document.createElement('button');
       b.id = id;
       b.innerHTML = '<b>' + title + '</b>' + sub;
-      b.disabled = busy;
       b.onclick = action;
       steps.appendChild(b);
     }
@@ -191,7 +190,7 @@ export function createResearchPanel(deps: ResearchPanelDeps): ResearchPanel {
 
     // T.39: картка протоколу: рядок 1 — назва + плашка стану; рядок 2 — ефект
     // простими словами; далі — за станом (ціна/час/кнопка, смуга прогресу,
-    // «Замовити в «Кузні»»). Назви — з каталогу (P12.6, ADR-0064).
+    // «Замовити в «Кузні»»). Назви — з каталогу (П12.6, ADR-0064).
     const catalog = document.createElement('div');
     const ref = party.roster.soldiers[0];
     for (let i = 0; i < PROJECTS.length; i++) {
@@ -240,16 +239,13 @@ export function createResearchPanel(deps: ResearchPanelDeps): ResearchPanel {
           };
           card.appendChild(forge);
           // під кнопкою — що з предметом зараз: в «Кузні» і/або на складі
+          // (для гарматного модуля ручного встановлення в UI немає — лише «На складі: N»)
           const notes: string[] = [];
           const q = party.workshop.queue.find((o) => o.id === itemId);
           if (q) notes.push('У «Кузні»: виготовляється, ще ' + ticksText(q.ticksLeft));
           const onStore = party.workshop.store[itemId];
           if (onStore > 0) {
-            notes.push(
-              itemId === 'gun-module'
-                ? 'На складі: ' + onStore + ' — встановіть на панелі «Перехоплювач»'
-                : 'На складі: ' + onStore + ' — видайте на вкладці «Загін»'
-            );
+            notes.push('На складі: ' + onStore + (itemId === 'gun-module' ? '' : ' — видайте на вкладці «Загін»'));
           }
           for (const n of notes) {
             const note = document.createElement('div');

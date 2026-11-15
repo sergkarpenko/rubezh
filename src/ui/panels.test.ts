@@ -553,15 +553,15 @@ describe('renderRoster: екіпірування (П11.6, ADR-0058)', () => {
   });
 });
 
-describe('T.39: readyToIssue — lichylnyk na vkladtsi «Загін»', () => {
-  it('porozhniy sklad — 0; dalі min(sklad, operatyvnykiv bez predmeta); modul ne vrakhovuyetsya', () => {
+describe('T.39: readyToIssue — лічильник на вкладці «Загін»', () => {
+  it('порожній склад — 0; далі min(склад, оперативників без предмета); модуль не враховується', () => {
     const { party } = makeFixture();
     expect(readyToIssue(party)).toBe(0);
     const soldiers = party.roster.soldiers.length;
     party.workshop.store.armor = soldiers + 5; // bilshe, nizh operatyvnykiv
     party.workshop.store.medkit = 1;
     expect(readyToIssue(party)).toBe(soldiers + 1);
-    // odyn operatyvnyk uzhe v broni — vin ne vidayetsya вдруге
+    // один оперативник уже в броні — він не видається вдруге
     party.workshop.equipped[party.roster.soldiers[0].id] = { armor: true, optics: false, medkit: false, grenade: false };
     expect(readyToIssue(party)).toBe(soldiers);
     // harmatnyy modul na skladi ne vidayetsya operatyvnykam
