@@ -622,3 +622,81 @@ describe('ADR-0081: демон у тумані для вводу не існує
     expect(st.log.filter((e) => e.type === 'move')).toHaveLength(moved);
   });
 });
+
+describe('Т.46: старт авто-бою знімає зведений режим (disarm)', () => {
+  // Вибраний оперативник із повним AP у запущеній місії.
+  function armedFixture(): { f: Fixture; s: Unit } {
+    const f = makeFixture();
+    launchMission(f);
+    const s = f.ui.mission!.state.units.find((u) => u.side === 'player' && u.alive)!;
+    f.ui.selectedId = s.id;
+    return { f, s };
+  }
+
+  it('зведений постріл (усі три режими) знято разом із ціллю тап-тапу і плашкою шансу; вибір і #binfo — без змін', () => {
+    for (const mode of ['snap', 'aimed', 'auto'] as const) {
+      const { f, s } = armedFixture();
+      f.input.armFire(mode);
+      expect(f.ui.fireMode).toBe(mode);
+      f.ui.tapCell = { x: 5, y: 5 };
+      f.ui.aimCell = { x: 5, y: 5 };
+      const hint = f.binfo();
+      f.input.disarm();
+      expect(f.ui.fireMode).toBeNull();
+      expect(f.ui.tapCell).toBeNull();
+      expect(f.ui.aimCell).toBeNull();
+      expect(f.ui.selectedId).toBe(s.id);
+      expect(f.binfo()).toBe(hint);
+    }
+  });
+
+  it('зведений витратник (граната і гель) знято, вибір оперативника лишається', () => {
+    for (const mode of ['grenade', 'medkit'] as const) {
+      const { f, s } = armedFixture();
+      f.ui.mission!.state.items = { [s.id]: { medkit: true, grenade: true } };
+      if (mode === 'grenade') f.input.armGrenade();
+      else f.input.armMedkit();
+      expect(f.ui.itemMode).toBe(mode);
+      f.ui.tapCell = { x: 5, y: 5 };
+      f.input.disarm();
+      expect(f.ui.itemMode).toBeNull();
+      expect(f.ui.fireMode).toBeNull();
+      expect(f.ui.tapCell).toBeNull();
+      expect(f.ui.selectedId).toBe(s.id);
+    }
+  });
+
+  it('без зведеного режиму: перший тап ходу і плашка шансу скидаються, шлях під курсором і вибір лишаються', () => {
+    const { f, s } = armedFixture();
+    const path = [{ x: s.pos.x + 1, y: s.pos.y }];
+    f.ui.tapCell = { x: s.pos.x + 1, y: s.pos.y };
+    f.ui.aimCell = { x: 5, y: 5 };
+    f.ui.hoverPath = path;
+    const hint = f.binfo();
+    f.input.disarm();
+    expect(f.ui.tapCell).toBeNull();
+    expect(f.ui.aimCell).toBeNull();
+    expect(f.ui.hoverPath).toBe(path);
+    expect(f.ui.selectedId).toBe(s.id);
+    expect(f.binfo()).toBe(hint);
+  });
+
+  it('перший тап ходу → старт авто-бою → один тап у ту саму клітинку ходу не виконує (знову лише прев\u2019ю)', () => {
+    const { f, s } = armedFixture();
+    const st = f.ui.mission!.state;
+    const to = [
+      { x: s.pos.x + 1, y: s.pos.y },
+      { x: s.pos.x, y: s.pos.y + 1 },
+      { x: s.pos.x - 1, y: s.pos.y },
+      { x: s.pos.x, y: s.pos.y - 1 },
+    ].find((c) => !st.units.some((u) => u.alive && u.pos.x === c.x && u.pos.y === c.y) && findPath(st, s.pos, c) !== null)!;
+    clickAt(f, to.x, to.y); // перший тап — прев'ю
+    expect(f.ui.tapCell).toEqual(to);
+    f.input.disarm(); // старт авто-бою; «Стоп» стану вводу не міняє
+    clickAt(f, to.x, to.y);
+    expect(s.pos).not.toEqual(to); // хід не виконано
+    expect(f.ui.tapCell).toEqual(to); // тап знову перший
+    clickAt(f, to.x, to.y);
+    expect(s.pos).toEqual(to); // другий тап — хід
+  });
+});

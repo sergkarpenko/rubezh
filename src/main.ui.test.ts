@@ -893,6 +893,25 @@ describe('П6.14: UX прицілювання — обведення цілей,
     expect($('binfo').textContent).toContain('Не вистачає AP');
     expect(btn('btn-aimed').classList.contains('armed')).toBe(false);
   });
+
+  it('Т.46: зведений постріл і «Авто» — плитка пострілу не зведена ні в авто-бої, ні після «Стоп»; вибір лишається', () => {
+    const armed = (id: string): boolean => btn(id).classList.contains('armed');
+    vi.useFakeTimers();
+    try {
+      btn('btn-snap').click(); // AP 3 — швидкий постріл зводиться
+      expect(armed('btn-snap')).toBe(true);
+      btn('btn-auto-battle').click();
+      expect(armed('btn-auto-battle')).toBe(true); // авто-бій іде
+      expect(armed('btn-snap')).toBe(false);
+      expect($('binfo').textContent).toContain('Авто-бій');
+      btn('btn-auto-battle').click(); // «Стоп»
+      expect(armed('btn-auto-battle')).toBe(false);
+      expect(armed('btn-snap')).toBe(false);
+      expect($('bctx-unit').textContent).toContain('AP '); // оперативник досі вибраний
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 
 // П7.4 (ADR-0021/0032): критичний флоу економіки винищувача — «запуск → бій →

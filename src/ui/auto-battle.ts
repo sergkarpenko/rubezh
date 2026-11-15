@@ -26,6 +26,7 @@ export interface AutoBattleDeps {
   binfo(text: string): void;
   finishBattle(outcome: 'перемога' | 'поразка'): void;
   pushAnims(anims: readonly Anim[]): void; // ставимо анімації дії в чергу AnimEngine
+  onStart?: () => void; // Т.46: авто-бій справді стартує (гейти пройдено) — зняти зведений режим вводу
   hasRaf: boolean; // без rAF (тестове середовище) анімації не ставляться (П6.8)
   visibleCells?: () => ReadonlySet<string>; // П14.4: туман для чисел пошкоджень (без нього — без фільтра)
   maxHalfTurns?: number; // ліміт півходів (прецедент демо 240; тести звужують)
@@ -81,6 +82,7 @@ export class AutoBattleDriver {
     const mission = this.deps.getMission();
     if (!mission || this.deps.battleFinished() || this.steps !== null) return;
     this.steps = new DemoSteps(this.deps.maxHalfTurns ?? 240);
+    this.deps.onStart?.(); // Т.46: до першого кроку — його renderBattle малює плитки вже без режиму
     this.deps.binfo('Авто-бій: загін веде політика ядра. «Стоп» — керування вручну.');
     this.next();
   }

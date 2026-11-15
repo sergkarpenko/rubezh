@@ -288,6 +288,7 @@ const autoBattle = new AutoBattleDriver({
   binfo: battle.binfo,
   finishBattle: battle.finish,
   pushAnims: (anims) => anim.push(...anims),
+  onStart: () => input.disarm(), // Т.46: зведений постріл чи витратник авто-бій знімає
   hasRaf,
   visibleCells: battle.visibleCells, // П14.4: туман для чисел пошкоджень авто-бою
 });
