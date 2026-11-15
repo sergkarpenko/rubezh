@@ -14,6 +14,7 @@ WITH_E2E = "--no-e2e" not in sys.argv
 ROOT = os.getcwd()
 INPUT, DRIVER, MAIN = "src/ui/input.ts", "src/ui/auto-battle.ts", "src/main.ts"
 GUARD = "    if (ui.fireMode === null && ui.itemMode === null) return;\n"
+HEAD = "  function disarm(): void {\n"
 BODY = """    ui.fireMode = null;
     ui.itemMode = null;
     ui.tapCell = null;
@@ -33,11 +34,11 @@ MUTATIONS = [
     ("зняття: витратник лишається зведеним", INPUT, BODY, BODY.replace("    ui.itemMode = null;\n", ""), True),
     ("зняття: ціль тап-тапу лишається", INPUT, BODY, BODY.replace("    ui.tapCell = null;\n", ""), False),
     ("зняття: плашка шансу лишається", INPUT, BODY, BODY.replace("    ui.aimCell = null;\n", ""), False),
-    ("зняття: без режиму теж чистить тап-тап", INPUT, GUARD, "", False),
-    ("зняття: лише коли зведено постріл", INPUT, GUARD, "    if (ui.fireMode === null) return;\n", False),
-    ("зняття: лише коли зведено витратник", INPUT, GUARD, "    if (ui.itemMode === null) return;\n", True),
+    ("зняття: без режиму тап-тап і плашка лишаються", INPUT, HEAD, HEAD + GUARD, False),
+    ("зняття: без пострілу нічого не знімає", INPUT, HEAD, HEAD + "    if (ui.fireMode === null) return;\n", False),
+    ("зняття: без витратника нічого не знімає", INPUT, HEAD, HEAD + "    if (ui.itemMode === null) return;\n", True),
     ("зняття: знімає і вибір оперативника", INPUT, BODY, BODY.replace("    ui.aimCell = null;\n", "    ui.aimCell = null;\n    ui.selectedId = null;\n"), True),
-    ("зняття: стирає шлях під курсором і без режиму", INPUT, GUARD, "    ui.hoverPath = null;\n" + GUARD, False),
+    ("зняття: стирає шлях під курсором", INPUT, HEAD, HEAD + "    ui.hoverPath = null;\n", False),
     ("зняття: переписує #binfo", INPUT, BODY, BODY.replace("    ui.aimCell = null;\n", "    ui.aimCell = null;\n    battle.binfo('Режим знято.');\n"), False),
     ("драйвер: onStart не викликається", DRIVER, CALL, "", True),
     ("драйвер: onStart до гейтів запуску", DRIVER, GATE, "    this.deps.onStart?.();\n" + GATE, False),
