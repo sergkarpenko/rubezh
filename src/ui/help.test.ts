@@ -8,6 +8,7 @@ import htmlRaw from '../../index.html?raw';
 // П10.2: version з package.json — єдине джерело числа (урок П9.1); тест
 // звіряє показ екрана з ним, дублювати версію в твердженні не можна.
 import pkg from '../../package.json';
+import { BASE_LAB_SLOTS, SCIENTIST_SALARY } from '../core/research';
 import { createHelp, isFirstVisit, type Help } from './help';
 
 const $ = (id: string): HTMLElement => document.getElementById(id) as HTMLElement;
@@ -68,6 +69,18 @@ describe('П9.1: екран «Як грати» — контент з конст
     expect(text).toContain('граната');
     expect(text).toContain('E');
     expect(text).toContain('Esc');
+  });
+  it('T.39: блок «Наука і спорядження» — числа з констант ядра (зарплата, слоти лабораторії)', () => {
+    freshHelp();
+    const text = $('help-screen').textContent ?? '';
+    expect(text).toContain('Наука і спорядження');
+    expect(text).toContain('Техноманти');
+    expect(text).toContain('1 очко потоку за добу і коштує ' + SCIENTIST_SALARY + ' кр. за добу');
+    expect(text).toContain('у роботі — до ' + BASE_LAB_SLOTS + ' протоколів одночасно');
+    expect(text).toContain('«Кузня»');
+    expect(text).toContain('Видача');
+    expect(text).toContain('на вкладці «Загін»');
+    expect(text).toContain('Гель і граната витрачаються в бою, броня й око — ні');
   });
   it('П10.2: показує версію гри зі зборки (vite define ← package.json)', () => {
     freshHelp();

@@ -8,7 +8,7 @@
 // геосцені (прецедент панелі збереження, П5.3): у бою кнопки вимкнені.
 // Детермінізм: панель лише читає стан ядра, жодного RNG.
 
-import { ITEM_IDS, WORKSHOP_CATALOG, itemName, orderItem } from '../core/workshop';
+import { ITEM_IDS, WORKSHOP_CATALOG, itemName, orderItem, type ItemId } from '../core/workshop';
 import { sciencePrice } from '../core/campaign';
 import type { Party } from '../core/save';
 import { itemEffect } from './effects';
@@ -28,6 +28,26 @@ export interface WorkshopPanelDeps {
 
 export interface WorkshopPanel {
   render(): void;
+}
+
+// T.39: спільний стан кнопки замовлення — одна умова активності і один title
+// для «Кузні» (btn-order-<id>) і картки завершеного протоколу в панелі
+// «Дослідження» (btn-forge-<id>); джерело правди — orderItem (ядро).
+export interface OrderButtonState {
+  disabled: boolean;
+  title: string;
+}
+
+export function orderButtonState(party: Party, id: ItemId, busy: boolean): OrderButtonState {
+  const def = WORKSHOP_CATALOG[id];
+  const price = sciencePrice(def.cost, party.campaign.preset);
+  const notResearched = !party.research.completed.includes(id);
+  const title = notResearched
+    ? 'Ще не досліджено (панель «Дослідження»)'
+    : party.econ.money < price
+      ? 'Недостатньо кредитів (ціна ' + price + ')'
+      : 'Замовити в «Кузні» (−' + price + ', готовність через ' + ticksText(def.ticks) + ')';
+  return { disabled: busy || notResearched || party.econ.money < price, title };
 }
 
 export function createWorkshopPanel(deps: WorkshopPanelDeps): WorkshopPanel {
@@ -81,13 +101,10 @@ export function createWorkshopPanel(deps: WorkshopPanelDeps): WorkshopPanel {
       order.id = 'btn-order-' + id.replace(/ /g, '-'); // id без пробілів (HTML)
       order.className = 'research'; // той самий акцент, що й у панелі «Дослідження»
       order.textContent = 'Замовити';
-      const notResearched = !party.research.completed.includes(id);
-      order.disabled = busy || notResearched || party.econ.money < price;
-      order.title = notResearched
-        ? 'Ще не досліджено (панель «Дослідження»)'
-        : party.econ.money < price
-          ? 'Недостатньо кредитів (ціна ' + price + ')'
-          : 'Замовити в «Кузні» (−' + price + ', готовність через ' + ticksText(def.ticks) + ')';
+      // T.39: та сама умова/title, що у картки протоколу (btn-forge-<id>)
+      const ob = orderButtonState(party, id, busy);
+      order.disabled = ob.disabled;
+      order.title = ob.title;
       order.onclick = () => {
         try {
           orderItem(party.econ, party.workshop, party.research, id, party.campaign.preset);

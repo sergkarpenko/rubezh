@@ -3,7 +3,7 @@
 // і змушує звірити правило «-а/-я — жіночий рід»).
 import { describe, expect, it } from 'vitest';
 import { SOLDIER_NAMES } from '../core/squad';
-import { byGender, isFeminineName, ticksText } from './text';
+import { byGender, daysText, isFeminineName, plural, ticksText } from './text';
 
 describe('ticksText: узгодження числівника з «тік»', () => {
   it('1 → тік; 2–4 → тіки; 0 і 5–20 → тіків', () => {
@@ -44,5 +44,26 @@ describe('рід за іменем: пул імен ядра (SOLDIER_NAMES)', (
   it('byGender обирає форму слова', () => {
     expect(byGender('Олена', 'загинув', 'загинула')).toBe('загинула');
     expect(byGender('Іван', 'загинув', 'загинула')).toBe('загинув');
+  });
+});
+
+describe('T.39: daysText — узгодження «доба» з числом (як «тик»)', () => {
+  it('1 доба; 2–4 доби; 5–20, 11–14 діб; 21 доба, 22 доби, 25 діб', () => {
+    expect(daysText(1)).toBe('1 доба');
+    expect([2, 3, 4].map(daysText)).toEqual(['2 доби', '3 доби', '4 доби']);
+    expect([0, 5, 8, 11, 14, 20].map(daysText)).toEqual(['0 діб', '5 діб', '8 діб', '11 діб', '14 діб', '20 діб']);
+    expect(daysText(21)).toBe('21 доба');
+    expect(daysText(22)).toBe('22 доби');
+    expect(daysText(25)).toBe('25 діб');
+  });
+});
+
+describe('T.39: plural — число + іменівник (техноманти у «Час ≈ …»)', () => {
+  it('1 техномант; 2–4 техноманти; 5+ техномантів; 21 техномант', () => {
+    const w: [string, string, string] = ['техномант', 'техноманти', 'техномантів'];
+    expect(plural(1, ...w)).toBe('1 техномант');
+    expect(plural(2, ...w)).toBe('2 техноманти');
+    expect(plural(5, ...w)).toBe('5 техномантів');
+    expect(plural(21, ...w)).toBe('21 техномант');
   });
 });

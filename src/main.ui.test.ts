@@ -24,7 +24,6 @@ import htmlRaw from '../index.html?raw';
 // П12.5 (ADR-0065): числа тверджень — з констант каталогів ядра (одне місце
 // правди), не дублі руками.
 import { ARMOR_MAX_HP_BONUS, OPTICS_ACCURACY_BONUS } from './core/workshop';
-import { BASE_LAB_SLOTS, MAX_LAB_SLOTS } from './core/research';
 import { GRENADE_DAMAGE, HEAL_AMOUNT, HIT_CHANCE_CAP } from './core/combat';
 import { GUN_MODULE_DAMAGE } from './core/intercept';
 
@@ -1068,7 +1067,7 @@ describe('П11.6: критичний флоу «дослідити → виро�
     $('battle').dispatchEvent(new MouseEvent('click', { clientX: x * 48 + 24, clientY: y * 48 + 24 }));
   };
   const researchDone = (id: string): boolean =>
-    [...document.querySelectorAll('#research .ufo')].some((r) => r.textContent!.includes(id) && r.textContent!.includes('завершено'));
+    [...document.querySelectorAll('#research .sci-card')].some((r) => r.textContent!.includes(id) && r.textContent!.includes('завершено'));
 
   it('дослідити → виробити → екіпірувати → граната і лікування в бою', () => {
     // чиста партія: сід 42, «норма» (баланс 300, ростер 6)
@@ -1229,28 +1228,62 @@ describe('П12.4: вкладки статус-колонки «Загін»/«Б
     expect($('status').classList.contains('dimmed')).toBe(false);
     expect(visibleTitles()).toEqual(['Фінанси', 'Ростер загону']); // вкладка «Загін» активна після бою
   });
+  it('T.39: лічильник «Загін» — скільки предметів зі складу можна видати зараз; у бою — 0 (та сама умова, що й кнопки видачі в panels.ts)', async () => {
+    startParty();
+    expect(btn('status-tab-squad').querySelector('.tab-badge')).toBeNull(); // склад порожній
+    btn('btn-save-1').click();
+    const raw = JSON.parse(localStorage.getItem('rubezh.save.1')!) as { state: { workshop: { store: Record<string, number> } } };
+    raw.state.workshop.store.medkit = 2;
+    raw.state.workshop.store.armor = 1;
+    localStorage.setItem('rubezh.save.1', JSON.stringify(raw));
+    btn('btn-load-1').click();
+    expect(btn('status-tab-squad').querySelector('.tab-badge')?.textContent).toBe('3'); // 2 гелі + 1 броня
+    // у бою лічильник 0 — та сама умова (busy), що вимикає кнопки видачі спорядження в panels.ts
+    let found = false;
+    for (let i = 0; i < 1500 && !found; i++) {
+      btn('btn-tick').click();
+      found = document.querySelector('button.mission') !== null;
+    }
+    expect(found).toBe(true);
+    (document.querySelector('button.mission') as HTMLButtonElement).click();
+    expect($('status').classList.contains('dimmed')).toBe(true);
+    expect(btn('status-tab-squad').querySelector('.tab-badge')).toBeNull(); // 0 — бейдж не показується
+    await runAutoBattle();
+    btn('btn-close').click();
+  });
 });
 
 describe('П12.5: зрозумілість розвитку — числові ефекти до дії (ADR-0065)', () => {
   const rowText = (root: string, name: string): string =>
-    Array.from(document.querySelectorAll('#' + root + ' .ufo'))
+    Array.from(document.querySelectorAll('#' + root + ' .ufo, #' + root + ' .sci-card'))
       .map((r) => r.textContent ?? '')
       .find((t) => t.includes(name)) ?? '';
 
   it('флоу: вкладка «База» — ефекти протоколів видимі ДО старту (критерії 1–2)', () => {
     startParty();
     btn('status-tab-base').click();
+    btn('btn-save-1').click(); // сейв — беремо реальні характеристики першого солдата
+    const s0 = (
+      JSON.parse(localStorage.getItem('rubezh.save.1')!).state as { roster: { soldiers: { maxHp: number; firingAccuracy: number }[] } }
+    ).roster.soldiers[0];
     // дослідження: кожен протокол картки — числовий ефект до старту
-    const research = $('research').textContent ?? '';
-    expect(rowText('research', 'Композитна броня')).toContain('+' + ARMOR_MAX_HP_BONUS + ' макс. HP'); // «зараз → стане» від першого солдата
-    expect(rowText('research', 'Композитна броня')).toContain('→');
-    expect(rowText('research', 'Кібернетичне око')).toContain('+' + OPTICS_ACCURACY_BONUS * 100 + '% точності');
-    expect(rowText('research', 'Кібернетичне око')).toContain('кап ' + HIT_CHANCE_CAP * 100 + '%');
-    expect(rowText('research', 'Регенеративний гель')).toContain('+' + HEAL_AMOUNT + ' HP');
-    expect(rowText('research', 'Імпульсна граната')).toContain('пошкодження ' + GRENADE_DAMAGE[0] + '–' + GRENADE_DAMAGE[1]);
-    expect(rowText('research', 'Розширення лабораторії')).toContain('(' + BASE_LAB_SLOTS + ' → ' + MAX_LAB_SLOTS + ')');
-    expect(rowText('research', 'Гарматний модуль перехоплювача')).toContain('+' + GUN_MODULE_DAMAGE + ' пошкодження за раунд');
-    expect(research).not.toContain('у роботі'); // жоден проєкт не запущено — ефекти самі «до дії»
+    expect(rowText('research', 'Композитна броня')).toContain(
+      'Оперативник у броні має ' + (s0.maxHp + ARMOR_MAX_HP_BONUS) + ' HP замість ' + s0.maxHp
+    ); // T.39: простий текст, «замість» від першого солдата
+    expect(rowText('research', 'Кібернетичне око')).toContain(
+      'Точність оперативника з оком — ' +
+        Math.round(Math.min(HIT_CHANCE_CAP, s0.firingAccuracy + OPTICS_ACCURACY_BONUS) * 100) +
+        ' % замість ' +
+        Math.round(s0.firingAccuracy * 100) +
+        ' %'
+    );
+    expect(rowText('research', 'Регенеративний гель')).toContain('Лікує ' + HEAL_AMOUNT + ' HP');
+    expect(rowText('research', 'Імпульсна граната')).toContain('Пошкодження ' + GRENADE_DAMAGE[0] + '–' + GRENADE_DAMAGE[1]);
+    expect(rowText('research', 'Імпульсна граната')).toContain('зачіпає і своїх');
+    expect(rowText('research', 'Розширення лабораторії')).toContain('протоколи в роботі одночасно замість');
+    expect(rowText('research', 'Гарматний модуль перехоплювача')).toContain('на ' + GUN_MODULE_DAMAGE + ' пошкодження більше за раунд');
+    // T.39: жоден проєкт не запущено — плашка «у роботі» немає (ефекти самі «до дії»)
+    expect(document.querySelectorAll('#research .sci-badge.run')).toHaveLength(0);
   });
 
   it('флоу: вкладка «База» — ефекти предметів цеху видимі ДО замовлення (критерії 1–2)', () => {

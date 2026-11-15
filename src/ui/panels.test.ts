@@ -10,7 +10,7 @@ import { createParty, type Party } from '../core/save';
 import { ARMOR_MAX_HP_BONUS, OPTICS_ACCURACY_BONUS } from '../core/workshop';
 import { GRENADE_DAMAGE, GRENADE_RANGE, HEAL_AMOUNT, HIT_CHANCE_CAP } from '../core/combat';
 import { initPixelSprites } from '../render';
-import { createPanels, hpColor, inAirCombat, type PanelsDeps } from './panels';
+import { createPanels, hpColor, inAirCombat, readyToIssue, type PanelsDeps } from './panels';
 
 // Піксельний рушій (ADR-0031): тестовий мок фабрики offscreen-канвасів —
 // той самий патерн, що й у main.ui.test.ts (jsdom без пакета canvas).
@@ -550,5 +550,22 @@ describe('renderRoster: екіпірування (П11.6, ADR-0058)', () => {
     (document.getElementById('btn-equip-' + s.id + '-medkit') as HTMLButtonElement).click(); // «зняти» ще раз
     expect(f.deps.journal).toHaveBeenCalledWith(expect.stringContaining('Предмета немає'), 'lose', 'base');
     expect(f.party.workshop.store['medkit']).toBe(0); // помилка ядра — склад не змінився
+  });
+});
+
+describe('T.39: readyToIssue — лічильник на вкладці «Загін»', () => {
+  it('порожній склад — 0; далі min(склад, оперативників без предмета); модуль не враховується', () => {
+    const { party } = makeFixture();
+    expect(readyToIssue(party)).toBe(0);
+    const soldiers = party.roster.soldiers.length;
+    party.workshop.store.armor = soldiers + 5; // більше, ніж оперативників
+    party.workshop.store.medkit = 1;
+    expect(readyToIssue(party)).toBe(soldiers + 1);
+    // один оперативник уже в броні — він не видається вдруге
+    party.workshop.equipped[party.roster.soldiers[0].id] = { armor: true, optics: false, medkit: false, grenade: false };
+    expect(readyToIssue(party)).toBe(soldiers);
+    // гарматний модуль на складі не видається оперативникам
+    party.workshop.store['gun-module'] = 3;
+    expect(readyToIssue(party)).toBe(soldiers); // без зміни від модуля
   });
 });

@@ -52,6 +52,19 @@ const EQUIP_ITEMS: [SoldierItemId, keyof SoldierEquipment, string][] = [
 // Т.16 (рішення власника 2026-11-11): повітряний бій заморожує час геосцени, як
 // тактична місія — тік партії нічого не робить, кнопки часу неактивні; вихід —
 // раундом (збиття, пошкодження) або відступом.
+// T.39: лічильник на вкладці «Загін» — скільки предметів зі складу можна видати
+// прямо зараз: для кожного з броня/око/гель/граната — min(«на складі»,
+// «оперативників без цього предмета»); гарматний модуль оперативникам не
+// видається (встановлюється на перехоплювач). У бою/банкрутстві — 0 (main.ts).
+export function readyToIssue(party: Party): number {
+  let n = 0;
+  for (const [itemId, slot] of EQUIP_ITEMS) {
+    const without = party.roster.soldiers.filter((soldier) => party.workshop.equipped[soldier.id]?.[slot] !== true).length;
+    n += Math.min(party.workshop.store[itemId], without);
+  }
+  return n;
+}
+
 export function inAirCombat(party: Party): boolean {
   return party.intercept.fighter.status === 'бій';
 }
