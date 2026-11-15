@@ -168,6 +168,7 @@ export function createPanels(deps: PanelsDeps): Panels {
     const busy = deps.inBattle() || inAirCombat(party);
     (el('btn-tick') as HTMLButtonElement).disabled = busy || deps.isGameOver();
     (el('btn-day') as HTMLButtonElement).disabled = busy || deps.isGameOver();
+    (el('btn-event') as HTMLButtonElement).disabled = busy || deps.isGameOver(); // Т.43
   }
 
   // Т.7: дії гравця на вкладці «Вузол» — ті самі умови, що показують кнопки

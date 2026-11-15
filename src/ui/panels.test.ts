@@ -35,6 +35,7 @@ function setupDom(): void {
     <span id="ready">—</span>
     <button id="btn-tick">+1 тік</button>
     <button id="btn-day">+1 доба</button>
+    <button id="btn-event">До події</button>
     <span id="econ-rates"></span>
     <button id="btn-hire">Вербувати оперативника</button>
     <section id="geo-panel"><canvas id="geo" width="768" height="432"></canvas></section>
@@ -122,6 +123,7 @@ describe('renderGeo: годинник, кнопки часу, анімаційн
     f.panels.renderGeo();
     expect((document.getElementById('btn-tick') as HTMLButtonElement).disabled).toBe(true);
     expect((document.getElementById('btn-day') as HTMLButtonElement).disabled).toBe(true);
+    expect((document.getElementById('btn-event') as HTMLButtonElement).disabled).toBe(true); // Т.43
     expect(f.deps.activeGeoAnim).toHaveBeenCalled();
   });
 });

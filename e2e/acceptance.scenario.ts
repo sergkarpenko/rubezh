@@ -227,6 +227,19 @@ test('сценарій приймання ADR-0030: партія → місія 
     expect(helpSmall.h, 'екран «Як грати» вищий за вікно на 1024×768').toBeLessThanOrEqual(helpSmall.win - 32);
     expect(helpSmall.page, 'сторінка з довідкою довша за вікно на 1024×768').toBeLessThanOrEqual(helpSmall.win);
     await page.locator('#btn-help-close').click();
+    // Т.43: з третьою кнопкою часу шапка на 1024 × 768 лишається в один рядок
+    // (кнопки часу на одній висоті з чипами), сторінка — у вікні
+    const bar = await page.evaluate(() => {
+      const top = (sel: string): number => Math.round(document.querySelector(sel)!.getBoundingClientRect().top);
+      return {
+        chips: top('#topbar .chips'),
+        event: top('#btn-event'),
+        page: document.documentElement.scrollHeight,
+        win: window.innerHeight,
+      };
+    });
+    expect(Math.abs(bar.event - bar.chips), 'кнопки часу з’їхали в другий рядок шапки на 1024×768').toBeLessThanOrEqual(8);
+    expect(bar.page, 'сторінка довша за вікно на 1024×768').toBeLessThanOrEqual(bar.win);
     await page.setViewportSize({ width: 1440, height: 900 });
   });
 
@@ -340,9 +353,22 @@ test('сценарій приймання ADR-0030: партія → місія 
     await page.locator('#btn-tick').click();
     mirror.tick();
     await expect(clock).toHaveText(mirror.clock());
+    // Т.43: «+1 доба» зупиняється на виявленні й приземленні зонда, «До події» —
+    // на першій події; дзеркало рухається за тим самим правилом (mirror.ts).
     await page.locator('#btn-day').click();
-    mirror.tick(TICKS_PER_DAY);
+    const dayTicks = mirror.dayWithStops();
     await expect(clock).toHaveText(mirror.clock());
+    await expect(page.locator('#btn-event')).toHaveText('До події');
+    await page.locator('#btn-event').click();
+    const eventTicks = mirror.toEvent();
+    await expect(clock).toHaveText(mirror.clock());
+    // пробіл на геосцені — те саме, що клік «До події» (фокус знято з кнопки)
+    await page.locator('#btn-event').blur();
+    await page.keyboard.press('Space');
+    mirror.toEvent();
+    await expect(clock).toHaveText(mirror.clock());
+    // на сіді сценарію хоч одна з двох кнопок стає раніше за добу — інакше крок нічого не перевіряє
+    expect(Math.min(dayTicks, eventTicks), 'зупинка на події раніше за 48 тіків').toBeLessThan(TICKS_PER_DAY);
     await expect(page.locator('#ufos .ufo')).toHaveCount(mirror.detected().length);
     await expect(page.locator('#ready')).toHaveText(mirror.readyChip()); // лікарня тікає разом з геосценою
   });

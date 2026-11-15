@@ -1069,6 +1069,24 @@
           overflow-y: auto;
         }
       }
+      /* Т.43: третя кнопка часу («До події») — на вікні завширшки з iPad (1024 px)
+         шапка лишається в один рядок: щільніші проміжки чипів і кнопок */
+      @media (min-width: 900px) and (max-width: 1180px) {
+        header#topbar {
+          gap: 4px 8px;
+        }
+        #topbar .chips,
+        #topbar .actions {
+          gap: 4px;
+        }
+        #topbar .chip {
+          padding: 4px 8px;
+        }
+        #topbar .actions button {
+          padding-left: 8px;
+          padding-right: 8px;
+        }
+      }
       .hidden {
         display: none !important;
       }
@@ -1088,6 +1106,7 @@
       </div>
       <div class="actions">
         <button id="btn-tick">+1 тік (30 хв)</button>
+        <button id="btn-event" title="Час іде до першої події, найдовше 1 добу (пробіл)">До події</button>
         <button id="btn-day">+1 доба</button>
         <!-- П12.2 (ADR-0065): кнопка «Меню» у топбарі — «Налаштування» (П12.3,
              вікно settings.ts), «Як грати», «На стартовий екран» -->
