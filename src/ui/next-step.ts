@@ -6,9 +6,9 @@
 
 import { sciencePrice } from '../core/campaign';
 import { TICK_MINUTES, detectedUfos, missionTargets } from '../core/geo';
-import { FIGHTER_MAX_HP } from '../core/intercept';
+import { FIGHTER_MAX_HP, FIGHTER_REPAIR_COST } from '../core/intercept';
 import type { Party } from '../core/save';
-import { readySoldiers } from '../core/squad';
+import { isBankrupt, readySoldiers } from '../core/squad';
 import { ITEM_IDS, WORKSHOP_CATALOG, type ItemId } from '../core/workshop';
 import { inAirCombat, readyToIssue } from './panels';
 
@@ -41,8 +41,12 @@ export interface NextStepContext {
 }
 
 // null — рядок прихований: бій, повітряний бій, партію програно, кампанію завершено.
+// Банкрутство перевіряється і тут: main.ts виставляє gameOver лише на тіку, а стан
+// «боєготових немає і на вербування бракує» настає одразу після витрати — порада
+// «вербуйте або чекайте» вела б до програшу (аудит PR #339).
 export function nextStepText(party: Party, ctx: NextStepContext): string | null {
   if (ctx.inBattle || ctx.gameOver || inAirCombat(party) || party.campaign.status !== 'триває') return null;
+  if (isBankrupt(party.econ, party.roster, party.campaign.preset)) return null;
   const ready = readySoldiers(party.roster).length;
   const fighter = party.intercept.fighter;
   const targets = missionTargets(party.geo);
@@ -56,6 +60,7 @@ export function nextStepText(party: Party, ctx: NextStepContext): string | null 
   if (ready === 0) return NEXT_STEP.noReady;
   if (ITEM_IDS.some((id) => canOrderNew(party, id))) return NEXT_STEP.order;
   if (readyToIssue(party) > 0) return NEXT_STEP.issue;
-  if (fighter.status === 'на базі' && fighter.hp < FIGHTER_MAX_HP) return NEXT_STEP.repair;
+  // ремонт радимо, лише коли кнопка «Ремонт» активна (кредитів вистачає) — аудит PR #339
+  if (fighter.status === 'на базі' && fighter.hp < FIGHTER_MAX_HP && party.econ.money >= FIGHTER_REPAIR_COST) return NEXT_STEP.repair;
   return NEXT_STEP.time;
 }

@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Т.43, PR 2: навмисні поломки рядка «Наступний крок». Запуск із кореня:
-E2E_CHROME=/шлях/до/chrome python3 docs/reports/t43/mutations-pr2.py
+E2E_CHROME=/шлях/до/chrome python3 docs/reports/t43/mutations-pr2.py [номер першої поломки]
 Заміна «було → стало» в одному файлі, після прогону файл відновлюється (у
 `finally`; убитий процес лишає зламаний файл — `git checkout -- src/ index.html`).
 Оракул: код виходу vitest на двох файлах і сценарію приймання."""
-import os, subprocess
+import os, subprocess, sys
 
 NS = 'src/ui/next-step.ts'
 MAIN = 'src/main.ts'
@@ -29,6 +29,14 @@ MUTS = [
     ('main.ts не ховає елемент', MAIN, "el('next-step').classList.toggle('hidden', step === null);", ""),
     ('текст рядка 8 з дефісом замість тире', NS, "рухайте час — сенсорна", "рухайте час - сенсорна"),
     ('рядок не на всю ширину шапки', 'index.html', "        flex-basis: 100%;\n        margin-top: -8px;", "        margin-top: -8px;"),
+    # після аудиту PR #339 (поломки аудитора B, C, D, E і поломки нового коду)
+    ('рядок 4 після рядків 5–7', NS, "  if (ready === 0) return NEXT_STEP.noReady;\n  if (ITEM_IDS", "  if (ITEM_IDS"),
+    ('«збитий» без вимоги боєготових', NS, "    if (targets.some((u) => u.status === 'збитий')) return NEXT_STEP.shotDown;\n  }", "  }\n  if (targets.some((u) => u.status === 'збитий')) return NEXT_STEP.shotDown;"),
+    ('«замовте» попри предмет на складі', NS, "w.store[id] > 0 || ", ""),
+    ('рядок сховано на вікнах до 1180 px', 'index.html', "        #next-step {\n          margin-top: 0;\n        }", "        #next-step {\n          display: none;\n        }"),
+    ('рядок налазить на перший ряд шапки на 1024', 'index.html', "        #next-step {\n          margin-top: 0;\n        }", "        #next-step {\n          margin-top: -8px;\n        }"),
+    ('банкрутство до тіку не ховає рядок', NS, "  if (isBankrupt(party.econ, party.roster, party.campaign.preset)) return null;\n", ""),
+    ('«замовте ремонт» без кредитів', NS, " && party.econ.money >= FIGHTER_REPAIR_COST", ""),
 ]
 
 def run(cmd):
@@ -39,7 +47,8 @@ def main():
     assert run('npm run test:e2e') == 0, 'сценарій приймання червоний без поломок'
     res = lambda c: 'червоний' if c else 'зелений'
     caught = 0
-    for name, path, a, b in MUTS:
+    start = int(sys.argv[1]) if len(sys.argv) > 1 else 0  # номер першої поломки (з 0) — щоб прогнати лише нові
+    for name, path, a, b in MUTS[start:]:
         src = open(path, encoding='utf-8').read()
         assert src.count(a) == 1, (name, src.count(a))
         open(path, 'w', encoding='utf-8').write(src.replace(a, b))
@@ -49,6 +58,6 @@ def main():
             open(path, 'w', encoding='utf-8').write(src)
         caught += 'червоний' in row[1:]
         print('| %s | %s | %s | %s |' % row, flush=True)
-    print('ВИЯВЛЕНО: %d із %d' % (caught, len(MUTS)))
+    print('ВИЯВЛЕНО: %d із %d' % (caught, len(MUTS) - start))
 
 main()
