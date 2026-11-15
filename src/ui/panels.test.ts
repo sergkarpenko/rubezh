@@ -558,14 +558,14 @@ describe('T.39: readyToIssue — лічильник на вкладці «Заг
     const { party } = makeFixture();
     expect(readyToIssue(party)).toBe(0);
     const soldiers = party.roster.soldiers.length;
-    party.workshop.store.armor = soldiers + 5; // bilshe, nizh operatyvnykiv
+    party.workshop.store.armor = soldiers + 5; // більше, ніж оперативників
     party.workshop.store.medkit = 1;
     expect(readyToIssue(party)).toBe(soldiers + 1);
     // один оперативник уже в броні — він не видається вдруге
     party.workshop.equipped[party.roster.soldiers[0].id] = { armor: true, optics: false, medkit: false, grenade: false };
     expect(readyToIssue(party)).toBe(soldiers);
-    // harmatnyy modul na skladi ne vidayetsya operatyvnykam
+    // гарматний модуль на складі не видається оперативникам
     party.workshop.store['gun-module'] = 3;
-    expect(readyToIssue(party)).toBe(soldiers); // bez zminy vid modulya
+    expect(readyToIssue(party)).toBe(soldiers); // без зміни від модуля
   });
 });
