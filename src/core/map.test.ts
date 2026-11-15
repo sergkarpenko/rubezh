@@ -3,7 +3,7 @@
 // Логіка всіх сценаріїв попередньо перевірена в пісочниці.
 
 import { describe, expect, it } from 'vitest';
-import { computeVisibleCells, findPath, makeTestMap, pathApCost, visibleEnemies } from './map';
+import { computeVisibleCells, findPath, makeTestMap, pathApCost, reachableCells, visibleEnemies } from './map';
 import { createGame, makeUnit, moveUnit, type GameMap, type GameState, type RNG, type Vec2 } from './combat';
 
 const alwaysHit: RNG = () => 0;
@@ -178,5 +178,73 @@ describe('Т.14: бюджет вузлів A*, вибір з рівних шля
     const m = makeTestMap(3, 6, 4, 0.5);
     expect(m.blocked.size).toBeGreaterThan(0);
     for (const cell of m.blocked) expect(cell).toMatch(/^[0-5],[0-3]$/);
+  });
+});
+
+describe('Т.44: reachableCells — зона ходу', () => {
+  const from: Vec2 = { x: 2, y: 2 };
+  const sorted = (s: Set<string>): string => [...s].sort().join(' ');
+
+  it('ap = 0 — порожньо; клітинка старту в зону не входить', () => {
+    expect(reachableCells(setupGame(), from, 0).size).toBe(0);
+    expect(reachableCells(setupGame(), from, 3).has('2,2')).toBe(false);
+  });
+
+  it('відкрита мапа: ромб за Мангеттеном — 4 клітинки за 1 AP, 12 за 2 AP; край поля обрізає', () => {
+    expect(sorted(reachableCells(setupGame(), from, 1))).toBe('1,2 2,1 2,3 3,2');
+    expect(reachableCells(setupGame(), from, 2).size).toBe(12);
+    // з кута (0,0) за 2 AP: (1,0) (0,1) (2,0) (1,1) (0,2)
+    expect(sorted(reachableCells(setupGame(), { x: 0, y: 0 }, 2))).toBe('0,1 0,2 1,0 1,1 2,0');
+  });
+
+  it('стіна обрізає зону і змушує обходити: за стіною x = 3 клітинка (4,2) коштує 6 AP, а не 2', () => {
+    const g = setupGame(['3,1', '3,2', '3,3']);
+    expect(reachableCells(g, from, 2).has('3,2')).toBe(false);
+    expect(reachableCells(g, from, 5).has('4,2')).toBe(false);
+    expect(reachableCells(g, from, 6).has('4,2')).toBe(true);
+  });
+
+  it('видимий юніт обрізає зону; юніт у тумані — ні (ADR-0081)', () => {
+    const g = setupGame([], { x: 3, y: 2 });
+    expect(sorted(reachableCells(g, from, 1))).toBe('1,2 2,1 2,3'); // без seen усі юніти відомі
+    expect(sorted(reachableCells(g, from, 1, new Set(['3,2'])))).toBe('1,2 2,1 2,3');
+    expect(sorted(reachableCells(g, from, 1, new Set(['1,2'])))).toBe('1,2 2,1 2,3 3,2');
+    // загиблий клітинки не займає
+    g.units[1]!.alive = false;
+    expect(reachableCells(g, from, 1).has('3,2')).toBe(true);
+  });
+
+  it('звірка з findPath на кожній клітинці: чотири сіди мапи, шість значень AP, з туманом і без', () => {
+    for (const [seed, density] of [
+      [1, 0.08],
+      [7, 0.2],
+      [42, 0.3],
+      [99, 0.08],
+    ] as const) {
+      const g = createGame({
+        map: makeTestMap(seed, 20, 20, density),
+        rng: alwaysHit,
+        units: [
+          makeUnit({ id: 's1', side: 'player', pos: { x: 2, y: 2 } }),
+          makeUnit({ id: 's2', side: 'player', pos: { x: 3, y: 2 } }),
+          makeUnit({ id: 'a1', side: 'alien', pos: { x: 2, y: 4 } }),
+          makeUnit({ id: 'a2', side: 'alien', pos: { x: 17, y: 2 } }),
+        ],
+      });
+      for (const seen of [undefined, computeVisibleCells(g, from, 3)]) {
+        // довжина найкоротшого шляху до кожної клітинки — один раз на мапу
+        const cost = new Map<string, number>();
+        for (let y = 0; y < 20; y++)
+          for (let x = 0; x < 20; x++) {
+            const p = findPath(g, from, { x, y }, undefined, seen);
+            if (p !== null && p.length > 0) cost.set(x + ',' + y, pathApCost(p));
+          }
+        for (const ap of [0, 1, 3, 6, 10, 40]) {
+          const expected = new Set([...cost].filter(([, c]) => c <= ap).map(([k]) => k));
+          expect(sorted(reachableCells(g, from, ap, seen)), 'сід ' + seed + ', ap ' + ap).toBe(sorted(expected));
+        }
+        expect(cost.size).toBeGreaterThan(50);
+      }
+    }
   });
 });

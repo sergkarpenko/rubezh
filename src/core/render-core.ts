@@ -170,6 +170,27 @@ export function fogBorderSegments(cells: readonly TerrainCell[]): CellEdge[] {
   return out;
 }
 
+// Т.44: контур множини клітинок (зона ходу) — сторони клітинок множини, за якими
+// сусідки з множини немає (зокрема край поля і стіни всередині зони). Координати
+// в клітинках; (nx, ny) — одиничний зсув усередину клітинки, щоб лінію малювати в її межах.
+export interface ZoneEdge extends CellEdge {
+  nx: number;
+  ny: number;
+}
+export function zoneOutlineSegments(keys: ReadonlySet<string>): ZoneEdge[] {
+  const out: ZoneEdge[] = [];
+  for (const k of keys) {
+    const i = k.indexOf(',');
+    const x = Number(k.slice(0, i));
+    const y = Number(k.slice(i + 1));
+    if (!keys.has(x + 1 + ',' + y)) out.push({ x1: x + 1, y1: y, x2: x + 1, y2: y + 1, nx: -1, ny: 0 });
+    if (!keys.has(x - 1 + ',' + y)) out.push({ x1: x, y1: y, x2: x, y2: y + 1, nx: 1, ny: 0 });
+    if (!keys.has(x + ',' + (y + 1))) out.push({ x1: x, y1: y + 1, x2: x + 1, y2: y + 1, nx: 0, ny: -1 });
+    if (!keys.has(x + ',' + (y - 1))) out.push({ x1: x, y1: y, x2: x + 1, y2: y, nx: 0, ny: 1 });
+  }
+  return out;
+}
+
 // --- П6.8 (ADR-0029): анімаційний рушій — черга + rAF лише під час активних анімацій ---
 
 // Тривалості фаз (мс): стримана анімація, без поспіху (дизайн-сесія 6b).

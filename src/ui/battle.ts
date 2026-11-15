@@ -26,10 +26,10 @@ import {
   type Unit,
   type Vec2,
 } from '../core/combat';
-import { computeVisibleCells } from '../core/map';
+import { computeVisibleCells, reachableCells } from '../core/map';
 import { geoClock } from '../core/geo';
 import type { Party } from '../core/save';
-import { drawAnimFrame, drawChanceLabel, drawNightTerrain, drawTargetFrame, drawUnitSprite } from '../render';
+import { drawAnimFrame, drawChanceLabel, drawNightTerrain, drawReachZone, drawTargetFrame, drawUnitSprite } from '../render';
 import {
   animT,
   animsFromEvents,
@@ -347,8 +347,14 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
     for (const p of SQUAD_SPAWN) ctx.strokeRect(p.x * BCELL + 2, p.y * BCELL + 2, BCELL - 5, BCELL - 5);
     ctx.setLineDash([]);
 
-    // прев'ю шляху під курсором: зелені крапки — вистачає AP, червоні — ні
+    // Т.44: зона ходу вибраного оперативника — у хід гравця, поки не зведено ні постріл,
+    // ні витратник; рахується і в тумані (рельєф відомий, юніт у тумані зони не обрізає — ADR-0081)
     const sel = selectedUnit();
+    if (sel && playerTurnActive() && ui.fireMode === null && ui.itemMode === null) {
+      drawReachZone(ctx, reachableCells(st, sel.pos, sel.ap, vis), sel.pos, BCELL);
+    }
+
+    // прев'ю шляху під курсором: зелені крапки — вистачає AP, червоні — ні
     if (ui.hoverPath && sel && playerTurnActive()) {
       const affordable = ui.hoverAp <= sel.ap;
       ctx.fillStyle = affordable ? 'rgba(127,226,160,0.9)' : 'rgba(255,156,156,0.9)';

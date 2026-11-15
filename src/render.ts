@@ -18,6 +18,7 @@ import {
   BOOM_PARTICLES,
   FOG_EDGE,
   fogBorderSegments,
+  zoneOutlineSegments,
   GEO_CELL_A,
   GEO_CELL_B,
   GEO_GRID_COLOR,
@@ -666,6 +667,38 @@ export function drawGeoTerrain(ctx: CanvasRenderingContext2D, w: number, h: numb
 // --- П6.14: UX прицілювання — обведення валідних цілей і шанс попадання ---
 
 // Обведення цілі — бурштиновий неон П12.7 (ADR-0064), плашка шансу — бурштин.
+// Т.44 (рішення власника «контур + легка заливка»): зона ходу вибраного оперативника.
+// keys — досяжні клітинки (ключі "x,y", без клітинки оперативника); контур обводить
+// зону разом із клітинкою оперативника і зсунутий на 1 px усередину клітинок.
+// Порожня зона — нічого не малюється.
+export const REACH_FILL = 'rgba(127,226,160,0.09)';
+export const REACH_OUTLINE = 'rgba(127,226,160,0.75)';
+const REACH_OUTLINE_W = 2;
+export function drawReachZone(
+  ctx: CanvasRenderingContext2D,
+  keys: ReadonlySet<string>,
+  origin: { x: number; y: number },
+  cell: number
+): void {
+  if (keys.size === 0) return;
+  const zone = new Set(keys).add(origin.x + ',' + origin.y);
+  ctx.save();
+  ctx.fillStyle = REACH_FILL;
+  for (const k of keys) {
+    const i = k.indexOf(',');
+    ctx.fillRect(Number(k.slice(0, i)) * cell + 1, Number(k.slice(i + 1)) * cell + 1, cell - 2, cell - 2);
+  }
+  ctx.strokeStyle = REACH_OUTLINE;
+  ctx.lineWidth = REACH_OUTLINE_W;
+  ctx.beginPath();
+  for (const e of zoneOutlineSegments(zone)) {
+    ctx.moveTo(e.x1 * cell + e.nx, e.y1 * cell + e.ny);
+    ctx.lineTo(e.x2 * cell + e.nx, e.y2 * cell + e.ny);
+  }
+  ctx.stroke();
+  ctx.restore();
+}
+
 export const TARGET_FRAME_COLOR = 'rgba(255,179,71,0.9)';
 export const CHANCE_LABEL_BG = 'rgba(10,13,18,0.85)';
 export const CHANCE_LABEL_TEXT = '#ffcf5c';

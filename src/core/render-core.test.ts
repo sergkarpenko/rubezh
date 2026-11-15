@@ -9,6 +9,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   fogBorderSegments,
+  zoneOutlineSegments,
   type TerrainCell,
   AnimEngine,
   BOOM_MS,
@@ -715,6 +716,39 @@ describe('Т.44: fogBorderSegments — межа зору', () => {
       const sides = e.x1 === e.x2 ? [e.x1 - 1 + ',' + e.y1, e.x1 + ',' + e.y1] : [e.x1 + ',' + (e.y1 - 1), e.x1 + ',' + e.y1];
       expect(sides.filter((k) => vis.has(k)).length).toBe(1);
       expect(sides.filter((k) => fog.has(k)).length).toBe(1);
+    }
+  });
+});
+
+describe('Т.44: zoneOutlineSegments — контур зони ходу', () => {
+  it('порожня множина — без відрізків; одна клітинка — чотири сторони зі зсувом усередину', () => {
+    expect(zoneOutlineSegments(new Set())).toEqual([]);
+    expect(zoneOutlineSegments(new Set(['3,5']))).toEqual([
+      { x1: 4, y1: 5, x2: 4, y2: 6, nx: -1, ny: 0 },
+      { x1: 3, y1: 5, x2: 3, y2: 6, nx: 1, ny: 0 },
+      { x1: 3, y1: 6, x2: 4, y2: 6, nx: 0, ny: -1 },
+      { x1: 3, y1: 5, x2: 4, y2: 5, nx: 0, ny: 1 },
+    ]);
+  });
+
+  it('дві сусідні клітинки — шість сторін, спільної сторони немає; край поля (x = 0) — теж контур', () => {
+    const edges = zoneOutlineSegments(new Set(['0,0', '1,0']));
+    expect(edges).toHaveLength(6);
+    expect(edges.some((e) => e.x1 === 1 && e.x2 === 1)).toBe(false);
+    expect(edges).toContainEqual({ x1: 0, y1: 0, x2: 0, y2: 1, nx: 1, ny: 0 });
+  });
+
+  it('кожен відрізок лежить між клітинкою множини і клітинкою поза нею; зсув показує в бік множини', () => {
+    const keys = new Set(['2,2', '3,2', '4,2', '2,3', '4,3', '2,4', '3,4', '4,4', '6,2']); // кільце з діркою (3,3) і окрема клітинка
+    const edges = zoneOutlineSegments(keys);
+    expect(edges).toHaveLength(12 + 4 + 4); // зовнішній контур кільця, дірка, окрема клітинка
+    for (const e of edges) {
+      const vertical = e.x1 === e.x2;
+      const a = vertical ? e.x1 - 1 + ',' + e.y1 : e.x1 + ',' + (e.y1 - 1);
+      const b = e.x1 + ',' + e.y1;
+      expect(keys.has(a)).not.toBe(keys.has(b));
+      // нормаль: +1 — множина праворуч чи знизу від лінії (клітинка b), −1 — ліворуч чи згори (клітинка a)
+      expect(vertical ? [e.nx, e.ny] : [e.ny, e.nx]).toEqual([keys.has(b) ? 1 : -1, 0]);
     }
   });
 });

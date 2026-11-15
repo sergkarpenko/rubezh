@@ -38,6 +38,7 @@ import {
   drawGeoBaseSprite,
   drawGeoTerrain,
   drawNightTerrain,
+  drawReachZone,
   drawSoldierSprite,
   drawTargetFrame,
   drawUfoSprite,
@@ -67,6 +68,7 @@ import {
   terrainShade,
   type TerrainCell,
   fogBorderSegments,
+  zoneOutlineSegments,
 } from './core/render-core';
 import {
   ALIEN_STAND,
@@ -1212,5 +1214,63 @@ describe('позафазна лінія: фон геосцени — ціліс�
       return { calls: s.calls, sets: s.sets };
     };
     expect(draw()).toEqual(draw());
+  });
+});
+
+describe('Т.44: drawReachZone — зона ходу (заливка і контур)', () => {
+  const fillsOf = (ops: Op[]): Array<{ color: string; args: unknown[] }> => {
+    const out: Array<{ color: string; args: unknown[] }> = [];
+    let cur = '';
+    for (const op of ops) {
+      if ('set' in op && op.set === 'fillStyle') cur = op.v as string;
+      if ('m' in op && op.m === 'fillRect') out.push({ color: cur, args: op.args });
+    }
+    return out;
+  };
+  const pts = (ops: Op[]): number[][] =>
+    ops.flatMap((o) => ('m' in o && (o.m === 'moveTo' || o.m === 'lineTo') ? [o.args as number[]] : []));
+
+  it('порожня зона — жодної операції (і контуру навколо оперативника немає)', () => {
+    const s = seqCtx();
+    drawReachZone(s.ctx, new Set(), { x: 2, y: 2 }, 48);
+    expect(s.ops).toEqual([]);
+  });
+
+  it('заливка — кожна клітинка зони, без клітинки оперативника: (x·48+1, y·48+1, 46, 46), колір рішення власника', () => {
+    const s = seqCtx();
+    drawReachZone(s.ctx, new Set(['3,2', '1,2', '2,3']), { x: 2, y: 2 }, 48);
+    expect(fillsOf(s.ops)).toEqual([
+      { color: 'rgba(127,226,160,0.09)', args: [145, 97, 46, 46] },
+      { color: 'rgba(127,226,160,0.09)', args: [49, 97, 46, 46] },
+      { color: 'rgba(127,226,160,0.09)', args: [97, 145, 46, 46] },
+    ]);
+  });
+
+  it('контур: один шлях кольором 0.75 товщиною 2 навколо зони разом з оперативником, без ліній між її клітинками, зсув 1 px усередину', () => {
+    const s = seqCtx();
+    const keys = new Set(['3,2', '1,2', '2,3']);
+    drawReachZone(s.ctx, keys, { x: 2, y: 2 }, 48);
+    expect(s.ops).toContainEqual({ set: 'strokeStyle', v: 'rgba(127,226,160,0.75)' });
+    expect(s.ops).toContainEqual({ set: 'lineWidth', v: 2 });
+    expect(s.ops.filter((o) => 'm' in o && o.m === 'beginPath')).toHaveLength(1);
+    expect(s.ops.filter((o) => 'm' in o && o.m === 'stroke')).toHaveLength(1);
+    const segs = zoneOutlineSegments(new Set([...keys, '2,2']));
+    expect(segs).toHaveLength(10); // «Т» з чотирьох клітинок: 16 сторін − 3 спільні × 2
+    const p = pts(s.ops);
+    expect(p).toHaveLength(segs.length * 2);
+    // жоден відрізок не лежить на межі клітинки (кратне 48) — усі зсунуті на 1 px усередину
+    for (let i = 0; i < p.length; i += 2) {
+      const [ax, ay] = p[i]!;
+      const [bx, by] = p[i + 1]!;
+      if (ax === bx) expect([1, 47]).toContain(ax! % 48);
+      else expect([1, 47]).toContain(ay! % 48);
+      expect(ax === bx || ay === by).toBe(true);
+    }
+    // спільна сторона оперативника (2,2) і клітинки (3,2) — x = 144 у рядку 2 (y від 96 до 144): ліній на 143 і 145 там немає
+    const inRow2 = (i: number): boolean => p[i]![0] === p[i + 1]![0] && Math.min(p[i]![1]!, p[i + 1]![1]!) === 96;
+    expect(p.filter((_v, i) => i % 2 === 0 && inRow2(i)).map(([x]) => x)).toEqual([191, 49]);
+    // стан контексту відновлено: save на початку, restore наприкінці
+    expect(s.ops[0]).toEqual({ m: 'save', args: [] });
+    expect(s.ops[s.ops.length - 1]).toEqual({ m: 'restore', args: [] });
   });
 });

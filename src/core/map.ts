@@ -94,6 +94,39 @@ export function pathApCost(path: Vec2[]): number {
   return path.length * MOVE_AP_PER_CELL;
 }
 
+/**
+ * Т.44: клітинки, до яких юніт зі start дійде за ap очок дій (ключі "x,y"; start не входить).
+ * Те саме, що «findPath дає шлях із pathApCost <= ap», але одним обходом у ширину.
+ * Прохідність — як у findPath: перешкоди непрохідні; юніт перекриває клітинку,
+ * лише коли seen не задано або клітинка в seen (ADR-0081: юніт у тумані зони не обрізає).
+ */
+export function reachableCells(state: GameState, start: Vec2, ap: number, seen?: ReadonlySet<string>): Set<string> {
+  const steps = Math.floor(ap / MOVE_AP_PER_CELL);
+  const startKey = key(start);
+  const out = new Set<string>();
+  let frontier: Vec2[] = [start];
+  for (let d = 1; d <= steps && frontier.length > 0; d++) {
+    const next: Vec2[] = [];
+    for (const cur of frontier) {
+      for (const n of [
+        { x: cur.x + 1, y: cur.y },
+        { x: cur.x - 1, y: cur.y },
+        { x: cur.x, y: cur.y + 1 },
+        { x: cur.x, y: cur.y - 1 },
+      ]) {
+        const nk = key(n);
+        if (nk === startKey || out.has(nk)) continue;
+        if (!isInside(state.map, n) || isBlocked(state.map, n)) continue;
+        if (unitAt(state, n) !== undefined && (seen === undefined || seen.has(nk))) continue;
+        out.add(nk);
+        next.push(n);
+      }
+    }
+    frontier = next;
+  }
+  return out;
+}
+
 // --- Туман війни ---
 
 /**
