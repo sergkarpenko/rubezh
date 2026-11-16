@@ -677,7 +677,16 @@ if (typeof document !== 'undefined') {
     storageOk: () => savePanel.isStorageOk(),
     slotsEmpty: () => savePanel.slotsEmpty(),
   });
-  el('btn-help').onclick = help.open;
+  // Т.53 (рішення власника 16.11.2026 «Зупинити»): вікно поверх бою зупиняє авто-бій, як «Стоп»
+  const stopAutoForWindow = (): void => {
+    if (!autoBattle.busy) return;
+    autoBattle.stop();
+    battle.renderBattle();
+  };
+  el('btn-help').onclick = () => {
+    stopAutoForWindow();
+    help.open();
+  };
   help.maybeShowOnFirstVisit();
   // П12.3 (ADR-0065): вікно «Налаштування» — тумблер звуку мігрував з топбара;
   // стан — аудіо-модуль (ADR-0059), персист поза сейвом (ADR-0026).
@@ -701,7 +710,10 @@ if (typeof document !== 'undefined') {
     hasUnsavedChanges,
     onExitToStart: exitToStart,
   });
-  el('btn-menu').onclick = () => screens?.openMenu();
+  el('btn-menu').onclick = () => {
+    stopAutoForWindow();
+    screens?.openMenu();
+  };
   // ADR-0065: сторінка → стартовий екран; партія не створюється до вибору
   // гравця (журнал старту партії — у startNewParty). Перший візит (П9.1)
   // показує «Як грати» поверх стартового екрана.
