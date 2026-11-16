@@ -1635,3 +1635,58 @@ describe('Т.51: переривання перехоплення при приз
     expect(document.getElementById('fighter-last')).toBeNull();
   });
 });
+
+// Т.53 (висновок аудиту PR #348, Т.48; план — docs/plans/t53-menu-auto-battle.md, Т.52/PR #352): меню і «Як грати»
+// поверх бою зупиняють авто-бій, як плітка «Стоп» (рішення власника 16.11.2026 «Зупинити»).
+describe('Т.53: меню і «Як грати» зупиняють авто-бій', () => {
+  const cap = (): string => (document.querySelector('#btn-auto-battle .tb-cap') as HTMLElement | null)?.textContent ?? '';
+
+  it('Т.53: клік «Меню» і «?» під час авто-бою зупиняє авто-бій: плітка «Авто», таймерів 0, журнал стоїть', async () => {
+    // 1. сід 27, пресет «норма»: кнопка місії з'являється, коли годинник показує «Д1 09:00»
+    startParty('27');
+    for (let i = 0; i < 1500 && document.querySelector('button.mission') === null; i++) btn('btn-tick').click();
+    (document.querySelector('button.mission') as HTMLButtonElement).click();
+    expect($('battle-panel').classList.contains('hidden')).toBe(false);
+    // 2. фейк-таймери — як у блоці Т.48
+    vi.useFakeTimers();
+    try {
+      // 3. авто-бій справді запущений
+      btn('btn-auto-battle').click();
+      await vi.advanceTimersByTimeAsync(AUTO_STEP_MS * 3);
+      expect(cap()).toBe('Стоп');
+      // 4. «Меню» зупиняє авто-бій і відкриває вікно
+      btn('btn-menu').click();
+      expect($('game-menu').classList.contains('hidden')).toBe(false);
+      expect(cap()).toBe('Авто');
+      expect(vi.getTimerCount()).toBe(0);
+      // 5. журнал не йде далі, поки вікно відкрите
+      const logBefore = $('log').textContent;
+      await vi.advanceTimersByTimeAsync(AUTO_STEP_MS * 50);
+      expect($('log').textContent).toBe(logBefore);
+      // 6. закрили меню — авто-бій не поновлюється, бій не завершується
+      btn('btn-menu-close').click();
+      await vi.advanceTimersByTimeAsync(AUTO_STEP_MS * 50);
+      expect($('log').textContent).toBe(logBefore);
+      expect($('bresult').textContent).toBe('');
+      // 7. знову «Авто» — авто-бій поновлюється (таймер є, плітка «Стоп», журнал іде)
+      btn('btn-auto-battle').click();
+      await vi.advanceTimersByTimeAsync(AUTO_STEP_MS * 3);
+      expect(cap()).toBe('Стоп');
+      expect(vi.getTimerCount()).toBeGreaterThan(0);
+      expect($('log').textContent).not.toBe(logBefore);
+      // 8. «?» («Як грати») теж зупиняє авто-бій
+      btn('btn-help').click();
+      expect($('help-screen').classList.contains('hidden')).toBe(false);
+      expect(cap()).toBe('Авто');
+      expect(vi.getTimerCount()).toBe(0);
+      btn('btn-help-close').click();
+    } finally {
+      vi.useRealTimers();
+    }
+    // 9. без авто-бою меню не чіпає binfo
+    const binfoBefore = $('binfo').textContent;
+    btn('btn-menu').click();
+    btn('btn-menu-close').click();
+    expect($('binfo').textContent).toBe(binfoBefore);
+  });
+});
