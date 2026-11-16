@@ -664,6 +664,61 @@ describe('панель збереження: 3 слоти, лише на гео�
     expect(btn('btn-del-2').disabled).toBe(true);
     expect(localStorage.getItem('rubezh.save.2')).toBeNull();
   });
+
+  // Т.47: сейв на геосцені зі знайденим зондом, ще один тік (щоб завантажений стан
+  // відрізнявся від покинутого) і запуск місії
+  const saveTickAndLaunch = (): string => {
+    btn('btn-del-3').click(); // останнім активним слотом має бути слот 1
+    startParty('27');
+    for (let i = 0; i < 1500 && document.querySelector('button.mission') === null; i++) btn('btn-tick').click();
+    btn('btn-save-1').click();
+    const money = $('money').textContent ?? '';
+    expect($('clock').textContent).toBe('Д1 09:00');
+    btn('btn-tick').click();
+    expect($('clock').textContent).toBe('Д1 09:30');
+    (document.querySelector('button.mission') as HTMLButtonElement).click();
+    expect($('battle-panel').classList.contains('hidden')).toBe(false);
+    return money;
+  };
+  const exitToStart = (unsaved: boolean): void => {
+    btn('btn-menu').click();
+    btn('btn-menu-exit').click();
+    expect($('exit-confirm').classList.contains('hidden')).toBe(!unsaved); // підтвердження — лише коли є що втрачати
+    if (unsaved) btn('btn-exit-yes').click();
+    expect($('start-screen').classList.contains('hidden')).toBe(false);
+  };
+  const expectLoadedGeo = (money: string): void => {
+    expect($('start-screen').classList.contains('hidden')).toBe(true);
+    expect($('clock').textContent).toBe('Д1 09:00'); // стан сейву, а не покинутої партії
+    expect($('money').textContent).toBe(money);
+    expect($('battle-panel').classList.contains('hidden')).toBe(true);
+    expect($('geo-panel').classList.contains('hidden')).toBe(false);
+    expect($('layout').classList.contains('in-battle')).toBe(false);
+    expect($('status').classList.contains('dimmed')).toBe(false);
+    expect($('next-step').classList.contains('hidden')).toBe(false);
+    expect($('bresult').innerHTML).toBe('');
+  };
+
+  it('Т.47: «Продовжити» після виходу з бою, що триває, завантажує сейв і закриває бій', () => {
+    const money = saveTickAndLaunch();
+    exitToStart(true);
+    btn('btn-start-continue').click();
+    expectLoadedGeo(money);
+    // місія з сейву на місці: новий бій починається з першого ходу
+    (document.querySelector('button.mission') as HTMLButtonElement).click();
+    expect($('bctx-turn').textContent).toBe('хід 1 · загін');
+    exitToStart(true);
+  });
+
+  it('Т.47: «Продовжити» після виходу з екрана результату бою — банера результату немає', async () => {
+    const money = saveTickAndLaunch();
+    await runAutoBattle();
+    expect($('bresult').textContent).toMatch(/ЗАЧИЩЕНО|ЗАГІН ВТРАЧЕНО/);
+    exitToStart(true);
+    btn('btn-start-continue').click();
+    expectLoadedGeo(money);
+    exitToStart(false);
+  });
 });
 
 describe('бойова фокусна зона (П6.3, ADR-0027)', () => {

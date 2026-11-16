@@ -531,6 +531,9 @@ function startNewParty(seed: number, preset: DifficultyPreset = 'норма'): v
 function continueGame(): boolean {
   const slot = savePanel.latestSlot();
   if (slot === null) return false;
+  // Т.47: з бою теж можна вийти на стартовий екран — старий бій закриваємо, як у
+  // startNewParty: інакше завантаження мовчки не відбувається (панель у бою не вантажить)
+  battle.close();
   savePanel.load(slot); // adoptParty + renderAll + журнал «Завантажено: слот N»
   return party !== null;
 }

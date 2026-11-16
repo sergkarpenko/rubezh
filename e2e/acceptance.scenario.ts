@@ -271,6 +271,30 @@ test('сценарій приймання ADR-0030: партія → місія 
     await page.setViewportSize({ width: 1440, height: 900 });
   });
 
+  await test.step('Т.47: «Продовжити» після виходу з бою — сейв завантажено, старого бою немає', async () => {
+    const saved = mirror.clock();
+    await page.locator('#status-tab-system').click();
+    await page.locator('#btn-save-1').click();
+    await expect(page.locator('#log')).toContainText('Збережено: слот 1.');
+    // тік і бій — лише на сторінці: дзеркало лишається на точці сейву, а годинник покинутої партії йде далі
+    await page.locator('#btn-tick').click();
+    await expect(clock).not.toHaveText(saved);
+    await page.locator('#status-tab-base').click();
+    await page.locator('#ufos button.mission').first().click();
+    await expect(page.locator('#battle-panel')).toBeVisible();
+    await page.locator('#btn-menu').click();
+    await page.locator('#btn-menu-exit').click();
+    await page.locator('#btn-exit-yes').click();
+    await expect(page.locator('#start-screen')).toBeVisible();
+    await page.locator('#btn-start-continue').click();
+    await expect(page.locator('#start-screen')).toBeHidden();
+    await expect(page.locator('#battle-panel')).toBeHidden();
+    await expect(page.locator('#geo-panel')).toBeVisible();
+    await expect(page.locator('#next-step')).toBeVisible();
+    await expect(clock).toHaveText(saved);
+    await expect(page.locator('#log')).toContainText('Завантажено: слот 1 — ' + saved);
+  });
+
   await test.step('запуск місії', async () => {
     const mission = mirror.launch(mirror.targets()[0].id);
     await page.locator('#status-tab-base').click();
