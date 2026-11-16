@@ -5,7 +5,8 @@
 // Запуск: node scripts/agents-docs-check.mjs [файл.md …] — без аргументів бере docs/agents/*.md.
 // Код виходу: 0 — розбіжностей немає, 1 — є, 2 — помилка запуску. Нічого не пише на диск.
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { execFileSync } from 'node:child_process';
+import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -15,20 +16,34 @@ if (args.some((a) => a.startsWith('-'))) {
   process.exit(args.every((a) => a === '--help' || a === '-h') ? 0 : 2);
 }
 const files = args.length
-  ? args
+  ? args.map((f) => relative(root, resolve(process.cwd(), f))) // аргументи — від поточної теки
   : readdirSync(join(root, 'docs/agents'))
       .filter((f) => f.endsWith('.md'))
       .map((f) => `docs/agents/${f}`);
 
-// Верхній рівень репозиторію, з якого починаються відносні шляхи в довідниках.
+// Верхній рівень репозиторію, з якого починаються відносні шляхи в довідниках: робоча тека
+// разом із origin/main — інакше згадка файла чи теки, видалених у гілці, пройшла б мовчки (аудит Т.50).
 const TOP = new Set(readdirSync(root).filter((f) => f !== '.git' && f !== 'node_modules'));
+try {
+  const out = execFileSync('git', ['-C', root, 'ls-tree', '--name-only', 'origin/main'], {
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'ignore'],
+  });
+  for (const name of out.split('\n')) if (name) TOP.add(name);
+} catch {
+  console.log('Увага: origin/main не прочитано — видалені на верхньому рівні файли не перевіряються');
+}
 const EXT = /\.(md|ts|mjs|js|sh|py|json|ya?ml|html|webp|png)$/;
 const adrFiles = readdirSync(join(root, 'docs/adr'));
 const npmScripts = Object.keys(JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).scripts ?? {});
 
 /** Чи схоже на шлях у репозиторії (а не на команду, змінну чи шаблон). */
 function pathCandidate(token) {
-  const t = token.replace(/^\.\//, '').replace(/[:,]$/, '');
+  // Зрізати «./» на початку, номер рядка «:N», якір «#…» і розділовий знак у кінці.
+  const t = token
+    .replace(/^\.\//, '')
+    .replace(/(:\d+(-\d+)?|#[^/]*)$/, '')
+    .replace(/[:,;.]$/, '');
   if (!t || /[\s*<>{}$|=?"'\\]/.test(t) || t.includes('…')) return null;
   if (/^(https?:|\/|~)/.test(t) || t.startsWith('-')) return null;
   const first = t.split('/')[0];
@@ -69,13 +84,13 @@ for (const file of files) {
     // Посилання Markdown: відносні до файлу довідника.
     for (const m of line.matchAll(/\]\(([^)#\s]+)(#[^)]*)?\)/g)) {
       const target = m[1];
-      if (/^https?:/.test(target)) continue;
+      if (/^(https?:|mailto:|\/)/.test(target)) continue;
       const p = join(dirname(file), target);
       seen.paths.add(p);
       if (!existsSync(join(root, p))) problems.push(`${where}: посилання веде в нікуди — ${target}`);
     }
     // ADR: номер має файл у docs/adr/.
-    for (const m of line.matchAll(/ADR-(\d{4})/g)) {
+    for (const m of line.matchAll(/ADR-(\d{4})(?!\d)/g)) {
       seen.adr.add(m[1]);
       if (!adrFiles.some((f) => f.startsWith(`${m[1]}-`))) problems.push(`${where}: ADR немає — ADR-${m[1]}`);
     }
