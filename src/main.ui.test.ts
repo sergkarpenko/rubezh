@@ -1587,3 +1587,51 @@ describe('Т.43: «До події», зупинки «+1 доба» і проб
     expect(clock()).toBe(before);
   });
 });
+
+// Т.51: рядок #fighter-last має зникати, коли зонд події (приземлився → ufo_left) вже не в geo.ufos.
+describe('Т.51: переривання перехоплення при приземленні зонда — журнал і панель #fighter-last', () => {
+  it('сід 42, пресет «норма»: ufo1 виявлено, старт перехоплення, abort (ufo_landed); після ufo_left рядка немає', () => {
+    startParty();
+    const interceptBtn = (): HTMLButtonElement | null => {
+      for (const b of document.querySelectorAll<HTMLButtonElement>('button.intercept')) {
+        if (!b.disabled) return b;
+      }
+      return null;
+    };
+    // 1. тикаємо, доки не з'явиться активна кнопка button.intercept (запобіжник — 60 кліків), і клікаємо її
+    let launched = false;
+    for (let i = 0; i < 60 && !launched; i++) {
+      const b = interceptBtn();
+      if (b) {
+        b.click();
+        launched = true;
+      } else {
+        btn('btn-tick').click();
+      }
+    }
+    expect(launched).toBe(true);
+    // 2. тикаємо, доки не з'явиться #fighter-last (запобіжник — 10 кліків)
+    let shown = false;
+    for (let i = 0; i < 10 && !shown; i++) {
+      btn('btn-tick').click();
+      shown = document.getElementById('fighter-last') !== null;
+    }
+    expect(shown).toBe(true);
+    // 3. текст #fighter-last — точно рядок журналу про abort; у #log такий самий рядок, «зник з трекінгу» ще немає
+    const abortedText = '✦ Зонд Розриву ufo1 приземлився — перехоплення перервано';
+    const leftText = 'Зонд Розриву ufo1 відлетів і зник';
+    expect($('fighter-last').textContent).toBe(abortedText);
+    expect($('log').textContent ?? '').toContain(abortedText);
+    expect($('log').textContent ?? '').not.toContain(leftText);
+    expect($('log').textContent ?? '').not.toContain('зник з трекінгу');
+    // 4. тикаємо, доки в #log не з'явиться рядок ufo_left (запобіжник — 400 кліків)
+    let left = false;
+    for (let i = 0; i < 400 && !left; i++) {
+      btn('btn-tick').click();
+      left = ($('log').textContent ?? '').includes(leftText);
+    }
+    expect(left).toBe(true);
+    // 5. зонд ufo1 вже не в geo.ufos — елемента #fighter-last немає
+    expect(document.getElementById('fighter-last')).toBeNull();
+  });
+});
