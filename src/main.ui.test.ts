@@ -26,6 +26,7 @@ import htmlRaw from '../index.html?raw';
 import { ARMOR_MAX_HP_BONUS, OPTICS_ACCURACY_BONUS } from './core/workshop';
 import { GRENADE_DAMAGE, HEAL_AMOUNT, HIT_CHANCE_CAP } from './core/combat';
 import { GUN_MODULE_DAMAGE } from './core/intercept';
+import { AnimEngine } from './core/render-core';
 
 const $ = (id: string): HTMLElement => document.getElementById(id) as HTMLElement;
 const btn = (id: string): HTMLButtonElement => $(id) as HTMLButtonElement;
@@ -715,6 +716,77 @@ describe('панель збереження: 3 слоти, лише на гео�
     await runAutoBattle();
     expect($('bresult').textContent).toMatch(/ЗАЧИЩЕНО|ЗАГІН ВТРАЧЕНО/);
     exitToStart(true);
+    expect($('bresult').innerHTML).toBe(''); // Т.48: завершений бій закриває вже вихід
+    btn('btn-start-continue').click();
+    expectLoadedGeo(money);
+    exitToStart(false);
+  });
+
+  // Т.48 (рішення власника «Зупиняти все»): вихід закриває бій одразу, а не «Продовжити»
+  it('Т.48: вихід на стартовий екран із бою закриває бій; з геосцени — лише скидає анімації', () => {
+    const cancel = vi.spyOn(AnimEngine.prototype, 'cancel');
+    try {
+      saveTickAndLaunch();
+      cancel.mockClear();
+      exitToStart(true);
+      expect($('battle-panel').classList.contains('hidden')).toBe(true);
+      expect($('geo-panel').classList.contains('hidden')).toBe(false);
+      expect($('layout').classList.contains('in-battle')).toBe(false);
+      expect($('clock').textContent).toBe('Д1 09:30'); // партія покинута, не завантажена
+      expect(cancel).toHaveBeenCalledTimes(2); // рушій бою (close) і рушій геосцени
+      cancel.mockClear();
+      btn('btn-start-continue').click();
+      expect(cancel).toHaveBeenCalledTimes(2); // «Продовжити»: close і рушій геосцени
+      cancel.mockClear();
+      btn('btn-tick').click(); // незбережена дія на геосцені
+      exitToStart(true);
+      expect(cancel).toHaveBeenCalledTimes(1); // бою немає — лише рушій геосцени
+      expect($('clock').textContent).toBe('Д1 09:30');
+    } finally {
+      cancel.mockRestore();
+    }
+  });
+
+  it('Т.48: невдале завантаження останнього слота — лишаємось на стартовому екрані', () => {
+    btn('btn-start-continue').click(); // слот 1 цілий — у гру
+    expect($('start-screen').classList.contains('hidden')).toBe(true);
+    exitToStart(false);
+    const good = localStorage.getItem('rubezh.save.1') as string;
+    const bad = JSON.parse(good) as { state: { geo: { ufos: unknown } } };
+    bad.state.geo.ufos = [null]; // метадані читаються (слот лишається останнім), розбір партії падає
+    const failures = (): number => ($('log').textContent ?? '').split('✗ Завантаження не вдалось').length - 1;
+    const failuresBefore = failures();
+    localStorage.setItem('rubezh.save.1', JSON.stringify(bad));
+    try {
+      expect(btn('btn-start-continue').disabled).toBe(false);
+      btn('btn-start-continue').click();
+      expect($('start-screen').classList.contains('hidden')).toBe(false);
+      expect($('topbar').classList.contains('hidden')).toBe(true);
+      expect(failures()).toBe(failuresBefore + 1); // завантаження справді пробували
+    } finally {
+      localStorage.setItem('rubezh.save.1', good);
+    }
+    btn('btn-start-continue').click(); // цілий слот знову вантажиться
+    expect($('start-screen').classList.contains('hidden')).toBe(true);
+    exitToStart(false);
+  });
+
+  // останнім у блоці: запускає авто-бій (спільний стан тестів блоку)
+  it('Т.48: авто-бій, запущений до виходу, за стартовим екраном не йде далі', async () => {
+    const money = saveTickAndLaunch();
+    vi.useFakeTimers();
+    try {
+      btn('btn-auto-battle').click();
+      await vi.advanceTimersByTimeAsync(AUTO_STEP_MS * 3); // авто-бій справді йде
+      const logBefore = $('log').textContent;
+      exitToStart(true);
+      expect(vi.getTimerCount()).toBe(0); // таймер паузи авто-бою знято
+      await vi.advanceTimersByTimeAsync(AUTO_STEP_MS * 6000);
+      expect($('log').textContent).toBe(logBefore); // жодної дії бою після виходу
+      expect($('bresult').innerHTML).toBe('');
+    } finally {
+      vi.useRealTimers();
+    }
     btn('btn-start-continue').click();
     expectLoadedGeo(money);
     exitToStart(false);
