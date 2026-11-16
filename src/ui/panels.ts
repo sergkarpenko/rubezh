@@ -340,7 +340,7 @@ export function createPanels(deps: PanelsDeps): Panels {
     // Не показуємо пошкодження, яке вже відремонтовано (аудит PR #340). Приземлення зонда
     // під час погоні після Т.49 має власний текст журналу — рядок показуємо, як і решту причин; виняток — Т.51: для причин ufo_landed/ufo_lost рядок показуємо лише поки зонд із події ще в geo.ufos (див. probeGone нижче).
     const stale = last?.type === 'intercept_aborted' && last.reason === 'fighter_damaged' && f.hp === FIGHTER_MAX_HP;
-    // Т.51: зонд останньої події вже не в geo.ufos (вилетіла після приземлення, зникла з радара або знищена місією) — рядок не показувати
+    // Т.51: зонд останньої події вже не в geo.ufos (відлетів після приземлення, зник із радара або місію на ньому виграно) — рядок не показувати
     const probeGone =
       last?.type === 'intercept_aborted' &&
       (last.reason === 'ufo_landed' || last.reason === 'ufo_lost') &&

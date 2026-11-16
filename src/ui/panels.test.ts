@@ -708,7 +708,7 @@ describe('Т.51: #fighter-last при відсутньому зонді поді
   // об'єкт зонда — копія створеної ядром, зі зміненим id
   const addProbe = (f: Fixture, id: string): void => {
     expect(tickUntil(f.party, () => f.party.geo.ufos.length > 0)).toBe(true);
-    f.party.geo.ufos = [{ ...f.party.geo.ufos[0], id }]; // копія створеної ядром зони зі зміненим id
+    f.party.geo.ufos = [{ ...f.party.geo.ufos[0], id }]; // копія створеного ядром зонда зі зміненим id
   };
   const dropProbe = (f: Fixture, id: string): void => {
     f.party.geo.ufos = f.party.geo.ufos.filter((u) => u.id !== id);
