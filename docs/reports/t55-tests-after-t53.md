@@ -1,6 +1,6 @@
 # Т.55. Тести після Т.53: меню без авто-бою і вікна з меню
 
-Дата: 2026-11-16. Позафазний крок, клас PR `auto` (`src/**/*.test.ts` і `docs/**`). Рішення власника 16.11.2026, після Т.54. Відповіді власника (дослівно): `"61"`, `"Тести після Т.53"`. План — `docs/plans/t55-tests-after-t53.md` (перший коміт гілки `test/t55-tests-after-t53` — `680a314`). Джерело: висновки аудиту PR #353 (Т.53); Т.54 — PR #354.
+Дата: 2026-11-16. Позафазний крок, клас PR `auto` (`src/**/*.test.ts` і `docs/**`). Рішення власника 16.11.2026, після Т.54. Відповіді власника (дослівно): «61», «Тести після Т.53». План — `docs/plans/t55-tests-after-t53.md` (перший коміт гілки `test/t55-tests-after-t53` — `680a314`). Джерело: висновки аудиту PR #353 (Т.53); Т.54 — PR #354.
 
 ## Що зроблено
 
@@ -29,7 +29,7 @@
 - Зупинку авто-бою у `battle.close` тест на сторінці, як і раніше, не тримає — лише тест модуля `src/ui/battle.test.ts`.
 - Кнопку «?» під час авто-бою тримає тест Т.53, а не тести цього кроку.
 
-## Чеклист перед PR
+## Чекліст перед PR
 
 - `npx tsc --noEmit` — без помилок; `npx tsc --noEmit -p tsconfig.core.json` — без помилок; `npx tsc --noEmit -p tsconfig.e2e.json` — без помилок.
 - `npm run lint` — ок; `npm run format:check` — ок; `npm test` — 1181 passed; `npm run docs` — 0 помилок (8 попереджень, до змін).
@@ -41,7 +41,7 @@
 - Рядків у PR (`./scripts/pr-size.sh origin/main HEAD`): 74 (ліміт 500).
 - Час кроку: з 18:47 UTC (старт сесії) до відкриття PR — див. оновлення цього розділу після PR.
 
-## Що з чеклиста не вдалося
+## Що з чекліста не вдалося
 
 - `npm run test:e2e` у пісочниці спочатку не стартував: браузер Playwright не був встановлений, а після `npx playwright install chromium` — помилка `libglib-2.0.so.0: cannot open shared object file` (системні бібліотеки відсутні, root немає, `apt-get`/`playwright install-deps` не працюють). Обхід: індекс `dists/trixie/main/binary-amd64/Packages.gz` і потрібні .deb-пакети з deb.debian.org розпаковано `dpkg -x` у `/tmp/debs/root`, запуск із `LD_LIBRARY_PATH=/tmp/debs/root/usr/lib/x86_64-linux-gnu:/tmp/debs/root/lib/x86_64-linux-gnu`; без шрифтів (fonts-dejavu-core і `FONTCONFIG_FILE` із `<dir>/tmp/debs/root/usr/share/fonts</dir>`) текст рендериться з нульовою висотою і `toBeVisible()` падає навіть на незміненій сторінці. Після підготовки сценарій зелений: 1 passed (22.9 с).
-- Більше з чеклиста нічого не впало.
+- Більше з чекліста нічого не впало.
