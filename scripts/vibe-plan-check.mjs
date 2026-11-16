@@ -41,6 +41,9 @@ export function quotes(text) {
   return out;
 }
 
+/** Усі цитати тексту на всіх рівнях вкладення, без зайвих пробілів. */
+const allQuotes = (text) => quotes(text).flatMap((q) => [norm(q.text), ...allQuotes(q.text)]);
+
 /** Пари «не писати → писати» з розділу термінів плану: **слово** (не «хибне», не «хибне2»). */
 export function parseTerms(text) {
   const terms = [];
@@ -76,7 +79,8 @@ export function parsePlan(plan) {
     reportSections: listed ? quotes(listed[1]).map((q) => q.text) : [],
     terms: parseTerms(section(plan, /Терміни гри/)),
     words: new Set((plan.match(WORD) ?? []).filter((w) => HAS_CYR.test(w)).map(lower)),
-    text: norm(plan),
+    quotes: new Set(allQuotes(plan)),
+    heads: plan.split('\n').filter((l) => /^#+ /.test(l)),
   };
 }
 
@@ -157,7 +161,7 @@ export function checkWords(items, plan, vocab, terms, allow = new Set()) {
   return [...found.values()].map((f) => `${f.kind}: «${f.word}»${f.note ? ` — ${f.note}` : ''} (×${f.count}; ${f.where})`);
 }
 
-/** Цитати, приписані власникові (маркер перед цитатою або клітинка таблиці відповідей), яких у плані немає. */
+/** Цитати, приписані власникові (маркер перед цитатою або клітинка таблиці відповідей), яких серед цитат плану немає. */
 export function checkOwnerQuotes(items, plan, allow = new Set()) {
   const out = [];
   let table = false;
@@ -169,9 +173,10 @@ export function checkOwnerQuotes(items, plan, allow = new Set()) {
     prev = text;
     for (const q of quotes(text)) {
       const before = text.slice(Math.max(0, q.start - 30), q.start);
-      const marked = /(власник|[Вв]ідпов)[^«»|]*$/.test(before) || (table && /\|\s*$/.test(before));
+      const marked = /([Вв]ласник|[Вв]ідпов)[^«»|]*$/.test(before) || (table && /\|\s*$/.test(before));
       const t = norm(q.text);
-      if (marked && !plan.text.includes(t) && !allow.has(lower(t))) out.push(`цитата власника не з плану: «${t}» (${where})`);
+      const known = plan.quotes.has(t) || plan.heads.some((h) => h.replace(/^#+ /, '').startsWith(t)); // цитата або назва розділу плану
+      if (marked && !known && !allow.has(lower(t))) out.push(`цитата власника не з плану: «${t}» (${where})`);
     }
   }
   return [...new Set(out)];
@@ -206,6 +211,8 @@ export function checkReport(plan, report, docsText) {
   return out;
 }
 
+// Поза дифом: план і шаблон самі називають заборонені слова, словник — теж.
+const EXCLUDE = [':(exclude)docs/plans', ':(exclude)docs/glossary.md'];
 const USAGE =
   'Запуск: node scripts/vibe-plan-check.mjs --plan docs/plans/tNN-x.md [--base origin/main] [--head HEAD] [--pr N | --title "…" --body-file файл] [--terms файл.md]… [--allow "слово чи цитата"]…';
 
@@ -245,15 +252,10 @@ function main(argv) {
       );
     }
   };
-  const show = (rev, path) => {
-    try {
-      return git(['show', `${rev}:${path}`]);
-    } catch {
-      return null; // файла в цій ревізії немає
-    }
-  };
-  git(['rev-parse', '--verify', '--quiet', `${opt.base}^{commit}`]);
-  git(['rev-parse', '--verify', '--quiet', `${opt.head}^{commit}`]);
+  // Файла в ревізії немає — null; будь-яка інша помилка git — помилка запуску, а не «немає».
+  const show = (rev, path) => (git(['ls-tree', '--name-only', rev, '--', path]).trim() ? git(['show', `${rev}:${path}`]) : null);
+  git(['rev-parse', '--verify', `${opt.base}^{commit}`]);
+  git(['rev-parse', '--verify', `${opt.head}^{commit}`]);
   const planText = show(opt.head, opt.plan);
   if (planText === null) throw new Error(`плану ${opt.plan} немає в ${opt.head}`);
   const plan = parsePlan(planText);
@@ -261,28 +263,23 @@ function main(argv) {
   for (const f of opt.terms) terms.push(...parseTerms(section(readFileSync(resolve(process.cwd(), f), 'utf8'), /Терміни гри/)));
   const allow = new Set(opt.allow.map((a) => lower(norm(a))));
 
-  // Додані рядки: без теки планів (план і шаблон самі називають заборонені слова) і без словника.
   const items = [];
   let file = '';
   let line = 0;
-  const diff = git([
-    'diff',
-    '--unified=0',
-    '--no-color',
-    '--no-renames',
-    opt.base,
-    opt.head,
-    '--',
-    '.',
-    ':(exclude)docs/plans',
-    ':(exclude)docs/glossary.md',
-  ]);
+  // Диф — від спільного предка (як `база...гілка`): інакше рядки, змінені в базі після відгалуження, вийшли б «доданими».
+  let from = opt.base;
+  try {
+    from = git(['merge-base', opt.base, opt.head]).trim();
+  } catch {
+    console.log('Увага: спільного предка не знайдено (мілкий клон?) — диф рахується прямо від бази');
+  }
+  const diff = git(['-c', 'core.quotePath=false', 'diff', '--unified=0', '--no-color', from, opt.head, '--', '.', ...EXCLUDE]);
   for (const l of diff.split('\n')) {
-    if (l.startsWith('+++ ')) file = l.slice(6);
+    if (l.startsWith('+++ ')) file = l.slice(6).replace(/\t$/, '');
     else if (l.startsWith('@@')) line = Number(l.match(/\+(\d+)/)[1]);
     else if (l.startsWith('+')) items.push({ where: `${file}:${line++}`, text: l.slice(1), md: file.endsWith('.md'), file });
   }
-  const commits = git(['log', '--no-merges', '--format=%h%x09%s %b%x00', `${opt.base}..${opt.head}`]).split('\0');
+  const commits = git(['log', '--no-merges', '--format=%h%x09%s %b%x00', `${from}..${opt.head}`]).split('\0');
   const messages = commits
     .map((c) => c.trim().split('\t'))
     .filter((c) => c.length === 2)

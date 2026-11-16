@@ -76,14 +76,20 @@ try {
   const glossary = '# Глосарій\n## Анти-глосарій\n| Не пишемо | Пишемо |\n| --- | --- |\n| папка | тека |\n';
   const src = 'export const status = 1; // плитка керування\n';
   const base = commit('base', { 'docs/glossary.md': glossary, 'docs/workflow.md': WF, 'src/a.ts': src });
-  commit('docs(plans): план', { [P]: PLAN });
+  const planRev = commit('docs(plans): план', { [P]: PLAN });
+  ok('звіту ще немає', run(`--plan·${P}·--base·${base}·--head·${planRev}`).stdout.includes('звіту docs/reports/t99-x.md немає'));
   const table = '| Питання | Відповідь |\n| --- | --- |\n| Що? | «Зупинити» |\n';
   const bad = commit('fix: зона і сид', {
-    'docs/reports/t99-x.md': `# Т.99\n## Що зроблено\nПлітка «Стоп», гайдJFKів, зони немає, одна папка; seed 5, напис «Готово».\n\n${table}## Метрики\n`,
+    'docs/reports/t99-x.md': `# Т.99\n## Що зроблено\nПлітка «Стоп», гайдJFKів, зони немає, одна папка; seed 5 і \`seed\`, напис «Готово».\n\n${table}## Метрики\n`,
     'docs/workflow.md': `${WF}- Т.99 (рішення власника «Так, усе збережено»): слово «зона» тут лише згадано; читання, зупинка, рядки лишаються.\n`,
-    'src/b.ts': '// zupynky pislia kliku: status лишається\nexport const afterStop = 2;\n',
+    'src/b.ts': "// zupynky pislia kliku: status лишається\nexport const yakshchoStop = 'Стан\\nГравець';\n",
+    'docs/glossary.md': `${glossary}| зона | зонд |\n| рядки | смуги |\n`,
   });
-  writeFileSync(join(dir, '.git/body-bad.md'), 'Відповідь власника: «Зупинити».\nЗупиняти треба.\n  Iter-Tag: iter-T.99\n');
+  writeFileSync(
+    join(dir, '.git/body-bad.md'),
+    'Власник: «Зупинити».\nВласник сказав «Що робить».\nЗупиняти треба.\n  Iter-Tag: iter-T.99\n'
+  );
+  writeFileSync(join(dir, '.git/terms.md'), '## Терміни гри\n- **перегляд** (не «читання»)\n');
   const r1 = run(`--plan·${P}·--base·${base}·--head·${bad}·--title·fix(ui): Т.99 — проба·--body-file·.git/body-bad.md`);
   eq('поганий PR: код виходу', r1.status, 1);
   // Очікувані рядки виводу, по одному через «|».
@@ -95,24 +101,33 @@ try {
     'можлива одруківка: «Плітка» — у плані «плитка»|мішанина латинки й кирилиці: «гайдJFKів»|' +
     'слово поза словником: «зони» — писати «зонд» (×1;|слово поза словником: «папка» — писати «тека»|' +
     'слово поза словником: «seed» — писати «сід»|схоже на трансліт: «zupynky» — «зупинки»|' +
-    'схоже на трансліт: «pislia» — «після»|схоже на трансліт: «kliku» — «кліку»|Знахідок: 16.|' +
+    'схоже на трансліт: «pislia» — «після»|схоже на трансліт: «kliku» — «кліку»|Знахідок: 18.|' +
+    'цитата власника не з плану: «Що робить» (опис PR:2)|схоже на трансліт: «yakshchoStop» — «якщо»|слово поза словником: «seed» — писати «сід» (×1;|' +
     'Заувага (повідомлення коміту, не виправити): слово поза словником: «зона»|' +
     'Заувага (повідомлення коміту, не виправити): слово поза словником: «сид»';
   for (const e of expected.split('|')) ok(`поганий PR: немає рядка «${e}» у виводі:\n${r1.stdout}`, r1.stdout.includes(e));
-  const r1a = run(`--plan·${P}·--base·${base}·--head·${bad}·--allow·плітка·--allow·Так, усе збережено`);
-  ok(`--allow прибирає слово і цитату (без назви й опису — 10 знахідок):\n${r1a.stdout}`, r1a.stdout.includes('Знахідок: 10.'));
+  const r1a = run(`--plan·${P}·--base·${base}·--head·${bad}·--allow·плітка·--allow·Так, усе збережено·--terms·.git/terms.md`);
+  ok(
+    `--allow прибирає слово і цитату, --terms додає «читання» (без назви й опису — 12 знахідок):\n${r1a.stdout}`,
+    r1a.stdout.includes('Знахідок: 12.')
+  );
 
   const good = commit('fix: виправлено', {
-    'docs/reports/t99-x.md': '# Т.99\n## Що зроблено\nПлитка «Стоп»; відповідь власника: «Зупиняти».\n## Межі (після аудиту)\n## Метрики\n',
+    'docs/reports/t99-x.md': '# Т.99\n## Що зроблено\nПлитка «Стоп».\n## Межі (після аудиту)\n## Метрики\n',
     'docs/workflow.md': `${WF}- Т.99 (рішення власника «Зупиняти»): слово «зона» тут лише згадано; читання.\n`,
-    'src/b.ts': '// зупинки після кліку: status лишається\nexport const afterStop = 2;\n',
+    'src/b.ts': "// зупинки після кліку: status лишається\nexport const afterStop = 'Стан\\nГравець';\n",
   });
-  writeFileSync(join(dir, '.git/body-good.md'), 'Відповідь власника: **«Зупиняти»**.\n\nIter-Tag: iter-T.99\n');
+  writeFileSync(join(dir, '.git/body-good.md'), 'Власник, розділ «Відповідь власника»: **«Зупиняти»**.\n\nIter-Tag: iter-T.99\n');
   const r2 = run(`--plan·${P}·--base·${base}·--head·${good}·--title·fix(ui): Т.99 — проба «Меню»·--body-file·.git/body-good.md`);
   ok(`добрий PR: код ${r2.status}, вивід:\n${r2.stdout}`, r2.status === 0 && r2.stdout.includes('Знахідок немає.'));
   eq('добрий PR: зауваги про коміти лишаються', (r2.stdout.match(/^Заувага/gm) ?? []).length, 2);
 
   const wrong = ['', '--plan', `--plan·${P}·--pr·abc`, `--plan·немає.md·--base·${base}`, `--plan·${P}·--base·немає`, `--plan·${P}·--head`];
+  // База пішла вперед після відгалуження: її зміна рядка про зону ходу — не «доданий рядок» гілки.
+  git('checkout', '-q', '-b', 'side', base);
+  const side = commit('side', { 'docs/workflow.md': WF.replace('зона', 'смуга') });
+  eq('база пішла вперед', run(`--plan·${P}·--base·${side}·--head·${good}`).status, 0);
+  ok('--pr без номера названо', run(`--plan·${P}·--pr·abc`).stdout.includes('--pr: потрібен номер'));
   ok('неповний аргумент названо', run(`--plan·${P}·--head`).stdout.includes('Невідомий або неповний аргумент: --head'));
   eq('помилки запуску', [...wrong, '--help'].map((a) => run(a).status).join(), '2,2,2,2,2,2,0');
 } finally {
