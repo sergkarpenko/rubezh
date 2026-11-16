@@ -326,6 +326,22 @@ describe('battle: флоу місії (запуск/закриття/завер�
     vi.useRealTimers();
   });
 
+  it('Т.48: закриття бою посеред ходу демонів знімає таймер плашки', () => {
+    vi.useFakeTimers();
+    try {
+      const f = makeFixture({ hasRaf: () => true });
+      f.deps.anim.queued = () => [{}] as never; // анімації ходу ще грають
+      f.battle.launch(firstTarget(f));
+      f.battle.alienTurnDone(f.ui.mission!.state.log.length, 'Ваш хід.');
+      expect(vi.getTimerCount()).toBe(1); // плашка чекає анімацій
+      f.battle.close();
+      expect(vi.getTimerCount()).toBe(0);
+      expect(document.getElementById('bturn')!.classList.contains('hidden')).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('Т.33: причина під неактивною плиткою — замість підпису; повертається з причиною', () => {
     const f = makeFixture();
     f.battle.launch(firstTarget(f));

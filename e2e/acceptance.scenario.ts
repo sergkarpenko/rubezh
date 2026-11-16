@@ -282,7 +282,10 @@ test('сценарій приймання ADR-0030: партія → місія 
     await page.locator('#status-tab-base').click();
     await page.locator('#ufos button.mission').first().click();
     await expect(page.locator('#battle-panel')).toBeVisible();
-    await page.locator('#btn-auto-battle').click(); // Т.48: авто-бій запущено до виходу
+    // Т.48: авто-бій запущено до виходу і справді йде — у журналі з'явились його рядки
+    const logBeforeAuto = await page.locator('#log').innerHTML();
+    await page.locator('#btn-auto-battle').click();
+    await expect.poll(() => page.locator('#log').innerHTML(), { timeout: 15_000 }).not.toBe(logBeforeAuto);
     await page.locator('#btn-menu').click();
     await page.locator('#btn-menu-exit').click();
     await page.locator('#btn-exit-yes').click();
@@ -290,8 +293,25 @@ test('сценарій приймання ADR-0030: партія → місія 
     // Т.48: вихід зупиняє все — бій закрито вже на стартовому екрані, авто-бій далі не йде
     await expect(page.locator('#battle-panel')).toHaveClass(/hidden/);
     await expect(page.locator('#layout')).not.toHaveClass(/in-battle/);
+    // три секунди на стартовому екрані (рядки авто-бою йдуть щонайрідше раз на ≈ 2 с): журнал
+    // не змінюється і жоден цикл анімації (бій, геосцена, ambient) не планує кадрів
     const logAtExit = await page.locator('#log').innerHTML();
-    await page.waitForTimeout(1000);
+    const frames = await page.evaluate(
+      () =>
+        new Promise<number>((resolve) => {
+          let n = 0;
+          const orig = window.requestAnimationFrame;
+          window.requestAnimationFrame = (cb) => {
+            n++;
+            return orig.call(window, cb);
+          };
+          setTimeout(() => {
+            window.requestAnimationFrame = orig;
+            resolve(n);
+          }, 3000);
+        })
+    );
+    expect(frames, 'після виходу на стартовий екран хтось планує кадри анімації').toBe(0);
     expect(await page.locator('#log').innerHTML(), 'журнал змінився після виходу на стартовий екран').toBe(logAtExit);
     await page.locator('#btn-start-continue').click();
     await expect(page.locator('#start-screen')).toBeHidden();
