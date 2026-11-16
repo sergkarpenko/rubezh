@@ -125,7 +125,7 @@ function exitConfirmHtml(): string {
   );
 }
 
-// Т.58 (рішення вlaunchа 17.11.2026): текст на стартовому екрані після невдалого «Продовжити»
+// Т.58 (рішення власника 17.11.2026): текст на стартовому екрані після невдалого «Продовжити»
 export const CONTINUE_FAILED_TEXT = 'Не вдалося завантажити збереження. Почніть нову гру.';
 
 export function createScreens(deps: ScreensDeps): Screens {
