@@ -694,6 +694,6 @@ describe('Т.43: причини під неактивними кнопками �
     expect(last()).toBeNull();
     f.party.geo.log.push({ type: 'intercept_aborted', ufoId: 'ufo4', reason: 'ufo_landed', pos, minute: 210 });
     f.panels.renderFighter();
-    expect(last()).toBe('✦ Зонд приземлився — перехоплення перервано');
+    expect(last()).toBe('✦ Зонд Розриву ufo4 приземлився — перехоплення перервано');
   });
 });

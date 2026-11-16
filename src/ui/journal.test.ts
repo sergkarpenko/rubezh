@@ -115,8 +115,8 @@ describe('geoEventText: фільтр туману стратегічного ж�
   });
 
   it('Т.49: перехоплення перервало приземлення зонда — власний текст, без «зник з трекінгу»', () => {
-    expect(geoEventText(evGeo({ type: 'intercept_aborted', reason: 'ufo_landed', ufoId: 'u1', minute: 3 }), known)).toEqual({
-      text: '✦ Зонд приземлився — перехоплення перервано',
+    expect(geoEventText(evGeo({ type: 'intercept_aborted', reason: 'ufo_landed', ufoId: 'u7', minute: 3 }), known)).toEqual({
+      text: '✦ Зонд Розриву u7 приземлився — перехоплення перервано',
       cls: '',
     });
   });
