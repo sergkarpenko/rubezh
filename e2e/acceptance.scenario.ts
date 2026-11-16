@@ -282,10 +282,17 @@ test('сценарій приймання ADR-0030: партія → місія 
     await page.locator('#status-tab-base').click();
     await page.locator('#ufos button.mission').first().click();
     await expect(page.locator('#battle-panel')).toBeVisible();
+    await page.locator('#btn-auto-battle').click(); // Т.48: авто-бій запущено до виходу
     await page.locator('#btn-menu').click();
     await page.locator('#btn-menu-exit').click();
     await page.locator('#btn-exit-yes').click();
     await expect(page.locator('#start-screen')).toBeVisible();
+    // Т.48: вихід зупиняє все — бій закрито вже на стартовому екрані, авто-бій далі не йде
+    await expect(page.locator('#battle-panel')).toHaveClass(/hidden/);
+    await expect(page.locator('#layout')).not.toHaveClass(/in-battle/);
+    const logAtExit = await page.locator('#log').innerHTML();
+    await page.waitForTimeout(1000);
+    expect(await page.locator('#log').innerHTML(), 'журнал змінився після виходу на стартовий екран').toBe(logAtExit);
     await page.locator('#btn-start-continue').click();
     await expect(page.locator('#start-screen')).toBeHidden();
     await expect(page.locator('#battle-panel')).toBeHidden();

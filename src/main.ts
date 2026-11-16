@@ -534,8 +534,21 @@ function continueGame(): boolean {
   // Т.47: з бою теж можна вийти на стартовий екран — старий бій закриваємо, як у
   // startNewParty: інакше завантаження мовчки не відбувається (панель у бою не вантажить)
   battle.close();
+  geoAnim.cancel(); // Т.48: як у startNewParty — анімації покинутої партії поверх завантаженої не відтворюємо
+  const before = party;
   savePanel.load(slot); // adoptParty + renderAll + журнал «Завантажено: слот N»
-  return party !== null;
+  // Т.48: невдале завантаження (слот не розібрано) партії не міняє — лишаємось на
+  // стартовому екрані, а не показуємо геосцену покинутої партії
+  return party !== null && party !== before;
+}
+
+// Т.48 (рішення власника 16.11.2026 «Зупиняти все»): вихід на стартовий екран зупиняє
+// авто-бій, закриває бій і скидає анімації геосцени; назад у партію — лише «Продовжити»
+// із сейву. На геосцені бою немає — close не кличемо (вихід без перерисовок, критерій П12.2).
+function exitToStart(): void {
+  if (ui.mission !== null) battle.close();
+  geoAnim.cancel();
+  screens?.showStart();
 }
 
 // пR.2 (ADR-0037): у node-середовищі (vitest) DOM відсутній — ініціалізацію
@@ -683,7 +696,7 @@ if (typeof document !== 'undefined') {
     onHelp: help.open,
     onSettings: settings.open, // П12.3: зі стартового екрана і з меню гри
     hasUnsavedChanges,
-    onExitToStart: () => screens?.showStart(),
+    onExitToStart: exitToStart,
   });
   el('btn-menu').onclick = () => screens?.openMenu();
   // ADR-0065: сторінка → стартовий екран; партія не створюється до вибору
