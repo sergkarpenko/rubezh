@@ -340,7 +340,12 @@ export function createPanels(deps: PanelsDeps): Panels {
     // Не показуємо пошкодження, яке вже відремонтовано (аудит PR #340). Приземлення зонда
     // під час погоні після Т.49 має власний текст журналу — рядок показуємо, як і решту причин.
     const stale = last?.type === 'intercept_aborted' && last.reason === 'fighter_damaged' && f.hp === FIGHTER_MAX_HP;
-    if (last?.type === 'intercept_aborted' && !stale) {
+    // Т.51: зона останньої події вже не в geo.ufos (вилетіла після приземлення, зникла з радара або знищена місією) — рядок не показувати
+    const zoneGone =
+      last?.type === 'intercept_aborted' &&
+      (last.reason === 'ufo_landed' || last.reason === 'ufo_lost') &&
+      !party.geo.ufos.some((u) => u.id === last.ufoId);
+    if (last?.type === 'intercept_aborted' && !stale && !zoneGone) {
       const note = document.createElement('div');
       note.id = 'fighter-last';
       note.className = 'meta';
