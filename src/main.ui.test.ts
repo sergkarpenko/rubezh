@@ -26,7 +26,6 @@ import htmlRaw from '../index.html?raw';
 import { ARMOR_MAX_HP_BONUS, OPTICS_ACCURACY_BONUS } from './core/workshop';
 import { GRENADE_DAMAGE, HEAL_AMOUNT, HIT_CHANCE_CAP } from './core/combat';
 import { GUN_MODULE_DAMAGE } from './core/intercept';
-import { geoEventText } from './ui/journal';
 import { AnimEngine } from './core/render-core';
 
 const $ = (id: string): HTMLElement => document.getElementById(id) as HTMLElement;
@@ -1589,9 +1588,9 @@ describe('Т.43: «До події», зупинки «+1 доба» і проб
   });
 });
 
-// Т.51: рядок #fighter-last має зникати, коли зона події (приземлився → ufo_left) вже не в geo.ufos.
-describe('Т.51: переривання перехоплення при приземленні зони — журнал і панель #fighter-last', () => {
-  it('сид 42, пресет «норма»: ufo1 виявлено, старт перехоплення, abort (ufo_landed); після ufo_left рядка немає', () => {
+// Т.51: рядок #fighter-last має зникати, коли зонд події (приземлився → ufo_left) вже не в geo.ufos.
+describe('Т.51: переривання перехоплення при приземленні зонда — журнал і панель #fighter-last', () => {
+  it('сід 42, пресет «норма»: ufo1 виявлено, старт перехоплення, abort (ufo_landed); після ufo_left рядка немає', () => {
     startParty();
     const interceptBtn = (): HTMLButtonElement | null => {
       for (const b of document.querySelectorAll<HTMLButtonElement>('button.intercept')) {
@@ -1618,14 +1617,13 @@ describe('Т.51: переривання перехоплення при приз
       shown = document.getElementById('fighter-last') !== null;
     }
     expect(shown).toBe(true);
-    // 3. текст #fighter-last — точно рядок журналу про abort; у #log та сама рядок, «зник» ще немає
-    const abortedText =
-      geoEventText({ type: 'intercept_aborted', ufoId: 'ufo1', reason: 'ufo_landed', pos: { x: 0, y: 0 }, minute: 0 }, new Set())?.text ??
-      '';
-    const leftText = geoEventText({ type: 'ufo_left', ufoId: 'ufo1', minute: 0 }, new Set(['ufo1']))?.text ?? '';
+    // 3. текст #fighter-last — точно рядок журналу про abort; у #log такий самий рядок, «зник з трекінгу» ще немає
+    const abortedText = '✦ Зонд Розриву ufo1 приземлився — перехоплення перервано';
+    const leftText = 'Зонд Розриву ufo1 відлетів і зник';
     expect($('fighter-last').textContent).toBe(abortedText);
     expect($('log').textContent ?? '').toContain(abortedText);
     expect($('log').textContent ?? '').not.toContain(leftText);
+    expect($('log').textContent ?? '').not.toContain('зник з трекінгу');
     // 4. тикаємо, доки в #log не з'явиться рядок ufo_left (запобіжник — 400 кліків)
     let left = false;
     for (let i = 0; i < 400 && !left; i++) {
@@ -1633,7 +1631,7 @@ describe('Т.51: переривання перехоплення при приз
       left = ($('log').textContent ?? '').includes(leftText);
     }
     expect(left).toBe(true);
-    // 5. зона ufo1 вже не в geo.ufos — елемента #fighter-last немає
+    // 5. зонд ufo1 вже не в geo.ufos — елемента #fighter-last немає
     expect(document.getElementById('fighter-last')).toBeNull();
   });
 });

@@ -11,7 +11,6 @@ import { ARMOR_MAX_HP_BONUS, OPTICS_ACCURACY_BONUS } from '../core/workshop';
 import { GRENADE_DAMAGE, GRENADE_RANGE, HEAL_AMOUNT, HIT_CHANCE_CAP } from '../core/combat';
 import { initPixelSprites } from '../render';
 import { createPanels, hpColor, inAirCombat, readyToIssue, type PanelsDeps } from './panels';
-import { geoEventText } from './journal';
 
 // Піксельний рушій (ADR-0031): тестовий мок фабрики offscreen-канвасів —
 // той самий патерн, що й у main.ui.test.ts (jsdom без пакета canvas).
@@ -667,7 +666,7 @@ describe('Т.43: причини під неактивними кнопками �
   it('#fighter-last: текст журналу після перерваного перехоплення; зникає після нового старту і після розриву контакту', () => {
     const f = easy();
     const last = (): string | null => document.getElementById('fighter-last')?.textContent ?? null;
-    // Т.51: зони подій мають бути в geo.ufos, інакше рядок не показується (перевірка за id зони)
+    // Т.51: зонди подій мають бути в geo.ufos, інакше рядок не показується (перевірка за id зонда)
     expect(tickUntil(f.party, () => f.party.geo.ufos.length > 0)).toBe(true);
     f.party.geo.ufos.push({ ...f.party.geo.ufos[0], id: 'ufo2' }, { ...f.party.geo.ufos[0], id: 'ufo4' });
     f.panels.renderFighter();
@@ -702,60 +701,58 @@ describe('Т.43: причини під неактивними кнопками �
   });
 });
 
-// Т.51: рядок #fighter-last не показується, якщо зона події вже не в geo.ufos (виліт ufo_left / місія).
-describe('Т.51: #fighter-last при відсутній зоні події в geo.ufos', () => {
+// Т.51: рядок #fighter-last не показується, якщо зонд події вже не в geo.ufos (виліт ufo_left / місія).
+describe('Т.51: #fighter-last при відсутньому зонді події в geo.ufos', () => {
   const pos = { x: 1, y: 1 };
   const last = (): string | null => document.getElementById('fighter-last')?.textContent ?? null;
-  const abortedText = (ufoId: string, reason: 'ufo_lost' | 'ufo_landed' | 'fighter_damaged'): string =>
-    geoEventText({ type: 'intercept_aborted', ufoId, reason, pos, minute: 0 }, new Set())?.text ?? '';
-  // об'єкт зони — копія створеної ядром, зі зміненим id
-  const addZone = (f: Fixture, id: string): void => {
+  // об'єкт зонда — копія створеної ядром, зі зміненим id
+  const addProbe = (f: Fixture, id: string): void => {
     expect(tickUntil(f.party, () => f.party.geo.ufos.length > 0)).toBe(true);
     f.party.geo.ufos = [{ ...f.party.geo.ufos[0], id }]; // копія створеної ядром зони зі зміненим id
   };
-  const dropZone = (f: Fixture, id: string): void => {
+  const dropProbe = (f: Fixture, id: string): void => {
     f.party.geo.ufos = f.party.geo.ufos.filter((u) => u.id !== id);
   };
 
-  it('Т.51.1: ufo_landed, зона є в geo.ufos — рядок показується', () => {
+  it('Т.51.1: ufo_landed, зонд є в geo.ufos — рядок показується', () => {
     const f = makeFixture();
-    addZone(f, 'ufo5');
+    addProbe(f, 'ufo5');
     f.party.geo.log.push({ type: 'intercept_aborted', ufoId: 'ufo5', reason: 'ufo_landed', pos, minute: 10 });
     f.panels.renderFighter();
-    expect(last()).toBe(abortedText('ufo5', 'ufo_landed'));
+    expect(last()).toBe('✦ Зонд Розриву ufo5 приземлився — перехоплення перервано');
   });
 
-  it('Т.51.2: ufo_landed, зону прибрано з geo.ufos — після renderFighter рядка немає', () => {
+  it('Т.51.2: ufo_landed, зонд прибрано з geo.ufos — після renderFighter рядка немає', () => {
     const f = makeFixture();
-    addZone(f, 'ufo5');
+    addProbe(f, 'ufo5');
     f.party.geo.log.push({ type: 'intercept_aborted', ufoId: 'ufo5', reason: 'ufo_landed', pos, minute: 10 });
-    dropZone(f, 'ufo5');
+    dropProbe(f, 'ufo5');
     f.panels.renderFighter();
     expect(last()).toBeNull();
   });
 
-  it('Т.51.3: ufo_lost — зона є: рядок; зони немає: рядка немає', () => {
+  it('Т.51.3: ufo_lost — зонд є: рядок; зонда немає: рядка немає', () => {
     const f = makeFixture();
-    addZone(f, 'ufo6');
+    addProbe(f, 'ufo6');
     f.party.geo.log.push({ type: 'intercept_aborted', ufoId: 'ufo6', reason: 'ufo_lost', pos, minute: 20 });
     f.panels.renderFighter();
-    expect(last()).toBe(abortedText('ufo6', 'ufo_lost'));
-    dropZone(f, 'ufo6');
+    expect(last()).toBe('✦ Зонд Розриву ufo6 зник з трекінгу — перехоплення перервано');
+    dropProbe(f, 'ufo6');
     f.panels.renderFighter();
     expect(last()).toBeNull();
   });
 
-  it('Т.51.4: fighter_damaged при HP < FIGHTER_MAX_HP і відсутній зоні — рядок є', () => {
+  it('Т.51.4: fighter_damaged при HP < FIGHTER_MAX_HP і відсутньому зонді — рядок є', () => {
     const f = makeFixture();
     f.party.intercept.fighter.hp = 1;
     f.party.geo.log.push({ type: 'intercept_aborted', ufoId: 'ufo7', reason: 'fighter_damaged', pos, minute: 30 });
     f.panels.renderFighter();
-    expect(last()).toBe(abortedText('ufo7', 'fighter_damaged'));
+    expect(last()).toBe('✦ Перехоплювач пошкоджений — вимушене переривання бою');
   });
 
-  it('Т.51.5: у geo.ufos є лише інша зона (інший id) — рядка немає (перевірка за id, а не за наявністю будь-якої зони)', () => {
+  it('Т.51.5: у geo.ufos є лише інший зонд (інший id) — рядка немає (перевірка за id, а не за наявністю будь-якого зонда)', () => {
     const f = makeFixture();
-    addZone(f, 'ufo9');
+    addProbe(f, 'ufo9');
     f.party.geo.log.push({ type: 'intercept_aborted', ufoId: 'ufo5', reason: 'ufo_landed', pos, minute: 40 });
     f.panels.renderFighter();
     expect(last()).toBeNull();
