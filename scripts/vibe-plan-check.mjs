@@ -295,8 +295,9 @@ function main(argv) {
   const vocab = { cyr: new Set(), lat: new Set() };
   for (const m of baseText.matchAll(WORD)) {
     const [t] = m;
-    if (!HAS_CYR.test(t)) for (const part of [t, ...t.split(/(?=[A-Z])/)]) vocab.lat.add(lower(part));
-    else if (!(baseText[m.index - 1] === '«' && baseText[m.index + t.length] === '»')) vocab.cyr.add(lower(t)); // згадка в лапках — не слово бази
+    if (baseText[m.index - 1] === '«' && baseText[m.index + t.length] === '»') continue; // згадка в лапках — не слово бази
+    if (HAS_CYR.test(t)) vocab.cyr.add(lower(t));
+    else for (const part of [t, ...t.split(/(?=[A-Z])/)]) vocab.lat.add(lower(part));
   }
 
   let title = opt.title ?? null;
