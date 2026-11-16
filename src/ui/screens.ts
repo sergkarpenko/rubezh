@@ -38,6 +38,7 @@ export interface Screens {
   current(): ScreenName;
   openMenu(): void; // вікно «Меню» у грі (кнопка «Меню» у топбарі)
   closeMenu(): void;
+  requestExit(): void; // Т.58: вихід на стартовий екран з підтвердженням, якщо незбережені дії (меню і екран перемоги)
   render(): void; // синхронізувати стани пунктів (наприклад, «Продовжити»)
 }
 
@@ -61,6 +62,7 @@ function startScreenHtml(version: string): string {
     '<p class="start-tagline">Остання лінія оборони людства проти Аномалії «Розрив»</p>' +
     '</div>' +
     '<div class="start-menu">' +
+    '<p class="start-note hidden" id="start-note"></p>' +
     '<button id="btn-start-new">Нова партія</button>' +
     '<button id="btn-start-continue">Продовжити</button>' +
     '<button id="btn-start-settings" title="Налаштування гри — зберігаються у браузері">Налаштування</button>' +
@@ -123,6 +125,9 @@ function exitConfirmHtml(): string {
   );
 }
 
+// Т.58 (рішення вlaunchа 17.11.2026): текст на стартовому екрані після невдалого «Продовжити»
+export const CONTINUE_FAILED_TEXT = 'Не вдалося завантажити збереження. Почніть нову гру.';
+
 export function createScreens(deps: ScreensDeps): Screens {
   // Скелетні секції — у index.html (мінімальні зміни розмітки, патерн
   // #help-screen); контент генерується тут.
@@ -181,6 +186,7 @@ export function createScreens(deps: ScreensDeps): Screens {
 
   function showStart(): void {
     current = 'стартовий';
+    showNote(''); // Т.58: пояснювальна невдача «Продовжити» живе до наступного показу стартового екрану
     render();
     loadLogo(); // П13.4: ліниво, один раз (ADR-0068)
     startScreen.classList.remove('hidden');
@@ -197,6 +203,13 @@ export function createScreens(deps: ScreensDeps): Screens {
     layout.classList.remove('hidden');
     closeMenu();
     hideDialogs();
+  }
+
+  // Т.58: рядок-пояснення над меню стартового екрану; порожній текст — сховати
+  function showNote(text: string): void {
+    const note = el('start-note');
+    note.textContent = text;
+    note.classList.toggle('hidden', text === '');
   }
 
   function hideDialogs(): void {
@@ -243,6 +256,7 @@ export function createScreens(deps: ScreensDeps): Screens {
   el('btn-start-continue').onclick = () => {
     if (!deps.hasSaves()) return; // вимкнений пункт — no-op (страхування від прихованих кліків)
     if (deps.onContinue()) showGame();
+    else showNote(CONTINUE_FAILED_TEXT); // Т.58: слот невалідний — пояснити, а не мовчати
   };
   el('btn-start-settings').onclick = () => deps.onSettings(); // п12.3: вікно налаштувань
   el('btn-start-help').onclick = () => deps.onHelp();
@@ -271,6 +285,7 @@ export function createScreens(deps: ScreensDeps): Screens {
     current: () => current,
     openMenu,
     closeMenu,
+    requestExit,
     render,
   };
 }

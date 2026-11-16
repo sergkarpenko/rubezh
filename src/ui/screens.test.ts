@@ -5,7 +5,7 @@
 // rAF-анімацій (idle → 0 перерисовок, ADR-0029). Повний флоу із сейвами —
 // у src/main.ui.test.ts (там живе панель збереження).
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createScreens, type ScreensDeps } from './screens';
+import { CONTINUE_FAILED_TEXT, createScreens, type ScreensDeps } from './screens';
 
 // Скелетні секції — ті самі id, що й в index.html (контент генерує модуль).
 const SKELETON =
@@ -297,5 +297,48 @@ describe('П13.4: лого стартового екрана — ассет з �
     const screens = createScreens(makeDeps());
     screens.showGame();
     expect(probes).toHaveLength(0); // запит лише при першому showStart
+  });
+});
+
+// Т.58 (кандидат 54; рішення власника 17.11.2026): пояснення невдалого «Продовжити» і вихід для екрана перемоги
+describe('Т.58: пояснення невдалого «Продовжити», requestExit', () => {
+  const TEXT = 'Не вдалося завантажити збереження. Почніть нову гру.';
+
+  it('Т.58: невдале «Продовжити» показує рядок над меню; showStart його прибирає; вдале — рядка немає', () => {
+    expect(CONTINUE_FAILED_TEXT).toBe(TEXT);
+    let ok = false;
+    const screens = createScreens(makeDeps({ hasSaves: () => true, continueDisabledReason: () => '', onContinue: () => ok }));
+    screens.showStart();
+    expect(visible('start-note')).toBe(false);
+    expect($('start-note').textContent).toBe('');
+    expect($('start-note').nextElementSibling).toBe($('btn-start-new')); // рядок — над кнопками меню
+    btn('btn-start-continue').click();
+    expect(screens.current()).toBe('стартовий');
+    expect(visible('start-note')).toBe(true);
+    expect($('start-note').textContent).toBe(TEXT);
+    screens.showStart(); // наступний показ стартового екрана
+    expect(visible('start-note')).toBe(false);
+    expect($('start-note').textContent).toBe('');
+    ok = true;
+    btn('btn-start-continue').click();
+    expect(screens.current()).toBe('гра');
+    expect(visible('start-note')).toBe(false);
+  });
+
+  it('Т.58: requestExit — з незбереженими діями підтвердження, без них вихід одразу; меню закривається', () => {
+    let dirty = true;
+    const deps = makeDeps({ hasUnsavedChanges: () => dirty });
+    const screens = createScreens(deps);
+    screens.showGame();
+    screens.openMenu();
+    screens.requestExit();
+    expect(visible('game-menu')).toBe(false);
+    expect(visible('exit-confirm')).toBe(true);
+    expect(deps.onExitToStart).not.toHaveBeenCalled();
+    btn('btn-exit-no').click();
+    dirty = false;
+    screens.requestExit();
+    expect(visible('exit-confirm')).toBe(false);
+    expect(deps.onExitToStart).toHaveBeenCalledTimes(1);
   });
 });

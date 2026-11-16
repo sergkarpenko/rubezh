@@ -187,6 +187,7 @@ export interface AmbientDeps {
   cancel(h: unknown): void; // браузер: cancelAnimationFrame
   now(): number; // wall-clock ефектів (браузер: performance.now)
   visible(): boolean; // гейт видимості: document.visibilityState === 'visible'
+  active(): boolean; // Т.58: партія на екрані; на стартовому екрані цикл не стартує (вкладка з фону, тумблер)
   repaint(): void; // перемальовка активної сцени (бій або геосцена) — вирішує викликач
   store?: AmbientStore; // тумблер: сховище поза сейвом (дефолт — localStorage)
 }
@@ -239,7 +240,7 @@ export function createAmbient(deps: AmbientDeps): Ambient {
   };
 
   function start(): void {
-    if (handle !== null || !on || !deps.hasRaf() || !deps.visible()) return;
+    if (handle !== null || !on || !deps.hasRaf() || !deps.visible() || !deps.active()) return;
     lastFrame = -AMBIENT_FRAME_MS; // перший кадр — одразу; далі тротлер тримає інтервал
     handle = deps.schedule(frame);
   }

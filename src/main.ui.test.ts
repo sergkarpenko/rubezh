@@ -1764,3 +1764,85 @@ describe('Т.55: тести після Т.53 — меню без авто-бою
     }
   });
 });
+
+// Т.58 (кандидат 54, решта після Т.48; план — docs/plans/t58-after-exit-to-start.md): пояснення невдалого
+// «Продовжити» і вихід з екрана перемоги (рішення власника 17.11.2026). Останній блок файла.
+describe('Т.58: стартовий екран після невдалого «Продовжити» і вихід з екрана перемоги', () => {
+  const hidden = (id: string): boolean => $(id).classList.contains('hidden');
+  // нова партія, один тік, сейв у слот 1 — єдиний, отже останній активний
+  const freshSave = (): string => {
+    btn('btn-del-2').click();
+    btn('btn-del-3').click();
+    startParty('27');
+    btn('btn-tick').click();
+    btn('btn-save-1').click();
+    return localStorage.getItem('rubezh.save.1') as string;
+  };
+  const exitViaMenu = (): void => {
+    btn('btn-menu').click();
+    btn('btn-menu-exit').click();
+    expect(hidden('exit-confirm')).toBe(true); // після сейву чи завантаження втрачати нічого
+    expect(hidden('start-screen')).toBe(false);
+  };
+
+  it('Т.58: невдале «Продовжити» — рядок-пояснення на стартовому екрані; наступний показ екрана його прибирає', () => {
+    const good = freshSave();
+    exitViaMenu();
+    expect(hidden('start-note')).toBe(true);
+    const bad = JSON.parse(good) as { state: { geo: { ufos: unknown } } };
+    bad.state.geo.ufos = [null]; // метадані читаються (слот лишається останнім), розбір партії падає
+    localStorage.setItem('rubezh.save.1', JSON.stringify(bad));
+    try {
+      btn('btn-start-continue').click();
+      expect(hidden('start-screen')).toBe(false);
+      expect(hidden('start-note')).toBe(false);
+      expect($('start-note').textContent).toBe('Не вдалося завантажити збереження. Почніть нову гру.');
+    } finally {
+      localStorage.setItem('rubezh.save.1', good);
+    }
+    btn('btn-start-continue').click(); // цілий слот вантажиться
+    expect(hidden('start-screen')).toBe(true);
+    exitViaMenu();
+    expect(hidden('start-note')).toBe(true);
+    expect($('start-note').textContent).toBe('');
+  });
+
+  it('Т.58: «На стартовий екран» на екрані перемоги — вихід, з незбереженою дією через підтвердження; екран перемоги поверх стартового не лишається', () => {
+    const good = freshSave();
+    const won = JSON.parse(good) as { state: { campaign: { status: string } } };
+    won.state.campaign.status = 'перемога';
+    localStorage.setItem('rubezh.save.1', JSON.stringify(won));
+    try {
+      btn('btn-load-1').click();
+      expect(hidden('campaign-victory')).toBe(false);
+      expect(btn('btn-victory-exit').textContent).toBe('На стартовий екран');
+      btn('btn-victory-exit').click(); // одразу після завантаження незбережених дій немає
+      expect(hidden('exit-confirm')).toBe(true);
+      expect(hidden('start-screen')).toBe(false);
+      expect(hidden('campaign-victory')).toBe(true);
+      // невдале «Продовжити» перемальовує панелі покинутої партії — екран перемоги не повертається
+      const bad = JSON.parse(good) as { state: { geo: { ufos: unknown } } };
+      bad.state.geo.ufos = [null];
+      localStorage.setItem('rubezh.save.1', JSON.stringify(bad));
+      btn('btn-start-continue').click();
+      expect(hidden('start-note')).toBe(false);
+      expect(hidden('campaign-victory')).toBe(true);
+      localStorage.setItem('rubezh.save.1', JSON.stringify(won));
+      btn('btn-start-continue').click(); // сейв із перемогою — екран перемоги знову показано
+      expect(hidden('start-screen')).toBe(true);
+      expect(hidden('campaign-victory')).toBe(false);
+      btn('btn-tick').click(); // незбережена дія
+      btn('btn-victory-exit').click();
+      expect(hidden('exit-confirm')).toBe(false);
+      expect(hidden('start-screen')).toBe(true);
+      btn('btn-exit-no').click(); // «Скасувати» — лишаємось на екрані перемоги
+      expect(hidden('campaign-victory')).toBe(false);
+      btn('btn-victory-exit').click();
+      btn('btn-exit-yes').click();
+      expect(hidden('start-screen')).toBe(false);
+      expect(hidden('campaign-victory')).toBe(true);
+    } finally {
+      localStorage.setItem('rubezh.save.1', good);
+    }
+  });
+});

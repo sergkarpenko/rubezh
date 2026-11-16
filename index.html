@@ -735,6 +735,16 @@
         border-color: rgba(49, 67, 95, 0.9);
         text-shadow: 0 1px 4px rgba(6, 10, 20, 0.75);
       }
+      /* Т.58: пояснювальна невдача «Продовжити» — над кнопками меню */
+      .start-note {
+        margin: 0;
+        padding: 8px 12px;
+        font-size: 13px;
+        text-align: center;
+        color: #ff8fa3;
+        background: rgba(6, 10, 20, 0.95);
+        border: 1px solid rgba(255, 92, 122, 0.6);
+      }
       .start-version {
         position: absolute;
         left: 0;
@@ -1243,6 +1253,7 @@
       <div class="score" id="campaign-score">—</div>
       <button id="btn-continue" class="btn-play-again">Грати далі</button>
       <button id="btn-play-again" class="btn-play-again">Грати знов</button>
+      <button id="btn-victory-exit" class="btn-play-again">На стартовий екран</button>
     </section>
     <!-- П9.1 (Фаза 9): екран «Як грати» — контент генерує src/ui/help.ts;
          показ при першому візиті (порожні слоти) або кнопкою «?» у топбарі -->

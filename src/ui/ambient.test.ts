@@ -90,6 +90,7 @@ interface Harness {
   cancel(h: unknown): void;
   now(): number;
   visible(): boolean;
+  active(): boolean;
   repaint(): void;
   // керування фейковим планувальником (тільки у тестах)
   step(dt: number): void; // «кадр браузера»: t += dt, викликати запланований кадр
@@ -98,12 +99,14 @@ interface Harness {
   pending(): boolean; // чи запланований наступний кадр
   repaints: number[]; // часові мітки репейнтів (t на момент кадру)
   setVisible(v: boolean): void;
+  setActive(v: boolean): void; // Т.58: партія на екрані чи стартовий екран
 }
 
 function makeHarness(visible = true): Harness {
   let t = 0;
   let cb: ((now: number) => void) | null = null;
   let vis = visible;
+  let act = true;
   let scheduled = 0;
   let cancelled = 0;
   const repaints: number[] = [];
@@ -120,6 +123,7 @@ function makeHarness(visible = true): Harness {
     },
     now: () => t,
     visible: () => vis,
+    active: () => act,
     repaint: () => {
       repaints.push(t);
     },
@@ -135,6 +139,9 @@ function makeHarness(visible = true): Harness {
     repaints,
     setVisible: (v) => {
       vis = v;
+    },
+    setActive: (v) => {
+      act = v;
     },
   };
 }
@@ -573,5 +580,24 @@ describe('П14.8 критерій: лог партії байт-у-байт од
     const p2 = createParty(42);
     for (let i = 0; i < 48; i++) advanceTime(p2.geo, 1);
     expect(serializeParty(p1)).toBe(serializeParty(p2)); // сейв-контракт (ADR-0026) не зачіпається
+  });
+});
+
+// Т.58 (кандидат 54): на стартовому екрані ambient-цикл не стартує — ні після повернення вкладки з фону, ні від тумблера
+describe('Т.58: ambient і стартовий екран', () => {
+  it('Т.58: active=false — start, resume і тумблер кадрів не планують; active=true — планують', () => {
+    const h = makeHarness();
+    const amb = createAmbient({ ...h, store: memStore() });
+    h.setActive(false);
+    amb.start();
+    amb.resume(); // вкладка повернулась із фону
+    expect(amb.toggle()).toBe(false); // тумблер: вимк
+    expect(amb.toggle()).toBe(true); // тумблер: увімк
+    expect(h.scheduled()).toBe(0);
+    expect(h.pending()).toBe(false);
+    h.setActive(true);
+    amb.resume();
+    expect(h.scheduled()).toBe(1);
+    expect(h.pending()).toBe(true);
   });
 });

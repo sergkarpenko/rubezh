@@ -322,6 +322,42 @@ test('сценарій приймання ADR-0030: партія → місія 
     await expect(page.locator('#log')).toContainText('Завантажено: слот 1 — ' + saved);
   });
 
+  await test.step('Т.58: стартовий екран після виходу з геосцени — кадрів ніхто не планує', async () => {
+    const saved = mirror.clock();
+    // тік — лише на сторінці (стан повертає «Продовжити»): запускає скан-радар геосцени на 1,2 с
+    await page.locator('#btn-tick').click();
+    await expect(clock).not.toHaveText(saved);
+    await page.locator('#btn-menu').click();
+    await page.locator('#btn-menu-exit').click();
+    await page.locator('#btn-exit-yes').click();
+    await expect(page.locator('#start-screen')).toBeVisible();
+    await page.evaluate(() => {
+      const w = window as unknown as { t58Frames: number };
+      const orig = window.requestAnimationFrame;
+      w.t58Frames = 0;
+      window.requestAnimationFrame = (cb) => {
+        w.t58Frames++;
+        return orig.call(window, cb);
+      };
+    });
+    // повернення вкладки з фону і тумблер «Анімація» (вимк → увімк) ambient на стартовому екрані не будять
+    await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+    await page.locator('#btn-start-settings').click();
+    await page.locator('#settings-ambient').click();
+    await expect(page.locator('#settings-ambient')).toHaveText('Анімація: вимк');
+    await page.locator('#settings-ambient').click();
+    await expect(page.locator('#settings-ambient')).toHaveText('Анімація: увімк');
+    await page.locator('#settings-close').click();
+    await page.waitForTimeout(1500);
+    const frames = await page.evaluate(() => (window as unknown as { t58Frames: number }).t58Frames);
+    expect(frames, 'на стартовому екрані хтось планує кадри анімації').toBe(0);
+    await page.locator('#btn-start-continue').click();
+    await expect(page.locator('#start-screen')).toBeHidden();
+    await expect(clock).toHaveText(saved);
+    // у грі ambient знову працює: цикл планує кадри
+    await expect.poll(() => page.evaluate(() => (window as unknown as { t58Frames: number }).t58Frames)).toBeGreaterThan(0);
+  });
+
   await test.step('запуск місії', async () => {
     const mission = mirror.launch(mirror.targets()[0].id);
     await page.locator('#status-tab-base').click();
