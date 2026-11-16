@@ -45,16 +45,18 @@ def run_tests():
     return r.returncode
 
 
-assert run_tests() == 0, 'без поломок тести мають бути зелені'
 caught = 0
-for name, rel, old, new in MUTATIONS:
-    path = os.path.join(copy, rel)
-    src = open(path, encoding='utf-8').read()
-    assert src.count(old) == 1, (name, src.count(old))
-    open(path, 'w', encoding='utf-8').write(src.replace(old, new))
-    red = run_tests() != 0
-    open(path, 'w', encoding='utf-8').write(src)
-    caught += red
-    print(('ЧЕРВОНИЙ' if red else 'ЗЕЛЕНИЙ ') + ' · ' + name, flush=True)
-shutil.rmtree(tmp)
+try:
+    assert run_tests() == 0, 'без поломок тести мають бути зелені'
+    for name, rel, old, new in MUTATIONS:
+        path = os.path.join(copy, rel)
+        src = open(path, encoding='utf-8').read()
+        assert src.count(old) == 1, (name, src.count(old))
+        open(path, 'w', encoding='utf-8').write(src.replace(old, new))
+        red = run_tests() != 0
+        open(path, 'w', encoding='utf-8').write(src)
+        caught += red
+        print(('ЧЕРВОНИЙ' if red else 'ЗЕЛЕНИЙ ') + ' · ' + name, flush=True)
+finally:
+    shutil.rmtree(tmp)  # тимчасову копію прибираємо і при збої (аудит PR #349)
 print(f'Зловлено {caught} із {len(MUTATIONS)}. Час: {round(time.time() - start)} с')
