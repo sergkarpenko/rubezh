@@ -1690,3 +1690,77 @@ describe('Т.53: меню і «Як грати» зупиняють авто-б�
     expect($('binfo').textContent).toBe(binfoBefore);
   });
 });
+
+// Т.55 (висновки аудитів PR #353, Т.53; план — docs/plans/t55-tests-after-t53.md): тести тримають перевірку
+// `busy` у `stopAutoForWindow` і зупинку авто-бою на шляху до вікон «Налаштування» та «Незбережені зміни».
+describe('Т.55: тести після Т.53 — меню без авто-бою і вікна з меню', () => {
+  const cap = (): string => (document.querySelector('#btn-auto-battle .tb-cap') as HTMLElement | null)?.textContent ?? '';
+
+  it('Т.55: «Меню» і «?» у ручному бою не перемальовують бій', () => {
+    // 1. сід 27, пресет «норма»: бій без авто-бою
+    startParty('27');
+    for (let i = 0; i < 1500 && document.querySelector('button.mission') === null; i++) btn('btn-tick').click();
+    (document.querySelector('button.mission') as HTMLButtonElement).click();
+    expect($('battle-panel').classList.contains('hidden')).toBe(false);
+    expect(cap()).toBe('Авто');
+    // 2. «Меню» без авто-бою: жодної операції на канві
+    const opsBeforeMenu = canvasOps.length;
+    btn('btn-menu').click();
+    expect($('game-menu').classList.contains('hidden')).toBe(false);
+    expect(canvasOps.length).toBe(opsBeforeMenu);
+    btn('btn-menu-close').click();
+    // 3. «?» без авто-бою: так само
+    const opsBeforeHelp = canvasOps.length;
+    btn('btn-help').click();
+    expect($('help-screen').classList.contains('hidden')).toBe(false);
+    expect(canvasOps.length).toBe(opsBeforeHelp);
+    btn('btn-help-close').click();
+  });
+
+  it('Т.55: «Налаштування» і «Незбережені зміни» відкриваються з меню вже після зупинки авто-бою', async () => {
+    // 1. бій з попереднього тесту триває; фейк-таймери — як у блоці Т.53
+    expect($('battle-panel').classList.contains('hidden')).toBe(false);
+    vi.useFakeTimers();
+    try {
+      // 2. авто-бій запущений
+      btn('btn-auto-battle').click();
+      await vi.advanceTimersByTimeAsync(AUTO_STEP_MS * 3);
+      expect(cap()).toBe('Стоп');
+      // 3. «Меню» → «Налаштування»: вікно відкрите, авто-бій стоїть
+      btn('btn-menu').click();
+      btn('btn-menu-settings').click();
+      expect($('settings-dialog').classList.contains('hidden')).toBe(false);
+      expect($('game-menu').classList.contains('hidden')).toBe(true);
+      expect(cap()).toBe('Авто');
+      expect(vi.getTimerCount()).toBe(0);
+      const logSettings = $('log').textContent;
+      await vi.advanceTimersByTimeAsync(AUTO_STEP_MS * 50);
+      expect($('log').textContent).toBe(logSettings);
+      btn('settings-close').click();
+      // 4. знову авто-бій
+      btn('btn-auto-battle').click();
+      await vi.advanceTimersByTimeAsync(AUTO_STEP_MS * 3);
+      expect(cap()).toBe('Стоп');
+      expect($('log').textContent).not.toBe(logSettings);
+      // 5. «Меню» → «На стартовий екран»: вікно «Незбережені зміни», авто-бій стоїть
+      btn('btn-menu').click();
+      btn('btn-menu-exit').click();
+      expect($('exit-confirm').classList.contains('hidden')).toBe(false);
+      expect($('exit-confirm').querySelector('h2')?.textContent).toBe('Незбережені зміни');
+      expect(cap()).toBe('Авто');
+      expect(vi.getTimerCount()).toBe(0);
+      const logExit = $('log').textContent;
+      await vi.advanceTimersByTimeAsync(AUTO_STEP_MS * 50);
+      expect($('log').textContent).toBe(logExit);
+      // 6. «Скасувати»: бій на місці, авто-бій не поновлюється
+      btn('btn-exit-no').click();
+      expect($('exit-confirm').classList.contains('hidden')).toBe(true);
+      expect($('battle-panel').classList.contains('hidden')).toBe(false);
+      await vi.advanceTimersByTimeAsync(AUTO_STEP_MS * 50);
+      expect($('log').textContent).toBe(logExit);
+      expect($('bresult').textContent).toBe('');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
