@@ -14,8 +14,12 @@ WITH_E2E = "--no-e2e" not in sys.argv
 ROOT = os.getcwd()
 MAIN = "src/main.ts"
 EXIT_CLOSE = "  if (ui.mission !== null) battle.close();\n"
-EXIT_GEO = "  geoAnim.cancel();\n  screens?.showStart();\n"
+EXIT_GEO = "  geoAnim.cancel();\n  ambient.pause();\n"
 CONT_GEO = "  geoAnim.cancel(); // Т.48: як у startNewParty — анімації покинутої партії поверх завантаженої не відтворюємо\n"
+EXIT_HIDE = (
+    "  el('battle-panel').classList.add('hidden');\n"
+    "  el('layout').classList.remove('in-battle');\n"
+)
 CONT_RET = "  return party !== null && party !== before;\n"
 # назва, файл, було, стало, чи ганяти e2e
 MUTATIONS = [
@@ -25,10 +29,14 @@ MUTATIONS = [
     ("вихід закриває лише завершений бій", MAIN, EXIT_CLOSE, "  if (ui.battleResult !== null) battle.close();\n", True),
     ("вихід закриває лише бій, що триває", MAIN, EXIT_CLOSE, "  if (ui.mission !== null && ui.battleResult === null) battle.close();\n", False),
     ("вихід закриває бій і на геосцені (зайва перерисовка)", MAIN, EXIT_CLOSE, "  battle.close();\n", False),
-    ("вихід не скидає анімації геосцени", MAIN, EXIT_GEO, "  screens?.showStart();\n", False),
+    ("вихід не скидає анімації геосцени", MAIN, EXIT_GEO, "  ambient.pause();\n", False),
     ("«Продовжити» не скидає анімації геосцени", MAIN, CONT_GEO, "", False),
     ("невдале завантаження вважається успіхом", MAIN, CONT_RET, "  return party !== null;\n", False),
     ("вдале завантаження вважається невдачею", MAIN, CONT_RET, "  return party !== null && party === before;\n", True),
+    # після аудиту PR #348
+    ("вихід лише ховає панель бою, авто-бій іде далі (лише e2e)", MAIN, EXIT_CLOSE, EXIT_HIDE, True),
+    ("вихід не ставить ambient на паузу (лише e2e)", MAIN, "  ambient.pause();\n", "", True),
+    ("закриття бою не знімає таймер плашки ходу демонів", "src/ui/battle.ts", "    dropPlate(); // Т.33\n    ui.mission = null;\n", "    ui.mission = null;\n", False),
 ]
 
 def run(cmd, cwd):
@@ -42,7 +50,7 @@ def main():
     try:
         shutil.copytree(ROOT, work, ignore=shutil.ignore_patterns("node_modules", ".git", "dist", "coverage"))
         os.symlink(os.path.join(ROOT, "node_modules"), os.path.join(work, "node_modules"))
-        unit = "npx vitest run src/main.ui.test.ts"
+        unit = "npx vitest run src/main.ui.test.ts src/ui/battle.test.ts"
         e2e = "npm run test:e2e"
         assert run(unit, work) == 0, "тести модулів незміненої копії мають бути зелені"
         if WITH_E2E:
