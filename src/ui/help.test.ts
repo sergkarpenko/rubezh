@@ -91,6 +91,20 @@ describe('П9.1: екран «Як грати» — контент з конст
   });
 });
 
+describe('Т.49: слово «перехоплювач» без друкарської помилки', () => {
+  it('довідка і розмітка сторінки: «перехоплювач», а не «перехоплюач»', () => {
+    freshHelp();
+    const text = $('help-screen').textContent ?? '';
+    expect(text).toContain('перехоплювач і загін живуть у ньому');
+    expect(text).toContain('перехоплювач атакує зонд у повітрі');
+    expect(text).toContain('ремонт перехоплювача');
+    expect(text).not.toContain('ерехоплюач');
+    expect(htmlRaw).toContain('Перехоплювач: <b id="ictx-fighter">');
+    expect(htmlRaw).toContain('<h2>Перехоплювач</h2>');
+    expect(htmlRaw).not.toContain('ерехоплюач');
+  });
+});
+
 describe('П9.1: відкриття/закриття і перший візит', () => {
   it('maybeShowOnFirstVisit: порожні слоти — показано', () => {
     const help = freshHelp(true, true);

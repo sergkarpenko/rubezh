@@ -253,7 +253,9 @@ export function geoEventText(e: GeoEvent, knownDetected: ReadonlySet<string>): {
         text:
           e.reason === 'fighter_damaged'
             ? '✦ Перехоплювач пошкоджений — вимушене переривання бою'
-            : '✦ Зонд Розриву ' + e.ufoId + ' зник з трекінгу — перехоплення перервано',
+            : e.reason === 'ufo_landed'
+              ? '✦ Зонд Розриву ' + e.ufoId + ' приземлився — перехоплення перервано' // Т.49: текст власника з номером зонда
+              : '✦ Зонд Розриву ' + e.ufoId + ' зник з трекінгу — перехоплення перервано',
         cls: e.reason === 'fighter_damaged' ? 'lose' : '',
       };
     case 'ufo_shot_down':
@@ -331,7 +333,7 @@ export function workshopEventText(e: WorkshopEvent): { text: string; cls: string
     case 'equipment_returned':
       return { text: '⚑ Кузня: спорядження ' + e.soldierId + ' повернуто на склад (' + e.items.map(itemName).join(', ') + ')', cls: '' };
     case 'gun_module_installed':
-      return { text: '⚑ Кузня: гарматний модуль перехоплювача на перехоплюачі', cls: '' };
+      return { text: '⚑ Кузня: гарматний модуль перехоплювача на перехоплювачі', cls: '' };
     case 'gun_module_removed':
       return { text: '⚑ Кузня: гарматний модуль перехоплювача знято на склад', cls: '' };
   }

@@ -1366,7 +1366,7 @@ describe('П12.4: вкладки статус-колонки «Загін»/«Б
     btn('status-tab-squad').click();
     expect(visibleTitles()).toEqual(['Фінанси', 'Ростер загону']);
     btn('status-tab-base').click();
-    expect(visibleTitles()).toEqual(['Сенсорна сітка (виявлені зонди)', 'Перехоплюач', 'Дослідження', 'Кузня']);
+    expect(visibleTitles()).toEqual(['Сенсорна сітка (виявлені зонди)', 'Перехоплювач', 'Дослідження', 'Кузня']);
     // приховані панелі зберігають контент у DOM (контракти не послаблюються)
     expect($('roster').textContent).toContain('оперативник');
     expect($('money-card').textContent).not.toBe('');

@@ -113,6 +113,13 @@ describe('geoEventText: фільтр туману стратегічного ж�
       cls: '',
     });
   });
+
+  it('Т.49: перехоплення перервало приземлення зонда — власний текст, без «зник з трекінгу»', () => {
+    expect(geoEventText(evGeo({ type: 'intercept_aborted', reason: 'ufo_landed', ufoId: 'u7', minute: 3 }), known)).toEqual({
+      text: '✦ Зонд Розриву u7 приземлився — перехоплення перервано',
+      cls: '',
+    });
+  });
 });
 
 describe('battleEventText: події бою → журнал', () => {
@@ -532,6 +539,13 @@ describe('workshopEventText: перетворювач подій цеху (П11.
     expect(workshopEventText(evWorkshop({ type: 'unequip', soldierId: 'с1', id: 'medkit' }))?.text).toContain(
       'з с1 знято «Регенеративний гель»'
     );
+  });
+
+  it('Т.49: гарматний модуль встановлено — рядок кузні дослівно', () => {
+    expect(workshopEventText(evWorkshop({ type: 'gun_module_installed' }))).toEqual({
+      text: '⚑ Кузня: гарматний модуль перехоплювача на перехоплювачі',
+      cls: '',
+    });
   });
 
   it('спорядження загиблого (Т.28): повернення на склад — без класу, втрата витратників — lose; назви з каталогу', () => {

@@ -225,7 +225,7 @@ describe('renderUfos: сканери НЛО', () => {
 });
 
 describe('Т.7: nodeActions — дії, що чекають на вкладці «Вузол» (сигнал вкладки)', () => {
-  it('нічого не виявлено — 0; зонд у повітрі і перехоплюач на базі — 1; погоня — 0', () => {
+  it('нічого не виявлено — 0; зонд у повітрі і перехоплювач на базі — 1; погоня — 0', () => {
     const f = makeFixture();
     expect(f.panels.nodeActions()).toBe(0);
     expect(tickUntil(f.party, () => detectedUfos(f.party.geo).some((u) => u.status === 'летить'))).toBe(true);
@@ -233,7 +233,7 @@ describe('Т.7: nodeActions — дії, що чекають на вкладці 
     expect(f.panels.nodeActions()).toBe(flying.length + missionTargets(f.party.geo).length);
     expect(f.panels.nodeActions()).toBeGreaterThan(0);
     startIntercept(f.party.intercept, f.party.geo, flying[0]!.id);
-    expect(f.panels.nodeActions()).toBe(missionTargets(f.party.geo).length); // перехоплюач у погоні — кнопки «Перехопити» нема
+    expect(f.panels.nodeActions()).toBe(missionTargets(f.party.geo).length); // перехоплювач у погоні — кнопки «Перехопити» нема
   });
 
   it('приземлений зонд — місія рахується; повітряний бій — +1 (рішення про дистанцію)', () => {
@@ -688,10 +688,12 @@ describe('Т.43: причини під неактивними кнопками �
     f.party.geo.log.push({ type: 'intercept_break_off', ufoId: 'ufo3', minute: 150 });
     f.panels.renderFighter();
     expect(last()).toBeNull();
-    // зонд приземлився під час погоні: текст журналу «зник з трекінгу» тут неправдивий — рядка немає
+    // Т.49: зонд приземлився під час погоні — власний текст журналу, без «зник з трекінгу»
     f.party.geo.log.push({ type: 'intercept_start', ufoId: 'ufo4', pos, minute: 180 });
-    f.party.geo.log.push({ type: 'intercept_aborted', ufoId: 'ufo4', reason: 'ufo_landed', pos, minute: 210 });
     f.panels.renderFighter();
     expect(last()).toBeNull();
+    f.party.geo.log.push({ type: 'intercept_aborted', ufoId: 'ufo4', reason: 'ufo_landed', pos, minute: 210 });
+    f.panels.renderFighter();
+    expect(last()).toBe('✦ Зонд Розриву ufo4 приземлився — перехоплення перервано');
   });
 });

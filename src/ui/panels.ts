@@ -102,7 +102,7 @@ export interface Panels {
   nodeActions(): number; // Т.7: дії, що чекають гравця на вкладці «Вузол» (сигнал вкладки)
 }
 
-// П7.4 (ADR-0032): «Перехопити» — лише для зонда в повітрі, коли перехоплюач
+// П7.4 (ADR-0032): «Перехопити» — лише для зонда в повітрі, коли перехоплювач
 // на базі. Спільна умова кнопки (renderUfos) і сигналу вкладки (nodeActions, Т.7).
 function canIntercept(party: Party, u: Ufo): boolean {
   return u.status === 'летить' && party.intercept.fighter.status === 'на базі';
@@ -337,10 +337,10 @@ export function createPanels(deps: PanelsDeps): Panels {
     let i = log.length - 1;
     while (i >= 0 && !['intercept_start', 'intercept_aborted', 'intercept_break_off'].includes(log[i].type)) i--;
     const last = log[i];
-    // Не показуємо: зонд приземлився під час погоні (текст журналу «зник з трекінгу» тут
-    // неправдивий — зонд видно в переліку) і пошкодження, яке вже відремонтовано (аудит PR #340).
+    // Не показуємо пошкодження, яке вже відремонтовано (аудит PR #340). Приземлення зонда
+    // під час погоні після Т.49 має власний текст журналу — рядок показуємо, як і решту причин.
     const stale = last?.type === 'intercept_aborted' && last.reason === 'fighter_damaged' && f.hp === FIGHTER_MAX_HP;
-    if (last?.type === 'intercept_aborted' && last.reason !== 'ufo_landed' && !stale) {
+    if (last?.type === 'intercept_aborted' && !stale) {
       const note = document.createElement('div');
       note.id = 'fighter-last';
       note.className = 'meta';
