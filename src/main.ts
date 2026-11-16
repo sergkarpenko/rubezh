@@ -677,7 +677,7 @@ if (typeof document !== 'undefined') {
     storageOk: () => savePanel.isStorageOk(),
     slotsEmpty: () => savePanel.slotsEmpty(),
   });
-  // Т.53 (рішення власника 16.11.2026 «Зупинити»): вікно поверх бою зупиняє авто-бій, як «Стоп»
+  // Т.53 (рішення власника 16.11.2026 «Зупиняти»): вікно поверх бою зупиняє авто-бій, як «Стоп»
   const stopAutoForWindow = (): void => {
     if (!autoBattle.busy) return;
     autoBattle.stop();
