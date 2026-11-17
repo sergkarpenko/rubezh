@@ -662,6 +662,39 @@ const T61_VIEWPORTS = [
   { width: 390, height: 844 },
 ];
 
+// Т.61: що бачить гравець у центрі елемента — сам елемент (не перекритий), повна непрозорість з предками,
+// непрозорий текст не меншого за 12 px кегля, текст не обрізано по ширині
+const t61Look = (page: Page, id: string) =>
+  page.evaluate((elId) => {
+    const el = document.getElementById(elId)!;
+    const r = el.getBoundingClientRect();
+    const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+    let opacity = 1;
+    for (let e: Element | null = el; e !== null; e = e.parentElement) opacity *= Number(getComputedStyle(e).opacity);
+    const s = getComputedStyle(el);
+    const rgba = (c: string): number[] => (c.match(/[\d.]+/g) ?? []).map(Number);
+    return {
+      top: r.top,
+      bottom: r.bottom,
+      h: r.height,
+      w: r.width,
+      onTop: hit !== null && el.contains(hit),
+      opacity,
+      color: rgba(s.color),
+      background: rgba(s.backgroundColor),
+      fontSize: parseFloat(s.fontSize),
+      fits: el.scrollWidth <= el.clientWidth,
+    };
+  }, id);
+
+const t61Visible = (b: Awaited<ReturnType<typeof t61Look>>, label: string): void => {
+  expect(b.onTop, label + ': елемент перекрито').toBe(true);
+  expect(b.opacity, label + ': елемент прозорий').toBe(1);
+  expect(b.color[3] ?? 1, label + ': текст прозорий').toBeGreaterThanOrEqual(0.9);
+  expect(b.fontSize, label + ': кегль тексту менший за 12 px').toBeGreaterThanOrEqual(12);
+  expect(b.fits, label + ': текст обрізано').toBe(true);
+};
+
 test('Т.61: екран перемоги і рядок-пояснення стартового екрана — видно на трьох розмірах вікна', async ({ page }) => {
   const errors = watchErrors(page);
   await page.goto('./');
@@ -694,15 +727,10 @@ test('Т.61: екран перемоги і рядок-пояснення ста
         await expect(page.locator('#' + id), label + ': #' + id).toBeVisible();
         await expect(page.locator('#' + id), label + ': #' + id).toBeInViewport({ ratio: 1 });
       }
-      const boxes = await page.evaluate(
-        (list) =>
-          list.map((id) => {
-            const r = document.getElementById(id)!.getBoundingClientRect();
-            return { top: r.top, bottom: r.bottom, h: r.height, w: r.width };
-          }),
-        ids
-      );
-      for (const b of boxes) {
+      const boxes = [];
+      for (const id of ids) boxes.push(await t61Look(page, id));
+      for (const [i, b] of boxes.entries()) {
+        t61Visible(b, label + ': #' + ids[i]);
         expect(b.h, label + ': кнопка нижча за тач-ціль 44 px').toBeGreaterThanOrEqual(44);
         expect(b.w, label + ': кнопка вужча за 44 px').toBeGreaterThanOrEqual(44);
       }
@@ -726,24 +754,13 @@ test('Т.61: екран перемоги і рядок-пояснення ста
       const label = size.width + ' × ' + size.height;
       await expect(note, label + ': рядок-пояснення').toBeVisible();
       await expect(note, label + ': рядок-пояснення').toBeInViewport({ ratio: 1 });
-      const m = await page.evaluate(() => {
-        const n = document.getElementById('start-note')!;
-        const r = n.getBoundingClientRect();
-        const first = document.getElementById('btn-start-new')!.getBoundingClientRect();
-        const s = getComputedStyle(n);
-        const rgba = (c: string): number[] => (c.match(/[\d.]+/g) ?? []).map(Number);
-        return {
-          gap: first.top - r.bottom,
-          fits: n.scrollWidth <= n.clientWidth,
-          widthDiff: Math.abs(r.width - first.width),
-          color: rgba(s.color),
-          background: rgba(s.backgroundColor),
-        };
-      });
-      expect(m.gap, label + ': рядок не над першою кнопкою меню або далі за проміжок меню').toBeGreaterThanOrEqual(0);
-      expect(m.gap, label + ': рядок не над першою кнопкою меню або далі за проміжок меню').toBeLessThanOrEqual(12);
-      expect(m.widthDiff, label + ': рядок вужчий чи ширший за кнопки меню').toBeLessThanOrEqual(1);
-      expect(m.fits, label + ': текст рядка обрізано').toBe(true);
+      const m = await t61Look(page, 'start-note');
+      const first = await t61Look(page, 'btn-start-new');
+      t61Visible(m, label + ': рядок-пояснення');
+      const gap = first.top - m.bottom;
+      expect(gap, label + ': рядок не над першою кнопкою меню або далі за проміжок меню').toBeGreaterThanOrEqual(0);
+      expect(gap, label + ': рядок не над першою кнопкою меню або далі за проміжок меню').toBeLessThanOrEqual(12);
+      expect(Math.abs(m.w - first.w), label + ': рядок вужчий чи ширший за кнопки меню').toBeLessThanOrEqual(1);
       const [r, g, b] = m.color as [number, number, number];
       expect(r - Math.max(g, b), label + ': колір тексту — не колір помилки').toBeGreaterThanOrEqual(80);
       expect(m.background[3] ?? 1, label + ': підкладка рядка прозора').toBeGreaterThanOrEqual(0.9);
