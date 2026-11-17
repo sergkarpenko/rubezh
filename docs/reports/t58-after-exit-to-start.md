@@ -45,7 +45,7 @@
 - [x] `npm test` — 1186 passed (47 файлів).
 - [x] `npm run build` — ок; `npm run docs` — 0 помилок; `node scripts/agents-docs-check.mjs` — без зауважень до змінених файлів.
 - [ ] `npm run test:e2e` — у цьому sandbox не проходить (див. «Що з чекліста не вдалося»); повний прогін — у CI PR.
-- [ ] `node scripts/vibe-plan-check.mjs --plan docs/plans/t58-after-exit-to-start.md --title "fix(ui): Т.58 — після виходу на стартовий екран" --body-file <файл опису>` — перший запуск перед `gh pr create`; після відкриття PR — вдруге з `--pr <N>` (числа запусків запишу в опис PR; якщо запуск з `--pr` не вдасться — допускається `gh pr edit <N> --body-file <файл>`, не новим комітом).
+- [x] `node scripts/vibe-plan-check.mjs --plan docs/plans/t58-after-exit-to-start.md --title "fix(ui): Т.58 — після виходу на стартовий екран" --body-file <файл опису>` — перший запуск перед `gh pr create`: 0 знахідок; після відкриття PR #358 — вдруге з `--pr 358`: 0 знахідок (обидва числа — також в описі PR #358).
 
 ## Метрики
 
@@ -58,4 +58,4 @@
 ## Що з чекліста не вдалося
 
 - `npm run test:e2e` у sandbox: браузер не стартує без системних lib (`libglib-2.0.so.0`), root немає, `apt-get`/`playwright install-deps` не працюють. Ручний набір .deb з deb.debian.org у `/tmp/debs/root` + `LD_LIBRARY_PATH` + `FONTCONFIG_FILE` запускає браузер, але сценарій падає на `e2e/acceptance.scenario.ts:138` (`#status-tab-base .tab-badge`, `toBeVisible`) — і та сама помилка на чистому `origin/main` в окремому worktree, тож це середовище sandbox, а не цей PR. Замість e2e — зонд playwright проти збірки: 11/11 перевірок. Повний e2e піде в CI.
-- Номер PR, числа запусків `vibe-plan-check` із `--pr` і підпункт «Аудит» у `docs/workflow.md` — другим комітом після аудиту (за планом до аудиту не писати).
+- PR #358 (`fix/t58-after-exit-to-start` → `main`, не мержено). Підпункт «Аудит» у `docs/workflow.md` — другим комітом після аудиту (за планом до аудиту не писати).
