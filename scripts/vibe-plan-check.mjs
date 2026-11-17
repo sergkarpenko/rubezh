@@ -3,8 +3,10 @@
 // Перевіряє те, чого шаблон сам не втримав у Т.51 і Т.53: назву PR і рядок Iter-Tag; відповіді власника дослівно
 // і цитати власника, яких у плані немає; розділи звіту; у доданих рядках — слова, заборонені планом чи анти-глосарієм
 // («зона» замість «зонд»), імовірні одруківки слів плану («плітка»), трансліт і мішанину латинки з кирилицею.
+// Т.62: довші форми заборонених слів («мутаційний»), незаповнені місця `<…>` з блоків плану, твердження про аудит
+// до аудиту (і «Аудит ще не проведено» після нього), вказівки плану, вставлені в документи чи опис PR дослівно.
 // Запуск: node scripts/vibe-plan-check.mjs --plan docs/plans/tNN-x.md [--base origin/main] [--head HEAD]
-//   [--pr N | --title "…" --body-file файл] [--terms файл.md]… [--allow "слово чи цитата"]…
+//   [--pr N | --title "…" --body-file файл] [--terms файл.md]… [--allow "слово чи цитата"]… [--after-audit]
 // Код виходу: 0 — знахідок немає, 1 — є, 2 — помилка запуску. Нічого не пише на диск. Знахідка — підказка
 // читачеві, а не вирок: слово чи цитату, що лишається свідомо, називає --allow.
 import { execFileSync } from 'node:child_process';
@@ -13,9 +15,10 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const CYR = 'А-Яа-яІіЇїЄєҐґ';
-const WORD = new RegExp(`[A-Za-z${CYR}]+`, 'g');
+// Слово з апострофом («м'ятий», «ім’я») — одне слово, а не два шматки.
+const WORD = new RegExp(`[A-Za-z${CYR}]+(?:['’ʼ][${CYR}]+)*`, 'g');
 const HAS_CYR = new RegExp(`[${CYR}]`);
-const lower = (s) => s.toLocaleLowerCase('uk');
+const lower = (s) => s.toLocaleLowerCase('uk').replace(/[’ʼ]/g, "'");
 const norm = (s) => s.replace(/\s+/g, ' ').trim();
 
 /** Розділ плану: від заголовка другого рівня, що відповідає re, до наступного такого заголовка. */
@@ -65,9 +68,31 @@ export function parseAntiGlossary(text) {
   return terms;
 }
 
+// Готовий блок плану — та сама розмітка, що в scripts/vibe-plan-blocks.mjs.
+const BLOCK = /^<!-- блок: (\S+) -->\n(`{3,})[^\n`]*\n([\s\S]*?)\n\2[ \t]*$/gm;
+// Місце для заповнення: <…> з кирилицею чи трьома крапками всередині; HTML-коментар і теги коду — ні.
+const PLACE = new RegExp(`<(?!!--)[^<>\\n]*(?:[${CYR}]|…|\\.\\.\\.)[^<>\\n]*>`, 'g');
+const ELLIPSIS = /^<\s*(?:…|\.\.\.)\s*>$/;
+const noCode = (t) => t.replace(/`[^`\n]*`/g, ' '); // `<файл>` у команді — частина команди, а не місце
+const listless = (l) => norm(l.replace(/^\s*(?:[-*]|\d+\.)\s+/, ''));
+
 /** Що план вимагає дослівно: назва PR, рядок тегу, відповіді власника, звіт і його розділи, терміни, слова. */
 export function parsePlan(plan) {
   const owner = section(plan, /Відповід\S* власника/);
+  const blocks = [...plan.matchAll(BLOCK)].map((m) => m[3]);
+  const inBlocks = new Set(blocks.flatMap((b) => b.split('\n').map(listless)));
+  // Вказівки — рядки поза блоками, розділами відповіді власника і термінів, заголовками й таблицями; лише коли блоки є.
+  const prose = blocks.length
+    ? plan
+        .replace(BLOCK, '')
+        .replace(owner, '')
+        .replace(section(plan, /Терміни гри/), '')
+    : '';
+  const instructions = prose
+    .split('\n')
+    .filter((l) => !/^\s*(#|\||```|<!--)/.test(l))
+    .map(listless)
+    .filter((l) => l.length >= 60 && !inBlocks.has(l));
   const report = plan.match(/Звіт `([^`]+)`([^\n]*)/);
   const listed = report?.[2].match(/з розділами:(.*?)(\*\*Жодного|$)/);
   return {
@@ -81,6 +106,9 @@ export function parsePlan(plan) {
     words: new Set((plan.match(WORD) ?? []).filter((w) => HAS_CYR.test(w)).map(lower)),
     quotes: new Set(allQuotes(plan)),
     heads: plan.split('\n').filter((l) => /^#+ /.test(l)),
+    places: new Set(noCode(blocks.join('\n')).match(PLACE) ?? []),
+    afterAudit: /^## Після аудиту/m.test(plan),
+    instructions: [...new Set(instructions)],
   };
 }
 
@@ -88,11 +116,19 @@ const stem = (s) => {
   const t = s.replace(/[аеиіоуюяьй]+$/, '');
   return t.length >= 3 ? t : s;
 };
+// Що може йти після основи забороненого слова: закінчення іменника чи прикметника або суфікс прикметника з
+// закінченням («мутац» + «ійний»). Довжина не обмежена, але «зонт» (основа «зон» + «т») — не форма «зона».
+const NOUN = '(?:а|я|и|і|ї|у|ю|е|є|о|ою|ею|єю|ам|ям|ами|ями|ах|ях|ом|ем|єм|ів|їв|ей|ові|еві|ь|й|ы|ой)'; // ы, ой — російські форми
+const ADJ = '(?:ий|ій|ого|ього|ому|ьому|им|ім|их|іх|ими|іми|а|я|ої|ьої|у|ю|ою|ьою|е|є|і|ї)';
+const ENDING = new RegExp(`^[іь]?${NOUN}?$`);
+const DERIVED = new RegExp(`^[іь]?(?:н|йн|ичн|ськ|цьк|ов|ев|єв|ин|ист)${ADJ}$`);
 /** Чи є слово w формою забороненого терміна (за основою), але не формою правильного. */
 export function matchesBad(w, term) {
   if (term.exact) return w === term.bad;
   const sb = stem(term.bad);
-  if (!w.startsWith(sb) || w.length > sb.length + (sb.length < 4 ? 2 : 3)) return false;
+  if (!w.startsWith(sb)) return false;
+  const rest = w.slice(sb.length);
+  if (!ENDING.test(rest) && !DERIVED.test(rest)) return false;
   return !w.startsWith(stem(term.good));
 }
 
@@ -182,6 +218,59 @@ export function checkOwnerQuotes(items, plan, allow = new Set()) {
   return [...new Set(out)];
 }
 
+/** Місця `<…>` з блоків плану (поза зворотними лапками; і буквальне `<…>`), що лишились незаповненими в доданих рядках, описі чи назві PR. */
+export function checkPlaces(items, plan, allow = new Set()) {
+  const found = new Map();
+  for (const { where, text } of items) {
+    for (const [p] of noCode(text).matchAll(PLACE)) {
+      if (!(plan.places.has(p) || ELLIPSIS.test(p)) || allow.has(lower(p))) continue;
+      const f = found.get(p) ?? found.set(p, { where, count: 0 }).get(p);
+      f.count++;
+    }
+  }
+  return [...found].map(([p, f]) => `незаповнене місце плану: «${p}» (×${f.count}; ${f.where})`);
+}
+
+const NC = `(?<![${CYR}])`;
+// Твердження «аудит уже пройшов»: до двох слів між «аудит» і дієсловом, але не «ще не проведено».
+const CLAIMS = [
+  new RegExp(
+    `${NC}аудит\\S*(?:\\s+(?!не\\s|ще\\s)[^\\s.;,]+){0,2}?\\s+(?:проведено|пройдено|пройшов|завершено|успішн|зелен|без\\s+(?:знахідок|зауважень))`,
+    'iu'
+  ),
+  new RegExp(`mistral-audit\\W{0,3}\\s*(?:—|:|-)?\\s*(?:pass|passed|success|ok\\b|зелен|успішн|пройден|без\\s+зауважень)`, 'iu'),
+];
+const NOT_YET = 'Аудит ще не проведено';
+/**
+ * Аудит у документах і описі PR. До аудиту (у плані ще немає розділу «## Після аудиту…», немає --after-audit) —
+ * твердження, що аудит пройшов; після — «Аудит ще не проведено», що лишилось у звіті чи описі PR.
+ */
+export function checkAudit(items, plan, report, body) {
+  if (plan.afterAudit) {
+    return [
+      ...(report?.includes(NOT_YET) ? [`після аудиту у звіті лишилось «${NOT_YET}»`] : []),
+      ...(body?.includes(NOT_YET) ? [`після аудиту в описі PR лишилось «${NOT_YET}»`] : []),
+    ];
+  }
+  const out = [];
+  for (const { where, text } of items) {
+    const m = CLAIMS.map((re) => text.match(re)).find(Boolean);
+    if (m) out.push(`твердження про аудит до аудиту: «${m[0]}» (${where})`);
+  }
+  return out;
+}
+
+/** Вказівки плану (рядки поза блоками), вставлені в документи чи опис PR дослівно. */
+export function checkInstructions(items, plan) {
+  const out = [];
+  for (const { where, text } of items) {
+    const t = listless(text);
+    const hit = t.length >= 60 && plan.instructions.find((l) => t.includes(l));
+    if (hit) out.push(`вказівку плану вставлено дослівно: «${hit.slice(0, 70)}…» (${where})`);
+  }
+  return out;
+}
+
 /** Назва PR, рядок тегу і дослівні відповіді власника в описі PR. */
 export function checkPr(plan, title, body) {
   const out = [];
@@ -214,12 +303,17 @@ export function checkReport(plan, report, docsText) {
 // Поза дифом: план і шаблон самі називають заборонені слова, словник — теж.
 const EXCLUDE = [':(exclude)docs/plans', ':(exclude)docs/glossary.md'];
 const USAGE =
-  'Запуск: node scripts/vibe-plan-check.mjs --plan docs/plans/tNN-x.md [--base origin/main] [--head HEAD] [--pr N | --title "…" --body-file файл] [--terms файл.md]… [--allow "слово чи цитата"]…';
+  'Запуск: node scripts/vibe-plan-check.mjs --plan docs/plans/tNN-x.md [--base origin/main] [--head HEAD] [--pr N | --title "…" --body-file файл] [--terms файл.md]… [--allow "слово чи цитата"]… [--after-audit]';
 
 function main(argv) {
   const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
   const opt = { base: 'origin/main', head: 'HEAD', terms: [], allow: [] };
   for (let i = 0; i < argv.length; i += 2) {
+    if (argv[i] === '--after-audit') {
+      opt.afterAudit = true;
+      i--;
+      continue;
+    }
     const key = argv[i].replace(/^--/, '').replace(/-([a-z])/g, (_, c) => c.toUpperCase());
     if (argv[i] === '--help' && argv.length === 1) return (console.log(USAGE), 0);
     if (
@@ -259,6 +353,7 @@ function main(argv) {
   const planText = show(opt.head, opt.plan);
   if (planText === null) throw new Error(`плану ${opt.plan} немає в ${opt.head}`);
   const plan = parsePlan(planText);
+  plan.afterAudit ||= Boolean(opt.afterAudit);
   const terms = [...plan.terms, ...parseAntiGlossary(show(opt.base, 'docs/glossary.md') ?? '')];
   for (const f of opt.terms) terms.push(...parseTerms(section(readFileSync(resolve(process.cwd(), f), 'utf8'), /Терміни гри/)));
   const allow = new Set(opt.allow.map((a) => lower(norm(a))));
@@ -319,6 +414,9 @@ function main(argv) {
     ...(plan.hasOwner ? [] : ['у плані немає розділу «Відповідь власника» — цитати звірити нема з чим']),
     ...checkOwnerQuotes([...items, ...bodyItems], plan, allow),
     ...checkReport(plan, report, record),
+    ...checkPlaces([...items, ...bodyItems, ...titleItems], plan, allow),
+    ...checkAudit([...docs, ...bodyItems], plan, report, body),
+    ...checkInstructions([...docs, ...bodyItems], plan),
     ...checkWords([...items, ...bodyItems, ...titleItems], plan, vocab, terms, allow),
   ];
   // Повідомлення комітів виправити не можна (історію не переписуємо) — це зауваги, код виходу вони не міняють.
@@ -327,7 +425,7 @@ function main(argv) {
     `План: ${opt.plan}; диф ${opt.base}..${opt.head}: доданих рядків ${items.length} (з них документів ${docs.length}), комітів ${messages.length}.`
   );
   console.log(
-    `Звірено: назва PR — ${title === null ? 'ні (не задано)' : 'так'}; опис PR — ${body === null ? 'ні (не задано)' : 'так'}; розділів звіту в плані — ${plan.reportSections.length}; відповідей власника — ${plan.answers.length}; заборонених слів — ${terms.length}.`
+    `Звірено: назва PR — ${title === null ? 'ні (не задано)' : 'так'}; опис PR — ${body === null ? 'ні (не задано)' : 'так'}; розділів звіту в плані — ${plan.reportSections.length}; відповідей власника — ${plan.answers.length}; заборонених слів — ${terms.length}; місць \`<…>\` у блоках — ${plan.places.size}; вказівок поза блоками — ${plan.instructions.length}; аудит — ${plan.afterAudit ? 'після' : 'до'}.`
   );
   findings.forEach((f, i) => console.log(`${i + 1}. ${f}`));
   notes.forEach((f) => console.log(`Заувага (повідомлення коміту, не виправити): ${f}`));
