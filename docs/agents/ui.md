@@ -27,6 +27,7 @@
 
 ## Гейт e2e і тести UI
 
+- **`toBeVisible` Playwright — не «гравець бачить» (спостереження сесії після мержу Т.61):** він пропускає `opacity: 0`, прозорий колір тексту, перекриття іншим елементом і обрізаний текст. Зразок перевірки — хелпери `t61Look` і `t61Visible` у `e2e/acceptance.scenario.ts`: елемент у центрі через `elementFromPoint`, непрозорість з предками, альфа кольору тексту, кегль, `scrollWidth`.
 - **Поломки гейта e2e (Т.32):** ламати лише файл під перевіркою (`cp` копії в `/tmp` → `sed` → `npm run build` → `E2E_URL=http://localhost:4173/rubezh/ npm run test:e2e` → `cp` назад); `git stash` ховає разом із кодом і сам гейт. Поки прев'ю на 4173 підняте, `npm run test:e2e` без `E2E_URL` падає з «already used». Поломку, яку e2e не бачить, прогнати тестами модуля і записати обидва результати (Т.33).
 - **Новий елемент у панелі бою:** `el('<id>')` кидає помилку, якщо елемента немає, — додати його в розмітку `setupDom` у `src/ui/battle.test.ts` і `src/ui/input.test.ts`. Залежності `BattleDeps` у `battle.test.ts` підмінюються (`makeFixture({ hasRaf: () => true })`, `f.deps.anim.queued = …`) — так тестується все, що в jsdom вимкнено через відсутність rAF; таймери — `vi.useFakeTimers()`.
 - **UI-тести панелей:** `src/ui/panels.test.ts` має фікстуру `makeFixture()`; `research-panel.test.ts` і `workshop-panel.test.ts` — глобальна `party` (`createParty(42)` у `beforeEach`; для пресета — `party = createParty(42, 'легкий')`). Тести на числа — на пресеті з множником не 1 (урок Т.29).

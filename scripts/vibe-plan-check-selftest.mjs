@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Самоперевірка scripts/vibe-plan-check.mjs (Т.54): функції окремо і весь скрипт у тимчасовому
+// Самоперевірка scripts/vibe-plan-check.mjs (Т.54; Т.62 — форми слів, місця <…>, аудит, вказівки): функції окремо і весь скрипт у тимчасовому
 // git-репозиторії (mktemp, без хуків) — «поганий» PR має дати рівно очікувані знахідки, «добрий» — жодної.
 // Запуск: node scripts/vibe-plan-check-selftest.mjs. Код виходу: 0 — усе зійшлось, 1 — ні. Пише лише в тимчасову теку.
 import { execFileSync, spawnSync } from 'node:child_process';
@@ -7,7 +7,7 @@ import { cpSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { matchesBad, parsePlan, parseTerms, quotes, translit } from './vibe-plan-check.mjs';
+import { checkAudit, checkInstructions, checkPlaces, matchesBad, parsePlan, parseTerms, quotes, translit } from './vibe-plan-check.mjs';
 
 let failed = 0;
 let total = 0;
@@ -31,6 +31,76 @@ const forms = ['зона', 'зони', 'зоною', 'зонда', 'зондом
 eq('форми слова «зона»', forms.join(), 'true,true,true,false,false,false');
 eq('коротке слово «сид»', ['сид', 'сиду', 'сидить'].map((w) => matchesBad(w, terms[1])).join(), 'true,true,false');
 eq('трансліт', translit('після').join(), 'pislia,pislya,pislya');
+// Т.62: довжина форми не обмежена, але після основи — лише закінчення чи суфікс прикметника.
+const mut = parseTerms('**навмисна поломка** (не «мутація»)')[0];
+const longForms = ['мутаційний', 'мутаційного', 'мутаціями', 'мутації', 'мутацій', 'мутаційна'].map((w) => matchesBad(w, mut));
+eq('апостроф після латинки — не склеює', [...parsePlan("f'Червоних і hook'а").words].join(), 'червоних,і,а');
+eq('довгі форми «мутація»', longForms.join(), 'true,true,true,true,true,true');
+eq(
+  'не форми «зона»',
+  ['зонт', 'зонтик', 'зонами', 'зоны', 'зонний', 'зоновий'].map((w) => matchesBad(w, terms[0])).join(),
+  'false,false,true,true,true,true'
+);
+eq('не форма «мутація»', ['мутаціяк', 'мутацнік'].map((w) => matchesBad(w, mut)).join(), 'false,false');
+eq('апостроф — одне слово', [...parsePlan("ім’я, м'ятий, імʼя").words].join(), "ім'я,м'ятий");
+const BL = '<!-- блок: rep -->\n```text\n- Рядків — <число>; команда `git checkout <файл>`.\n```\n';
+const bp = parsePlan(`# П\n${BL}- Перед відкриттям PR запустити звірку з планом і числа записати в опис PR, а не новим комітом.\n`);
+eq('місця з блоків, без коду', [...bp.places].join(), '<число>');
+eq('вказівки поза блоками', bp.instructions.length, 1);
+const noBlocks = parsePlan('<число> і довга вказівка плану, яка не в блоці, але блоків немає в плані зовсім.');
+eq('без блоків — ні місць, ні вказівок', [noBlocks.places.size, noBlocks.instructions.length].join(), '0,0');
+const LONG = 'заголовок або рядок таблиці, довший за шістдесят знаків, — не вказівка плану';
+const marked = parsePlan(`${BL.replace('<число>', '<!-- примітка в блоці --> <число>')}## ${LONG}\n| ${LONG} |\n`);
+eq(
+  'HTML-коментар у блоці — не місце; заголовок і таблиця — не вказівки',
+  [[...marked.places].join(), marked.instructions.length].join(),
+  '<число>,0'
+);
+const heads = [
+  '# П\n\n## Після аудиту: порції\n',
+  '# П\n## Порція після аудиту (коміт)\n',
+  '# П\n## Порядок аудиту\n',
+  'Після аудиту — порції.\n',
+];
+eq('розділ «Після аудиту»', [bp.afterAudit, ...heads.map((h) => parsePlan(h).afterAudit)].join(), 'false,true,true,false,false');
+const it = (text) => [{ where: 'w', text }];
+eq(
+  'незаповнені місця',
+  checkPlaces(it('<число> і <…> і `<число>` і <файл> і <br> і <!-- блок: x --> і <...>'), bp).join('|'),
+  'незаповнене місце плану: «<число>» (×1; w)|незаповнене місце плану: «<…>» (×1; w)|незаповнене місце плану: «<...>» (×1; w)'
+);
+const claims = ['Аудит проведено', 'аудит CI зелений', 'CI `mistral-audit` pass (11s)', 'mistral-audit: success', 'Аудит PR #362 пройдено'];
+const calm = ['Аудит ще не проведено.', 'Аудит не проведено', 'Після аудиту — порції', 'mistral-audit — джоба CI', 'Переаудит проведено'];
+claims.push('Аудит завершено', 'аудит без зауважень', 'Аудит: без знахідок', 'mistral-audit — без зауважень');
+calm.push(
+  '(до аудиту — зелений)',
+  'в аудитора e2e зелений',
+  'Аудит наступного кроку буде проведено',
+  'твердження «аудит проведено» і «`mistral-audit` pass»'
+);
+eq('твердження про аудит', claims.map((c) => checkAudit(it(c), bp, null, null).length).join(), '1,1,1,1,1,1,1,1,1');
+eq('не твердження про аудит', calm.map((c) => checkAudit(it(c), bp, null, null).length).join(), '0,0,0,0,0,0,0,0,0');
+const after = { ...bp, afterAudit: true };
+eq(
+  'після аудиту',
+  [
+    checkAudit(it('Аудит проведено'), after, null, null).length,
+    checkAudit([], after, 'Аудит ще не проведено.', 'Аудит ще не проведено.').length,
+  ].join(),
+  '0,2'
+);
+eq('місце з --allow', checkPlaces(it('<число>'), bp, new Set(['<число>'])).length, 0);
+const dup = parsePlan(
+  `${BL.replace('<число>; команда', 'вказівка, що є і в блоці, і поза ним, тож це текст документа, а не вказівка')}- Рядків — вказівка, що є і в блоці, і поза ним, тож це текст документа, а не вказівка \`git checkout <файл>\`.\n`
+);
+eq('рядок блоку поза блоком — не вказівка', dup.instructions.length, 0);
+const at60 = parsePlan(`${BL}- ${'в'.repeat(30)} ${'к'.repeat(29)}\n- ${'в'.repeat(30)} ${'к'.repeat(28)}\n`);
+eq('вказівка — від 60 знаків', at60.instructions.map((l) => l.length).join(), '60');
+eq(
+  'вказівка дослівно',
+  checkInstructions(it('- Перед відкриттям PR запустити звірку з планом і числа записати в опис PR, а не новим комітом. Так.'), bp).length,
+  1
+);
 
 const P = 'docs/plans/t99-x.md';
 const PLAN = `# Т.99 — проба: план для Vibe Code
@@ -46,8 +116,18 @@ const PLAN = `# Т.99 — проба: план для Vibe Code
 \`\`\`
 Iter-Tag: iter-T.99
 \`\`\`
+- Перед відкриттям PR запустити звірку з планом і числа записати в опис PR, а не новим комітом.
+<!-- блок: rep -->
+\`\`\`text
+- Рядків — <число>; команда \`git checkout <файл>\`.
+\`\`\`
 `;
 const plan = parsePlan(PLAN);
+eq(
+  'вказівки плану: без відповіді власника і термінів',
+  plan.instructions.map((l) => l.slice(0, 12)).join('|'),
+  'Звіт `docs/r|Після зупинк|PR у `main`.|Перед відкри'
+);
 eq('план: назва', plan.title, 'fix(ui): Т.99 — проба «Меню»');
 const parsed = [plan.iterTag, plan.answers, plan.reportPath, plan.reportSections].join('; ');
 eq('план: тег, відповіді, звіт', parsed, 'Iter-Tag: iter-T.99; Зупиняти; docs/reports/t99-x.md; Що зроблено,Межі,Метрики');
@@ -80,17 +160,17 @@ try {
   ok('звіту ще немає', run(`--plan·${P}·--base·${base}·--head·${planRev}`).stdout.includes('звіту docs/reports/t99-x.md немає'));
   const table = '| Питання | Відповідь |\n| --- | --- |\n| Що? | «Зупинити» |\n';
   const bad = commit('fix: зона і сид', {
-    'docs/reports/t99-x.md': `# Т.99\n## Що зроблено\nПлітка «Стоп», гайдJFKів, зони немає, одна папка; seed 5 і \`seed\`, напис «Готово».\n\n${table}## Метрики\n`,
+    'docs/reports/t99-x.md': `# Т.99\n## Що зроблено\nПлітка «Стоп», гайдJFKів, зони немає, одна папка; seed 5 і \`seed\`, напис «Готово».\n\n${table}## Метрики\n- Рядків — <число>; команда \`git checkout <файл>\`.\nАудит проведено, mistral-audit pass.\n`,
     'docs/workflow.md': `${WF}- Т.99 (рішення власника «Так, усе збережено»): слово «зона» тут лише згадано; читання, зупинка, рядки лишаються.\n`,
-    'src/b.ts': "// zupynky pislia kliku: status лишається\nexport const yakshchoStop = 'Стан\\nГравець';\n",
+    'src/b.ts': "// zupynky pislia kliku: status лишається; аудит проведено\nexport const yakshchoStop = 'Стан\\nГравець';\n",
     'docs/glossary.md': `${glossary}| зона | зонд |\n| рядки | смуги |\n`,
   });
   writeFileSync(
     join(dir, '.git/body-bad.md'),
-    'Власник: «Зупинити».\nВласник сказав «Що робить».\nЗупиняти треба.\n  Iter-Tag: iter-T.99\n'
+    'Власник: «Зупинити».\nВласник сказав «Що робить».\nЗупиняти треба.\n  Iter-Tag: iter-T.99\nЧисла — <…>.\n- Перед відкриттям PR запустити звірку з планом і числа записати в опис PR, а не новим комітом.\nАудит пройдено.\n'
   );
   writeFileSync(join(dir, '.git/terms.md'), '## Терміни гри\n- **перегляд** (не «читання»)\n');
-  const r1 = run(`--plan·${P}·--base·${base}·--head·${bad}·--title·fix(ui): Т.99 — проба·--body-file·.git/body-bad.md`);
+  const r1 = run(`--plan·${P}·--base·${base}·--head·${bad}·--title·fix(ui): Т.99 — проба <число>·--body-file·.git/body-bad.md`);
   eq('поганий PR: код виходу', r1.status, 1);
   // Очікувані рядки виводу, по одному через «|».
   const expected =
@@ -101,15 +181,17 @@ try {
     'можлива одруківка: «Плітка» — у плані «плитка»|мішанина латинки й кирилиці: «гайдJFKів»|' +
     'слово поза словником: «зони» — писати «зонд» (×1;|слово поза словником: «папка» — писати «тека»|' +
     'слово поза словником: «seed» — писати «сід»|схоже на трансліт: «zupynky» — «зупинки»|' +
-    'схоже на трансліт: «pislia» — «після»|схоже на трансліт: «kliku» — «кліку»|Знахідок: 18.|' +
+    'схоже на трансліт: «pislia» — «після»|схоже на трансліт: «kliku» — «кліку»|Знахідок: 23.|' +
+    'незаповнене місце плану: «<число>» (×2; docs/reports/t99-x.md:9)|незаповнене місце плану: «<…>» (×1; опис PR:5)|' +
+    'твердження про аудит до аудиту: «Аудит проведено» (docs/reports/t99-x.md:10)|твердження про аудит до аудиту: «Аудит пройдено» (опис PR:7)|вказівку плану вставлено дослівно: «Перед відкриттям PR|' +
     'цитата власника не з плану: «Що робить» (опис PR:2)|схоже на трансліт: «yakshchoStop» — «якщо»|слово поза словником: «seed» — писати «сід» (×1;|' +
     'Заувага (повідомлення коміту, не виправити): слово поза словником: «зона»|' +
     'Заувага (повідомлення коміту, не виправити): слово поза словником: «сид»';
   for (const e of expected.split('|')) ok(`поганий PR: немає рядка «${e}» у виводі:\n${r1.stdout}`, r1.stdout.includes(e));
   const r1a = run(`--plan·${P}·--base·${base}·--head·${bad}·--allow·плітка·--allow·Так, усе збережено·--terms·.git/terms.md`);
   ok(
-    `--allow прибирає слово і цитату, --terms додає «читання» (без назви й опису — 12 знахідок):\n${r1a.stdout}`,
-    r1a.stdout.includes('Знахідок: 12.')
+    `--allow прибирає слово і цитату, --terms додає «читання» (без назви й опису — 14 знахідок):\n${r1a.stdout}`,
+    r1a.stdout.includes('Знахідок: 14.')
   );
 
   const good = commit('fix: виправлено', {
@@ -121,6 +203,16 @@ try {
   const r2 = run(`--plan·${P}·--base·${base}·--head·${good}·--title·fix(ui): Т.99 — проба «Меню»·--body-file·.git/body-good.md`);
   ok(`добрий PR: код ${r2.status}, вивід:\n${r2.stdout}`, r2.status === 0 && r2.stdout.includes('Знахідок немає.'));
   eq('добрий PR: зауваги про коміти лишаються', (r2.stdout.match(/^Заувага/gm) ?? []).length, 2);
+  // Після аудиту: «Аудит ще не проведено» у звіті — знахідка лише з --after-audit.
+  const stale = commit('docs: аудит', {
+    'docs/reports/t99-x.md': '# Т.99\n## Що зроблено\nПлитка «Стоп».\n## Межі\n## Метрики\n## Аудит\nАудит ще не проведено.\n',
+  });
+  eq('до аудиту «ще не проведено» — не знахідка', run(`--plan·${P}·--base·${base}·--head·${stale}`).status, 0);
+  const r3 = run(`--after-audit·--plan·${P}·--base·${base}·--head·${stale}`); // прапорець без значення — і першим
+  ok(
+    `--after-audit: «ще не проведено» у звіті:\n${r3.stdout}`,
+    r3.status === 1 && r3.stdout.includes('після аудиту у звіті лишилось') && r3.stdout.includes('аудит — після')
+  );
 
   const wrong = ['', '--plan', `--plan·${P}·--pr·abc`, `--plan·немає.md·--base·${base}`, `--plan·${P}·--base·немає`, `--plan·${P}·--head`];
   // База пішла вперед після відгалуження: її зміна рядка про зону ходу — не «доданий рядок» гілки.
