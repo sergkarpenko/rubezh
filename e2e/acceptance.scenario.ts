@@ -651,3 +651,108 @@ test('сценарій приймання ADR-0030: партія → місія 
 
   expect(errors, 'помилки сторінки: ' + errors.join(' | ')).toEqual([]);
 });
+
+// Т.61: екран перемоги і рядок-пояснення невдалого «Продовжити» — на сторінці, а не лише класом hidden.
+// Наскрізні тести на сторінці (jsdom) розкладки не мають: кнопка з display:none чи рядок без стилів їх проходять.
+// Екран перемоги — правкою сейву (campaign.status = 'перемога'), як у наскрізному тесті Т.58; невдале
+// «Продовжити» — зіпсованим списком зондів (ufos = [null]).
+const T61_VIEWPORTS = [
+  { width: 1366, height: 768 },
+  { width: 1024, height: 768 },
+  { width: 390, height: 844 },
+];
+
+test('Т.61: екран перемоги і рядок-пояснення стартового екрана — видно на трьох розмірах вікна', async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.goto('./');
+  const helpClose = page.locator('#btn-help-close'); // перший візит — «Як грати» поверх стартового екрана
+  if (await helpClose.isVisible()) await helpClose.click();
+  await page.locator('#btn-start-new').click();
+  await page.locator('#new-game-seed').fill(String(SEED));
+  await page.locator('#new-game-preset').selectOption(PRESET);
+  await page.locator('#btn-new-game-start').click();
+  await expect(page.locator('#geo')).toBeVisible();
+  await page.locator('#status-tab-system').click();
+  await page.locator('#btn-save-1').click();
+  await expect(page.locator('#log')).toContainText('Збережено: слот 1.');
+  const good = await page.evaluate(() => localStorage.getItem('rubezh.save.1')!);
+  const won = JSON.parse(good) as { state: { campaign: { status: string } } };
+  won.state.campaign.status = 'перемога';
+  const bad = JSON.parse(good) as { state: { geo: { ufos: unknown } } };
+  bad.state.geo.ufos = [null]; // метадані читаються, розбір партії падає
+
+  await test.step('екран перемоги: три кнопки видно в межах вікна, одна під одною', async () => {
+    await page.evaluate((s) => localStorage.setItem('rubezh.save.1', s), JSON.stringify(won));
+    await page.locator('#btn-load-1').click();
+    await expect(page.locator('#campaign-victory')).toBeVisible();
+    const ids = ['btn-continue', 'btn-play-again', 'btn-victory-exit'];
+    await expect(page.locator('#campaign-victory button')).toHaveText(['Грати далі', 'Грати знов', 'На стартовий екран']);
+    for (const size of T61_VIEWPORTS) {
+      await page.setViewportSize(size);
+      const label = size.width + ' × ' + size.height;
+      for (const id of ids) {
+        await expect(page.locator('#' + id), label + ': #' + id).toBeVisible();
+        await expect(page.locator('#' + id), label + ': #' + id).toBeInViewport({ ratio: 1 });
+      }
+      const boxes = await page.evaluate(
+        (list) =>
+          list.map((id) => {
+            const r = document.getElementById(id)!.getBoundingClientRect();
+            return { top: r.top, bottom: r.bottom, h: r.height, w: r.width };
+          }),
+        ids
+      );
+      for (const b of boxes) {
+        expect(b.h, label + ': кнопка нижча за тач-ціль 44 px').toBeGreaterThanOrEqual(44);
+        expect(b.w, label + ': кнопка вужча за 44 px').toBeGreaterThanOrEqual(44);
+      }
+      for (let i = 1; i < boxes.length; i++)
+        expect(boxes[i]!.top, label + ': кнопки накладаються').toBeGreaterThanOrEqual(boxes[i - 1]!.bottom);
+    }
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.locator('#btn-victory-exit').click(); // одразу після завантаження незбережених дій немає
+    await expect(page.locator('#start-screen')).toBeVisible();
+    await expect(page.locator('#campaign-victory')).toBeHidden();
+  });
+
+  await test.step('невдале «Продовжити»: рядок-пояснення над кнопками меню, кольором помилки на непрозорій підкладці', async () => {
+    await expect(page.locator('#start-note')).toBeHidden();
+    await page.evaluate((s) => localStorage.setItem('rubezh.save.1', s), JSON.stringify(bad));
+    await page.locator('#btn-start-continue').click();
+    const note = page.locator('#start-note');
+    await expect(note).toHaveText('Не вдалося завантажити збереження. Почніть нову гру.');
+    for (const size of T61_VIEWPORTS) {
+      await page.setViewportSize(size);
+      const label = size.width + ' × ' + size.height;
+      await expect(note, label + ': рядок-пояснення').toBeVisible();
+      await expect(note, label + ': рядок-пояснення').toBeInViewport({ ratio: 1 });
+      const m = await page.evaluate(() => {
+        const n = document.getElementById('start-note')!;
+        const r = n.getBoundingClientRect();
+        const first = document.getElementById('btn-start-new')!.getBoundingClientRect();
+        const s = getComputedStyle(n);
+        const rgba = (c: string): number[] => (c.match(/[\d.]+/g) ?? []).map(Number);
+        return {
+          gap: first.top - r.bottom,
+          fits: n.scrollWidth <= n.clientWidth,
+          widthDiff: Math.abs(r.width - first.width),
+          color: rgba(s.color),
+          background: rgba(s.backgroundColor),
+        };
+      });
+      expect(m.gap, label + ': рядок не над першою кнопкою меню або далі за проміжок меню').toBeGreaterThanOrEqual(0);
+      expect(m.gap, label + ': рядок не над першою кнопкою меню або далі за проміжок меню').toBeLessThanOrEqual(12);
+      expect(m.widthDiff, label + ': рядок вужчий чи ширший за кнопки меню').toBeLessThanOrEqual(1);
+      expect(m.fits, label + ': текст рядка обрізано').toBe(true);
+      const [r, g, b] = m.color as [number, number, number];
+      expect(r - Math.max(g, b), label + ': колір тексту — не колір помилки').toBeGreaterThanOrEqual(80);
+      expect(m.background[3] ?? 1, label + ': підкладка рядка прозора').toBeGreaterThanOrEqual(0.9);
+    }
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.evaluate((s) => localStorage.setItem('rubezh.save.1', s), good);
+    await page.locator('#btn-start-continue').click(); // цілий слот вантажиться
+    await expect(page.locator('#start-screen')).toBeHidden();
+  });
+
+  expect(errors, 'помилки сторінки: ' + errors.join(' | ')).toEqual([]);
+});
