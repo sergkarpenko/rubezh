@@ -1846,3 +1846,58 @@ describe('Т.58: стартовий екран після невдалого «�
     }
   });
 });
+
+// Т.64 (кандидат 60, після Т.53; план — docs/plans/t64-auto-battle-close.md): з Т.53 клік «Меню» зупиняє
+// авто-бій раніше, ніж battle.close, тож зупинку в battle.close на сторінці тримають лише ці тести —
+// кнопки виходу і нової партії клікаються без кліку «Меню»: гравець так не може, зате так видно саму зупинку
+// в battle.close і її зв'язок у src/main.ts (stopAuto: () => autoBattle.stop()).
+describe('Т.64: зупинка авто-бою в battle.close на сторінці', () => {
+  const cap = (): string => (document.querySelector('#btn-auto-battle .tb-cap') as HTMLElement | null)?.textContent ?? '';
+  // сід 27, пресет «норма»: місія, авто-бій справді йде (плитка «Стоп», таймер є)
+  const launchAuto = async (): Promise<void> => {
+    startParty('27');
+    for (let i = 0; i < 1500 && document.querySelector('button.mission') === null; i++) btn('btn-tick').click();
+    (document.querySelector('button.mission') as HTMLButtonElement).click();
+    expect($('battle-panel').classList.contains('hidden')).toBe(false);
+    btn('btn-auto-battle').click();
+    await vi.advanceTimersByTimeAsync(AUTO_STEP_MS * 3);
+    expect(cap()).toBe('Стоп');
+    expect(vi.getTimerCount()).toBeGreaterThan(0);
+  };
+
+  it('Т.64: вихід на стартовий екран без кліку «Меню» — авто-бій зупиняє battle.close', async () => {
+    vi.useFakeTimers();
+    try {
+      await launchAuto();
+      btn('btn-menu-exit').click(); // вікно «Меню» не відкривали — stopAutoForWindow не викликано
+      expect($('exit-confirm').classList.contains('hidden')).toBe(false); // після запуску місії є незбережені дії
+      expect(cap()).toBe('Стоп'); // вікно підтвердження авто-бій не зупиняє
+      btn('btn-exit-yes').click(); // exitToStart → battle.close
+      expect($('start-screen').classList.contains('hidden')).toBe(false);
+      expect(vi.getTimerCount()).toBe(0); // таймер паузи авто-бою знято
+      const logBefore = $('log').textContent;
+      await vi.advanceTimersByTimeAsync(AUTO_STEP_MS * 6000);
+      expect($('log').textContent).toBe(logBefore); // жодної дії бою після виходу
+      expect($('bresult').innerHTML).toBe('');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('Т.64: нова партія під час авто-бою — авто-бій зупиняє battle.close', async () => {
+    vi.useFakeTimers();
+    try {
+      await launchAuto();
+      startParty('42'); // startNewParty → battle.close
+      expect($('battle-panel').classList.contains('hidden')).toBe(true);
+      expect($('clock').textContent).toBe('Д1 00:00'); // нова партія з нуля, а не покинута
+      expect(vi.getTimerCount()).toBe(0); // таймер паузи авто-бою знято
+      const logBefore = $('log').textContent;
+      await vi.advanceTimersByTimeAsync(AUTO_STEP_MS * 6000);
+      expect($('log').textContent).toBe(logBefore); // жодної дії бою покинутої партії
+      expect($('bresult').innerHTML).toBe('');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
