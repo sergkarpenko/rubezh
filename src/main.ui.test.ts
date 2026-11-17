@@ -1896,6 +1896,11 @@ describe('Т.64: зупинка авто-бою в battle.close на сторі�
       await vi.advanceTimersByTimeAsync(AUTO_STEP_MS * 6000);
       expect($('log').textContent).toBe(logBefore); // жодної дії бою покинутої партії
       expect($('bresult').innerHTML).toBe('');
+      // стан драйвера теж скинуто, а не лише таймер: у наступному бою плитка — «Авто», а не «Стоп»
+      for (let i = 0; i < 1500 && document.querySelector('button.mission') === null; i++) btn('btn-tick').click();
+      (document.querySelector('button.mission') as HTMLButtonElement).click();
+      expect($('battle-panel').classList.contains('hidden')).toBe(false);
+      expect(cap()).toBe('Авто');
     } finally {
       vi.useRealTimers();
     }
