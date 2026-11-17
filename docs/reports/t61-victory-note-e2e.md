@@ -17,6 +17,24 @@
 
 | № | Поломка | Тест «Т.61» | Перша помилка |
 | --- | --- | --- | --- |
+| 1 | `#btn-victory-exit { display: none; }` в `index.html` | червоний | Error: 1366 × 768: #btn-victory-exit |
+| 2 | `#btn-victory-exit { visibility: hidden; }` в `index.html` | червоний | Error: 1366 × 768: #btn-victory-exit |
+| 3 | `margin-top` кнопок екрана перемоги 16px → 300px | червоний | Error: 1366 × 768: #btn-victory-exit |
+| 4 | прибрати правило `.start-note` з `index.html` цілком | червоний | Error: 1366 × 768: рядок не над першою кнопкою меню або далі за проміжок меню |
+| 5 | колір `.start-note` #ff8fa3 → #d7e4f7 | червоний | Error: 1366 × 768: колір тексту — не колір помилки |
+| 6 | підкладка `.start-note` 0.95 → 0.4 | червоний | Error: 1366 × 768: підкладка рядка прозора |
+| 7 | `margin` `.start-note` 0 → 16px 0 | червоний | Error: 1366 × 768: рядок не над першою кнопкою меню або далі за проміжок меню |
+| 8 | прибрати `text-align: center` з `.start-note` | зелений | — |
+| 9 | `white-space: nowrap; overflow: hidden` у `.start-note` | червоний | Error: 1366 × 768: рядок-пояснення: текст обрізано |
+| 10 | рядок `start-note` після кнопки `btn-start-new` у `src/ui/screens.ts` | червоний | Error: 1366 × 768: рядок не над першою кнопкою меню або далі за проміжок меню |
+| 11 | текст `CONTINUE_FAILED_TEXT` «гру» → «партію» у `src/ui/screens.ts` | червоний | Error: expect(locator).toHaveText(expected) failed |
+| 12 | `#btn-victory-exit { opacity: 0; }` в `index.html` | червоний | Error: 1366 × 768: #btn-victory-exit: елемент прозорий |
+| 13 | `z-index` екрана перемоги 100 → -1 (під грою) | червоний | Error: 1366 × 768: #btn-continue: елемент перекрито |
+| 14 | `#btn-victory-exit { color: transparent }` в `index.html` | червоний | Error: 1366 × 768: #btn-victory-exit: текст прозорий |
+| 15 | `font-size: 0` у `.start-note` | червоний | Error: 1366 × 768: рядок-пояснення: кегль тексту менший за 12 px |
+| 16 | колір `.start-note` з альфою 0 | червоний | Error: 1366 × 768: рядок-пояснення: текст прозорий |
+| 17 | `opacity: 0` у `.start-note` | червоний | Error: 1366 × 768: рядок-пояснення: елемент прозорий |
+| 18 | `#btn-victory-exit` 60px, `nowrap`, `overflow: hidden` | червоний | Error: 1366 × 768: #btn-victory-exit: текст обрізано |
 | 19 | екран перемоги під грою лише при `max-width: 400px` | червоний | Error: 390 × 844: #btn-continue: елемент перекрито |
 
 ## Межі
