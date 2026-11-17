@@ -15,8 +15,9 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const CYR = 'А-Яа-яІіЇїЄєҐґ';
-// Слово з апострофом («м'ятий», «ім’я») — одне слово, а не два шматки.
-const WORD = new RegExp(`[A-Za-z${CYR}]+(?:['’ʼ][${CYR}]+)*`, 'g');
+// Слово з апострофом («м'ятий», «ім’я») — одне слово, а не два шматки; лише між кириличними літерами
+// (`f'Червоних` у Python і «hook'а» — не мішанина).
+const WORD = new RegExp(`[A-Za-z${CYR}]+(?:(?<=[${CYR}])['’ʼ][${CYR}]+)*`, 'g');
 const HAS_CYR = new RegExp(`[${CYR}]`);
 const lower = (s) => s.toLocaleLowerCase('uk').replace(/[’ʼ]/g, "'");
 const norm = (s) => s.replace(/\s+/g, ' ').trim();
@@ -107,7 +108,7 @@ export function parsePlan(plan) {
     quotes: new Set(allQuotes(plan)),
     heads: plan.split('\n').filter((l) => /^#+ /.test(l)),
     places: new Set(noCode(blocks.join('\n')).match(PLACE) ?? []),
-    afterAudit: /^## Після аудиту/m.test(plan),
+    afterAudit: /^## (?:Порці\S* )?[Пп]ісля аудиту/m.test(plan), // «## Після аудиту…» (Т.58, Т.61), «## Порція після аудиту» (залишки Т.58)
     instructions: [...new Set(instructions)],
   };
 }
@@ -232,10 +233,11 @@ export function checkPlaces(items, plan, allow = new Set()) {
 }
 
 const NC = `(?<![${CYR}])`;
-// Твердження «аудит уже пройшов»: до двох слів між «аудит» і дієсловом, але не «ще не проведено».
+// Твердження «аудит уже пройшов»: саме слово «аудит» (не «аудиту», «аудитора»), до двох слів між ним і дієсловом,
+// але не «ще не проведено»; текст у лапках «…» — цитата, а не твердження.
 const CLAIMS = [
   new RegExp(
-    `${NC}аудит\\S*(?:\\s+(?!не\\s|ще\\s)[^\\s.;,]+){0,2}?\\s+(?:проведено|пройдено|пройшов|завершено|успішн|зелен|без\\s+(?:знахідок|зауважень))`,
+    `${NC}аудит(?![${CYR}])\\s*[:—–-]?(?:\\s+(?!не\\s|ще\\s)[^\\s.;,]+){0,2}?\\s+(?:проведено|пройдено|пройшов|завершено|успішн|зелен|без\\s+(?:знахідок|зауважень))`,
     'iu'
   ),
   new RegExp(`mistral-audit\\W{0,3}\\s*(?:—|:|-)?\\s*(?:pass|passed|success|ok\\b|зелен|успішн|пройден|без\\s+зауважень)`, 'iu'),
@@ -254,7 +256,8 @@ export function checkAudit(items, plan, report, body) {
   }
   const out = [];
   for (const { where, text } of items) {
-    const m = CLAIMS.map((re) => text.match(re)).find(Boolean);
+    const own = text.replace(/«[^«»\n]*(?:«[^«»\n]*»[^«»\n]*)*»/g, (q) => ' '.repeat(q.length));
+    const m = CLAIMS.map((re) => own.match(re)).find(Boolean);
     if (m) out.push(`твердження про аудит до аудиту: «${m[0]}» (${where})`);
   }
   return out;
