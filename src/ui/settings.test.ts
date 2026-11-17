@@ -62,6 +62,7 @@ const ambientNoRaf = (store?: AmbientStore) =>
     cancel: () => {},
     now: () => 0,
     visible: () => true,
+    active: () => true,
     repaint: () => {},
     store,
   });
@@ -236,6 +237,7 @@ describe('П14.8 (ADR-0073): секція «Анімація» — тумбле�
       cancel: () => {},
       now: () => 0,
       visible: () => true,
+      active: () => true,
       repaint: () => {},
     });
     const settings = createSettings({ sound: mockSound(true), ambient });

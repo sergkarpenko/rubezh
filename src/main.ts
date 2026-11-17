@@ -160,6 +160,7 @@ const ambient = createAmbient({
   cancel: (h) => cancelAnimationFrame(h as number),
   now: () => performance.now(),
   visible: () => (typeof document === 'undefined' ? false : document.visibilityState === 'visible'),
+  active: () => partyOnScreen,
   repaint: () => {
     if (party === null) return; // партії немає — 0 перерисовок (стартовий екран П12.2)
     if (!el('start-screen').classList.contains('hidden')) return; // П14.7: стартовий екран — 0 нових анімацій
@@ -195,6 +196,7 @@ const journal = journalUI.add; // виклики journal(text, cls, cat) у ша
 // Т.43: вікна поверх гри — поки хоч одне відкрите, пробіл час не рухає.
 const OVERLAY_IDS = ['help-screen', 'game-menu', 'settings-dialog', 'new-game-dialog', 'exit-confirm', 'campaign-victory'];
 let gameOver = false; // банкрутство (ADR-0021): боєготових немає і грошей на найм немає
+let partyOnScreen = false; // Т.58: партію показано (не стартовий екран) — лише тоді ambient-цикл стартує
 let victoryDismissed = false; // П8.3a: endless — гравець закрив екран перемоги і продовжує гру
 // П12.2 (ADR-0065): партія створюється лише вибором гравця на стартовому
 // екрані — до того її немає (стартовий екран живе без стану партії).
@@ -329,7 +331,8 @@ const panels = createPanels({
   drainEcon: () => journalUI.drainEcon(),
   activeGeoAnim: () => geoAnim.active(),
   geoAnimNow: () => geoAnim.now,
-  victoryDismissed: () => victoryDismissed,
+  // Т.58: на стартовому екрані екран перемоги не показуємо — і коли невдале «Продовжити» перемальовує панелі
+  victoryDismissed: () => victoryDismissed || !partyOnScreen,
   ambient, // П14.8: ефекти поверх кадру геосцени (ADR-0073)
 });
 
@@ -385,6 +388,7 @@ function adoptParty(p: Party): Party {
   gameOver = isBankrupt(p.econ, p.roster, p.campaign.preset);
   victoryDismissed = false; // П8.3a: нова/завантажена партія — екран перемоги показується знову
   checkpoint = serializeParty(p);
+  partyOnScreen = true; // Т.58: до ambient.start — гейт active
   ambient.start(); // П14.8: партія активна — ambient-цикл (гейти всередині; стартовий екран репейнт пропускає)
   return p;
 }
@@ -550,7 +554,9 @@ function continueGame(): boolean {
 function exitToStart(): void {
   if (ui.mission !== null) battle.close();
   geoAnim.cancel();
+  partyOnScreen = false; // Т.58: повернення вкладки з фону і тумблер налаштувань ambient на стартовому екрані не будять
   ambient.pause();
+  el('campaign-victory').classList.add('hidden'); // Т.58: вихід з екрана перемоги — екран не лишається поверх стартового
   screens?.showStart();
 }
 
@@ -598,6 +604,8 @@ if (typeof document !== 'undefined') {
     renderAll();
     journal('Перемогу зафіксовано (рахунок ' + party.campaign.score?.total + '). Партію продовжено.', 'win');
   };
+  // Т.58 (рішення власника 17.11.2026 «Третя кнопка»): вихід з екрана перемоги — той самий шлях, що «На стартовий екран» у меню
+  el('btn-victory-exit').onclick = () => screens?.requestExit();
   // П4.5 (ADR-0021): найм солдата — списання грошей, новобранець у кінець ростеру
   el('btn-hire').onclick = () => {
     try {
