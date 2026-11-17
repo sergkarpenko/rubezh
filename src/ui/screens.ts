@@ -38,7 +38,7 @@ export interface Screens {
   current(): ScreenName;
   openMenu(): void; // вікно «Меню» у грі (кнопка «Меню» у топбарі)
   closeMenu(): void;
-  requestExit(): void; // Т.58: вихід на стартовий екран з підтвердженням, якщо незбережені дії (меню і екран перемоги)
+  requestExit(): void; // Т.58: вихід на стартовий екран з підтвердженням, якщо є незбережені дії (меню і екран перемоги)
   render(): void; // синхронізувати стани пунктів (наприклад, «Продовжити»)
 }
 
@@ -186,7 +186,7 @@ export function createScreens(deps: ScreensDeps): Screens {
 
   function showStart(): void {
     current = 'стартовий';
-    showNote(''); // Т.58: пояснювальна невдача «Продовжити» живе до наступного показу стартового екрану
+    showNote(''); // Т.58: пояснення невдалого «Продовжити» живе до наступного показу екрана
     render();
     loadLogo(); // П13.4: ліниво, один раз (ADR-0068)
     startScreen.classList.remove('hidden');
@@ -205,7 +205,7 @@ export function createScreens(deps: ScreensDeps): Screens {
     hideDialogs();
   }
 
-  // Т.58: рядок-пояснення над меню стартового екрану; порожній текст — сховати
+  // Т.58: рядок-пояснення над меню стартового екрана; порожній текст — сховати
   function showNote(text: string): void {
     const note = el('start-note');
     note.textContent = text;
@@ -256,7 +256,7 @@ export function createScreens(deps: ScreensDeps): Screens {
   el('btn-start-continue').onclick = () => {
     if (!deps.hasSaves()) return; // вимкнений пункт — no-op (страхування від прихованих кліків)
     if (deps.onContinue()) showGame();
-    else showNote(CONTINUE_FAILED_TEXT); // Т.58: слот невалідний — пояснити, а не мовчати
+    else showNote(CONTINUE_FAILED_TEXT); // Т.58: слот не розібрано — пояснити, а не мовчати
   };
   el('btn-start-settings').onclick = () => deps.onSettings(); // п12.3: вікно налаштувань
   el('btn-start-help').onclick = () => deps.onHelp();
