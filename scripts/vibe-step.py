@@ -3,13 +3,14 @@
 # і звірка з планом. До Т.70 ці скрипти план нового кроку ніс цілком блоками mutations-py, checklist-py, docs-py,
 # check-py (≈ 30 КБ на план); тепер план дає лише дані кроку — блок `step` — і команди.
 # Дані кроку — блок плану `step`: словник Python лише з літералів (ast.literal_eval, коду в ньому немає);
-# поля — у шаблоні docs/plans/TEMPLATE-vibe.md, розділ «Дані кроку».
+# поля — у шаблоні docs/plans/TEMPLATE-vibe.md, підказка перед блоком `step` у розділі 4.
 # Запуск з кореня репозиторію, блоки плану — уже в /tmp/blocks (node scripts/vibe-plan-blocks.mjs <план> /tmp/blocks):
 #   python3 scripts/vibe-step.py mutations                  — таблиця поломок, підсумок, перевірки без поломки
 #   python3 scripts/vibe-step.py checklist <ключ>           — одна команда чекліста; без ключа — зведення
 #   python3 scripts/vibe-step.py docs [--lesson-file <ф>]   — звіт, запис кроку, рядок довідника, чернетка опису PR
 #   python3 scripts/vibe-step.py check [--pr <номер>]       — звірка з планом, рядки звірки в опис PR
-# Порція після аудиту: той самий виклик з --v2 — блоки з /tmp/blocks2, імена блоків з суфіксом -v2.
+# Порція після аудиту: той самий виклик з --v2 — блоки з /tmp/blocks2, імена блоків з суфіксом -v2
+# (дані кроку — блок `step-v2`, якщо в порції змінено тест; інакше `step`). Зайвий чи невідомий аргумент — відмова.
 import ast, glob, json, os, re, signal, subprocess, sys
 
 USAGE = 'Використання: python3 scripts/vibe-step.py mutations | checklist [<ключ>] | docs [--lesson-file <файл>] | check [--pr <номер>]; з --v2 — порція після аудиту'
@@ -20,6 +21,18 @@ if V2:
 if not args or args[0] not in ('mutations', 'checklist', 'docs', 'check'):
     sys.exit(USAGE)
 CMD, args = args[0], args[1:]
+ALLOWED = {'mutations': (), 'checklist': (), 'docs': ('--lesson-file',), 'check': ('--pr',)}
+rest = list(args)
+for flag in ALLOWED[CMD]:
+    if flag in rest:
+        i = rest.index(flag)
+        if i + 1 >= len(rest) or rest[i + 1].startswith('--'):
+            sys.exit(flag + ' без значення')
+        del rest[i : i + 2]
+if CMD == 'checklist' and len(rest) == 1 and not rest[0].startswith('-'):
+    rest = []  # ключ чекліста
+if rest:
+    sys.exit('Зайві аргументи: ' + ' '.join(rest) + '\n' + USAGE)
 B, V = ('/tmp/blocks2/', '-v2') if V2 else ('/tmp/blocks/', '')
 
 
@@ -33,15 +46,11 @@ def write(path, text):
         f.write(text + '\n')
 
 
-def opt(name):  # значення прапорця; прапорець без значення — помилка, а не мовчазне «немає»
-    if name not in args:
-        return None
-    i = args.index(name)
-    assert i + 1 < len(args), name + ' без значення'
-    return args[i + 1]
+def opt(name):  # значення прапорця (перевірено разом з аргументами вище)
+    return args[args.index(name) + 1] if name in args else None
 
 
-STEP = ast.literal_eval(read(B + 'step.txt'))  # блок `step` плану
+STEP = ast.literal_eval(read(B + 'step' + V + '.txt' if os.path.exists(B + 'step' + V + '.txt') else B + 'step.txt'))  # блок `step` плану
 assert isinstance(STEP, dict), 'блок step — словник'
 NUM = re.fullmatch(r'Т\.(\d+)', STEP['step'])
 assert NUM, 'step — «Т.<число>», кирилична Т'
@@ -171,7 +180,9 @@ def chrome():  # обхід E2E_CHROME (Т.69): браузера ревізії 
     if os.environ.get('E2E_CHROME'):
         return None  # обхід уже задано — команда бере його сама
     want = subprocess.run(['node', '-e', "process.stdout.write(require('@playwright/test').chromium.executablePath())"], capture_output=True, text=True).stdout
-    if want and os.path.exists(want):
+    m = re.search(r'^(.*)/chromium-(\d+)/', want)
+    # headless-режим e2e бере chromium_headless_shell тієї самої ревізії, а не повний chromium (аудит Т.70, знахідка 5)
+    if m and os.path.exists(want) and os.path.isdir(m.group(1) + '/chromium_headless_shell-' + m.group(2)):
         return None
     roots = [os.environ.get('PLAYWRIGHT_BROWSERS_PATH') or '', os.path.expanduser('~/.cache/ms-playwright'), '/opt/pw-browsers']
     found = [p for r in roots if r for p in glob.glob(r + '/chromium-*/chrome-linux*/chrome')]
@@ -263,11 +274,13 @@ def docs():
     lesson = read(lesson_file) if lesson_file else 'немає'
     assert lesson and '\n' not in lesson, 'урок — одним рядком'
     no_ci('урок', lesson)
+    no_ci('limits' + V, read(B + 'limits' + V + '.txt'))
+    no_ci('pr-title', read(B + 'pr-title.txt'))
     fill_map = {  # місце → значення; жодне з них виконавець руками не заповнює
         '<таблиця поломок>': table,
         '<речення з summary.md>': summary,
         '<розбіжності з таблицею плану>': 'немає' if not diff else ('рядок ' if len(set(diff)) == 1 else 'рядки ') + ', '.join(sorted(set(diff), key=diff.index)),
-        '<межі плану>': read(B + 'limits' + V + '.txt'),
+        '<межі плану>': read(B + 'limits' + V + '.txt'),  # перевірено no_ci нижче
         '<рядки чекліста>': read(TMP + '/checklist.md'),
         '<що з чекліста не вдалося>': read(TMP + '/failed.md'),
         '<число рядків>': lines[0],
@@ -317,13 +330,14 @@ def handbook():  # рядок кроку в розділі «Лише для Mis
     new = read(path)
     no_ci('handbook' + V, new)
     assert '\n' not in new and not places(new), 'рядок довідника — один рядок без місць'
-    m = re.match(r'- \*\*' + re.escape(STEP['step']) + r' [^*\n]*:\*\* ', new)
-    assert m, 'рядок довідника починається з «- **' + STEP['step'] + ' (<дата>):** »'
+    assert re.match(r'- \*\*' + re.escape(STEP['step']) + r' \([^*\n]*\):\*\* ', new), 'рядок довідника починається з «- **' + STEP['step'] + ' (<дата>):** »'
     s = open(HANDBOOK, encoding='utf-8').read()
     assert re.findall(r'^## .*', s, re.M)[-1] == '## Лише для Mistral Vibe Code', 'останній розділ довідника — не «Лише для Mistral Vibe Code»'
-    if s.count('\n' + m.group(0)):  # рядок уже є (порція після аудиту) — замінити
-        assert s.count('\n' + m.group(0)) == 1, 'рядок кроку в довіднику не один'
-        i = s.index('\n' + m.group(0)) + 1
+    key = '\n- **' + STEP['step'] + ' ('  # рядок кроку — за номером, без дати: дата в -v2 може бути іншою (аудит Т.70)
+    top = s.rindex('\n## ')  # шукати лише в розділі виконавця
+    if s.count(key, top):  # рядок уже є (порція після аудиту) — замінити
+        assert s.count(key, top) == 1, 'рядок кроку в розділі виконавця не один'
+        i = s.index(key, top) + 1
         j = s.index('\n', i)
         s = s[:i] + new + s[j:]
     else:
