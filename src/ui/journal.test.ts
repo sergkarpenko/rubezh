@@ -580,3 +580,78 @@ describe('drainWorkshop: seen-трекінг подій цеху (П11.6)', () =
     expect(document.querySelector('#log li')!.textContent).toContain('Композитна броня');
   });
 });
+
+// Т.72 (рішення власника 18.11.2026): разова підказка «Можна евакуюватись» — після першого
+// поранення чи смерті оперативника в бою з клітинками висадки, один раз за партію.
+describe('Т.72: підказка «Можна евакуюватись» (один раз за партію)', () => {
+  const HINT =
+    'Підказка: оперативника можна евакуювати із зони висадки — плитка «Евакуація» або клавіша V, 2 AP. Евакуйовані повертаються на базу без премії.';
+  const hints = (): HTMLElement[] => [...document.querySelectorAll<HTMLElement>('#log li')].filter((li) => li.textContent === HINT);
+  const shot = (targetId: string, hit: boolean, damage: number): GameEvent =>
+    evBattle({ type: 'shot', shooterId: 'x', targetId, mode: 'snap', hit, damage });
+  const grenade = (hits: { unitId: string; damage: number }[]): GameEvent =>
+    evBattle({ type: 'grenade', unitId: 'a1', center: { x: 1, y: 1 }, hits });
+  // оперативники гравця в бою з клітинками висадки — s1, s2, s3; a1, a2 — чужі
+  function setup(events: GameEvent[], over: Partial<JournalDeps> = {}) {
+    const p = createParty(42);
+    const j = createJournal(makeDeps({ party: () => p, battleLog: () => events, isEvacOperative: (id) => id.startsWith('s'), ...over }));
+    return { p, j };
+  }
+
+  it('Т.72: перше влучання в оперативника — підказка один раз, у вкладці «Бій»; промах, влучання без шкоди і в чужого — без неї', () => {
+    const events: GameEvent[] = [shot('s1', false, 0), shot('s1', true, 0), shot('a1', true, 3)];
+    const { p, j } = setup(events);
+    j.drainBattle();
+    expect(hints()).toHaveLength(0);
+    expect(p.hints.evac).toBe(false);
+    events.push(shot('s1', true, 3));
+    j.drainBattle();
+    expect(hints()).toHaveLength(1);
+    expect(hints()[0].dataset.cat).toBe('battle');
+    expect(p.hints.evac).toBe(true);
+    events.push(shot('s2', true, 4), evBattle({ type: 'death', unitId: 's2', killerId: 'a1' }));
+    j.drainBattle();
+    expect(hints()).toHaveLength(1);
+  });
+
+  it('Т.72: смерть оперативника і осколки гранати зі шкодою — теж підказка; граната без шкоди оперативнику — ні', () => {
+    const g0 = setup([
+      grenade([
+        { unitId: 's1', damage: 0 },
+        { unitId: 'a2', damage: 5 },
+      ]),
+    ]);
+    g0.j.drainBattle();
+    expect(hints()).toHaveLength(0);
+    expect(g0.p.hints.evac).toBe(false);
+    const g1 = setup([
+      grenade([
+        { unitId: 'a2', damage: 5 },
+        { unitId: 's1', damage: 2 },
+      ]),
+    ]);
+    g1.j.drainBattle();
+    expect(hints()).toHaveLength(1);
+    expect(g1.p.hints.evac).toBe(true);
+    setupDom();
+    const d = setup([evBattle({ type: 'death', unitId: 's3', killerId: 'a1' })]);
+    d.j.drainBattle();
+    expect(hints()).toHaveLength(1);
+    expect(d.p.hints.evac).toBe(true);
+  });
+
+  it('Т.72: бій без клітинок висадки, без залежності або підказку вже показано — підказки немає', () => {
+    const none = setup([shot('s1', true, 3)], { isEvacOperative: () => false });
+    none.j.drainBattle();
+    expect(hints()).toHaveLength(0);
+    expect(none.p.hints.evac).toBe(false);
+    const noDep = setup([shot('s1', true, 3)], { isEvacOperative: undefined });
+    noDep.j.drainBattle();
+    expect(hints()).toHaveLength(0);
+    expect(noDep.p.hints.evac).toBe(false);
+    const shown = setup([shot('s1', true, 3)]);
+    shown.p.hints.evac = true; // показано раніше в цій партії (сейв)
+    shown.j.drainBattle();
+    expect(hints()).toHaveLength(0);
+  });
+});

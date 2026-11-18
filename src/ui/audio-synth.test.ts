@@ -292,3 +292,33 @@ describe('П11.7 критерій 1: зі звуком і без — бій ба
     expect(JSON.stringify(g2.log) + '|' + (g2.rng as StatefulRng).state).toBe(before);
   });
 });
+
+// Т.72 (рішення власника 18.11.2026): звук евакуації — висхідний «підйом» з тихим шумом.
+describe('Т.72: рецепт звуку евакуації', () => {
+  it('Т.72: evac — sine 220→880 Гц за 0,3 с і тихий шум тієї ж тривалості; подія evac_unit мапиться в рецепт', () => {
+    const m = mockContext();
+    const s = createSound({ makeContext: () => m.ctx, store: memStore() });
+    s.battleEvent({ type: 'evac_unit', unitId: 's1' } as never);
+    expect(m.rec.osc).toHaveLength(1);
+    expect(m.rec.osc[0].type).toBe('sine');
+    expect(m.rec.osc[0].freq).toEqual([
+      { v: 220, t: 0 },
+      { v: 880, t: 0.3 },
+    ]);
+    expect(m.rec.osc[0].start).toBe(0);
+    expect(m.rec.osc[0].stop).toBeCloseTo(0.32, 9);
+    expect(m.rec.src).toHaveLength(1);
+    expect(m.rec.src[0].start).toBe(0);
+    expect(m.rec.src[0].stop).toBeCloseTo(0.32, 9);
+    expect(m.rec.gain).toEqual([
+      [
+        { v: 0.2, t: 0 },
+        { v: 0.0001, t: 0.3 },
+      ],
+      [
+        { v: 0.06, t: 0 },
+        { v: 0.0001, t: 0.3 },
+      ],
+    ]);
+  });
+});

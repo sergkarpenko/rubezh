@@ -339,7 +339,7 @@ describe('save: пресети партії (П8.4a)', () => {
 describe('save: прапорці підказок (П9.2, ADR-0026)', () => {
   it('createParty: нова партія — усі підказки ще не показано (false)', () => {
     const p = createParty(42);
-    expect(p.hints).toEqual({ intercept: false, mission: false, repair: false });
+    expect(p.hints).toEqual({ intercept: false, mission: false, repair: false, evac: false });
   });
 
   it('claimHint: перший виклик — true, повторні — false; ключі незалежні', () => {
@@ -347,7 +347,7 @@ describe('save: прапорці підказок (П9.2, ADR-0026)', () => {
     expect(claimHint(h, 'intercept')).toBe(true);
     expect(claimHint(h, 'intercept')).toBe(false); // один раз за партію
     expect(claimHint(h, 'mission')).toBe(true); // інші ключі не зачіпаються
-    expect(h).toEqual({ intercept: true, mission: true, repair: false });
+    expect(h).toEqual({ intercept: true, mission: true, repair: false, evac: false });
   });
 
   it('round-trip: показані підказки зберігаються і відновлюються (стабільний формат)', () => {
@@ -356,7 +356,7 @@ describe('save: прапорці підказок (П9.2, ADR-0026)', () => {
     claimHint(p.hints, 'intercept');
     claimHint(p.hints, 'repair');
     const restored = deserializeParty(serializeParty(p, 'T'));
-    expect(restored.hints).toEqual({ intercept: true, mission: false, repair: true });
+    expect(restored.hints).toEqual({ intercept: true, mission: false, repair: true, evac: false });
     // load → save того самого стану — ідентичний рядок (прапорці в форматі)
     expect(serializeParty(restored, 'T')).toBe(serializeParty(p, 'T'));
   });
@@ -367,7 +367,7 @@ describe('save: прапорці підказок (П9.2, ADR-0026)', () => {
     const legacy = JSON.parse(serializeParty(p, 'T')) as Record<string, unknown>;
     delete (legacy.state as Record<string, unknown>).hints; // сейв до П9.2
     const restored = deserializeParty(JSON.stringify(legacy));
-    expect(restored.hints).toEqual({ intercept: false, mission: false, repair: false });
+    expect(restored.hints).toEqual({ intercept: false, mission: false, repair: false, evac: false });
   });
 
   it('поле hints не об’єкт — throw українською, без часткового стану', () => {
@@ -670,5 +670,20 @@ describe('save: Т.12 — кожне поле сейву перевіряєть�
     const store = memoryStore();
     saveToSlot(store, 1, createParty(42));
     expect(slotMeta(store.dump.get(1)!).savedAt).toBe('');
+  });
+});
+
+// Т.72 (рішення власника 18.11.2026): прапорець разової підказки «Можна евакуюватись» — у сейві.
+describe('Т.72: прапорець підказки «Можна евакуюватись» у сейві', () => {
+  it('Т.72: показана підказка evac зберігається; сейв до Т.72 (hints без evac) — підказку ще не показано', () => {
+    const p = createParty(42);
+    expect(claimHint(p.hints, 'evac')).toBe(true);
+    expect(claimHint(p.hints, 'evac')).toBe(false);
+    expect(deserializeParty(serializeParty(p, 'T')).hints.evac).toBe(true);
+    const legacy = JSON.parse(serializeParty(p, 'T')) as { state: { hints: Record<string, boolean> } };
+    delete legacy.state.hints.evac; // сейв до Т.72: три прапорці
+    legacy.state.hints.mission = true;
+    const restored = deserializeParty(JSON.stringify(legacy));
+    expect(restored.hints).toEqual({ intercept: false, mission: true, repair: false, evac: false });
   });
 });

@@ -2056,3 +2056,24 @@ describe('Т.71: евакуація на сторінці — плитка, кл
     expect($('evac-confirm').classList.contains('hidden')).toBe(true);
   });
 });
+
+// Т.72 (рішення власника 18.11.2026): разова підказка «Можна евакуюватись» на сторінці —
+// після першого поранення чи смерті оперативника в бою місії, один раз за партію.
+describe('Т.72: підказка «Можна евакуюватись» на сторінці', () => {
+  it('Т.72: сід 42, пресет «норма»: до першого поранення оперативника підказки немає, після — рівно одна, у вкладці «Бій»', () => {
+    const HINT =
+      'Підказка: оперативника можна евакуювати із зони висадки — плитка «Евакуація» або клавіша V, 2 AP. Евакуйовані повертаються на базу без премії.';
+    const hints = (): HTMLElement[] => [...document.querySelectorAll<HTMLElement>('#log li')].filter((li) => li.textContent === HINT);
+    startParty('42');
+    $('log').replaceChildren(); // журнал сторінки зберігає записи попередніх тестів файла
+    for (let i = 0; i < 1500 && document.querySelector('button.mission') === null; i++) btn('btn-tick').click();
+    (document.querySelector('button.mission') as HTMLButtonElement).click();
+    expect($('battle-panel').classList.contains('hidden')).toBe(false);
+    expect(hints()).toHaveLength(0);
+    for (let i = 0; i < 30 && hints().length === 0 && $('bresult').textContent === ''; i++) btn('btn-end').click();
+    expect(hints()).toHaveLength(1);
+    expect(hints()[0].dataset.cat).toBe('battle');
+    for (let i = 0; i < 5 && $('bresult').textContent === ''; i++) btn('btn-end').click();
+    expect(hints()).toHaveLength(1);
+  });
+});

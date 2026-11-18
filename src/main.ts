@@ -190,6 +190,12 @@ const journalUI = createJournal({
   onBattleSound: (e) => sound.battleEvent(e),
   onGeoSound: (e) => sound.geoEvent(e),
   party: () => activeParty(), // П9.2: прапорці підказок журналу — у Party (сейв-сумісні)
+  // Т.72: операціоник у місії з непорожньою зоною висадки (evacZone), юніт із side === 'player'
+  isEvacOperative: (id) => {
+    const m = ui.mission;
+    if (m === null || m.state.evacZone === undefined || m.state.evacZone.length === 0) return false;
+    return m.state.units.some((u) => u.id === id && u.side === 'player');
+  },
 });
 const journal = journalUI.add; // виклики journal(text, cls, cat) у шарі застосунку без змін
 
