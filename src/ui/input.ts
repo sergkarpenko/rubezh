@@ -7,6 +7,7 @@
 // інтерфейс BattleUI; драйвер авто-бою і повне перемалювання — через Deps.
 
 import {
+  EVAC_AP_COST,
   GRENADE_AP_COST,
   GRENADE_RANGE,
   HEAL_AMOUNT,
@@ -15,6 +16,7 @@ import {
   calculateHitChance,
   distance,
   endTurn,
+  evacuate,
   hasLineOfSight,
   moveUnit,
   resolveAttack,
@@ -30,7 +32,7 @@ import { el } from './dom';
 import { BCELL } from './grid';
 import { MODE_LABEL } from './journal';
 import { byGender } from './text';
-import type { BattleUI, BattleUIState } from './battle';
+import { evacBlockReason, type BattleUI, type BattleUIState } from './battle';
 
 // П7: чиста частина cellFromEvent — координати вікна (CSS) → клітинка бойовища
 // (buffer-розмір канви / BCELL); rect — getBoundingClientRect канви.
@@ -62,6 +64,9 @@ export function sameCell(a: Vec2 | null, b: Vec2 | null): boolean {
 export interface InputDeps {
   renderAll(): void;
   autoBusy(): boolean; // П13.3 (ADR-0067): триває авто-бій — керування заблоковано
+  // Т.71: вікно підтвердження евакуації останнього оперативника; yes — після «Евакуювати»
+  confirmLastEvac(name: string, yes: () => void): void;
+  evacConfirmOpen(): boolean; // Т.71: вікно відкрите — клавіші бою не діють
 }
 
 export interface InputUI {
@@ -72,6 +77,7 @@ export interface InputUI {
   armOverwatch(): void;
   armMedkit(): void; // П11.6 (ADR-0058): зведення аптечки (клавіша M)
   armGrenade(): void; // П11.6 (ADR-0058): зведення гранати (клавіша G)
+  evacuateSelected(): void; // Т.71 (ADR-0075): евакуація вибраного (клавіша V)
   disarm(): void; // Т.46: старт авто-бою знімає зведений постріл і витратник
   endPlayerTurn(): void;
   onKeyDown(ev: KeyboardEvent): void;
@@ -574,6 +580,50 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
     armItem('grenade');
   }
 
+  // Т.71 (ADR-0075, рішення власника 18.11.2026): «Евакуація» — плитка тулбара і клавіша V.
+  // Останнього оперативника на полі — лише після вікна підтвердження: бій закінчиться без премії.
+  function evacuateSelected(): void {
+    if (!battle.playerTurnActive() || !ui.mission) return;
+    if (deps.autoBusy()) return; // П13.3: триває авто-бій — керування заблоковано
+    const sel = battle.selectedUnit();
+    if (!sel) {
+      battle.binfo('Спершу клікніть свого оперативника.');
+      return;
+    }
+    const why = evacBlockReason(ui.mission.state, sel);
+    if (why !== null) {
+      battle.binfo(
+        why === 'cell'
+          ? 'Евакуація — лише з синьої клітинки висадки.'
+          : 'Не вистачає AP: евакуація коштує ' + EVAC_AP_COST + ', є ' + sel.ap + '.'
+      );
+      return;
+    }
+    const onField = ui.mission.state.units.filter((u) => u.side === 'player' && u.alive).length;
+    if (onField === 1) deps.confirmLastEvac(sel.name, () => evacuateNow(sel.id));
+    else evacuateNow(sel.id);
+  }
+
+  function evacuateNow(id: string): void {
+    if (!battle.playerTurnActive() || !ui.mission) return;
+    const state = ui.mission.state;
+    try {
+      const prevLen = state.log.length;
+      const { unit } = evacuate(state, id);
+      ui.selectedId = null;
+      ui.hoverPath = null;
+      disarm();
+      battle.enqueueAnims(prevLen);
+      if (!battle.checkOutcome()) {
+        const left = state.units.filter((u) => u.side === 'player' && u.alive).length;
+        battle.binfo(unit.name + ' евакуйовано на базу. На полі лишилось оперативників: ' + left + '.');
+      }
+    } catch (e) {
+      battle.binfo('✗ ' + (e as Error).message);
+    }
+    deps.renderAll();
+  }
+
   // ADR-0027 (П6.4): гарячі клавіші керування боєм — 1/2/3 (режими пострілу),
   // O (дозор), E (кінець ходу), Esc (скасувати). Ключ — за ev.code
   // (фізична клавіша, незалежно від розкладки), цифри — ще й за ev.key.
@@ -585,6 +635,7 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
 
   function onKeyDown(ev: KeyboardEvent): void {
     if (isTypingTarget(ev.target)) return;
+    if (deps.evacConfirmOpen()) return; // Т.71: під вікном підтвердження клавіші бою не діють
     battle.dismissTurnPlate(); // Т.33: клавіша дії прибирає підсумок ходу демонів
     if (ev.code === 'Digit1' || ev.key === '1') armFire('snap');
     else if (ev.code === 'Digit2' || ev.key === '2') armFire('aimed');
@@ -592,6 +643,8 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
     else if (ev.code === 'KeyO') armOverwatch();
     else if (ev.code === 'KeyM') armMedkit();
     else if (ev.code === 'KeyG') armGrenade();
+    else if (ev.code === 'KeyV')
+      evacuateSelected(); // Т.71 (ADR-0075)
     else if (ev.code === 'KeyE') endPlayerTurn();
     else if (ev.key === 'Escape') cancelSelection();
   }
@@ -604,6 +657,7 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
     armOverwatch,
     armMedkit,
     armGrenade,
+    evacuateSelected,
     disarm,
     endPlayerTurn,
     onKeyDown,

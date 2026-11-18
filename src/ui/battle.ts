@@ -14,6 +14,7 @@ import { applyMissionResult, missionSquad } from '../core/squad';
 import { deployConsumables, removeLostEquipment, settleConsumables } from '../core/workshop';
 import { creditMissionBonus, missionBonus } from '../core/economy';
 import {
+  EVAC_AP_COST,
   GRENADE_AP_COST,
   HEAL_AP_COST,
   OVERWATCH_AP_COST,
@@ -149,6 +150,13 @@ export function validHealTargets(state: GameState, healer: Unit): Unit[] {
     out.push(t);
   }
   return out;
+}
+
+// Т.71 (ADR-0075): чому оперативник не може евакуюватись — ті самі перевірки, що й evacuate
+// у ядрі (клітинка висадки, потім AP); null — може. Чиста функція: стан лише читається, без RNG.
+export function evacBlockReason(state: GameState, u: Unit): 'cell' | 'ap' | null {
+  if (!state.evacZone?.some((c) => c.x === u.pos.x && c.y === u.pos.y)) return 'cell';
+  return u.ap < EVAC_AP_COST ? 'ap' : null;
 }
 
 export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
@@ -559,6 +567,22 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
       tileReason(b, noItem ? (mode === 'medkit' ? 'немає гелю' : 'немає гранати') : noAp ? 'мало AP' : null);
       b.classList.toggle('armed', ui.itemMode === mode);
     }
+
+    // Т.71 (ADR-0075, рішення власника 18.11.2026): плитка «Евакуація» — завжди в бою місії;
+    // оперативник не на синій клітинці висадки чи без AP — неактивна з причиною (патерн П6.14).
+    const ev = el<HTMLButtonElement>('btn-evac');
+    ev.hidden = !st.evacZone?.length;
+    const evWhy = sel === undefined ? null : evacBlockReason(st, sel);
+    ev.disabled = busy || evWhy !== null;
+    const evHint = ev.dataset.hint || ev.title;
+    ev.dataset.hint = evHint;
+    ev.title =
+      evWhy === 'cell'
+        ? evHint + ' — оперативник не на синій клітинці висадки'
+        : evWhy === 'ap'
+          ? evHint + ' — не вистачає AP (потрібно ' + EVAC_AP_COST + ')'
+          : evHint;
+    tileReason(ev, evWhy === 'cell' ? 'не на висадці' : evWhy === 'ap' ? 'мало AP' : null);
   }
 
   function close(): void {

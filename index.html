@@ -761,6 +761,7 @@
       #new-game-dialog,
       #game-menu,
       #exit-confirm,
+      #evac-confirm,
       #settings-dialog {
         position: fixed;
         top: 0;
@@ -1265,6 +1266,8 @@
     <section class="hidden" id="new-game-dialog"></section>
     <section class="hidden" id="game-menu"></section>
     <section class="hidden" id="exit-confirm"></section>
+    <!-- Т.71 (ADR-0075): підтвердження евакуації останнього оперативника — контент генерує src/main.ts -->
+    <section class="hidden" id="evac-confirm"></section>
     <!-- П12.3 (ADR-0065/0059): скелет вікна «Налаштування» — контент генерує
          src/ui/settings.ts; тумблер звуку мігрував сюди з топбара (П11.7) -->
     <section class="hidden" id="settings-dialog"></section>

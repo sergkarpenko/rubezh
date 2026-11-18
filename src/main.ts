@@ -194,7 +194,7 @@ const journalUI = createJournal({
 const journal = journalUI.add; // виклики journal(text, cls, cat) у шарі застосунку без змін
 
 // Т.43: вікна поверх гри — поки хоч одне відкрите, пробіл час не рухає.
-const OVERLAY_IDS = ['help-screen', 'game-menu', 'settings-dialog', 'new-game-dialog', 'exit-confirm', 'campaign-victory'];
+const OVERLAY_IDS = ['help-screen', 'game-menu', 'settings-dialog', 'new-game-dialog', 'exit-confirm', 'campaign-victory', 'evac-confirm'];
 let gameOver = false; // банкрутство (ADR-0021): боєготових немає і грошей на найм немає
 let partyOnScreen = false; // Т.58: партію показано (не стартовий екран) — лише тоді ambient-цикл стартує
 let victoryDismissed = false; // П8.3a: endless — гравець закрив екран перемоги і продовжує гру
@@ -269,7 +269,28 @@ const battle = createBattleUI(ui, {
 const input = createInput(ui, battle, {
   renderAll,
   autoBusy: () => autoBattle.busy,
+  confirmLastEvac,
+  evacConfirmOpen: () => !el('evac-confirm').classList.contains('hidden'),
 });
+
+// Т.71 (ADR-0075, рішення власника 18.11.2026): вікно підтвердження евакуації останнього оперативника на
+// полі — після неї бій закінчиться без премії. Розмітка — як у «Незбережені зміни» (screens.ts).
+function confirmLastEvac(name: string, yes: () => void): void {
+  const box = el('evac-confirm');
+  box.innerHTML =
+    '<div class="panel screen-dialog"><h2>Евакуювати останнього?</h2><p id="evac-confirm-text"></p>' +
+    '<div class="dialog-actions"><button id="btn-evac-yes">Евакуювати</button><button id="btn-evac-no">Скасувати</button></div></div>';
+  el('evac-confirm-text').textContent =
+    name + ' — останній оперативник на полі. Місію буде завершено без премії, зонд Розриву лишиться активним.';
+  box.classList.remove('hidden');
+  const close = (go: boolean): void => {
+    box.classList.add('hidden');
+    box.innerHTML = '';
+    if (go) yes();
+  };
+  el('btn-evac-yes').onclick = () => close(true);
+  el('btn-evac-no').onclick = () => close(false);
+}
 
 // П6.8 (ADR-0029): анімаційний рушій — черга анімацій, rAF-цикл живе лише
 // поки черга непорожня (idle → 0 перерисовок; батарея iPad). Кожен кадр —
@@ -636,6 +657,8 @@ if (typeof document !== 'undefined') {
       else if (id === 'ow') input.armOverwatch();
       else if (id === 'medkit') input.armMedkit();
       else if (id === 'grenade') input.armGrenade();
+      else if (id === 'evac')
+        input.evacuateSelected(); // Т.71 (ADR-0075)
       else if (id === 'end') input.endPlayerTurn();
       // П13.3 (ADR-0067): «Авто»/«Стоп» — після зупинки драйвера плитка
       // оновлює підпис («Стоп» → «Авто») одразу; старт оновлює сам (крок).
