@@ -1906,3 +1906,42 @@ describe('Т.64: зупинка авто-бою в battle.close на сторі�
     }
   });
 });
+
+// Т.66 (кандидат 55, після Т.51; план — docs/plans/t66-fighter-last-mission.md): рядок #fighter-last
+// після перерваного перехоплення (зонд приземлився) зникає, коли місію на цьому зонді виграно, — зонда
+// вже немає в geo.ufos (completeMission), хоча відліт ufo_left так і не настав. Досі це тримав лише тест модуля.
+describe('Т.66: рядок #fighter-last зникає після виграної місії', () => {
+  it('Т.66: сід 42, пресет «норма»: перехоплення ufo1 перервано приземленням, місію на ufo1 виграно — рядка немає', async () => {
+    startParty();
+    // 1. тикаємо, доки не з'явиться активна кнопка перехоплення (запобіжник — 60 кліків), і клікаємо її
+    let launched = false;
+    for (let i = 0; i < 60 && !launched; i++) {
+      const b = [...document.querySelectorAll<HTMLButtonElement>('button.intercept')].find((x) => !x.disabled);
+      if (b) {
+        b.click();
+        launched = true;
+      } else btn('btn-tick').click();
+    }
+    expect(launched).toBe(true);
+    // 2. тикаємо, доки не з'явиться #fighter-last (запобіжник — 10 кліків): зонд приземлився під час погоні
+    for (let i = 0; i < 10 && document.getElementById('fighter-last') === null; i++) btn('btn-tick').click();
+    const abortedText = '✦ Зонд Розриву ufo1 приземлився — перехоплення перервано';
+    expect(document.getElementById('fighter-last')?.textContent).toBe(abortedText);
+    // 3. місія на ufo1 — одразу, без жодного тіку: відліт ufo_left не настає
+    const mission = document.querySelector<HTMLButtonElement>('button.mission');
+    expect(mission).not.toBeNull();
+    expect(mission!.disabled).toBe(false);
+    mission!.click();
+    expect($('battle-panel').classList.contains('hidden')).toBe(false);
+    // 4. авто-бій до результату — перемога (сід 42)
+    await runAutoBattle();
+    expect($('bresult').textContent).toContain('ЗАЧИЩЕНО');
+    // 5. назад на геосцену: зонда ufo1 немає, рядка #fighter-last немає, а в журналі рядок про переривання лишився
+    btn('btn-close').click();
+    expect($('geo-panel').classList.contains('hidden')).toBe(false);
+    expect($('ufos').textContent ?? '').not.toContain('ufo1');
+    expect($('log').textContent ?? '').not.toContain('Зонд Розриву ufo1 відлетів і зник');
+    expect($('log').textContent ?? '').toContain(abortedText);
+    expect(document.getElementById('fighter-last')).toBeNull();
+  });
+});
