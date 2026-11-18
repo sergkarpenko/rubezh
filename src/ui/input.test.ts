@@ -48,6 +48,7 @@ function setupDom(): void {
       <button id="btn-ow">Дозор</button>
       <button id="btn-medkit">Лікування</button>
       <button id="btn-grenade">Граната</button>
+      <button id="btn-evac">Евакуація</button>
       <button id="btn-end">Кінець ходу</button>
       <button id="btn-auto-battle"><span class="tb-cap">Авто</span></button>
     </div>`;
@@ -77,7 +78,7 @@ interface Fixture {
   ui: BattleUIState;
   battle: ReturnType<typeof createBattleUI>;
   input: ReturnType<typeof createInput>;
-  deps: InputDeps & { autoBusy: ReturnType<typeof vi.fn> };
+  deps: InputDeps & { autoBusy: ReturnType<typeof vi.fn>; confirmLastEvac: ReturnType<typeof vi.fn> };
   binfo(): string;
 }
 
@@ -109,13 +110,14 @@ function makeFixture(autoBusy = false, queue: Anim[] = []): Fixture {
   };
   const battle = createBattleUI(ui, battleDeps);
   const busy = vi.fn(() => autoBusy);
-  const input = createInput(ui, battle, { renderAll: vi.fn(), autoBusy: busy });
+  const confirmLastEvac = vi.fn(); // Т.71: вікно підтвердження — у тестах лише виклик
+  const input = createInput(ui, battle, { renderAll: vi.fn(), autoBusy: busy, confirmLastEvac, evacConfirmOpen: () => false });
   return {
     party,
     ui,
     battle,
     input,
-    deps: { renderAll: vi.fn(), autoBusy: busy },
+    deps: { renderAll: vi.fn(), autoBusy: busy, confirmLastEvac, evacConfirmOpen: () => false },
     binfo: () => document.getElementById('binfo')!.textContent ?? '',
   };
 }
@@ -698,5 +700,106 @@ describe('Т.46: старт авто-бою знімає зведений реж
     expect(f.ui.tapCell).toEqual(to); // тап знову перший
     clickAt(f, to.x, to.y);
     expect(s.pos).toEqual(to); // другий тап — хід
+  });
+});
+
+// Т.71 (ADR-0075, рішення власника 18.11.2026): «Евакуація» — плитка тулбара і клавіша V; оперативник
+// на синій клітинці висадки покидає поле; останнього — лише через вікно підтвердження.
+describe('Т.71: евакуація (плитка і клавіша V)', () => {
+  const keyV = (f: Fixture): void => f.input.onKeyDown(new KeyboardEvent('keydown', { key: 'v', code: 'KeyV' }));
+  const squad = (f: Fixture): Unit[] => f.ui.mission!.state.units.filter((u) => u.side === 'player' && u.alive);
+  const cap = (): string => document.querySelector('#btn-evac .tb-cap')?.textContent ?? '';
+
+  it('Т.71: без вибору — підказка; не на висадці і без AP — причина в підказці й на плитці', () => {
+    const f = makeFixture();
+    launchMission(f);
+    document.getElementById('btn-evac')!.innerHTML = '<span class="tb-cap">Евакуація</span>';
+    keyV(f);
+    expect(f.binfo()).toBe('Спершу клікніть свого оперативника.');
+    const [s] = squad(f);
+    f.ui.selectedId = s!.id;
+    s!.pos = { x: 10, y: 10 };
+    keyV(f);
+    expect(f.binfo()).toBe('Евакуація — лише з синьої клітинки висадки.');
+    f.battle.renderBattle();
+    expect(cap()).toBe('не на висадці');
+    expect((document.getElementById('btn-evac') as HTMLButtonElement).disabled).toBe(true);
+    s!.pos = { x: 2, y: 2 };
+    s!.ap = 1;
+    keyV(f);
+    expect(f.binfo()).toBe('Не вистачає AP: евакуація коштує 2, є 1.');
+    f.battle.renderBattle();
+    expect(cap()).toBe('мало AP');
+  });
+
+  it('Т.71: клавіша V на синій клітинці — оперативник покидає поле, вибір знято; під авто-боєм V не діє', () => {
+    const f = makeFixture();
+    launchMission(f);
+    const [s, t] = squad(f);
+    const n = squad(f).length;
+    expect(n).toBeGreaterThan(1);
+    f.ui.selectedId = t!.id;
+    f.deps.autoBusy.mockReturnValue(true);
+    keyV(f);
+    expect(squad(f)).toHaveLength(n);
+    f.deps.autoBusy.mockReturnValue(false);
+    f.ui.selectedId = s!.id;
+    keyV(f);
+    expect(squad(f).map((u) => u.id)).not.toContain(s!.id);
+    expect(f.ui.mission!.state.evacuated!.map((u) => u.id)).toEqual([s!.id]);
+    expect(f.ui.selectedId).toBeNull();
+    expect(f.binfo()).toBe('Евакуйовано: ' + s!.name + '. На полі лишилось оперативників: ' + (n - 1) + '.');
+    expect(f.deps.confirmLastEvac).not.toHaveBeenCalled();
+  });
+
+  it('Т.71: останній на полі — лише через вікно підтвердження; без «Евакуювати» він лишається, після — бій «евакуйовано»', () => {
+    const f = makeFixture();
+    launchMission(f);
+    const all = squad(f);
+    for (const u of all.slice(0, -1)) {
+      f.ui.selectedId = u.id;
+      keyV(f);
+    }
+    const last = all[all.length - 1]!;
+    f.ui.selectedId = last.id;
+    keyV(f);
+    expect(f.deps.confirmLastEvac).toHaveBeenCalledTimes(1);
+    expect(f.deps.confirmLastEvac.mock.calls[0]![0]).toBe(last.name);
+    expect(squad(f).map((u) => u.id)).toEqual([last.id]);
+    expect(f.ui.battleResult).toBeNull();
+    (f.deps.confirmLastEvac.mock.calls[0]![1] as () => void)();
+    expect(squad(f)).toEqual([]);
+    expect(document.getElementById('bresult')!.textContent).toContain(
+      'ЗАГІН ЕВАКУЙОВАНО — врятовані на базі, зонд Розриву лишається активним'
+    );
+  });
+
+  it('Т.71: «Евакуювати» у вікні ще раз перевіряє клітинку, AP і авто-бій — інакше нікого не знімає', () => {
+    const f = makeFixture();
+    launchMission(f);
+    const all = squad(f);
+    for (const u of all.slice(0, -1)) {
+      f.ui.selectedId = u.id;
+      keyV(f);
+    }
+    const last = all[all.length - 1]!;
+    f.ui.selectedId = last.id;
+    keyV(f);
+    const yes = f.deps.confirmLastEvac.mock.calls[0]![1] as () => void;
+    const pos = last.pos;
+    last.pos = { x: 10, y: 10 };
+    yes();
+    expect(f.binfo()).toBe('Евакуація — лише з синьої клітинки висадки.');
+    last.pos = pos;
+    last.ap = 1;
+    yes();
+    expect(f.binfo()).toBe('Не вистачає AP: евакуація коштує 2, є 1.');
+    last.ap = 2;
+    f.deps.autoBusy.mockReturnValue(true);
+    yes();
+    expect(squad(f).map((u) => u.id)).toEqual([last.id]);
+    f.deps.autoBusy.mockReturnValue(false);
+    yes();
+    expect(squad(f)).toEqual([]);
   });
 });

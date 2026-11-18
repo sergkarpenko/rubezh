@@ -7,11 +7,21 @@
 // («П13.2»): темно-сірі плитки, неонові акценти #00E5FF/#FF2E88, білі силуети.
 
 import type { PixelSprite } from '../core/sprites';
-import { GRENADE_AP_COST, GRENADE_DAMAGE, GRENADE_RANGE, HEAL_AP_COST, HEAL_AMOUNT, OVERWATCH_AP_COST, RIFLE } from '../core/combat';
+import {
+  EVAC_AP_COST,
+  GRENADE_AP_COST,
+  GRENADE_DAMAGE,
+  GRENADE_RANGE,
+  HEAL_AP_COST,
+  HEAL_AMOUNT,
+  OVERWATCH_AP_COST,
+  RIFLE,
+} from '../core/combat';
 
 // Ідентифікатори дій тулбара — чинні дії бою (src/ui/battle.ts + input/
 // auto-battle); «Авто»/«Стоп» — перемикач авто-бою (П13.3, ADR-0067).
-export type ToolbarActionId = 'snap' | 'aimed' | 'auto' | 'ow' | 'medkit' | 'grenade' | 'end' | 'auto-battle';
+// Т.71 (ADR-0075): «Евакуація» — між гранатою і кінцем ходу.
+export type ToolbarActionId = 'snap' | 'aimed' | 'auto' | 'ow' | 'medkit' | 'grenade' | 'evac' | 'end' | 'auto-battle';
 
 // Палітра іконок (ігровий трек, style-references): білі силуети фігурок,
 // неонові акценти блакитний («Рубіж»/гравець) і рожевий (акценти).
@@ -179,6 +189,25 @@ const ICON_AUTO_BATTLE: PixelSprite = {
   palette: ICON_PALETTE,
 };
 
+// Т.71 (ADR-0075): евакуація — блакитна стрілка вгору з білої рамки (клітинки висадки).
+const ICON_EVAC: PixelSprite = {
+  rows: [
+    '.....CC.....',
+    '....CCCC....',
+    '...CCCCCC...',
+    '..CC.CC.CC..',
+    '.....CC.....',
+    '.....CC.....',
+    'WWW..CC..WWW',
+    'W....CC....W',
+    'W..........W',
+    'W..........W',
+    'W..........W',
+    'WWWWWWWWWWWW',
+  ],
+  palette: ICON_PALETTE,
+};
+
 export interface ToolbarAction {
   id: ToolbarActionId;
   btnId: string; // стабільний id плитки — той самий, що був у нижній смузі (контракт тестів)
@@ -232,6 +261,13 @@ export const TOOLBAR_ACTIONS: readonly ToolbarAction[] = [
       '), уражає і своїх · клавіша G',
     icon: ICON_GRENADE,
   },
+  {
+    id: 'evac',
+    btnId: 'btn-evac',
+    label: 'Евакуація',
+    hint: EVAC_AP_COST + ' AP · оперативник на синій клітинці висадки покидає бій; премії за місію немає · клавіша V',
+    icon: ICON_EVAC,
+  },
   { id: 'end', btnId: 'btn-end', label: 'Кінець', hint: 'клавіша E', icon: ICON_END },
   {
     id: 'auto-battle',
@@ -250,9 +286,15 @@ const TILE_KEY: Partial<Record<ToolbarActionId, string>> = {
   ow: 'O',
   medkit: 'M',
   grenade: 'G',
+  evac: 'V',
   end: 'E',
 };
-const ITEM_AP: Partial<Record<ToolbarActionId, number>> = { ow: OVERWATCH_AP_COST, medkit: HEAL_AP_COST, grenade: GRENADE_AP_COST };
+const ITEM_AP: Partial<Record<ToolbarActionId, number>> = {
+  ow: OVERWATCH_AP_COST,
+  medkit: HEAL_AP_COST,
+  grenade: GRENADE_AP_COST,
+  evac: EVAC_AP_COST,
+};
 
 export interface ToolbarDeps {
   onAction(id: ToolbarActionId): void;
