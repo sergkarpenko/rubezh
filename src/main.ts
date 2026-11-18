@@ -190,7 +190,7 @@ const journalUI = createJournal({
   onBattleSound: (e) => sound.battleEvent(e),
   onGeoSound: (e) => sound.geoEvent(e),
   party: () => activeParty(), // П9.2: прапорці підказок журналу — у Party (сейв-сумісні)
-  // Т.72: операціоник у місії з непорожньою зоною висадки (evacZone), юніт із side === 'player'
+  // Т.72: оперативник — юніт гравця (side === 'player') у бою місії, де є хоча б одна клітинка висадки (evacZone)
   isEvacOperative: (id) => {
     const m = ui.mission;
     if (m === null || m.state.evacZone === undefined || m.state.evacZone.length === 0) return false;

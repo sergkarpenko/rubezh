@@ -173,7 +173,7 @@ interface HintsSave {
   intercept: boolean;
   mission: boolean;
   repair: boolean;
-  evac?: boolean; // Т.72: нове поле; у сейвах до Т.72 його немає — default дає false (deserialize нижче)
+  evac?: boolean; // Т.72: нове поле; у сейвах до Т.72 його немає — злиття з defaultHints() у deserializeParty дає false
 }
 
 // П11.2 (ADR-0058): стан науки в сейві; відсутнє поле (сейви до Фази 11) =

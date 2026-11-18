@@ -39,7 +39,7 @@ export interface JournalDeps {
   onBattleSound?(e: GameEvent): void; // постріл/влучання/смерть з подій бою
   onGeoSound?(e: GeoEvent): void; // виявлення НЛО, результат місії
   party(): Party; // П9.2: прапорці підказок живуть у Party (сейв-сумісні, ADR-0026)
-  isEvacOperative?(id: string): boolean; // Т.72: юніт із цим id — операціоник у зоні висадки; без deps — підказки немає
+  isEvacOperative?(id: string): boolean; // Т.72: юніт із цим id — оперативник гравця в бою з клітинками висадки; без цієї залежності підказки немає
 }
 
 export interface Journal {
@@ -145,7 +145,7 @@ export function createJournal(deps: JournalDeps): Journal {
       if (msg) journal(msg.text, msg.cls, 'battle');
       // П11.7 (ADR-0059): постріл/влучання/смерть → звук (drain-контур журналу).
       deps.onBattleSound?.(e);
-      // Т.72: перша шкода операціонику в бою (коли є зона висадки) — підказка «Можна евакуюватись», один раз за партію.
+      // Т.72: перше поранення чи смерть оперативника в бою з клітинками висадки — підказка «Можна евакуюватись», один раз за партію.
       const op = deps.isEvacOperative ?? (() => false);
       const evacHurt =
         (e.type === 'shot' && e.hit && e.damage > 0 && op(e.targetId)) ||
