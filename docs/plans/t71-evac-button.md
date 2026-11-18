@@ -952,3 +952,668 @@ Iter-Tag: iter-T.71
 - Після відкриття — `python3 scripts/vibe-step.py check --pr <номер>`. Якщо рядки звірки інші, ніж в описі, — **нового коміту не робити і опис не правити**, а написати про це в сесії.
 - Після відкриття PR — коротко відповісти в сесії: номер PR, вивід `gh pr view <номер> --json isDraft`, останній рядок `vibe-step.py check --pr`, вміст `/tmp/t71/failed.md` і перелік «пункт плану — зроблено / ні» з доказом `grep` на кожен рядок «зроблено». Скільки часу зайняв крок, не писати. **Не мержити.**
 - **Після відкриття PR — нічого не пушити, доки планувальник не дасть знахідок.** **Про аудит і результати чеків CI нічого не писати** — ні в документах, ні в описі PR. Розділ «Аудит» лишається «Аудит ще не проведено», доки його текст не дасть планувальник.
+
+## Після аудиту: порції (додано планувальником після аудиту PR #373)
+
+Знахідки обох аудиторів і що з кожною зроблено — готовим текстом у блоках нижче. Код і тести виправлено латками планувальника (прототип із ними пройшов `npm test` — 47 файлів, 1197 тестів — і e2e — 3 сценарії), тож руками в код нічого не набирати. Блоки порцій вирізати в нову теку: `node scripts/vibe-plan-blocks.mjs docs/plans/t71-evac-button.md /tmp/blocks2`. **Спершу `git pull`** — цей розділ плану прийшов новим комітом у гілку.
+
+### Порція 1 — латки коду і тестів (два коміти, без пушу)
+
+1. `git pull`, далі `rm -rf /tmp/blocks2 && node scripts/vibe-plan-blocks.mjs docs/plans/t71-evac-button.md /tmp/blocks2`.
+2. Код: `{ cat /tmp/blocks2/code-patch-v2.txt; echo; } | git apply`, потім `git add index.html src/main.ts src/ui/battle.ts src/ui/input.ts && git commit -F /tmp/blocks2/commit-1-v2.txt`.
+3. Тести: `{ cat /tmp/blocks2/test-patch-v2.txt; echo; } | git apply`, потім `git add e2e/acceptance.scenario.ts src/main.ui.test.ts src/ui/input.test.ts && git commit -F /tmp/blocks2/commit-2-v2.txt`.
+4. Відповісти в сесії: вивід `git log --oneline -3` і `git diff HEAD~2 --stat`. Якщо латка не накладається — нічого не правити руками, написати вивід. Не пушити.
+
+<!-- блок: commit-1-v2 -->
+```text
+fix(ui): Т.71 — вікно евакуації: плитки під ним, фокус, повторна перевірка, закриття з боєм
+```
+
+<!-- блок: code-patch-v2 -->
+```diff
+diff --git a/index.html b/index.html
+index cb753c4..ca55c6b 100644
+--- a/index.html
++++ b/index.html
+@@ -277,4 +277,7 @@
+         border-radius: 10px;
+       }
++      #btoolbar button[hidden] {
++        display: none; /* Т.71 (аудит): display: flex вище перекриває атрибут hidden */
++      }
+       #btoolbar button canvas {
+         background: transparent;
+diff --git a/src/main.ts b/src/main.ts
+index 37dd11d..f178078 100644
+--- a/src/main.ts
++++ b/src/main.ts
+@@ -284,4 +284,5 @@ function confirmLastEvac(name: string, yes: () => void): void {
+     name + ' — останній оперативник на полі. Місію буде завершено без премії, зонд Розриву лишиться активним.';
+   box.classList.remove('hidden');
++  el('btn-evac-no').focus(); // Т.71 (аудит): фокус у вікні, а не на плитці під ним
+   const close = (go: boolean): void => {
+     box.classList.add('hidden');
+@@ -653,4 +654,5 @@ if (typeof document !== 'undefined') {
+   createToolbar(el('btoolbar'), {
+     onAction: (id) => {
++      if (!el('evac-confirm').classList.contains('hidden')) return; // Т.71: під вікном евакуації плитки не діють
+       battle.dismissTurnPlate(id === 'auto-battle'); // Т.33: дія гравця прибирає підсумок ходу демонів
+       if (id === 'snap' || id === 'aimed' || id === 'auto') input.armFire(id);
+diff --git a/src/ui/battle.ts b/src/ui/battle.ts
+index b32f65e..fd8adc1 100644
+--- a/src/ui/battle.ts
++++ b/src/ui/battle.ts
+@@ -587,4 +587,5 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
+ 
+   function close(): void {
++    document.getElementById('evac-confirm')?.classList.add('hidden'); // Т.71 (аудит): вікно евакуації — разом із боєм
+     deps.stopAuto(); // П13.3: авто-бій міг тривати — таймер і стан драйвера скидаємо
+     deps.anim.cancel(); // П6.8: бій закрито — чергу анімацій скидаємо
+diff --git a/src/ui/input.ts b/src/ui/input.ts
+index ce71716..cf640bc 100644
+--- a/src/ui/input.ts
++++ b/src/ui/input.ts
+@@ -593,9 +593,5 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
+     const why = evacBlockReason(ui.mission.state, sel);
+     if (why !== null) {
+-      battle.binfo(
+-        why === 'cell'
+-          ? 'Евакуація — лише з синьої клітинки висадки.'
+-          : 'Не вистачає AP: евакуація коштує ' + EVAC_AP_COST + ', є ' + sel.ap + '.'
+-      );
++      evacRefused(why, sel.ap);
+       return;
+     }
+@@ -605,7 +601,23 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
+   }
+ 
++  function evacRefused(why: 'cell' | 'ap', ap: number): void {
++    battle.binfo(
++      why === 'cell'
++        ? 'Евакуація — лише з синьої клітинки висадки.'
++        : 'Не вистачає AP: евакуація коштує ' + EVAC_AP_COST + ', є ' + ap + '.'
++    );
++  }
++
+   function evacuateNow(id: string): void {
+-    if (!battle.playerTurnActive() || !ui.mission) return;
++    if (!battle.playerTurnActive() || !ui.mission || deps.autoBusy()) return;
+     const state = ui.mission.state;
++    // Т.71 (аудит): між вікном і «Евакуювати» стан міг змінитись — перевірки ще раз
++    const u = state.units.find((x) => x.id === id && x.alive);
++    const why = u === undefined ? null : evacBlockReason(state, u);
++    if (u === undefined || why !== null) {
++      if (u !== undefined && why !== null) evacRefused(why, u.ap);
++      deps.renderAll();
++      return;
++    }
+     try {
+       const prevLen = state.log.length;
+@@ -617,5 +629,5 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
+       if (!battle.checkOutcome()) {
+         const left = state.units.filter((u) => u.side === 'player' && u.alive).length;
+-        battle.binfo(unit.name + ' евакуйовано на базу. На полі лишилось оперативників: ' + left + '.');
++        battle.binfo('Евакуйовано: ' + unit.name + '. На полі лишилось оперативників: ' + left + '.');
+       }
+     } catch (e) {
+```
+
+<!-- блок: commit-2-v2 -->
+```text
+test(ui): Т.71 — вікно евакуації після аудиту і e2e до банера
+```
+
+<!-- блок: test-patch-v2 -->
+```diff
+diff --git a/e2e/acceptance.scenario.ts b/e2e/acceptance.scenario.ts
+index c3542ae..ce5d51b 100644
+--- a/e2e/acceptance.scenario.ts
++++ b/e2e/acceptance.scenario.ts
+@@ -775,2 +775,38 @@ test('Т.61: екран перемоги і рядок-пояснення ста
+   expect(errors, 'помилки сторінки: ' + errors.join(' | ')).toEqual([]);
+ });
++
++// Т.71 (рішення власника 18.11.2026; в описі обраного варіанта — e2e до банера): загін покидає бій з синіх клітинок висадки —
++// плиткою, клавішею V і, для останнього, через вікно підтвердження — до банера «ЗАГІН ЕВАКУЙОВАНО».
++test('Т.71: евакуація — плитка, клавіша V і вікно для останнього до банера «ЗАГІН ЕВАКУЙОВАНО»', async ({ page }) => {
++  const errors = watchErrors(page);
++  await page.goto('./');
++  const helpClose = page.locator('#btn-help-close'); // перший візит — «Як грати» поверх стартового екрана
++  if (await helpClose.isVisible()) await helpClose.click();
++  await page.locator('#btn-start-new').click();
++  await page.locator('#new-game-seed').fill(String(SEED));
++  await page.locator('#new-game-preset').selectOption(PRESET);
++  await page.locator('#btn-new-game-start').click();
++  await page.locator('#status-tab-base').click();
++  const mission = page.locator('#ufos button.mission').first();
++  for (let i = 0; i < MAX_TICKS_TO_MISSION && !(await mission.isVisible()); i++) await page.locator('#btn-tick').click();
++  await mission.click();
++  await expect(page.locator('#battle-panel')).toBeVisible();
++  const box = (await page.locator('#battle').boundingBox())!;
++  const k = box.width / (MISSION_MAP_W * 48);
++  const tap = (x: number, y: number): Promise<void> => page.mouse.click(box.x + (x * 48 + 24) * k, box.y + (y * 48 + 24) * k);
++  const info = page.locator('#binfo');
++  await tap(2, 2);
++  await page.locator('#btn-evac').click();
++  await expect(info).toHaveText(/^Евакуйовано: .+\. На полі лишилось оперативників: 2\.$/);
++  await tap(3, 2);
++  await page.keyboard.press('v');
++  await expect(info).toHaveText(/^Евакуйовано: .+\. На полі лишилось оперативників: 1\.$/);
++  await tap(2, 3);
++  await page.keyboard.press('v');
++  await expect(page.locator('#evac-confirm')).toBeVisible();
++  await expect(page.locator('#btn-evac-no')).toBeFocused();
++  await page.locator('#btn-evac-yes').click();
++  await expect(page.locator('#evac-confirm')).toBeHidden();
++  await expect(page.locator('#bresult')).toContainText('ЗАГІН ЕВАКУЙОВАНО — врятовані на базі, зонд Розриву лишається активним');
++  expect(errors, 'помилки сторінки: ' + errors.join(' | ')).toEqual([]);
++});
+diff --git a/src/main.ui.test.ts b/src/main.ui.test.ts
+index 62b0fe0..6a3934b 100644
+--- a/src/main.ui.test.ts
++++ b/src/main.ui.test.ts
+@@ -2012,8 +2012,8 @@ describe('Т.71: евакуація на сторінці — плитка, кл
+     tap(2, 2);
+     btn('btn-evac').click();
+-    expect($('binfo').textContent).toMatch(/ евакуйовано на базу\. На полі лишилось оперативників: 2\.$/);
++    expect($('binfo').textContent).toMatch(/^Евакуйовано: .+\. На полі лишилось оперативників: 2\.$/);
+     tap(3, 2);
+     key('KeyV');
+-    expect($('binfo').textContent).toMatch(/ евакуйовано на базу\. На полі лишилось оперативників: 1\.$/);
++    expect($('binfo').textContent).toMatch(/^Евакуйовано: .+\. На полі лишилось оперативників: 1\.$/);
+     tap(2, 3);
+     key('KeyV');
+@@ -2022,6 +2022,8 @@ describe('Т.71: евакуація на сторінці — плитка, кл
+       / — останній оперативник на полі\. Місію буде завершено без премії, зонд Розриву лишиться активним\.$/
+     );
++    expect(document.activeElement?.id).toBe('btn-evac-no'); // фокус у вікні, а не на плитці під ним
+     const turn = $('bctx-turn').textContent;
+     key('KeyE'); // під вікном клавіші бою не діють
++    btn('btn-end').click(); // і плитки теж
+     expect($('bctx-turn').textContent).toBe(turn);
+     btn('btn-evac-no').click();
+@@ -2033,3 +2035,24 @@ describe('Т.71: евакуація на сторінці — плитка, кл
+     expect($('bresult').textContent).toContain('ЗАГІН ЕВАКУЙОВАНО — врятовані на базі, зонд Розриву лишається активним');
+   });
++
++  it('Т.71: вихід на стартовий екран з відкритим вікном евакуації — вікно закривається разом із боєм', () => {
++    startParty('42');
++    for (let i = 0; i < 1500 && document.querySelector('button.mission') === null; i++) btn('btn-tick').click();
++    (document.querySelector('button.mission') as HTMLButtonElement).click();
++    const keyV = (): void => void document.dispatchEvent(new KeyboardEvent('keydown', { key: 'v', code: 'KeyV', bubbles: true }));
++    for (const [x, y] of [
++      [2, 2],
++      [3, 2],
++      [2, 3],
++    ] as const) {
++      $('battle').dispatchEvent(new MouseEvent('click', { clientX: x * 48 + 24, clientY: y * 48 + 24 }));
++      keyV();
++    }
++    expect($('evac-confirm').classList.contains('hidden')).toBe(false);
++    btn('btn-menu').click();
++    btn('btn-menu-exit').click();
++    btn('btn-exit-yes').click();
++    expect($('start-screen').classList.contains('hidden')).toBe(false);
++    expect($('evac-confirm').classList.contains('hidden')).toBe(true);
++  });
+ });
+diff --git a/src/ui/input.test.ts b/src/ui/input.test.ts
+index e23e338..7a802ce 100644
+--- a/src/ui/input.test.ts
++++ b/src/ui/input.test.ts
+@@ -749,5 +749,5 @@ describe('Т.71: евакуація (плитка і клавіша V)', () => {
+     expect(f.ui.mission!.state.evacuated!.map((u) => u.id)).toEqual([s!.id]);
+     expect(f.ui.selectedId).toBeNull();
+-    expect(f.binfo()).toBe(s!.name + ' евакуйовано на базу. На полі лишилось оперативників: ' + (n - 1) + '.');
++    expect(f.binfo()).toBe('Евакуйовано: ' + s!.name + '. На полі лишилось оперативників: ' + (n - 1) + '.');
+     expect(f.deps.confirmLastEvac).not.toHaveBeenCalled();
+   });
+@@ -774,3 +774,32 @@ describe('Т.71: евакуація (плитка і клавіша V)', () => {
+     );
+   });
++
++  it('Т.71: «Евакуювати» у вікні ще раз перевіряє клітинку, AP і авто-бій — інакше нікого не знімає', () => {
++    const f = makeFixture();
++    launchMission(f);
++    const all = squad(f);
++    for (const u of all.slice(0, -1)) {
++      f.ui.selectedId = u.id;
++      keyV(f);
++    }
++    const last = all[all.length - 1]!;
++    f.ui.selectedId = last.id;
++    keyV(f);
++    const yes = f.deps.confirmLastEvac.mock.calls[0]![1] as () => void;
++    const pos = last.pos;
++    last.pos = { x: 10, y: 10 };
++    yes();
++    expect(f.binfo()).toBe('Евакуація — лише з синьої клітинки висадки.');
++    last.pos = pos;
++    last.ap = 1;
++    yes();
++    expect(f.binfo()).toBe('Не вистачає AP: евакуація коштує 2, є 1.');
++    last.ap = 2;
++    f.deps.autoBusy.mockReturnValue(true);
++    yes();
++    expect(squad(f).map((u) => u.id)).toEqual([last.id]);
++    f.deps.autoBusy.mockReturnValue(false);
++    yes();
++    expect(squad(f)).toEqual([]);
++  });
+ });
+```
+
+Блок тестів модуля після латки — для скрипта поломок (у файл його вже вставила латка; окремо не вставляти):
+
+<!-- блок: test-t71-v2 -->
+```ts
+// Т.71 (ADR-0075, рішення власника 18.11.2026): «Евакуація» — плитка тулбара і клавіша V; оперативник
+// на синій клітинці висадки покидає поле; останнього — лише через вікно підтвердження.
+describe('Т.71: евакуація (плитка і клавіша V)', () => {
+  const keyV = (f: Fixture): void => f.input.onKeyDown(new KeyboardEvent('keydown', { key: 'v', code: 'KeyV' }));
+  const squad = (f: Fixture): Unit[] => f.ui.mission!.state.units.filter((u) => u.side === 'player' && u.alive);
+  const cap = (): string => document.querySelector('#btn-evac .tb-cap')?.textContent ?? '';
+
+  it('Т.71: без вибору — підказка; не на висадці і без AP — причина в підказці й на плитці', () => {
+    const f = makeFixture();
+    launchMission(f);
+    document.getElementById('btn-evac')!.innerHTML = '<span class="tb-cap">Евакуація</span>';
+    keyV(f);
+    expect(f.binfo()).toBe('Спершу клікніть свого оперативника.');
+    const [s] = squad(f);
+    f.ui.selectedId = s!.id;
+    s!.pos = { x: 10, y: 10 };
+    keyV(f);
+    expect(f.binfo()).toBe('Евакуація — лише з синьої клітинки висадки.');
+    f.battle.renderBattle();
+    expect(cap()).toBe('не на висадці');
+    expect((document.getElementById('btn-evac') as HTMLButtonElement).disabled).toBe(true);
+    s!.pos = { x: 2, y: 2 };
+    s!.ap = 1;
+    keyV(f);
+    expect(f.binfo()).toBe('Не вистачає AP: евакуація коштує 2, є 1.');
+    f.battle.renderBattle();
+    expect(cap()).toBe('мало AP');
+  });
+
+  it('Т.71: клавіша V на синій клітинці — оперативник покидає поле, вибір знято; під авто-боєм V не діє', () => {
+    const f = makeFixture();
+    launchMission(f);
+    const [s, t] = squad(f);
+    const n = squad(f).length;
+    expect(n).toBeGreaterThan(1);
+    f.ui.selectedId = t!.id;
+    f.deps.autoBusy.mockReturnValue(true);
+    keyV(f);
+    expect(squad(f)).toHaveLength(n);
+    f.deps.autoBusy.mockReturnValue(false);
+    f.ui.selectedId = s!.id;
+    keyV(f);
+    expect(squad(f).map((u) => u.id)).not.toContain(s!.id);
+    expect(f.ui.mission!.state.evacuated!.map((u) => u.id)).toEqual([s!.id]);
+    expect(f.ui.selectedId).toBeNull();
+    expect(f.binfo()).toBe('Евакуйовано: ' + s!.name + '. На полі лишилось оперативників: ' + (n - 1) + '.');
+    expect(f.deps.confirmLastEvac).not.toHaveBeenCalled();
+  });
+
+  it('Т.71: останній на полі — лише через вікно підтвердження; без «Евакуювати» він лишається, після — бій «евакуйовано»', () => {
+    const f = makeFixture();
+    launchMission(f);
+    const all = squad(f);
+    for (const u of all.slice(0, -1)) {
+      f.ui.selectedId = u.id;
+      keyV(f);
+    }
+    const last = all[all.length - 1]!;
+    f.ui.selectedId = last.id;
+    keyV(f);
+    expect(f.deps.confirmLastEvac).toHaveBeenCalledTimes(1);
+    expect(f.deps.confirmLastEvac.mock.calls[0]![0]).toBe(last.name);
+    expect(squad(f).map((u) => u.id)).toEqual([last.id]);
+    expect(f.ui.battleResult).toBeNull();
+    (f.deps.confirmLastEvac.mock.calls[0]![1] as () => void)();
+    expect(squad(f)).toEqual([]);
+    expect(document.getElementById('bresult')!.textContent).toContain(
+      'ЗАГІН ЕВАКУЙОВАНО — врятовані на базі, зонд Розриву лишається активним'
+    );
+  });
+
+  it('Т.71: «Евакуювати» у вікні ще раз перевіряє клітинку, AP і авто-бій — інакше нікого не знімає', () => {
+    const f = makeFixture();
+    launchMission(f);
+    const all = squad(f);
+    for (const u of all.slice(0, -1)) {
+      f.ui.selectedId = u.id;
+      keyV(f);
+    }
+    const last = all[all.length - 1]!;
+    f.ui.selectedId = last.id;
+    keyV(f);
+    const yes = f.deps.confirmLastEvac.mock.calls[0]![1] as () => void;
+    const pos = last.pos;
+    last.pos = { x: 10, y: 10 };
+    yes();
+    expect(f.binfo()).toBe('Евакуація — лише з синьої клітинки висадки.');
+    last.pos = pos;
+    last.ap = 1;
+    yes();
+    expect(f.binfo()).toBe('Не вистачає AP: евакуація коштує 2, є 1.');
+    last.ap = 2;
+    f.deps.autoBusy.mockReturnValue(true);
+    yes();
+    expect(squad(f).map((u) => u.id)).toEqual([last.id]);
+    f.deps.autoBusy.mockReturnValue(false);
+    yes();
+    expect(squad(f)).toEqual([]);
+  });
+});
+```
+
+### Порція 2 — поломки, чекліст, документи, опис PR, пуш
+
+1. Поломки: `python3 scripts/vibe-step.py mutations --v2` (дані — блок `step-v2`; ≈ 6 хв на прототипі).
+2. Чекліст: `python3 scripts/vibe-step.py checklist <ключ>` з ключами `tsc`, `tsc-core`, `tsc-e2e`, `lint`, `format`, `test`, `docs`, `e2e`, і наостанок без ключа. e2e у пісочниці не стартує (рядок довідника нижче) — скрипт запише «не пройшла», це очікувано.
+3. Документи: `python3 scripts/vibe-step.py docs --v2 --lesson-file /tmp/blocks2/lesson-v2.txt` — звіт, запис кроку, рядок довідника і чернетку опису збирає скрипт із блоків `-v2`; руками нічого не правити.
+4. Коміт: `git add docs/ && git commit -F /tmp/blocks2/commit-3-v2.txt`.
+5. Звірка й опис: `python3 scripts/vibe-step.py check --v2` — має надрукувати «Знахідок немає.» і зібрати `/tmp/pr-body-v2.md`. Якщо знахідки є — написати їх у сесії і не пушити.
+6. Спершу опис, потім пуш: `gh pr edit 373 --body-file /tmp/pr-body-v2.md` (якщо відмовляє — `gh api -X PATCH repos/sergkarpenko/rubezh/pulls/373 -F body=@/tmp/pr-body-v2.md`), далі `git push`. Нічого не писати про чеки й аудит від себе.
+7. Відповісти в сесії: перелік «пункт — зроблено / ні», останній рядок `vibe-step.py check --v2`, вміст `/tmp/t71/failed.md`, вивід `git log --oneline -6`. Не мержити.
+
+<!-- блок: commit-3-v2 -->
+```text
+docs(workflow): Т.71 — звіт, запис кроку і довідник після аудиту
+```
+
+<!-- блок: lesson-v2 -->
+```text
+вікно поверх бою мусить блокувати й плитки, і закриватись разом із боєм: заборони клавіш в `onKeyDown` для цього мало — плитку у фокусі Enter натискає сам браузер (знахідки 1 і 2 аудиту Opus).
+```
+
+<!-- блок: handbook-v2 -->
+```text
+- **Т.71 (18.11.2026):** план `docs/plans/t71-evac-button.md` виконано скриптом `scripts/vibe-step.py` з блоків плану; код і тести кроку гри прийшли готовими латками `git apply` з блоків `code-patch` і `test-patch` (після аудиту — `-v2`), тож руками в код нічого не набиралось. У пісочниці є `chromium_headless_shell-1255`, але він не стартує без системної бібліотеки `libglib-2.0.so.0` (код 127), а іншої ревізії chromium для обходу `E2E_CHROME` немає: рядок e2e чекліста — «не пройшла (код 1)», сценарії проганяє планувальник.
+```
+
+<!-- блок: step-v2 -->
+```text
+{'step': 'Т.71',
+ 'plan': 'docs/plans/t71-evac-button.md',
+ 'report': 'docs/reports/t71-evac-button.md',
+ 'anchor': '    - Звіт — `docs/reports/t70-vibe-step-scripts.md`\n',
+ 'new_file': 'src/ui/input.test.ts',
+ 'test_block': 'test-t71-v2',
+ 'files': ['src/main.ui.test.ts', 'src/ui/toolbar.test.ts'],
+ 'alone': [('Т.71 причини (окремо)', 'Т.71: без вибору — підказка; не на висадці і без AP — причина в підказці й на плитці'),
+           ('Т.71 клавіша V (окремо)', 'Т.71: клавіша V на синій клітинці — оперативник покидає поле, вибір знято; під авто-боєм V не діє'),
+           ('Т.71 останній (окремо)',
+            'Т.71: останній на полі — лише через вікно підтвердження; без «Евакуювати» він лишається, після — бій «евакуйовано»'),
+           ('Т.71 повторна перевірка (окремо)',
+            'Т.71: «Евакуювати» у вікні ще раз перевіряє клітинку, AP і авто-бій — інакше нікого не знімає')],
+ 'whole': [('Т.71 на сторінці',
+            'Т.71: сід 42, пресет «норма»: загін покидає поле з синіх клітинок; останнього — через вікно, «Скасувати» його лишає'),
+           ('Т.71 вихід з вікном', 'Т.71: вихід на стартовий екран з відкритим вікном евакуації — вікно закривається разом із боєм'),
+           ('Т.71 підказка плитки', 'Т.71: евакуація — AP з константи, синя клітинка висадки, без премії, клавіша V')],
+ 'mutations': [('вікна підтвердження немає: останній покидає поле одразу',
+                'src/ui/input.ts',
+                '    if (onField === 1) deps.confirmLastEvac(sel.name, () => evacuateNow(sel.id));',
+                '    if (onField === 0) deps.confirmLastEvac(sel.name, () => evacuateNow(sel.id));'),
+               ('«Скасувати» у вікні евакуює',
+                'src/main.ts',
+                "  el('btn-evac-no').onclick = () => close(false);",
+                "  el('btn-evac-no').onclick = () => close(true);"),
+               ('під вікном підтвердження клавіші бою діють',
+                'src/ui/input.ts',
+                '    if (deps.evacConfirmOpen()) return; // Т.71: під вікном підтвердження клавіші бою не діють\n',
+                ''),
+               ('`evacBlockReason` не перевіряє клітинку висадки',
+                'src/ui/battle.ts',
+                "  if (!state.evacZone?.some((c) => c.x === u.pos.x && c.y === u.pos.y)) return 'cell';\n",
+                ''),
+               ('`evacBlockReason` не перевіряє AP', 'src/ui/battle.ts', "  return u.ap < EVAC_AP_COST ? 'ap' : null;", '  return null;'),
+               ('клавіша V не прив’язана (KeyB замість KeyV)', 'src/ui/input.ts', "ev.code === 'KeyV'", "ev.code === 'KeyB'"),
+               ('після евакуації вибір не знято',
+                'src/ui/input.ts',
+                '      ui.selectedId = null;\n      ui.hoverPath = null;\n      disarm();',
+                '      ui.hoverPath = null;\n      disarm();'),
+               ('під авто-боєм евакуація діє',
+                'src/ui/input.ts',
+                '    if (deps.autoBusy()) return; // П13.3: триває авто-бій — керування заблоковано\n'
+                '    const sel = battle.selectedUnit();\n'
+                '    if (!sel) {\n'
+                "      battle.binfo('Спершу клікніть свого оперативника.');\n"
+                '      return;\n'
+                '    }\n'
+                '    const why',
+                '    const sel = battle.selectedUnit();\n'
+                '    if (!sel) {\n'
+                "      battle.binfo('Спершу клікніть свого оперативника.');\n"
+                '      return;\n'
+                '    }\n'
+                '    const why'),
+               ('плитка «Евакуація» лишається активною з причиною',
+                'src/ui/battle.ts',
+                '    ev.disabled = busy || evWhy !== null;',
+                '    ev.disabled = busy;'),
+               ('змінити слово в причині на плитці в `src/ui/battle.ts` («висадці» → «посадці»)',
+                'src/ui/battle.ts',
+                "'не на висадці'",
+                "'не на посадці'"),
+               ('змінити слово в рядку `#binfo` в `src/ui/input.ts` («синьої» → «зеленої»)',
+                'src/ui/input.ts',
+                "'Евакуація — лише з синьої клітинки висадки.'",
+                "'Евакуація — лише з зеленої клітинки висадки.'"),
+               ('змінити слово в тексті вікна в `src/main.ts` («останній» → «крайній»)',
+                'src/main.ts',
+                "' — останній оперативник на полі.",
+                "' — крайній оперативник на полі."),
+               ('змінити слово в підказці плитки в `src/ui/toolbar.ts` («премії» → «нагороди»)',
+                'src/ui/toolbar.ts',
+                'премії за місію немає',
+                'нагороди за місію немає'),
+               ('змінити причину нестачі AP на плитці в `src/ui/battle.ts` («мало AP» → «мало ОД»)',
+                'src/ui/battle.ts',
+                "evWhy === 'ap' ? 'мало AP' : null",
+                "evWhy === 'ap' ? 'мало ОД' : null"),
+               ('змінити слово в рядку `#binfo` після евакуації в `src/ui/input.ts` («Евакуйовано» → «Вивезено»)',
+                'src/ui/input.ts',
+                "'Евакуйовано: '",
+                "'Вивезено: '"),
+               ('у вікно підтвердження йде id, а не ім’я оперативника',
+                'src/ui/input.ts',
+                'deps.confirmLastEvac(sel.name,',
+                'deps.confirmLastEvac(sel.id,'),
+               ('«Евакуювати» у вікні нікого не евакуює', 'src/ui/input.ts', '() => evacuateNow(sel.id));', '() => undefined);'),
+               ('«Евакуювати» у вікні не перевіряє клітинку й AP ще раз',
+                'src/ui/input.ts',
+                '    const why = u === undefined ? null : evacBlockReason(state, u);',
+                '    const why = u === undefined ? null : null;'),
+               ('«Евакуювати» у вікні діє під авто-боєм',
+                'src/ui/input.ts',
+                '    if (!battle.playerTurnActive() || !ui.mission || deps.autoBusy()) return;',
+                '    if (!battle.playerTurnActive() || !ui.mission) return;'),
+               ('під вікном евакуації плитки діють',
+                'src/main.ts',
+                "      if (!el('evac-confirm').classList.contains('hidden')) return; // Т.71: під вікном евакуації плитки не діють\n",
+                ''),
+               ('фокус лишається на плитці під вікном',
+                'src/main.ts',
+                "  el('btn-evac-no').focus(); // Т.71 (аудит): фокус у вікні, а не на плитці під ним\n",
+                ''),
+               ('`battle.close` не закриває вікно евакуації',
+                'src/ui/battle.ts',
+                "    document.getElementById('evac-confirm')?.classList.add('hidden'); // Т.71 (аудит): вікно евакуації — разом із боєм\n",
+                '')]}
+```
+
+<!-- блок: table-plan-v2 -->
+```text
+| № | Поломка | Т.71 причини (окремо) | Т.71 клавіша V (окремо) | Т.71 останній (окремо) | Т.71 повторна перевірка (окремо) | Т.71 на сторінці | Т.71 вихід з вікном | Т.71 підказка плитки |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | вікна підтвердження немає: останній покидає поле одразу | зелений | зелений | червоний | червоний | червоний | червоний | зелений |
+| 2 | «Скасувати» у вікні евакуює | зелений | зелений | зелений | зелений | червоний | зелений | зелений |
+| 3 | під вікном підтвердження клавіші бою діють | зелений | зелений | зелений | зелений | червоний | зелений | зелений |
+| 4 | `evacBlockReason` не перевіряє клітинку висадки | червоний | зелений | зелений | червоний | зелений | зелений | зелений |
+| 5 | `evacBlockReason` не перевіряє AP | червоний | зелений | зелений | червоний | зелений | зелений | зелений |
+| 6 | клавіша V не прив’язана (KeyB замість KeyV) | червоний | червоний | червоний | червоний | червоний | червоний | зелений |
+| 7 | після евакуації вибір не знято | зелений | червоний | зелений | зелений | зелений | зелений | зелений |
+| 8 | під авто-боєм евакуація діє | зелений | зелений | зелений | зелений | зелений | зелений | зелений |
+| 9 | плитка «Евакуація» лишається активною з причиною | червоний | зелений | зелений | зелений | зелений | зелений | зелений |
+| 10 | змінити слово в причині на плитці в `src/ui/battle.ts` («висадці» → «посадці») | червоний | зелений | зелений | зелений | зелений | зелений | зелений |
+| 11 | змінити слово в рядку `#binfo` в `src/ui/input.ts` («синьої» → «зеленої») | червоний | зелений | зелений | червоний | зелений | зелений | зелений |
+| 12 | змінити слово в тексті вікна в `src/main.ts` («останній» → «крайній») | зелений | зелений | зелений | зелений | червоний | зелений | зелений |
+| 13 | змінити слово в підказці плитки в `src/ui/toolbar.ts` («премії» → «нагороди») | зелений | зелений | зелений | зелений | червоний | зелений | червоний |
+| 14 | змінити причину нестачі AP на плитці в `src/ui/battle.ts` («мало AP» → «мало ОД») | червоний | зелений | зелений | зелений | зелений | зелений | зелений |
+| 15 | змінити слово в рядку `#binfo` після евакуації в `src/ui/input.ts` («Евакуйовано» → «Вивезено») | зелений | червоний | зелений | зелений | червоний | зелений | зелений |
+| 16 | у вікно підтвердження йде id, а не ім’я оперативника | зелений | зелений | червоний | зелений | зелений | зелений | зелений |
+| 17 | «Евакуювати» у вікні нікого не евакуює | зелений | зелений | червоний | червоний | червоний | зелений | зелений |
+| 18 | «Евакуювати» у вікні не перевіряє клітинку й AP ще раз | зелений | зелений | зелений | червоний | зелений | зелений | зелений |
+| 19 | «Евакуювати» у вікні діє під авто-боєм | зелений | зелений | зелений | червоний | зелений | зелений | зелений |
+| 20 | під вікном евакуації плитки діють | зелений | зелений | зелений | зелений | червоний | зелений | зелений |
+| 21 | фокус лишається на плитці під вікном | зелений | зелений | зелений | зелений | червоний | зелений | зелений |
+| 22 | `battle.close` не закриває вікно евакуації | зелений | зелений | зелений | зелений | зелений | червоний | зелений |
+```
+
+Перевірки `expect` без поломки на прототипі (`expects.md`): вісім рядків. `expect(n).toBeGreaterThan(1)` — крок сценарію. `expect(squad(f)).toHaveLength(n)` під авто-боєм — поломка 8 її більше не ламає: після аудиту та сама перевірка є й у `evacuateNow` (поломка 19), тож одна поломка поведінки не міняє — поломку 8 не ловить жоден тест. Решта шість — перевірки після сильнішої в тому ж тесті (як у таблиці плану до аудиту).
+
+<!-- блок: limits-v2 -->
+```text
+- (а) Звуку події евакуації і разової підказки «Можна евакуюватись» (решта кроку П15.4) немає: за відповіддю власника в крок увійшли кнопка, клавіша V і причини.
+- (б) Бот авто-бою не евакуюється (відповідь власника «Ні, як зараз»); політика евакуації бота — крок П15.5 із симуляціями балансу.
+- (в) Рядка про евакуацію в журналі бою немає: `battleEventText` подію `evac_unit` не показує; про евакуацію каже лише рядок `#binfo`.
+- (г) Під вікнами «Меню», «Як грати» і «Незбережені зміни» клавіші бою і плитки діють, як і до кроку: заборона й фокус — лише для вікна евакуації (рішення планувальника; аудитор Opus припускає ту саму ваду з фокусом у «Незбережених змінах», крок її не перевіряв).
+- (д) Плитка прихована лише в бою без клітинок висадки; на сторінці таких боїв немає (кожен бій — місія), тож приховування (атрибут `hidden` і правило `#btoolbar button[hidden]`) тести не перевіряють.
+- (е) Тест модуля і тест на сторінці не бачать, що оперативник зник з канви (канва в jsdom — заглушка): це видно в сценарії e2e і на прев'ю.
+- (є) Поломку 8 («під авто-боєм евакуація діє») не ловить жоден тест: та сама перевірка є і в `evacuateNow` (поломка 19) — тест ловить лише зняття обох.
+- (ж) Підсумок поломок рахує лише чотири тести модуля, що йдуть окремо; поломки 12, 13, 20 і 21 ловить лише тест на сторінці, поломку 22 — лише тест виходу з вікном.
+```
+
+<!-- блок: report-v2 -->
+````text
+# Т.71 — кнопка «Евакуація» в бою: звіт
+
+План — `docs/plans/t71-evac-button.md`. Код і тести — готовими латками плану, поломки, чекліст, звіт, запис кроку і PR — Mistral Vibe Code (Mistral Large 4); план, прототип коду і тестів, латки після аудиту — сесія Claude (Opus 5.5).
+
+## Що зроблено
+
+- Плитка тулбара «Евакуація» (`btn-evac`, 2 AP, клавіша V) між «Граната» і «Кінець»: оперативник на синій клітинці висадки покидає бій через `evacuate` ядра (ADR-0075, ядро без змін); у `#binfo` — «Евакуйовано: ім'я. На полі лишилось оперативників: N.».
+- Причини неактивності на плитці — «не на висадці» і «мало AP» (ті самі перевірки, що в ядрі, — `evacBlockReason` у `src/ui/battle.ts`); причини — і рядком `#binfo` на клавішу V.
+- Останній живий оперативник на полі — лише через вікно «Евакуювати останнього?» (`#evac-confirm`, кнопки «Евакуювати» і «Скасувати», фокус — на «Скасувати»). Під вікном клавіші бою, пробіл і плитки не діють; «Евакуювати» ще раз перевіряє клітинку, AP і авто-бій; вікно закривається разом із боєм.
+- Тести: чотири нові тести модуля вводу, тест підказки плитки, два наскрізні тести на сторінці (сід 42, пресет «норма») і сценарій e2e «Т.71» до банера «ЗАГІН ЕВАКУЙОВАНО»; переліки плиток у тесті тулбара і в сценарії приймання доповнено новою плиткою.
+
+## Навмисні поломки
+
+Поломки робив скрипт `python3 scripts/vibe-step.py mutations --v2` за блоком `step-v2` плану: по одній поломці в коді кроку, кожен новий тест модуля — окремим прогоном, `src/main.ui.test.ts` і `src/ui/toolbar.test.ts` — файлами цілком; файл після кожної поломки повернуто. Підсумок рахує лише чотири тести модуля, що йдуть окремо; стовпці тестів на сторінці і тесту тулбара в нього не входять (межа (ж)).
+
+<таблиця поломок>
+
+<речення з summary.md>
+
+Розбіжності з таблицею плану: <розбіжності з таблицею плану>
+
+## Межі
+
+<межі плану>
+
+## Чекліст перед PR
+
+<рядки чекліста>
+
+## Метрики
+
+- Рядків у підрахунку `./scripts/pr-size.sh origin/main HEAD` — <число рядків>
+- Час від запуску сесії до відкриття PR — ≈ 25 хв (запуск ≈ 13:27 UTC, PR відкрито 13:52 UTC; за годинником планувальника)
+
+## Що з чекліста не вдалося
+
+<що з чекліста не вдалося>
+
+## Відповідь власника (18.11.2026)
+
+Питання: «Т.70 змержено о 14:43 (PR #372, тег iter-T.70), але документ стану в проєкті ще «після Т.69», і Т.71 там не обрано. Що робимо як Т.71?». Відповідь: «Кандидат 76: евакуація».
+
+Питання: «Т.71 = евакуація в бою (план П15.4). Ядро готове: 2 ОД, солдат у синій клітинці старту знімається з поля. Що входить у крок?». Відповідь: «Кнопка + V + причини (Recommended)».
+
+Питання: «Якщо евакуйовується останній солдат на полі (бій одразу закінчується без премії, зонд лишається) — питати підтвердження?». Відповідь: «Так, вікно підтвердження (Recommended)».
+
+Питання: «Де кнопка видна?». Відповідь: «Завжди в бою місії (Recommended)».
+
+Питання: «Бот авто-бою евакуюється?». Відповідь: «Ні, як зараз (Recommended)».
+
+## Аудит
+
+Аудит PR #373 (ADR-0097), два аудитори, коміт `5e9fba1`.
+
+- Opus, субагент з копією репозиторію — знайдено 7, підтверджено 7 (≈ 6 хв, ≈ 147 тис. токенів); сценарії зіграно в браузері.
+- Mistral Large (джоба `mistral-audit`) — знайдено 2, підтверджено 2 (ввід 92,9 тис. токенів).
+
+Знахідки Opus:
+
+1. (висока, підтверджено) Під вікном евакуації плитки діяли: фокус лишався на плитці, Enter на «Кінець» віддавав хід демонам, на «Авто» — запускав авто-бій, а «Евакуювати» не перевіряв стан ще раз. Виправлено: фокус — на «Скасувати», плитки під вікном не діють, `evacuateNow` ще раз перевіряє клітинку, AP і авто-бій; тести модуля і на сторінці.
+2. (середня, підтверджено) Вікно лишалось поверх стартового екрана після виходу з бою. Виправлено: `battle.close` закриває вікно; тест на сторінці.
+3. (середня, підтверджено) В описі обраного власником варіанта (відповідь «Кнопка + V + причини (Recommended)») ішлося про e2e до банера, а сценарію e2e до банера не було. Виправлено: сценарій e2e «Т.71».
+4. (середня–низька, підтверджено) Атрибут `hidden` плитки не діяв: `display: flex` його перекривав. Виправлено правилом `#btoolbar button[hidden]`; тестом не покрито (межа (д)).
+5. (низька, підтверджено) «Олена евакуйовано на базу» — неправильна граматика. Виправлено: «Евакуйовано: Олена. …».
+6. (низька, підтверджено) Підсумок «ловить 13 з 17» при червоному в кожному рядку таблиці вводив в оману. Виправлено поясненням у звіті й межею (ж); підсумок рахує скрипт.
+7. (низька, підтверджено) Прогалини тестів: повторна перевірка, закриття вікна з боєм, плитки під вікном — тести додано; приховування плитки — межа (д).
+
+Знахідки Mistral:
+
+1. (середня, підтверджено) Та сама, що знахідка 6 Opus: підсумок проти таблиці. Виправлено так само.
+2. (низька, підтверджено) Критерій приймання «AP −2» новими тестами не перевірено (знімає AP ядро, його тести — у `src/core/`). Виправлено: «AP −2» з критеріїв прибрано.
+````
+
+<!-- блок: record-v2 -->
+```text
+- [x] **Т.71 (рішення власника 18.11.2026, після Т.70): кнопка «Евакуація» в бою (частина П15.4).** Мета: евакуація з ядра (ADR-0075) досяжна зі сторінки — кандидат 76 документа стану сесій Claude.
+    - Зроблено: плитка «Евакуація» (2 AP, клавіша V) між «Граната» і «Кінець»; причини неактивності «не на висадці» і «мало AP» на плитці й рядком `#binfo`; останній оперативник на полі — лише через вікно «Евакуювати останнього?» (`#evac-confirm`): фокус у вікні, клавіші й плитки під ним не діють, «Евакуювати» ще раз перевіряє стан, вікно закривається разом із боєм; сценарій e2e до банера «ЗАГІН ЕВАКУЙОВАНО»; ядро без змін. Звуку і разової підказки П15.4 у кроці немає (відповідь власника), бот авто-бою не евакуюється.
+    - Виконано: рядків у підрахунку `./scripts/pr-size.sh origin/main HEAD` — <число рядків>. <речення з summary.md>
+    - Урок: <урок>
+    - Аудит (PR #373, ADR-0097): Opus, субагент з копією репозиторію (коміт `5e9fba1`) — знайдено 7, підтверджено 7 (≈ 6 хв, ≈ 147 тис. токенів): плитки під вікном, вікно після виходу з бою, e2e до банера, `hidden`, граматика рядка, підсумок поломок, прогалини тестів — виправлено латками планувальника. Mistral Large (той самий коміт) — 2 / 2: підсумок поломок, «AP −2» у критеріях.
+    - Код і тести — Mistral Vibe Code латками плану; час від запуску до PR — ≈ 25 хв за годинником планувальника.
+    - Звіт — `docs/reports/t71-evac-button.md`
+```
+
+<!-- блок: pr-body-v2 -->
+```text
+### Що змінено і чому
+
+Евакуація з місії є в ядрі (ADR-0075, `evacuate`), але зі сторінки була недосяжна. Тепер у тулбарі бою є плитка «Евакуація» (2 AP, клавіша V): оперативник на синій клітинці висадки покидає бій. Не на клітинці чи без AP — плитка неактивна з причиною «не на висадці» / «мало AP», причина — і рядком `#binfo`. Останнього живого оперативника на полі гра евакуює лише після вікна «Евакуювати останнього?»: бій тоді закінчиться результатом «евакуйовано» без премії. Під вікном клавіші й плитки не діють, вікно закривається разом із боєм. Ядро без змін; звуку, разової підказки і евакуації бота авто-бою в кроці немає.
+
+### Критерії приймання
+
+- Оперативник на синій клітинці висадки з ≥ 2 AP — плитка «Евакуація» чи клавіша V знімає його з поля, у `#binfo` — «Евакуйовано: ім'я. На полі лишилось оперативників: N.».
+- Не на клітинці висадки чи < 2 AP — плитка неактивна з причиною на ній і в підказці; клавіша V дає причину в `#binfo` і нікого не знімає.
+- Останній живий оперативник на полі — лише після «Евакуювати» у вікні; «Скасувати» лишає його на полі, бій триває; під вікном клавіші і плитки бою не діють; «Евакуювати» ще раз перевіряє клітинку, AP і авто-бій.
+- Вихід із бою закриває вікно; під авто-боєм клавіша V нічого не робить.
+- Сценарій e2e «Т.71» доходить до банера «ЗАГІН ЕВАКУЙОВАНО».
+
+### Відповідь власника (18.11.2026)
+
+Питання: «Т.70 змержено о 14:43 (PR #372, тег iter-T.70), але документ стану в проєкті ще «після Т.69», і Т.71 там не обрано. Що робимо як Т.71?». Відповідь: «Кандидат 76: евакуація».
+
+Питання: «Т.71 = евакуація в бою (план П15.4). Ядро готове: 2 ОД, солдат у синій клітинці старту знімається з поля. Що входить у крок?». Відповідь: «Кнопка + V + причини (Recommended)».
+
+Питання: «Якщо евакуйовується останній солдат на полі (бій одразу закінчується без премії, зонд лишається) — питати підтвердження?». Відповідь: «Так, вікно підтвердження (Recommended)».
+
+Питання: «Де кнопка видна?». Відповідь: «Завжди в бою місії (Recommended)».
+
+Питання: «Бот авто-бою евакуюється?». Відповідь: «Ні, як зараз (Recommended)».
+
+### Перевірка
+
+<рядки чекліста>
+
+- <речення з summary.md> Підсумок рахує лише чотири тести модуля, що йдуть окремо (межа (ж) звіту).
+- Розбіжності з таблицею плану: <розбіжності з таблицею плану>
+- Рядків у підрахунку `./scripts/pr-size.sh origin/main HEAD` — <число рядків>
+- `vibe-plan-check.mjs` перед пушем, рядки «Звірено» і «Знахідок» дослівно:
+<рядки vibe-plan-check>
+
+### Аудит
+
+Аудит PR #373 (ADR-0097) на коміті `5e9fba1`: Opus, субагент з копією репозиторію — знайдено 7, підтверджено 7; Mistral Large (джоба `mistral-audit`) — знайдено 2, підтверджено 2. Усі підтверджені виправлено латками планувальника в цьому PR (два коміти після аудиту); відхилених немає. Перелік — у розділі «Аудит» звіту `docs/reports/t71-evac-button.md`.
+
+Згадка: кандидат 76, П15.4 (ADR-0075); план — `docs/plans/t71-evac-button.md`.
+
+Iter-Tag: iter-T.71
+```
