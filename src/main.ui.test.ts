@@ -2011,18 +2011,20 @@ describe('Т.71: евакуація на сторінці — плитка, кл
     expect(btn('btn-evac').title).toBe('2 AP · оперативник на синій клітинці висадки покидає бій; премії за місію немає · клавіша V');
     tap(2, 2);
     btn('btn-evac').click();
-    expect($('binfo').textContent).toMatch(/ евакуйовано на базу\. На полі лишилось оперативників: 2\.$/);
+    expect($('binfo').textContent).toMatch(/^Евакуйовано: .+\. На полі лишилось оперативників: 2\.$/);
     tap(3, 2);
     key('KeyV');
-    expect($('binfo').textContent).toMatch(/ евакуйовано на базу\. На полі лишилось оперативників: 1\.$/);
+    expect($('binfo').textContent).toMatch(/^Евакуйовано: .+\. На полі лишилось оперативників: 1\.$/);
     tap(2, 3);
     key('KeyV');
     expect($('evac-confirm').classList.contains('hidden')).toBe(false);
     expect($('evac-confirm-text').textContent).toMatch(
       / — останній оперативник на полі\. Місію буде завершено без премії, зонд Розриву лишиться активним\.$/
     );
+    expect(document.activeElement?.id).toBe('btn-evac-no'); // фокус у вікні, а не на плитці під ним
     const turn = $('bctx-turn').textContent;
     key('KeyE'); // під вікном клавіші бою не діють
+    btn('btn-end').click(); // і плитки теж
     expect($('bctx-turn').textContent).toBe(turn);
     btn('btn-evac-no').click();
     expect($('evac-confirm').classList.contains('hidden')).toBe(true);
@@ -2031,5 +2033,26 @@ describe('Т.71: евакуація на сторінці — плитка, кл
     btn('btn-evac-yes').click();
     expect($('evac-confirm').classList.contains('hidden')).toBe(true);
     expect($('bresult').textContent).toContain('ЗАГІН ЕВАКУЙОВАНО — врятовані на базі, зонд Розриву лишається активним');
+  });
+
+  it('Т.71: вихід на стартовий екран з відкритим вікном евакуації — вікно закривається разом із боєм', () => {
+    startParty('42');
+    for (let i = 0; i < 1500 && document.querySelector('button.mission') === null; i++) btn('btn-tick').click();
+    (document.querySelector('button.mission') as HTMLButtonElement).click();
+    const keyV = (): void => void document.dispatchEvent(new KeyboardEvent('keydown', { key: 'v', code: 'KeyV', bubbles: true }));
+    for (const [x, y] of [
+      [2, 2],
+      [3, 2],
+      [2, 3],
+    ] as const) {
+      $('battle').dispatchEvent(new MouseEvent('click', { clientX: x * 48 + 24, clientY: y * 48 + 24 }));
+      keyV();
+    }
+    expect($('evac-confirm').classList.contains('hidden')).toBe(false);
+    btn('btn-menu').click();
+    btn('btn-menu-exit').click();
+    btn('btn-exit-yes').click();
+    expect($('start-screen').classList.contains('hidden')).toBe(false);
+    expect($('evac-confirm').classList.contains('hidden')).toBe(true);
   });
 });

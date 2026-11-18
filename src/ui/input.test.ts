@@ -748,7 +748,7 @@ describe('Т.71: евакуація (плитка і клавіша V)', () => {
     expect(squad(f).map((u) => u.id)).not.toContain(s!.id);
     expect(f.ui.mission!.state.evacuated!.map((u) => u.id)).toEqual([s!.id]);
     expect(f.ui.selectedId).toBeNull();
-    expect(f.binfo()).toBe(s!.name + ' евакуйовано на базу. На полі лишилось оперативників: ' + (n - 1) + '.');
+    expect(f.binfo()).toBe('Евакуйовано: ' + s!.name + '. На полі лишилось оперативників: ' + (n - 1) + '.');
     expect(f.deps.confirmLastEvac).not.toHaveBeenCalled();
   });
 
@@ -772,5 +772,34 @@ describe('Т.71: евакуація (плитка і клавіша V)', () => {
     expect(document.getElementById('bresult')!.textContent).toContain(
       'ЗАГІН ЕВАКУЙОВАНО — врятовані на базі, зонд Розриву лишається активним'
     );
+  });
+
+  it('Т.71: «Евакуювати» у вікні ще раз перевіряє клітинку, AP і авто-бій — інакше нікого не знімає', () => {
+    const f = makeFixture();
+    launchMission(f);
+    const all = squad(f);
+    for (const u of all.slice(0, -1)) {
+      f.ui.selectedId = u.id;
+      keyV(f);
+    }
+    const last = all[all.length - 1]!;
+    f.ui.selectedId = last.id;
+    keyV(f);
+    const yes = f.deps.confirmLastEvac.mock.calls[0]![1] as () => void;
+    const pos = last.pos;
+    last.pos = { x: 10, y: 10 };
+    yes();
+    expect(f.binfo()).toBe('Евакуація — лише з синьої клітинки висадки.');
+    last.pos = pos;
+    last.ap = 1;
+    yes();
+    expect(f.binfo()).toBe('Не вистачає AP: евакуація коштує 2, є 1.');
+    last.ap = 2;
+    f.deps.autoBusy.mockReturnValue(true);
+    yes();
+    expect(squad(f).map((u) => u.id)).toEqual([last.id]);
+    f.deps.autoBusy.mockReturnValue(false);
+    yes();
+    expect(squad(f)).toEqual([]);
   });
 });

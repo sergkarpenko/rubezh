@@ -774,3 +774,39 @@ test('Т.61: екран перемоги і рядок-пояснення ста
 
   expect(errors, 'помилки сторінки: ' + errors.join(' | ')).toEqual([]);
 });
+
+// Т.71 (рішення власника 18.11.2026; в описі обраного варіанта — e2e до банера): загін покидає бій з синіх клітинок висадки —
+// плиткою, клавішею V і, для останнього, через вікно підтвердження — до банера «ЗАГІН ЕВАКУЙОВАНО».
+test('Т.71: евакуація — плитка, клавіша V і вікно для останнього до банера «ЗАГІН ЕВАКУЙОВАНО»', async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.goto('./');
+  const helpClose = page.locator('#btn-help-close'); // перший візит — «Як грати» поверх стартового екрана
+  if (await helpClose.isVisible()) await helpClose.click();
+  await page.locator('#btn-start-new').click();
+  await page.locator('#new-game-seed').fill(String(SEED));
+  await page.locator('#new-game-preset').selectOption(PRESET);
+  await page.locator('#btn-new-game-start').click();
+  await page.locator('#status-tab-base').click();
+  const mission = page.locator('#ufos button.mission').first();
+  for (let i = 0; i < MAX_TICKS_TO_MISSION && !(await mission.isVisible()); i++) await page.locator('#btn-tick').click();
+  await mission.click();
+  await expect(page.locator('#battle-panel')).toBeVisible();
+  const box = (await page.locator('#battle').boundingBox())!;
+  const k = box.width / (MISSION_MAP_W * 48);
+  const tap = (x: number, y: number): Promise<void> => page.mouse.click(box.x + (x * 48 + 24) * k, box.y + (y * 48 + 24) * k);
+  const info = page.locator('#binfo');
+  await tap(2, 2);
+  await page.locator('#btn-evac').click();
+  await expect(info).toHaveText(/^Евакуйовано: .+\. На полі лишилось оперативників: 2\.$/);
+  await tap(3, 2);
+  await page.keyboard.press('v');
+  await expect(info).toHaveText(/^Евакуйовано: .+\. На полі лишилось оперативників: 1\.$/);
+  await tap(2, 3);
+  await page.keyboard.press('v');
+  await expect(page.locator('#evac-confirm')).toBeVisible();
+  await expect(page.locator('#btn-evac-no')).toBeFocused();
+  await page.locator('#btn-evac-yes').click();
+  await expect(page.locator('#evac-confirm')).toBeHidden();
+  await expect(page.locator('#bresult')).toContainText('ЗАГІН ЕВАКУЙОВАНО — врятовані на базі, зонд Розриву лишається активним');
+  expect(errors, 'помилки сторінки: ' + errors.join(' | ')).toEqual([]);
+});
