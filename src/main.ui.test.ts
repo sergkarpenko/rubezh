@@ -1952,3 +1952,44 @@ describe('Т.66: рядок #fighter-last зникає після виграно
     expect($('fighter').textContent ?? '').not.toContain(abortedText);
   });
 });
+
+// Т.69 (кандидат 55, після Т.66; план — docs/plans/t69-fighter-last-lost.md): рядок #fighter-last
+// після перерваного перехоплення (зонд приземлився) лишається, коли місію на цьому зонді програно, — зонд
+// лишається в geo.ufos (completeMission). Виграну місію тримає тест Т.66; евакуйованої зі сторінки не досягти.
+describe('Т.69: рядок #fighter-last лишається після програної місії', () => {
+  it('Т.69: сід 36, пресет «складний»: перехоплення ufo1 перервано приземленням, місію на ufo1 програно — рядок лишається', async () => {
+    startParty('36', 'складний');
+    // 1. тикаємо, доки не з'явиться активна кнопка перехоплення (запобіжник — 60 кліків), і клікаємо її
+    let launched = false;
+    for (let i = 0; i < 60 && !launched; i++) {
+      const b = [...document.querySelectorAll<HTMLButtonElement>('button.intercept')].find((x) => !x.disabled);
+      if (b) {
+        b.click();
+        launched = true;
+      } else btn('btn-tick').click();
+    }
+    expect(launched).toBe(true);
+    // 2. тикаємо, доки не з'явиться #fighter-last (запобіжник — 10 кліків): зонд приземлився під час погоні
+    for (let i = 0; i < 10 && document.getElementById('fighter-last') === null; i++) btn('btn-tick').click();
+    const abortedText = '✦ Зонд Розриву ufo1 приземлився — перехоплення перервано';
+    expect(document.getElementById('fighter-last')?.textContent).toBe(abortedText);
+    // 3. місія на ufo1 — одразу, без жодного тіку
+    const mission = document.querySelector<HTMLButtonElement>('#ufos .ufo button.mission');
+    expect(mission).not.toBeNull();
+    expect(mission!.disabled).toBe(false);
+    mission!.click();
+    expect($('battle-panel').classList.contains('hidden')).toBe(false);
+    // 4. авто-бій до результату — поразка (сід 36, пресет «складний»)
+    await runAutoBattle();
+    expect($('bresult').textContent).toContain('ЗАГІН ВТРАЧЕНО');
+    // 5. уже на картці результату (finish перемальовує панелі): зонд лишився в списку, рядок на панелі — той самий, один
+    expect(document.querySelectorAll('#ufos .ufo')).toHaveLength(1);
+    expect(document.querySelectorAll('#fighter-last')).toHaveLength(1);
+    expect(document.getElementById('fighter-last')?.textContent).toBe(abortedText);
+    // 6. назад на геосцену: зонд у списку, місію можна повторити, рядок на панелі лишився
+    btn('btn-close').click();
+    expect($('geo-panel').classList.contains('hidden')).toBe(false);
+    expect(document.querySelectorAll('#ufos .ufo button.mission')).toHaveLength(1);
+    expect(document.getElementById('fighter-last')?.textContent).toBe(abortedText);
+  });
+});
