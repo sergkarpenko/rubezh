@@ -12,7 +12,7 @@ import type { EconomyEvent } from '../core/economy';
 // П11.6 (ADR-0058): події науки і «Кузні» → журнал (категорія «База»).
 import { projectName, type ResearchEvent } from '../core/research';
 import { itemName, type WorkshopEvent } from '../core/workshop';
-import type { GameEvent, ShotMode } from '../core/combat';
+import { EVAC_AP_COST, type GameEvent, type ShotMode } from '../core/combat';
 import { claimHint, type Party } from '../core/save';
 import { el } from './dom';
 import { byGender, ticksText } from './text';
@@ -39,6 +39,7 @@ export interface JournalDeps {
   onBattleSound?(e: GameEvent): void; // постріл/влучання/смерть з подій бою
   onGeoSound?(e: GeoEvent): void; // виявлення НЛО, результат місії
   party(): Party; // П9.2: прапорці підказок живуть у Party (сейв-сумісні, ADR-0026)
+  isEvacOperative?(id: string): boolean; // Т.72: юніт із цим id — оперативник гравця в бою з клітинками висадки; без цієї залежності підказки немає
 }
 
 export interface Journal {
@@ -144,6 +145,19 @@ export function createJournal(deps: JournalDeps): Journal {
       if (msg) journal(msg.text, msg.cls, 'battle');
       // П11.7 (ADR-0059): постріл/влучання/смерть → звук (drain-контур журналу).
       deps.onBattleSound?.(e);
+      // Т.72: перше поранення чи смерть оперативника в бою з клітинками висадки — підказка «Можна евакуюватись», один раз за партію.
+      const op = deps.isEvacOperative ?? (() => false);
+      const evacHurt =
+        (e.type === 'shot' && e.hit && e.damage > 0 && op(e.targetId)) ||
+        (e.type === 'death' && op(e.unitId)) ||
+        (e.type === 'grenade' && e.hits.some((h) => h.damage > 0 && op(h.unitId)));
+      if (evacHurt && claimHint(deps.party().hints, 'evac')) {
+        journal(
+          `Підказка: оперативника можна евакуювати із зони висадки — плитка «Евакуація» або клавіша V, ${EVAC_AP_COST} AP. Евакуйовані повертаються на базу без премії.`,
+          '',
+          'battle'
+        );
+      }
     }
   }
 

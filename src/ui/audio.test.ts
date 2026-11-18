@@ -107,3 +107,10 @@ describe('тумблер і сховище (ADR-0026: localStorage поза се
 // audio-synth.test.ts у коміті wiring: тести йдуть разом із точками викликів.
 // Фолбек-міграція ключа (rubezh.sound → rubezh.settings.sound, П12.3) — у
 // src/ui/settings.test.ts: browserStore живе на localStorage (jsdom).
+
+// Т.72 (рішення власника 18.11.2026): звук евакуації — висхідний «підйом».
+describe('Т.72: звук евакуації', () => {
+  it('Т.72: подія evac_unit — звук «evac»', () => {
+    expect(battleSounds(evB({ type: 'evac_unit' }))).toEqual(['evac']);
+  });
+});

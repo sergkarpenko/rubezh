@@ -11,7 +11,7 @@ import type { GeoEvent } from '../core/geo';
 
 // Набір звуків (ADR-0059): постріли трьох режимів (різні сигнатури), влучання,
 // смерть, рух (крок), виявлення НЛО, результат місії (перемога/поразка), клік UI.
-export type SoundName = 'click' | 'move' | 'shot-snap' | 'shot-aimed' | 'shot-auto' | 'hit' | 'death' | 'detect' | 'win' | 'lose';
+export type SoundName = 'click' | 'move' | 'shot-snap' | 'shot-aimed' | 'shot-auto' | 'hit' | 'death' | 'detect' | 'win' | 'lose' | 'evac';
 
 // --- Мінімальні структурні інтерфейси WebAudio (для моків у тестах) ---
 
@@ -112,6 +112,7 @@ export function battleSounds(e: GameEvent): SoundName[] {
   if (e.type === 'shot') return e.hit ? [SHOT_SOUND[e.mode], 'hit'] : [SHOT_SOUND[e.mode]];
   if (e.type === 'death') return ['death'];
   if (e.type === 'move') return ['move'];
+  if (e.type === 'evac_unit') return ['evac']; // Т.72: звук евакуації
   return [];
 }
 
@@ -216,6 +217,10 @@ function playRecipe(c: SoundContext, name: SoundName, t: number): void {
     case 'lose': // дві ноти вниз
       note(c, t, 'sine', 392, undefined, 0.18, 0.2);
       note(c, t + 0.18, 'sine', 261.63, undefined, 0.24, 0.2);
+      break;
+    case 'evac': // Т.72: «підйом» — sine 220→880 за 0,3 с + тихий шум
+      note(c, t, 'sine', 220, 880, 0.3, 0.2);
+      noise(c, t, 0.3, 0.06);
       break;
   }
 }

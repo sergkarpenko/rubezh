@@ -74,12 +74,13 @@ export interface HintFlags {
   intercept: boolean; // «Можна перехопити»
   mission: boolean; // «Доступна місія»
   repair: boolean; // «Ремонт завершено»
+  evac: boolean; // Т.72: «Можна евакуюватись»
 }
 
 export type HintKey = keyof HintFlags;
 
 export function defaultHints(): HintFlags {
-  return { intercept: false, mission: false, repair: false };
+  return { intercept: false, mission: false, repair: false, evac: false };
 }
 
 // Атомарне «бронювання» підказки: true — лише перший виклик (підказку щойно
@@ -172,6 +173,7 @@ interface HintsSave {
   intercept: boolean;
   mission: boolean;
   repair: boolean;
+  evac?: boolean; // Т.72: нове поле; у сейвах до Т.72 його немає — злиття з defaultHints() у deserializeParty дає false
 }
 
 // П11.2 (ADR-0058): стан науки в сейві; відсутнє поле (сейви до Фази 11) =
