@@ -1927,8 +1927,10 @@ describe('Т.66: рядок #fighter-last зникає після виграно
     for (let i = 0; i < 10 && document.getElementById('fighter-last') === null; i++) btn('btn-tick').click();
     const abortedText = '✦ Зонд Розриву ufo1 приземлився — перехоплення перервано';
     expect(document.getElementById('fighter-last')?.textContent).toBe(abortedText);
+    // у списку зондів — один зонд (ufo1; назв зондів список не показує) з кнопкою місії
+    expect(document.querySelectorAll('#ufos .ufo')).toHaveLength(1);
     // 3. місія на ufo1 — одразу, без жодного тіку: відліт ufo_left не настає
-    const mission = document.querySelector<HTMLButtonElement>('button.mission');
+    const mission = document.querySelector<HTMLButtonElement>('#ufos .ufo button.mission');
     expect(mission).not.toBeNull();
     expect(mission!.disabled).toBe(false);
     mission!.click();
@@ -1936,12 +1938,17 @@ describe('Т.66: рядок #fighter-last зникає після виграно
     // 4. авто-бій до результату — перемога (сід 42)
     await runAutoBattle();
     expect($('bresult').textContent).toContain('ЗАЧИЩЕНО');
-    // 5. назад на геосцену: зонда ufo1 немає, рядка #fighter-last немає, а в журналі рядок про переривання лишився
+    // 5. уже на картці результату (finish перемальовує панелі): зонда в списку немає, рядка немає — ні елемента, ні тексту
+    expect(document.querySelectorAll('#ufos .ufo')).toHaveLength(0);
+    expect(document.getElementById('fighter-last')).toBeNull();
+    expect($('fighter').textContent ?? '').not.toContain(abortedText);
+    // 6. назад на геосцену: те саме, а в журналі рядок про переривання лишився, рядка про відліт немає
     btn('btn-close').click();
     expect($('geo-panel').classList.contains('hidden')).toBe(false);
-    expect($('ufos').textContent ?? '').not.toContain('ufo1');
+    expect(document.querySelectorAll('#ufos .ufo')).toHaveLength(0);
     expect($('log').textContent ?? '').not.toContain('Зонд Розриву ufo1 відлетів і зник');
     expect($('log').textContent ?? '').toContain(abortedText);
     expect(document.getElementById('fighter-last')).toBeNull();
+    expect($('fighter').textContent ?? '').not.toContain(abortedText);
   });
 });
