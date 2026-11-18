@@ -6,7 +6,16 @@
 // (там готова фікстура бою); іконки малюються матрицями один раз при створенні.
 // П13.3 (ADR-0067): остання плитка — перемикач авто-бою «Авто»/«Стоп».
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { GRENADE_AP_COST, GRENADE_DAMAGE, GRENADE_RANGE, HEAL_AP_COST, HEAL_AMOUNT, OVERWATCH_AP_COST, RIFLE } from '../core/combat';
+import {
+  EVAC_AP_COST,
+  GRENADE_AP_COST,
+  GRENADE_DAMAGE,
+  GRENADE_RANGE,
+  HEAL_AP_COST,
+  HEAL_AMOUNT,
+  OVERWATCH_AP_COST,
+  RIFLE,
+} from '../core/combat';
 import { ICON_SIZE, TOOLBAR_ACTIONS, createToolbar, drawToolbarIcon, type ToolbarActionId } from './toolbar';
 
 // No-op контекст малювання — той самий патерн, що й у battle.test.ts (jsdom
@@ -49,6 +58,7 @@ describe('Т.33: ціна в AP і клавіша в кутках плитки',
       ['btn-ow', OVERWATCH_AP_COST + ' AP', 'O'],
       ['btn-medkit', HEAL_AP_COST + ' AP', 'M'],
       ['btn-grenade', GRENADE_AP_COST + ' AP', 'G'],
+      ['btn-evac', EVAC_AP_COST + ' AP', 'V'],
       ['btn-end', null, 'E'],
       ['btn-auto-battle', null, null],
     ]);
@@ -61,7 +71,7 @@ describe('тулбар: перелік дій (П13.2, ADR-0066)', () => {
     createToolbar(document.getElementById('btoolbar')!, { onAction });
     const buttons = [...document.querySelectorAll<HTMLButtonElement>('#btoolbar button')];
     expect(buttons.map((b) => b.id)).toEqual(TOOLBAR_ACTIONS.map((a) => a.btnId)); // той самий порядок
-    expect(TOOLBAR_ACTIONS.map((a) => a.id)).toEqual(['snap', 'aimed', 'auto', 'ow', 'medkit', 'grenade', 'end', 'auto-battle']);
+    expect(TOOLBAR_ACTIONS.map((a) => a.id)).toEqual(['snap', 'aimed', 'auto', 'ow', 'medkit', 'grenade', 'evac', 'end', 'auto-battle']);
     expect(TOOLBAR_ACTIONS.map((a) => a.label)).toEqual([
       'Швидкий',
       'Прицільний',
@@ -69,6 +79,7 @@ describe('тулбар: перелік дій (П13.2, ADR-0066)', () => {
       'Дозор',
       'Лікування',
       'Граната',
+      'Евакуація',
       'Кінець',
       'Авто',
     ]);
@@ -121,5 +132,9 @@ describe('тулбар: числові підказки механіки з ко
     expect(g).toContain('пошкодження ' + GRENADE_DAMAGE[0] + '–' + GRENADE_DAMAGE[1]);
     expect(g).toContain('≤' + GRENADE_RANGE);
     expect(g).toContain('уражає і своїх');
+  });
+
+  it('Т.71: евакуація — AP з константи, синя клітинка висадки, без премії, клавіша V', () => {
+    expect(hint('evac')).toBe(EVAC_AP_COST + ' AP · оперативник на синій клітинці висадки покидає бій; премії за місію немає · клавіша V');
   });
 });

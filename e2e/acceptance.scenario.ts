@@ -369,8 +369,9 @@ test('сценарій приймання ADR-0030: партія → місія 
     await expect(unit).toHaveText('не вибраний');
     // Т.32: розкладка бою на трьох розмірах вікна (журнал збоку / смугою)
     // Т.33: ціна в AP і клавіша — у кутках плиток дій
-    await expect(page.locator('#btoolbar .tb-key')).toHaveText(['1', '2', '3', 'O', 'M', 'G', 'E']);
-    await expect(page.locator('#btoolbar .tb-ap')).toHaveText(['3 AP', '5 AP', '4 AP', '3 AP', '4 AP', '4 AP']); // snap, aimed, auto, дозор, гель, граната
+    // Т.71: плитка «Евакуація» — 2 AP, клавіша V
+    await expect(page.locator('#btoolbar .tb-key')).toHaveText(['1', '2', '3', 'O', 'M', 'G', 'V', 'E']);
+    await expect(page.locator('#btoolbar .tb-ap')).toHaveText(['3 AP', '5 AP', '4 AP', '3 AP', '4 AP', '4 AP', '2 AP']); // snap, aimed, auto, дозор, гель, граната, евакуація
     // Т.44: туман знебарвлено — у клітинках туману (без стіни, декору, юніта і м'якого краю) середній розкид
     // каналів max(R,G,B) − min(R,G,B) у центральній ділянці 24 × 24 px не більший за 9 (до Т.44 — 13,6–18,3);
     // видимі клітинки кольорові. Пікселі канви від шрифту машини не залежать.
