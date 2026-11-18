@@ -283,6 +283,7 @@ function confirmLastEvac(name: string, yes: () => void): void {
   el('evac-confirm-text').textContent =
     name + ' — останній оперативник на полі. Місію буде завершено без премії, зонд Розриву лишиться активним.';
   box.classList.remove('hidden');
+  el('btn-evac-no').focus(); // Т.71 (аудит): фокус у вікні, а не на плитці під ним
   const close = (go: boolean): void => {
     box.classList.add('hidden');
     box.innerHTML = '';
@@ -652,6 +653,7 @@ if (typeof document !== 'undefined') {
   // іконки будує src/ui/toolbar.ts; стани/причини блокування — renderBattle).
   createToolbar(el('btoolbar'), {
     onAction: (id) => {
+      if (!el('evac-confirm').classList.contains('hidden')) return; // Т.71: під вікном евакуації плитки не діють
       battle.dismissTurnPlate(id === 'auto-battle'); // Т.33: дія гравця прибирає підсумок ходу демонів
       if (id === 'snap' || id === 'aimed' || id === 'auto') input.armFire(id);
       else if (id === 'ow') input.armOverwatch();

@@ -276,6 +276,9 @@
         border: 1px solid #3a4152;
         border-radius: 10px;
       }
+      #btoolbar button[hidden] {
+        display: none; /* Т.71 (аудит): display: flex вище перекриває атрибут hidden */
+      }
       #btoolbar button canvas {
         background: transparent;
       }

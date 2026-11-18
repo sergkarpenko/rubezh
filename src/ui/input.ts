@@ -592,11 +592,7 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
     }
     const why = evacBlockReason(ui.mission.state, sel);
     if (why !== null) {
-      battle.binfo(
-        why === 'cell'
-          ? 'Евакуація — лише з синьої клітинки висадки.'
-          : 'Не вистачає AP: евакуація коштує ' + EVAC_AP_COST + ', є ' + sel.ap + '.'
-      );
+      evacRefused(why, sel.ap);
       return;
     }
     const onField = ui.mission.state.units.filter((u) => u.side === 'player' && u.alive).length;
@@ -604,9 +600,25 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
     else evacuateNow(sel.id);
   }
 
+  function evacRefused(why: 'cell' | 'ap', ap: number): void {
+    battle.binfo(
+      why === 'cell'
+        ? 'Евакуація — лише з синьої клітинки висадки.'
+        : 'Не вистачає AP: евакуація коштує ' + EVAC_AP_COST + ', є ' + ap + '.'
+    );
+  }
+
   function evacuateNow(id: string): void {
-    if (!battle.playerTurnActive() || !ui.mission) return;
+    if (!battle.playerTurnActive() || !ui.mission || deps.autoBusy()) return;
     const state = ui.mission.state;
+    // Т.71 (аудит): між вікном і «Евакуювати» стан міг змінитись — перевірки ще раз
+    const u = state.units.find((x) => x.id === id && x.alive);
+    const why = u === undefined ? null : evacBlockReason(state, u);
+    if (u === undefined || why !== null) {
+      if (u !== undefined && why !== null) evacRefused(why, u.ap);
+      deps.renderAll();
+      return;
+    }
     try {
       const prevLen = state.log.length;
       const { unit } = evacuate(state, id);
@@ -616,7 +628,7 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
       battle.enqueueAnims(prevLen);
       if (!battle.checkOutcome()) {
         const left = state.units.filter((u) => u.side === 'player' && u.alive).length;
-        battle.binfo(unit.name + ' евакуйовано на базу. На полі лишилось оперативників: ' + left + '.');
+        battle.binfo('Евакуйовано: ' + unit.name + '. На полі лишилось оперативників: ' + left + '.');
       }
     } catch (e) {
       battle.binfo('✗ ' + (e as Error).message);

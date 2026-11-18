@@ -586,6 +586,7 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
   }
 
   function close(): void {
+    document.getElementById('evac-confirm')?.classList.add('hidden'); // Т.71 (аудит): вікно евакуації — разом із боєм
     deps.stopAuto(); // П13.3: авто-бій міг тривати — таймер і стан драйвера скидаємо
     deps.anim.cancel(); // П6.8: бій закрито — чергу анімацій скидаємо
     dropPlate(); // Т.33
