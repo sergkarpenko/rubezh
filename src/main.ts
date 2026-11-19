@@ -215,6 +215,8 @@ const OVERLAY_ESC_CLOSE: Record<string, string> = {
   'game-menu': 'btn-menu-close',
   'new-game-dialog': 'btn-new-game-cancel',
 };
+// Т.75: елементи, на які Tab ставить фокус (пастка фокусу у вікні)
+const FOCUSABLE = 'button, input, select, textarea, a[href], [tabindex]:not([tabindex="-1"])';
 let gameOver = false; // банкрутство (ADR-0021): боєготових немає і грошей на найм немає
 let partyOnScreen = false; // Т.58: партію показано (не стартовий екран) — лише тоді ambient-цикл стартує
 let victoryDismissed = false; // П8.3a: endless — гравець закрив екран перемоги і продовжує гру
@@ -724,6 +726,20 @@ if (typeof document !== 'undefined') {
         return;
       }
     }
+  });
+  // Т.75: пастка фокусу — Tab і Shift+Tab ходять по колу всередині відкритого вікна (вікно — за порядком Esc)
+  document.addEventListener('keydown', (ev) => {
+    if (ev.key !== 'Tab') return;
+    const box = [...Object.keys(OVERLAY_ESC_CLOSE), 'campaign-victory'].map((id) => el(id)).find((o) => !o.classList.contains('hidden'));
+    if (box === undefined) return;
+    const items = [...box.querySelectorAll<HTMLElement>(FOCUSABLE)].filter(
+      (e) => !(e as HTMLButtonElement).disabled && !e.hidden && e.closest('.hidden') === null
+    );
+    const i = items.indexOf(document.activeElement as HTMLElement);
+    const edge = ev.shiftKey ? i <= 0 : i === -1 || i === items.length - 1;
+    if (!edge) return; // всередині вікна — звичайний Tab браузера
+    ev.preventDefault();
+    if (items.length > 0) items[ev.shiftKey ? items.length - 1 : 0].focus();
   });
   // П11.7 (ADR-0059): клік UI — делегований слухач (усі кнопки застосунку);
   // перший звук іде з жесту користувача — AudioContext розблоковується (autoplay).

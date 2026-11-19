@@ -237,6 +237,10 @@ export function battleEventText(e: GameEvent, name: (id: string) => string): { t
     const hits = e.hits.length > 0 ? e.hits.map((h) => '−' + h.damage + ' ' + name(h.unitId)).join(', ') : 'у зоні нікого';
     return { text: '✦ ' + name(e.unitId) + ' кидає гранату в (' + e.center.x + ', ' + e.center.y + '): ' + hits, cls: '' };
   }
+  // Т.75 (рішення власника 19.11.2026): рядок евакуації — без роду, як рядок під полем бою
+  if (e.type === 'evac_unit') {
+    return { text: '⇧ Евакуйовано: ' + name(e.unitId), cls: '' };
+  }
   return null; // move / turn / overwatch — не для журналу бою
 }
 
@@ -254,6 +258,8 @@ export function geoEventText(e: GeoEvent, knownDetected: ReadonlySet<string>): {
       return knownDetected.has(e.ufoId) ? { text: 'Зонд Розриву ' + e.ufoId + ' відлетів і зник', cls: '' } : null;
     case 'mission_won':
       return { text: 'Місію зачищено ✓', cls: 'win' };
+    case 'mission_evacuated': // Т.75 (рішення власника 19.11.2026): у парі до «зачищено ✓» / «втрачено ✗»
+      return { text: 'Загін евакуйовано ⇧', cls: '' };
     case 'mission_lost':
       return { text: 'Загін втрачено ✗', cls: 'lose' };
     case 'intercept_start':

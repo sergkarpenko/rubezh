@@ -114,6 +114,13 @@ describe('geoEventText: фільтр туману стратегічного ж�
     });
   });
 
+  it('Т.75: місія з результатом «евакуйовано» — рядок «Загін евакуйовано ⇧» (рішення власника)', () => {
+    expect(geoEventText(evGeo({ type: 'mission_evacuated', ufoId: 'u3', minute: 9 }), known)).toEqual({
+      text: 'Загін евакуйовано ⇧',
+      cls: '',
+    });
+  });
+
   it('Т.49: перехоплення перервало приземлення зонда — власний текст, без «зник з трекінгу»', () => {
     expect(geoEventText(evGeo({ type: 'intercept_aborted', reason: 'ufo_landed', ufoId: 'u7', minute: 3 }), known)).toEqual({
       text: '✦ Зонд Розриву u7 приземлився — перехоплення перервано',
@@ -171,6 +178,11 @@ describe('battleEventText: події бою → журнал', () => {
     expect(battleEventText(evBattle({ type: 'move', unitId: 's1', from: { x: 0, y: 0 }, to: { x: 1, y: 0 } }), name)).toBe(null);
     expect(battleEventText(evBattle({ type: 'turn', turn: 2, side: 'alien' }), name)).toBe(null);
     expect(battleEventText(evBattle({ type: 'overwatch', unitId: 's1', armed: true }), name)).toBe(null);
+  });
+
+  it('Т.75: евакуація оперативника — рядок «⇧ Евакуйовано: …» без роду (рішення власника)', () => {
+    expect(battleEventText(evBattle({ type: 'evac_unit', unitId: 's1' }), name)).toEqual({ text: '⇧ Евакуйовано: Гарт', cls: '' });
+    expect(battleEventText(evBattle({ type: 'evac_unit', unitId: 's2' }), () => 'Олена')?.text).toBe('⇧ Евакуйовано: Олена');
   });
 });
 

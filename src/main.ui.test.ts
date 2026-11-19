@@ -2223,3 +2223,62 @@ describe('Т.73: вікна поверх бою — клавіші, плитки
     expect(open('start-screen')).toBe(true);
   });
 });
+
+// Т.75 (хвіст Т.73, межа (а) звіту): пастка фокусу — Tab і Shift+Tab не виводять фокус з відкритого вікна
+describe('Т.75: пастка фокусу у вікнах поверх гри', () => {
+  const tab = (shift = false): void => {
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', code: 'Tab', shiftKey: shift, bubbles: true, cancelable: true }));
+  };
+  const items = (id: string): HTMLButtonElement[] => [...$(id).querySelectorAll<HTMLButtonElement>('button')].filter((b) => !b.disabled);
+  const focused = (): Element | null => document.activeElement;
+  // Tab з останньої кнопки — на першу; Shift+Tab з першої — на останню; фокус поза вікном — Tab на першу
+  const trapped = (id: string): void => {
+    const b = items(id);
+    expect(b.length).toBeGreaterThan(1);
+    b[b.length - 1].focus();
+    tab();
+    expect(focused()).toBe(b[0]);
+    tab(true);
+    expect(focused()).toBe(b[b.length - 1]);
+    btn('btn-menu').focus(); // кнопка топбару під вікном
+    tab();
+    expect(focused()).toBe(b[0]);
+    btn('btn-menu').focus();
+    tab(true);
+    expect(focused()).toBe(b[b.length - 1]);
+  };
+
+  it('Т.75: «Меню» і «Незбережені зміни» тримають фокус; без вікна Tab не перехоплюється', () => {
+    startParty('42');
+    btn('btn-tick').click(); // незбережені зміни — тоді «Вийти» відкриває «Незбережені зміни»
+    btn('btn-menu').click();
+    trapped('game-menu');
+    btn('btn-menu-exit').click();
+    expect($('exit-confirm').classList.contains('hidden')).toBe(false);
+    trapped('exit-confirm');
+    btn('btn-exit-no').click();
+    // вікна закрито: Tab іде браузеру — подію не скасовано, фокус на місці
+    btn('btn-menu').focus();
+    const ev = new KeyboardEvent('keydown', { key: 'Tab', code: 'Tab', bubbles: true, cancelable: true });
+    document.dispatchEvent(ev);
+    expect(ev.defaultPrevented).toBe(false);
+    expect(focused()).toBe(btn('btn-menu'));
+  });
+
+  it('Т.75: «Налаштування» і «Як грати» тримають фокус', () => {
+    startParty('42');
+    btn('btn-menu').click();
+    btn('btn-menu-settings').click();
+    trapped('settings-dialog');
+    btn('settings-close').click();
+    btn('btn-help').click();
+    const b = items('help-screen');
+    // у «Як грати» може бути одна кнопка — тоді Tab лишає фокус на ній
+    b[b.length - 1].focus();
+    tab();
+    expect(focused()).toBe(b[0]);
+    btn('btn-menu').focus();
+    tab();
+    expect(focused()).toBe(b[0]);
+  });
+});
