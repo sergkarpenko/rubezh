@@ -12,4 +12,4 @@ labels: vibe
 
 **Клас PR:** лише `auto` — `./scripts/pr-class.sh origin/main HEAD` дає `КЛАС: auto`; інакше зупинитись і написати в issue
 
-**Як брати:** `docs/agents/common.md`, розділ «Задача з issue». PR без `Iter-Tag`, в описі — `Closes #<номер>`
+**Як брати:** `docs/agents/common.md`, розділ «Задача з issue». PR без рядка тегу, в описі — `Closes #<номер>`

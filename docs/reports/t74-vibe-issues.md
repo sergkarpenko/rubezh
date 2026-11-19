@@ -5,13 +5,14 @@
 ## Що зроблено
 
 - ADR-0100: схему згорнуто з числами Т.44–Т.49 проти Т.71 і Т.73; режим Issues (спосіб 1) і контрольні точки КТ-0–КТ-2; три уроки згорнутої схеми — в ADR, не в довідник.
-- `docs/agents/common.md`: розділ «Крок, який виконує інший агент» (≈ 37 КБ) замінено посиланням на ADR-0100 і `git show 86400ed:docs/agents/common.md`; новий розділ «Задача з issue»; з розділів «Середовище», «Ціна сесії» і «Лише для Mistral Vibe Code» прибрано пункти схеми; файл ≈ 118 КБ → ≈ 75 КБ.
-- Заморожено (позначка в перших рядках, решта без змін): `docs/plans/TEMPLATE-vibe.md`, `scripts/vibe-step.py`, `scripts/vibe-plan-blocks.mjs`, `scripts/vibe-plan-check.mjs`, `scripts/vibe-plan-check-selftest.mjs`. Самоперевірка `vibe-plan-check` після позначки — 64 перевірки зійшлись.
+- `docs/agents/common.md`: розділ «Крок, який виконує інший агент» (≈ 37 КБ) замінено посиланням на ADR-0100 і `git show iter-T.73:docs/agents/common.md`; новий розділ «Задача з issue»; з розділів «Аудит кроку», «Середовище», «Ціна сесії», «Запуск Mistral Vibe Code Web» і «Лише для Mistral Vibe Code» прибрано пункти схеми; файл ≈ 118 КБ → ≈ 75 КБ.
+- Заморожено (позначка в перших рядках, решта без змін): `docs/plans/TEMPLATE-vibe.md`, `scripts/vibe-step.py`, `scripts/vibe-plan-blocks.mjs`, `scripts/vibe-plan-check.mjs`, `scripts/vibe-plan-check-selftest.mjs`. Самоперевірка `vibe-plan-check` після позначки — 64 перевірки зійшлись. Плани кроків `docs/plans/t39-…`–`t73-…` — без позначки (записи виконаних кроків).
+- `npm test` на гілці — 47 файлів, 1207 тестів, зелений.
 - Шаблон issue `.github/ISSUE_TEMPLATE/vibe.md` (мітка `vibe`, клас `auto`); `AGENTS.md` — рядок ADR-0100 і примітка в ролі Vibe Code.
 
 ## PR без номера кроку
 
-`scripts/iter-tag.sh --preview` на описі без рядка `Iter-Tag` пише «тег не ставиться» і виходить з кодом 0 (самоперевірка: випадки «рядок не з початку», «порожня назва»). Отже PR з issue не червонить чек `check`, зміна `.github/workflows/` не потрібна.
+`scripts/iter-tag.sh --preview` на описі без рядка `Iter-Tag` пише «тег не ставиться» і виходить з кодом 0 (самоперевірка: випадки «preview: без рядка» і «plan: мерж без рядка»). Отже на PR з issue чек `check` лишається зеленим, зміна `.github/workflows/` не потрібна.
 
 ## Перша пачка issue
 
