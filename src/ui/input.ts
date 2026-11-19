@@ -66,7 +66,7 @@ export interface InputDeps {
   autoBusy(): boolean; // П13.3 (ADR-0067): триває авто-бій — керування заблоковано
   // Т.71: вікно підтвердження евакуації останнього оперативника; yes — після «Евакуювати»
   confirmLastEvac(name: string, yes: () => void): void;
-  evacConfirmOpen(): boolean; // Т.71: вікно відкрите — клавіші бою не діють
+  overlayOpen(): boolean; // Т.73: будь-яке вікно поверх гри — клавіші бою не діють (було evacConfirmOpen у Т.71)
 }
 
 export interface InputUI {
@@ -647,7 +647,7 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
 
   function onKeyDown(ev: KeyboardEvent): void {
     if (isTypingTarget(ev.target)) return;
-    if (deps.evacConfirmOpen()) return; // Т.71: під вікном підтвердження клавіші бою не діють
+    if (deps.overlayOpen()) return; // Т.73: під відкритим вікном клавіші бою не діють
     battle.dismissTurnPlate(); // Т.33: клавіша дії прибирає підсумок ходу демонів
     if (ev.code === 'Digit1' || ev.key === '1') armFire('snap');
     else if (ev.code === 'Digit2' || ev.key === '2') armFire('aimed');

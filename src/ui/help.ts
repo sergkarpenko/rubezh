@@ -110,6 +110,7 @@ export function createHelp(deps: HelpDeps): Help {
 
   function open(): void {
     screen.classList.remove('hidden');
+    el<HTMLButtonElement>('btn-help-close').focus(); // Т.73: фокус на кнопку «Грати»
   }
   function close(): void {
     screen.classList.add('hidden');

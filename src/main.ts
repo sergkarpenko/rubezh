@@ -201,6 +201,20 @@ const journal = journalUI.add; // виклики journal(text, cls, cat) у ша
 
 // Т.43: вікна поверх гри — поки хоч одне відкрите, пробіл час не рухає.
 const OVERLAY_IDS = ['help-screen', 'game-menu', 'settings-dialog', 'new-game-dialog', 'exit-confirm', 'campaign-victory', 'evac-confirm'];
+// Т.73: одна перевірка «відкрите вікно» (той самий OVERLAY_IDS, що й в обробнику пробілу нижче)
+function overlayOpen(): boolean {
+  return OVERLAY_IDS.some((id) => !el(id).classList.contains('hidden'));
+}
+// Т.73: безпечна кнопка кожного вікна для Esc — у порядку, в якому Esc перебирає вікна (таблиця плану);
+// екрана перемоги кампанії (campaign-victory) тут немає — Esc його не закриває
+const OVERLAY_ESC_CLOSE: Record<string, string> = {
+  'evac-confirm': 'btn-evac-no',
+  'exit-confirm': 'btn-exit-no',
+  'settings-dialog': 'settings-close',
+  'help-screen': 'btn-help-close',
+  'game-menu': 'btn-menu-close',
+  'new-game-dialog': 'btn-new-game-cancel',
+};
 let gameOver = false; // банкрутство (ADR-0021): боєготових немає і грошей на найм немає
 let partyOnScreen = false; // Т.58: партію показано (не стартовий екран) — лише тоді ambient-цикл стартує
 let victoryDismissed = false; // П8.3a: endless — гравець закрив екран перемоги і продовжує гру
@@ -225,6 +239,12 @@ function hasUnsavedChanges(): boolean {
 // П12.2 (ADR-0065): каркас екранів — створюється лише у браузері (контент
 // будує DOM); твердження про null страхують шари-зв'язки до ініціалізації.
 let screens: Screens | null = null;
+// Т.73: кнопка топбара («Меню»/«?»), що відкрила вікно; після закриття вікна фокус повертається на неї
+let topbarOpener: HTMLButtonElement | null = null;
+function focusTopbarOpener(): void {
+  if (topbarOpener === null || overlayOpen() || screens?.current() !== 'гра') return;
+  topbarOpener.focus();
+}
 // Т.7: вкладки статус-колонки — посилання для сигналу дій «Вузла» (renderAll);
 // null до ініціалізації DOM (node-середовище тестів модулів).
 let statusTabs: StatusTabs | null = null;
@@ -276,7 +296,7 @@ const input = createInput(ui, battle, {
   renderAll,
   autoBusy: () => autoBattle.busy,
   confirmLastEvac,
-  evacConfirmOpen: () => !el('evac-confirm').classList.contains('hidden'),
+  overlayOpen, // Т.73: замість evacConfirmOpen (Т.71) — клавіші бою не діють під будь-яким вікном
 });
 
 // Т.71 (ADR-0075, рішення власника 18.11.2026): вікно підтвердження евакуації останнього оперативника на
@@ -611,7 +631,7 @@ if (typeof document !== 'undefined') {
   document.addEventListener('keydown', (ev) => {
     if (!isSpaceForEvent(ev)) return;
     if (party === null || screens?.current() !== 'гра') return;
-    if (OVERLAY_IDS.some((id) => !el(id).classList.contains('hidden'))) return;
+    if (overlayOpen()) return; // Т.43; Т.73: та сама перевірка overlayOpen()
     const b = el<HTMLButtonElement>('btn-event');
     if (b.disabled) return;
     ev.preventDefault();
@@ -659,7 +679,7 @@ if (typeof document !== 'undefined') {
   // іконки будує src/ui/toolbar.ts; стани/причини блокування — renderBattle).
   createToolbar(el('btoolbar'), {
     onAction: (id) => {
-      if (!el('evac-confirm').classList.contains('hidden')) return; // Т.71: під вікном евакуації плитки не діють
+      if (overlayOpen()) return; // Т.73: під відкритим вікном плитки тулбара не діють (було evac-confirm у Т.71)
       battle.dismissTurnPlate(id === 'auto-battle'); // Т.33: дія гравця прибирає підсумок ходу демонів
       if (id === 'snap' || id === 'aimed' || id === 'auto') input.armFire(id);
       else if (id === 'ow') input.armOverwatch();
@@ -694,6 +714,17 @@ if (typeof document !== 'undefined') {
   bc.addEventListener('mouseleave', input.battleCanvasLeave);
   // ADR-0027 (П6.4): гарячі клавіші — на document (бій у фокусі канви не потрібен)
   document.addEventListener('keydown', input.onKeyDown);
+  // Т.73: Esc закриває відкрите вікно натисканням його безпечної кнопки. Слухач — ПІСЛЯ input.onKeyDown:
+  // тоді onKeyDown бачить вікно ще відкритим і цей самий Esc не скасовує вибір чи зведений режим під вікном
+  document.addEventListener('keydown', (ev) => {
+    if (ev.key !== 'Escape') return;
+    for (const id of Object.keys(OVERLAY_ESC_CLOSE)) {
+      if (!el(id).classList.contains('hidden')) {
+        el<HTMLButtonElement>(OVERLAY_ESC_CLOSE[id]).click();
+        return;
+      }
+    }
+  });
   // П11.7 (ADR-0059): клік UI — делегований слухач (усі кнопки застосунку);
   // перший звук іде з жесту користувача — AudioContext розблоковується (autoplay).
   document.addEventListener('click', (ev) => {
@@ -723,6 +754,7 @@ if (typeof document !== 'undefined') {
     battle.renderBattle();
   };
   el('btn-help').onclick = () => {
+    topbarOpener = el<HTMLButtonElement>('btn-help'); // Т.73: запам'ятати кнопку топбара, що відкрила вікно
     stopAutoForWindow();
     help.open();
   };
@@ -750,9 +782,16 @@ if (typeof document !== 'undefined') {
     onExitToStart: exitToStart,
   });
   el('btn-menu').onclick = () => {
+    topbarOpener = el<HTMLButtonElement>('btn-menu'); // Т.73: запам'ятати кнопку топбара, що відкрила вікно
     stopAutoForWindow();
     screens?.openMenu();
   };
+  // Т.73: після закриття вікна кнопками «Закрити»/«Скасувати» (Esc натискає ті самі кнопки через .click()) —
+  // фокус на кнопку топбара, що відкрила вікно. addEventListener — після створення модулів: їхні onclick
+  // спершу закривають вікно, і лише потім цей слухач повертає фокус (коли відкритих вікон немає і показано екран гри)
+  for (const closeId of ['btn-menu-close', 'btn-exit-no', 'settings-close', 'btn-help-close']) {
+    el(closeId).addEventListener('click', focusTopbarOpener);
+  }
   // ADR-0065: сторінка → стартовий екран; партія не створюється до вибору
   // гравця (журнал старту партії — у startNewParty). Перший візит (П9.1)
   // показує «Як грати» поверх стартового екрана.
