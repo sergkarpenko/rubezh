@@ -247,4 +247,11 @@ describe('Т.44: reachableCells — зона ходу', () => {
       }
     }
   });
+
+  it('ap = Infinity: цикл зупиняється, коли frontier порожній; зона точна, оточений start — порожньо', () => {
+    const g = setupGame();
+    expect(reachableCells(g, from, Infinity).size).toBe(398);
+    const walled = setupGame(['1,2', '3,2', '2,1', '2,3']);
+    expect(reachableCells(walled, from, Infinity).size).toBe(0);
+  });
 });
