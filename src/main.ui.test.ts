@@ -1436,6 +1436,27 @@ describe('П12.4: вкладки статус-колонки «Загін»/«Б
   });
 });
 
+describe('Т.78: гарматний модуль вручну — панель «Перехоплювач» на сторінці', () => {
+  it('модуль зі складу: «Встановити» → рядок стану і запис журналу «Вузол»; «Зняти» → назад на склад', () => {
+    startParty();
+    btn('btn-save-1').click();
+    const raw = JSON.parse(localStorage.getItem('rubezh.save.1')!) as { state: { workshop: { store: Record<string, number> } } };
+    raw.state.workshop.store['gun-module'] = 1;
+    localStorage.setItem('rubezh.save.1', JSON.stringify(raw));
+    btn('btn-load-1').click();
+    btn('status-tab-base').click();
+    btn('btn-gun-install').click();
+    expect($('gun-module-state').textContent).toBe('Гарматний модуль: встановлено');
+    expect(document.getElementById('btn-gun-install')).toBeNull();
+    const texts = (): string[] => Array.from(document.querySelectorAll('#log li[data-cat="base"]')).map((li) => li.textContent ?? '');
+    expect(texts().some((t) => t.includes('гарматний модуль перехоплювача на перехоплювачі'))).toBe(true);
+    btn('btn-gun-remove').click();
+    expect(document.getElementById('gun-module-state')).toBeNull();
+    expect(texts().some((t) => t.includes('гарматний модуль перехоплювача знято на склад'))).toBe(true);
+    expect(document.getElementById('btn-gun-install')).not.toBeNull(); // модуль знову на складі
+  });
+});
+
 describe('П12.5: зрозумілість розвитку — числові ефекти до дії (ADR-0065)', () => {
   const rowText = (root: string, name: string): string =>
     Array.from(document.querySelectorAll('#' + root + ' .ufo, #' + root + ' .sci-card'))

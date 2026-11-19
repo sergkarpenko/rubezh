@@ -241,13 +241,17 @@ export function createResearchPanel(deps: ResearchPanelDeps): ResearchPanel {
           card.appendChild(forge);
           setWhy(forge, st.why); // Т.43
           // під кнопкою — що з предметом зараз: в «Кузні» і/або на складі
-          // (для гарматного модуля ручного встановлення в UI немає — лише «На складі: N»)
+          // (гарматний модуль — Т.78: встановлюється в панелі «Перехоплювач»)
           const notes: string[] = [];
           const q = party.workshop.queue.find((o) => o.id === itemId);
           if (q) notes.push('У «Кузні»: виготовляється, ще ' + ticksText(q.ticksLeft));
           const onStore = party.workshop.store[itemId];
           if (onStore > 0) {
-            notes.push('На складі: ' + onStore + (itemId === 'gun-module' ? '' : ' — видайте на вкладці «Загін»'));
+            notes.push(
+              'На складі: ' +
+                onStore +
+                (itemId === 'gun-module' ? ' — встановіть у панелі «Перехоплювач»' : ' — видайте на вкладці «Загін»')
+            );
           }
           for (const n of notes) {
             const note = document.createElement('div');

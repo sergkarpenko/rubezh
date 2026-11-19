@@ -315,6 +315,74 @@ describe('renderInterceptCtx: контекст-стрічка повітряно
 });
 
 describe('renderFighter: панель винищувача (П7.4)', () => {
+  // Т.78 (кандидат 21): гарматний модуль вручну — встановити / зняти, безкоштовно й одразу, лише «на базі»
+  it('Т.78: модуля немає ні на складі, ні на перехоплювачі — ні кнопки, ні рядка', () => {
+    const f = makeFixture();
+    f.panels.renderFighter();
+    expect(document.getElementById('btn-gun-install')).toBeNull();
+    expect(document.getElementById('btn-gun-remove')).toBeNull();
+    expect(document.getElementById('gun-module-state')).toBeNull();
+  });
+
+  it('Т.78: модуль на складі — «Встановити модуль (+2 пошк.)»; клік ставить його безкоштовно, склад −1, renderAll', () => {
+    const f = makeFixture();
+    f.party.workshop.store['gun-module'] = 1;
+    const money = f.party.econ.money;
+    f.panels.renderFighter();
+    const b = document.getElementById('btn-gun-install') as HTMLButtonElement;
+    expect(b.textContent).toBe('Встановити модуль (+2 пошк.)');
+    expect(b.disabled).toBe(false);
+    b.click();
+    expect(f.party.intercept.fighter.gunModule).toBe(true);
+    expect(f.party.workshop.store['gun-module']).toBe(0);
+    expect(f.party.econ.money).toBe(money);
+    expect(f.party.workshop.log.at(-1)?.type).toBe('gun_module_installed');
+    expect(f.deps.journal).not.toHaveBeenCalled();
+    expect(f.deps.renderAll).toHaveBeenCalled();
+    f.panels.renderFighter();
+    expect(document.getElementById('gun-module-state')!.textContent).toBe('Гарматний модуль: встановлено');
+    expect(document.getElementById('btn-gun-install')).toBeNull();
+  });
+
+  it('Т.78: модуль встановлено — «Зняти модуль» повертає його на склад', () => {
+    const f = makeFixture();
+    f.party.intercept.fighter.gunModule = true;
+    f.panels.renderFighter();
+    const b = document.getElementById('btn-gun-remove') as HTMLButtonElement;
+    expect(b.textContent).toBe('Зняти модуль');
+    expect(b.disabled).toBe(false);
+    b.click();
+    expect(f.party.intercept.fighter.gunModule).toBe(false);
+    expect(f.party.workshop.store['gun-module']).toBe(1);
+    expect(f.party.workshop.log.at(-1)?.type).toBe('gun_module_removed');
+  });
+
+  it('Т.78: перехоплювач не на базі — кнопка неактивна з причиною рядком; модуль лишається', () => {
+    const f = makeFixture();
+    f.party.intercept.fighter.gunModule = true;
+    f.party.intercept.fighter.status = 'ремонт';
+    f.party.intercept.fighter.repairTicksLeft = 3;
+    f.panels.renderFighter();
+    const b = document.getElementById('btn-gun-remove') as HTMLButtonElement;
+    expect(b.disabled).toBe(true);
+    expect(b.nextElementSibling?.textContent).toBe('Лише у вузлі «Рубіж»: перехоплювач зараз — ремонт');
+    expect(document.getElementById('gun-module-state')!.textContent).toBe('Гарматний модуль: встановлено');
+  });
+
+  it('Т.78: у бою і після банкрутства — кнопка неактивна з причиною', () => {
+    for (const [over, why] of [
+      [{ inBattle: () => true }, 'Під час бою недоступно'],
+      [{ isGameOver: () => true }, 'Партію програно'],
+    ] as const) {
+      const f = makeFixture(over);
+      f.party.workshop.store['gun-module'] = 1;
+      f.panels.renderFighter();
+      const b = document.getElementById('btn-gun-install') as HTMLButtonElement;
+      expect(b.disabled).toBe(true);
+      expect(b.nextElementSibling?.textContent).toBe(why);
+    }
+  });
+
   it('боєготовий на базі — статус і повний HP', () => {
     const f = makeFixture();
     f.panels.renderFighter();

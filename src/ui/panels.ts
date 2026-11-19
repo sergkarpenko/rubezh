@@ -9,6 +9,7 @@ import { RADAR_RANGE, TICK_MINUTES, detectedUfos, geoClock, geoDay, missionTarge
 import {
   FIGHTER_MAX_HP,
   FIGHTER_REPAIR_COST,
+  GUN_MODULE_DAMAGE,
   RANGE_PROFILES,
   interceptRound,
   startIntercept,
@@ -19,11 +20,19 @@ import {
 import { dailyAllowance, hirePrice, missionBonus } from '../core/economy';
 // П11.6 (ADR-0058): екіпірування в картці солдата ростеру — броня/оптика
 // (постійні), аптечка/граната (витратні); дії — лише на геосцені.
-import { equipItem, unequipItem, itemName, type SoldierEquipment, type SoldierItemId } from '../core/workshop';
+import {
+  equipItem,
+  unequipItem,
+  installGunModule,
+  removeGunModule,
+  itemName,
+  type SoldierEquipment,
+  type SoldierItemId,
+} from '../core/workshop';
 import { missionRisksBankruptcy, readySoldiers } from '../core/squad';
 import { SQUAD_SPAWN } from '../core/mission';
 import type { Party } from '../core/save';
-import { itemEffect } from './effects';
+import { gunModuleEffect, itemEffect } from './effects';
 import { drawAnimFrame, drawFighterSprite, drawGeoBaseSprite, drawGeoTerrain, drawUfoSprite } from '../render';
 import type { Anim } from '../core/render-core';
 import { el, setWhy } from './dom';
@@ -414,6 +423,48 @@ export function createPanels(deps: PanelsDeps): Panels {
         box.appendChild(warn);
       }
     }
+    renderGunModule(box);
+  }
+
+  // Т.78 (кандидат 21, рішення власника 19.11.2026): гарматний модуль вручну —
+  // встановити зі складу і зняти назад, безкоштовно й одразу; лише у вузлі
+  // «Рубіж» (статус «на базі», правило ядра installGunModule/removeGunModule).
+  function renderGunModule(box: HTMLElement): void {
+    const party = deps.getParty();
+    const f = party.intercept.fighter;
+    const onStore = party.workshop.store['gun-module'];
+    if (!f.gunModule && onStore <= 0) return;
+    const atBase = f.status === 'на базі';
+    const why = deps.isGameOver()
+      ? 'Партію програно'
+      : deps.inBattle()
+        ? 'Під час бою недоступно'
+        : atBase
+          ? null
+          : 'Лише у вузлі «Рубіж»: перехоплювач зараз — ' + f.status;
+    if (f.gunModule) {
+      const note = document.createElement('div');
+      note.id = 'gun-module-state';
+      note.className = 'meta';
+      note.textContent = 'Гарматний модуль: встановлено';
+      box.appendChild(note);
+    }
+    const b = document.createElement('button');
+    b.id = f.gunModule ? 'btn-gun-remove' : 'btn-gun-install';
+    b.textContent = f.gunModule ? 'Зняти модуль' : 'Встановити модуль (+' + GUN_MODULE_DAMAGE + ' пошк.)';
+    b.disabled = why !== null;
+    b.title = why ?? (f.gunModule ? 'Модуль повертається на склад' : gunModuleEffect() + ' · зі складу: ' + onStore);
+    b.onclick = () => {
+      try {
+        if (f.gunModule) removeGunModule(party.workshop, party.intercept);
+        else installGunModule(party.workshop, party.intercept);
+      } catch (e) {
+        deps.journal('✗ ' + (e as Error).message, 'lose', 'base');
+      }
+      deps.renderAll();
+    };
+    box.appendChild(b);
+    setWhy(b, why);
   }
 
   function renderRoster(): void {
