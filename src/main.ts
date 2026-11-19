@@ -201,18 +201,19 @@ const journal = journalUI.add; // виклики journal(text, cls, cat) у ша
 
 // Т.43: вікна поверх гри — поки хоч одне відкрите, пробіл час не рухає.
 const OVERLAY_IDS = ['help-screen', 'game-menu', 'settings-dialog', 'new-game-dialog', 'exit-confirm', 'campaign-victory', 'evac-confirm'];
-// Т.73: єдиний чек «відкритий» для оверлеїв (той самий OVERLAY_IDS, що й у обробника пробілу нижче)
+// Т.73: одна перевірка «відкрите вікно» (той самий OVERLAY_IDS, що й в обробнику пробілу нижче)
 function overlayOpen(): boolean {
   return OVERLAY_IDS.some((id) => !el(id).classList.contains('hidden'));
 }
-// Т.73: безпечна кнопка закриття для Esc (campaign-victory свідомо відсутній — Esc його не закриває)
+// Т.73: безпечна кнопка кожного вікна для Esc — у порядку, в якому Esc перебирає вікна (таблиця плану);
+// екрана перемоги кампанії (campaign-victory) тут немає — Esc його не закриває
 const OVERLAY_ESC_CLOSE: Record<string, string> = {
+  'evac-confirm': 'btn-evac-no',
+  'exit-confirm': 'btn-exit-no',
+  'settings-dialog': 'settings-close',
   'help-screen': 'btn-help-close',
   'game-menu': 'btn-menu-close',
-  'settings-dialog': 'settings-close',
   'new-game-dialog': 'btn-new-game-cancel',
-  'exit-confirm': 'btn-exit-no',
-  'evac-confirm': 'btn-evac-no',
 };
 let gameOver = false; // банкрутство (ADR-0021): боєготових немає і грошей на найм немає
 let partyOnScreen = false; // Т.58: партію показано (не стартовий екран) — лише тоді ambient-цикл стартує
@@ -241,7 +242,7 @@ let screens: Screens | null = null;
 // Т.73: кнопка топбара («Меню»/«?»), що відкрила вікно; після закриття вікна фокус повертається на неї
 let topbarOpener: HTMLButtonElement | null = null;
 function focusTopbarOpener(): void {
-  if (topbarOpener === null || screens?.current() !== 'гра') return;
+  if (topbarOpener === null || overlayOpen() || screens?.current() !== 'гра') return;
   topbarOpener.focus();
 }
 // Т.7: вкладки статус-колонки — посилання для сигналу дій «Вузла» (renderAll);
@@ -295,7 +296,7 @@ const input = createInput(ui, battle, {
   renderAll,
   autoBusy: () => autoBattle.busy,
   confirmLastEvac,
-  overlayOpen, // Т.73: замість evacConfirmOpen (Т.71) — блокує клавіші при будь-якому оверлеї
+  overlayOpen, // Т.73: замість evacConfirmOpen (Т.71) — клавіші бою не діють під будь-яким вікном
 });
 
 // Т.71 (ADR-0075, рішення власника 18.11.2026): вікно підтвердження евакуації останнього оперативника на
@@ -630,7 +631,7 @@ if (typeof document !== 'undefined') {
   document.addEventListener('keydown', (ev) => {
     if (!isSpaceForEvent(ev)) return;
     if (party === null || screens?.current() !== 'гра') return;
-    if (overlayOpen()) return; // Т.43; Т.73: єдиний чек через overlayOpen()
+    if (overlayOpen()) return; // Т.43; Т.73: та сама перевірка overlayOpen()
     const b = el<HTMLButtonElement>('btn-event');
     if (b.disabled) return;
     ev.preventDefault();
@@ -714,13 +715,12 @@ if (typeof document !== 'undefined') {
   // ADR-0027 (П6.4): гарячі клавіші — на document (бій у фокусі канви не потрібен)
   document.addEventListener('keydown', input.onKeyDown);
   // Т.73: Esc закриває відкрите вікно натисканням його безпечної кнопки. Слухач — ПІСЛЯ input.onKeyDown:
-  // тоді onKeyDown бачить уже закритий оверлей і цей самий Esc не скасує режим розстановки
+  // тоді onKeyDown бачить вікно ще відкритим і цей самий Esc не скасовує вибір чи зведений режим під вікном
   document.addEventListener('keydown', (ev) => {
     if (ev.key !== 'Escape') return;
-    for (const id of OVERLAY_IDS) {
-      const closeId = OVERLAY_ESC_CLOSE[id];
-      if (closeId !== undefined && !el(id).classList.contains('hidden')) {
-        el<HTMLButtonElement>(closeId).click();
+    for (const id of Object.keys(OVERLAY_ESC_CLOSE)) {
+      if (!el(id).classList.contains('hidden')) {
+        el<HTMLButtonElement>(OVERLAY_ESC_CLOSE[id]).click();
         return;
       }
     }
@@ -788,7 +788,7 @@ if (typeof document !== 'undefined') {
   };
   // Т.73: після закриття вікна кнопками «Закрити»/«Скасувати» (Esc натискає ті самі кнопки через .click()) —
   // фокус на кнопку топбара, що відкрила вікно. addEventListener — після створення модулів: їхні onclick
-  // спершу закривають оверлей, і лише потім цей слухач повертає фокус (коли активний екран гри)
+  // спершу закривають вікно, і лише потім цей слухач повертає фокус (коли відкритих вікон немає і показано екран гри)
   for (const closeId of ['btn-menu-close', 'btn-exit-no', 'settings-close', 'btn-help-close']) {
     el(closeId).addEventListener('click', focusTopbarOpener);
   }
