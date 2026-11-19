@@ -5,7 +5,9 @@
 // DOM-флоу застосунку лишається у main.ui.test.ts.
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { advanceTime, detectedUfos, geoClock, missionTargets } from '../core/geo';
-import { FIGHTER_MAX_HP, startIntercept } from '../core/intercept';
+import { FIGHTER_MAX_HP, FIGHTER_REPAIR_COST, startIntercept } from '../core/intercept';
+import { hirePrice } from '../core/economy';
+import type { DifficultyPreset } from '../core/campaign';
 import { createParty, type Party } from '../core/save';
 import { ARMOR_MAX_HP_BONUS, OPTICS_ACCURACY_BONUS } from '../core/workshop';
 import { GRENADE_DAMAGE, GRENADE_RANGE, HEAL_AMOUNT, HIT_CHANCE_CAP } from '../core/combat';
@@ -756,5 +758,70 @@ describe('Т.51: #fighter-last при відсутньому зонді поді
     f.party.geo.log.push({ type: 'intercept_aborted', ufoId: 'ufo5', reason: 'ufo_landed', pos, minute: 40 });
     f.panels.renderFighter();
     expect(last()).toBeNull();
+  });
+});
+
+// issue #385 (кандидат 16): три структурні рядки-попередження в panels.ts мають показувати
+// hirePrice(preset) пресету партії, а не hirePrice() «норми» (100). Параметричні тести для
+// пресетів «легкий» (120) і «складний» (90); грошей — 90 і 120, щоб відповіді на цих пресетах
+// різнилися між собою і не збігалися з «нормою».
+describe('issue #385: hirePrice(preset) у попередженнях — пресети «легкий»/«складний»', () => {
+  const withPreset = (preset: DifficultyPreset, over: Partial<PanelsDeps> = {}): Fixture => {
+    const party = createParty(42, preset);
+    const f = makeFixture({ getParty: () => party, ...over });
+    return { ...f, party };
+  };
+  const presets: DifficultyPreset[] = ['легкий', 'складний'];
+
+  it.each(presets)('Т.24: .mission-warn — ціна найму пресету %s (грошей 90 і 120)', (preset) => {
+    const f = withPreset(preset);
+    expect(tickUntil(f.party, () => missionTargets(f.party.geo).length > 0)).toBe(true);
+    for (const s of f.party.roster.soldiers.slice(3)) f.party.roster.hospital[s.id] = 3; // ready = 3 = SQUAD_SPAWN.length
+    for (const money of [90, 120]) {
+      f.party.econ.money = money;
+      f.panels.renderUfos();
+      const warn = document.querySelector('.ufo .mission-warn');
+      if (money < hirePrice(preset)) {
+        expect(warn!.textContent).toBe(
+          '⚠ Останній загін, а на вербування бракує (' + money + ' з ' + hirePrice(preset) + '): загине — банкрутство.'
+        );
+      } else {
+        expect(warn).toBeNull();
+      }
+    }
+  });
+
+  it.each(presets)('Т.26: #repair-warn — repair + hirePrice(preset) для пресету %s (грошей 90 і 120)', (preset) => {
+    const f = withPreset(preset);
+    f.party.intercept.fighter.hp = 0;
+    for (const s of f.party.roster.soldiers) f.party.roster.hospital[s.id] = 3; // ready = 0
+    for (const money of [90, 120]) {
+      f.party.econ.money = money;
+      f.panels.renderFighter();
+      const warn = document.getElementById('repair-warn');
+      if (money - FIGHTER_REPAIR_COST < hirePrice(preset)) {
+        expect(warn!.textContent).toBe(
+          '⚠ Ремонт не почався сам: боєготових немає, а після ремонту не лишиться на вербування (' +
+            money +
+            ' з ' +
+            (FIGHTER_REPAIR_COST + hirePrice(preset)) +
+            ').'
+        );
+      } else {
+        expect(warn).toBeNull();
+      }
+    }
+  });
+
+  it.each(presets)('порожній ростер: hirePrice(party.campaign.preset) для пресету %s (грошей 90 і 120)', (preset) => {
+    const f = withPreset(preset);
+    f.party.roster.soldiers.length = 0;
+    for (const money of [90, 120]) {
+      f.party.econ.money = money;
+      f.panels.renderRoster();
+      const box = document.getElementById('roster')!;
+      if (money >= hirePrice(preset)) expect(box.textContent).toContain('Вербування доступне');
+      else expect(box.textContent).toContain('Кредитів на вербування немає.');
+    }
   });
 });
