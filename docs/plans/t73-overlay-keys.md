@@ -780,3 +780,127 @@ Iter-Tag: iter-T.73
 - Після відкриття — `python3 scripts/vibe-step.py check --pr <номер>`. Якщо рядки звірки інші, ніж в описі, — **нового коміту не робити і опис не правити**, а написати про це в сесії.
 - Після відкриття PR — коротко відповісти в сесії: номер PR, вивід `gh pr view <номер> --json isDraft`, останній рядок `vibe-step.py check --pr`, вміст `/tmp/t73/failed.md`, чи були червоні тести після латки і що в коді виправлено, і перелік «пункт плану — зроблено / ні» з доказом `grep` на кожен рядок «зроблено». Скільки часу зайняв крок, не писати. **Не мержити.**
 - **Після відкриття PR — нічого не пушити, доки планувальник не дасть знахідок.** **Про аудит і результати чеків CI нічого не писати** — ні в документах, ні в описі PR. Розділ «Аудит» лишається «Аудит ще не проведено», доки його текст не дасть планувальник.
+
+## Після аудиту: порція (додано планувальником після аудиту PR #375)
+
+Знахідки аудитора — у тексті блоку `docs-v2` (він же піде в розділ «Аудит» звіту й опису PR). Виправити треба код і коментарі в `src/main.ts` і поломку 3 у `docs/reports/t73-step.txt`; кирилицю руками не набирати — заміни роблять скрипти з блоків. Таблицю поломок на коді після цих замін планувальник уже прогнав — вона та сама; `vibe-step.py mutations` і `docs` повторно **не запускати**. Порядок:
+
+1. `git pull --ff-only origin feat/t73-overlay-keys` (у гілці — цей коміт планувальника), потім `node scripts/vibe-plan-blocks.mjs docs/plans/t73-overlay-keys.md /tmp/blocks2`.
+2. `python3 /tmp/blocks2/fix-v2.txt` — вісім рядків `ok` і рядок `ok якорі: усі 14 по одному разу`; далі `npx tsc --noEmit` і `npx vitest run src/main.ui.test.ts src/ui/input.test.ts` (усе зелене); `git add src/main.ts docs/reports/t73-step.txt && git commit -F /tmp/blocks2/commit-fix-v2.txt` (без `--no-verify`).
+3. `python3 /tmp/blocks2/docs-v2.txt` — три рядки `ok`; `git add docs/ && git commit -F /tmp/blocks2/commit-docs-v2.txt`.
+4. `git push`, потім опис PR: `gh api -X PATCH repos/sergkarpenko/rubezh/pulls/375 -F body=@/tmp/pr-body-v2.md --jq .number`.
+5. Коротко відповісти в сесії: `git log --oneline -3`, вивід кроку 4 і `grep -c 'оверле\|чек ' src/main.ts` (має бути 0). Більше нічого не міняти і не мержити.
+
+Якщо скрипт падає на `assert` — нічого не правити руками, а написати вивід у сесії.
+
+<!-- блок: fix-v2 -->
+```text
+# Т.73, порція після аудиту PR #375: заміни дослівно (кирилицю руками не набирати). Запуск з кореня репозиторію.
+def ed(path, old, new):
+    s = open(path, encoding='utf-8').read()
+    assert s.count(old) == 1, (path, old[:60], s.count(old))
+    open(path, 'w', encoding='utf-8').write(s.replace(old, new))
+    print('ok', path)
+
+ed('src/main.ts',
+   "// Т.73: єдиний чек «відкритий» для оверлеїв (той самий OVERLAY_IDS, що й у обробника пробілу нижче)\n",
+   "// Т.73: одна перевірка «відкрите вікно» (той самий OVERLAY_IDS, що й в обробнику пробілу нижче)\n")
+ed('src/main.ts',
+   "// Т.73: безпечна кнопка закриття для Esc (campaign-victory свідомо відсутній — Esc його не закриває)\n"
+   "const OVERLAY_ESC_CLOSE: Record<string, string> = {\n"
+   "  'help-screen': 'btn-help-close',\n"
+   "  'game-menu': 'btn-menu-close',\n"
+   "  'settings-dialog': 'settings-close',\n"
+   "  'new-game-dialog': 'btn-new-game-cancel',\n"
+   "  'exit-confirm': 'btn-exit-no',\n"
+   "  'evac-confirm': 'btn-evac-no',\n"
+   "};\n",
+   "// Т.73: безпечна кнопка кожного вікна для Esc — у порядку, в якому Esc перебирає вікна (таблиця плану);\n"
+   "// екрана перемоги кампанії (campaign-victory) тут немає — Esc його не закриває\n"
+   "const OVERLAY_ESC_CLOSE: Record<string, string> = {\n"
+   "  'evac-confirm': 'btn-evac-no',\n"
+   "  'exit-confirm': 'btn-exit-no',\n"
+   "  'settings-dialog': 'settings-close',\n"
+   "  'help-screen': 'btn-help-close',\n"
+   "  'game-menu': 'btn-menu-close',\n"
+   "  'new-game-dialog': 'btn-new-game-cancel',\n"
+   "};\n")
+ed('src/main.ts',
+   "  if (topbarOpener === null || screens?.current() !== 'гра') return;\n",
+   "  if (topbarOpener === null || overlayOpen() || screens?.current() !== 'гра') return;\n")
+ed('src/main.ts',
+   "  overlayOpen, // Т.73: замість evacConfirmOpen (Т.71) — блокує клавіші при будь-якому оверлеї\n",
+   "  overlayOpen, // Т.73: замість evacConfirmOpen (Т.71) — клавіші бою не діють під будь-яким вікном\n")
+ed('src/main.ts',
+   "    if (overlayOpen()) return; // Т.43; Т.73: єдиний чек через overlayOpen()\n",
+   "    if (overlayOpen()) return; // Т.43; Т.73: та сама перевірка overlayOpen()\n")
+ed('src/main.ts',
+   "  // тоді onKeyDown бачить уже закритий оверлей і цей самий Esc не скасує режим розстановки\n"
+   "  document.addEventListener('keydown', (ev) => {\n"
+   "    if (ev.key !== 'Escape') return;\n"
+   "    for (const id of OVERLAY_IDS) {\n"
+   "      const closeId = OVERLAY_ESC_CLOSE[id];\n"
+   "      if (closeId !== undefined && !el(id).classList.contains('hidden')) {\n"
+   "        el<HTMLButtonElement>(closeId).click();\n",
+   "  // тоді onKeyDown бачить вікно ще відкритим і цей самий Esc не скасовує вибір чи зведений режим під вікном\n"
+   "  document.addEventListener('keydown', (ev) => {\n"
+   "    if (ev.key !== 'Escape') return;\n"
+   "    for (const id of Object.keys(OVERLAY_ESC_CLOSE)) {\n"
+   "      if (!el(id).classList.contains('hidden')) {\n"
+   "        el<HTMLButtonElement>(OVERLAY_ESC_CLOSE[id]).click();\n")
+ed('src/main.ts',
+   "  // спершу закривають оверлей, і лише потім цей слухач повертає фокус (коли активний екран гри)\n",
+   "  // спершу закривають вікно, і лише потім цей слухач повертає фокус (коли відкритих вікон немає і показано екран гри)\n")
+ed('docs/reports/t73-step.txt',
+   "\"    else if (ev.key === 'Escape') cancelSelection();\", \"    else if (ev.key === 'Esc') cancelSelection();\"",
+   "'    if (deps.overlayOpen()) return;', \"    if (deps.overlayOpen() && ev.key !== 'Escape') return;\"")
+import ast
+s = ast.literal_eval(open('docs/reports/t73-step.txt', encoding='utf-8').read())
+for m in s['mutations']:
+    n = open(m[1], encoding='utf-8').read().count(m[2])
+    assert n == 1 and m[2] != m[3], (m[0][:50], n)
+print('ok якорі: усі', len(s['mutations']), 'по одному разу')
+```
+
+<!-- блок: commit-fix-v2 -->
+```text
+fix(ui): Т.73 — після аудиту: порядок вікон для Esc, умова повернення фокусу, коментарі; поломка 3
+```
+
+<!-- блок: docs-v2 -->
+```text
+# Т.73, порція після аудиту PR #375: розділ «Аудит» і час кроку у звіті, розділ «Аудит» опису PR.
+# Запуск з кореня репозиторію: python3 /tmp/blocks2/docs-v2.txt — після коміту правок коду.
+import subprocess
+AUDIT = """Аудитор для мержу (субагент Opus 5.5 з копією репозиторію: повний `npx vitest run`, звірка тестів із латкою плану побайтно, поломки № 3, 9, 13 і 14 відтворено руками, перевірка в jsdom двох вікон одночасно, сценарії e2e на своєму порту) на коміті `e44ada8`: знахідок 5, підтверджено 5 — виправлено після аудиту:
+
+- коментар біля слухача Esc у `src/main.ts` казав, що `onKeyDown` бачить уже закрите вікно, і вживав вигаданий «режим розстановки»; насправді `onKeyDown` спрацьовує першим і бачить вікно ще відкритим — коментар переписано;
+- поломка 3 у `docs/reports/t73-step.txt` ламала скасування Esc і без вікна (`'Escape'` → `'Esc'` у гілці скасування), а не пропуск Esc крізь перевірку вікна, як в описі; якір і поломку замінено на перевірку вікна в `onKeyDown` — стовпці таблиці ті самі (зелений / червоний / зелений), прогін поломок на коді після виправлень повторив планувальник;
+- Esc перебирав вікна в порядку `OVERLAY_IDS` (першим «Як грати»), а не в порядку таблиці плану (першим «Евакуювати останнього?»): клавіатурою (Tab, Enter на «?») над вікном евакуації можна відкрити «Як грати», і перший Esc закривав невидиме гравцеві вікно під ним — тепер Esc іде за порядком таблиці;
+- повернення фокусу на кнопку топбару не перевіряло, чи відкритих вікон уже немає (план, розділ 1 (д)) — умову додано;
+- коментарі з «чек» і «оверлей» замість «перевірка» і «вікно» — переписано.
+
+Аудитор Mistral на коміті `e44ada8`: аудиту не було — API Mistral недоступний (три спроби).
+
+Сценарій e2e (3 сценарії) на коміті `e44ada8` прогнав планувальник — пройшов."""
+
+def ed(path, old, new):
+    s = open(path, encoding='utf-8').read()
+    assert s.count(old) == 1, (path, old[:60], s.count(old))
+    open(path, 'w', encoding='utf-8').write(s.replace(old, new))
+    print('ok', path)
+
+ed('docs/reports/t73-overlay-keys.md', '## Аудит\n\nАудит ще не проведено.', '## Аудит\n\n' + AUDIT)
+ed('docs/reports/t73-overlay-keys.md',
+   '- Час від запуску сесії до відкриття PR — запише планувальник після аудиту, за своїм годинником',
+   '- Час від запуску сесії до відкриття PR — ≈ 38 хв (запуск ≈ 08:00 UTC, PR відкрито 08:38 UTC; за годинником планувальника)')
+body = subprocess.run(['gh', 'api', 'repos/sergkarpenko/rubezh/pulls/375', '--jq', '.body'], capture_output=True, text=True, check=True).stdout
+assert body.count('### Аудит\n\nАудит ще не проведено.') == 1, 'у описі PR немає розділу «Аудит ще не проведено»'
+open('/tmp/pr-body-v2.md', 'w', encoding='utf-8').write(body.replace('### Аудит\n\nАудит ще не проведено.', '### Аудит\n\n' + AUDIT))
+print('ok /tmp/pr-body-v2.md — далі: gh api -X PATCH repos/sergkarpenko/rubezh/pulls/375 -F body=@/tmp/pr-body-v2.md --jq .number')
+```
+
+<!-- блок: commit-docs-v2 -->
+```text
+docs(workflow): Т.73 — аудит і час кроку у звіті
+```
