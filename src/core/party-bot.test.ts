@@ -33,7 +33,7 @@ describe('П8.5: оркестратор — детермінізм (ADR-0003)', 
     const a = simulateParty(42, 'норма');
     const b = simulateParty(42, 'норма');
     expect(JSON.stringify(b)).toBe(JSON.stringify(a));
-  });
+  }, 30_000); // issue #377: явний тайм-аут замість дефолтних 5000 мс (під покриттям повільніше)
 
   it('короткий горизонт теж відтворюваний (10 діб, усі три пресети)', () => {
     for (const preset of ['легкий', 'норма', 'складний'] as const) {
@@ -41,7 +41,7 @@ describe('П8.5: оркестратор — детермінізм (ADR-0003)', 
       const b = simulateParty(7, preset, { maxDays: 10 });
       expect(JSON.stringify(b)).toBe(JSON.stringify(a));
     }
-  });
+  }, 30_000); // issue #377: явний тайм-аут замість дефолтних 5000 мс (під покриттям повільніше)
 });
 
 // П10.3: третій пресет «складний» — каркас у ядрі; числа затверджено П10.4
@@ -57,7 +57,7 @@ describe('П10.3: пресет «складний» у симуляціях', ()
     // уся траєкторія (криві, місії, перехоплення) розходиться за трьома пресетами
     expect(JSON.stringify(складний)).not.toBe(JSON.stringify(норма));
     expect(JSON.stringify(норма)).not.toBe(JSON.stringify(легкий));
-  });
+  }, 30_000); // issue #377: явний тайм-аут замість дефолтних 5000 мс (під покриттям повільніше)
 });
 
 describe('П8.5: критерій 3 — пресет у рантайм-викликах бота', () => {
@@ -69,7 +69,7 @@ describe('П8.5: критерій 3 — пресет у рантайм-викл�
     // Уся траєкторія (криві, місії, перехоплення) розходиться — пресет
     // досягає рантайму, а не лишився в createParty
     expect(JSON.stringify(легкий)).not.toBe(JSON.stringify(норма));
-  });
+  }, 30_000); // issue #377: явний тайм-аут замість дефолтних 5000 мс (під покриттям повільніше)
 
   it('partyBotHireStep передає пресет у hireSoldier: HP новобранця ×1.2 на «легкому»', () => {
     const p = createParty(42, 'легкий');
@@ -81,7 +81,7 @@ describe('П8.5: критерій 3 — пресет у рантайм-викл�
     for (let i = 0; i < 4; i++) fireSoldier(n.roster, n.roster.soldiers[0].id);
     expect(partyBotHireStep(n, DEFAULT_PARTY_POLICY)).toBe(1);
     expect(n.roster.soldiers[n.roster.soldiers.length - 1].maxHp).toBe(10); // 10 × 1.0
-  });
+  }, 30_000); // issue #377: явний тайм-аут замість дефолтних 5000 мс (під покриттям повільніше)
 });
 
 describe('П8.5: оркестратор — повна партія (фіксовані сіди фіксують баланс)', () => {
@@ -103,7 +103,7 @@ describe('П8.5: оркестратор — повна партія (фіксо�
     expect(r.soldiersWounded).toBe(21);
     expect(r.hiredTotal).toBe(29);
     expect(r.hireSpent).toBe(29 * hirePrice('норма')); // П11.8: hirePrice «норми» = 100
-  });
+  }, 30_000); // issue #377: явний тайм-аут замість дефолтних 5000 мс (під покриттям повільніше)
 
   // Т.22 (ADR-0089): чинний бот не банкрутує — останній загін без грошей на найм
   // у бій не йде, ремонт без боєготових чекає (сід 16, банкрутний до Т.22, тепер
@@ -115,7 +115,7 @@ describe('П8.5: оркестратор — повна партія (фіксо�
     expect(r.missionsLaunched).toBe(42);
     expect(r.missionsWon).toBe(35);
     expect(r.soldiersLost).toBe(50);
-  });
+  }, 30_000); // issue #377: явний тайм-аут замість дефолтних 5000 мс (під покриттям повільніше)
 
   it('банкрутство (ADR-0021): наука без найму, сід 26 «норма» — боєготових немає і грошей немає', () => {
     const r = simulateParty(26, 'норма', { policy: { ...SCIENCE_POLICY, name: 'sci-no-hire', hireUpTo: 0 } });
@@ -124,7 +124,7 @@ describe('П8.5: оркестратор — повна партія (фіксо�
     expect(r.ticks).toBe(48);
     expect(r.soldiersLost).toBe(6);
     expect(r.moneyByDay.length).toBeLessThan(30); // обірвана крива — доба 2 незавершена
-  });
+  }, 30_000); // issue #377: явний тайм-аут замість дефолтних 5000 мс (під покриттям повільніше)
 
   it('смоук: 4 доби × 2 сіди × 2 пресети — без винятків, криви заповнені', () => {
     for (const seed of [1, 42]) {
@@ -139,7 +139,7 @@ describe('П8.5: оркестратор — повна партія (фіксо�
         expect(r.hireSpent).toBe(r.hiredTotal * hirePrice(preset));
       }
     }
-  });
+  }, 30_000); // issue #377: явний тайм-аут замість дефолтних 5000 мс (під покриттям повільніше)
 });
 
 describe('П8.5: політика бот-гравця — детерміновані рішення за станом', () => {
@@ -149,20 +149,20 @@ describe('П8.5: політика бот-гравця — детермінова
     expect(r.launches).toBe(0);
     expect(r.engagements).toBe(0);
     expect(r.shotDown).toBe(0);
-  });
+  }, 30_000); // issue #377: явний тайм-аут замість дефолтних 5000 мс (під покриттям повільніше)
 
   it('місії вимкнені: жодної місії', () => {
     const policy = { ...DEFAULT_PARTY_POLICY, name: 'no-missions', missions: false };
     const r = simulateParty(42, 'норма', { policy, maxDays: 5 });
     expect(r.missionsLaunched).toBe(0);
-  });
+  }, 30_000); // issue #377: явний тайм-аут замість дефолтних 5000 мс (під покриттям повільніше)
 
   it('політика «не наймати» (hireUpTo 0) не наймає', () => {
     const policy = { ...DEFAULT_PARTY_POLICY, name: 'no-hire', hireUpTo: 0 };
     const r = simulateParty(42, 'норма', { policy, maxDays: 5 });
     expect(r.hiredTotal).toBe(0);
     expect(r.hireSpent).toBe(0);
-  });
+  }, 30_000); // issue #377: явний тайм-аут замість дефолтних 5000 мс (під покриттям повільніше)
 });
 
 // Т.22 (ADR-0089, рішення власника за звітом Т.20): два дефекти політики, з
@@ -183,13 +183,13 @@ describe('Т.22: запобіжник останнього загону і ре�
     const before = JSON.stringify(p);
     expect(partyBotMissionStep(p, DEFAULT_PARTY_POLICY).launched).toBe(false);
     expect(JSON.stringify(p)).toBe(before); // крок нічого не змінив
-  });
+  }, 30_000); // issue #377: явний тайм-аут замість дефолтних 5000 мс (під покриттям повільніше)
 
   it('із грошима рівно на найм той самий загін іде в бій', () => {
     const p = partyWithTarget();
     spend(p.econ, p.econ.money - 100);
     expect(partyBotMissionStep(p, DEFAULT_PARTY_POLICY).launched).toBe(true);
-  });
+  }, 30_000); // issue #377: явний тайм-аут замість дефолтних 5000 мс (під покриттям повільніше)
 
   it('без грошей, але з четвертим боєготовим місія запускається', () => {
     const p = createParty(42, 'норма');
@@ -197,7 +197,7 @@ describe('Т.22: запобіжник останнього загону і ре�
     while (readySoldiers(p.roster).length > 4) fireSoldier(p.roster, p.roster.soldiers[0].id);
     spend(p.econ, p.econ.money);
     expect(partyBotMissionStep(p, DEFAULT_PARTY_POLICY).launched).toBe(true);
-  });
+  }, 30_000); // issue #377: явний тайм-аут замість дефолтних 5000 мс (під покриттям повільніше)
 
   it('пошкоджений перехоплювач без боєготових не ремонтується; з одним боєготовим — ремонтується', () => {
     const p = createParty(42, 'норма');
@@ -214,7 +214,7 @@ describe('Т.22: запобіжник останнього загону і ре�
     partyBotInterceptStep(p, BALANCED_POLICY);
     expect(p.econ.money).toBe(money - 50);
     expect(p.intercept.fighter.repairTicksLeft).toBeGreaterThan(0);
-  });
+  }, 30_000); // issue #377: явний тайм-аут замість дефолтних 5000 мс (під покриттям повільніше)
 });
 
 // П11.8 (Фаза 11, ADR-0058): політика науки у бот-гравці — найм вчених,
@@ -228,7 +228,7 @@ describe('П11.8: політика науки — ізоляція (критер
     const b = simulateParty(42, 'норма', { policy: zeroed });
     // розбіжність лише в імені політики — траєкторія байт-у-байт та сама
     expect(JSON.stringify(b)).toBe(JSON.stringify({ ...a, policy: 'zero-science' }));
-  });
+  }, 30_000); // issue #377: явний тайм-аут замість дефолтних 5000 мс (під покриттям повільніше)
 
   it('метрики науки нульові без науки; крива штату — нулі (партія не помічає науки)', () => {
     const r = simulateParty(42, 'норма');
@@ -245,7 +245,7 @@ describe('П11.8: політика науки — ізоляція (критер
     expect(r.scientistsByDay.every((n) => n === 0)).toBe(true);
     // золоті числа сіда 42 пинить тест вище (score 4053 при WORLD_H 9) — траєкторія
     // геосцени/бою не змінена додаванням науки в оркестратор
-  });
+  }, 30_000); // issue #377: явний тайм-аут замість дефолтних 5000 мс (під покриттям повільніше)
 });
 
 describe('П11.8: політика науки — повний флоу (фіксовані сіди фіксують баланс)', () => {
@@ -289,7 +289,7 @@ describe('П11.8: політика науки — повний флоу (фік�
     // штат просідає 8 → 7 (наймані поверх звільнених) — метрики бачать спіраль
     expect(Math.max(...r.scientistsByDay)).toBe(8);
     expect(r.scientistsByDay[r.scientistsByDay.length - 1]).toBe(7);
-  });
+  }, 30_000); // issue #377: явний тайм-аут замість дефолтних 5000 мс (під покриттям повільніше)
 });
 
 describe('П11.8: partyBotScienceStep — детерміновані рішення за станом', () => {
@@ -300,7 +300,7 @@ describe('П11.8: partyBotScienceStep — детерміновані рішен�
     partyBotScienceStep(p, NO_SCIENCE_BASE);
     expect(p.research.scientists).toHaveLength(2);
     expect(p.econ.money).toBe(100);
-  });
+  }, 30_000); // issue #377: явний тайм-аут замість дефолтних 5000 мс (під покриттям повільніше)
 
   it('Т.28: усі протоколи політики завершено — штат звільнено, нових не наймає; без прапорця штат лишається', () => {
     const p = createParty(42, 'норма');
@@ -322,14 +322,14 @@ describe('П11.8: partyBotScienceStep — детерміновані рішен�
     partyBotScienceStep(p, policy);
     expect(p.research.scientists).toHaveLength(0);
     expect(p.econ.money).toBe(1000);
-  });
+  }, 30_000); // issue #377: явний тайм-аут замість дефолтних 5000 мс (під покриттям повільніше)
 
   it('Т.28: політика без протоколів штат не звільняє (порожній список — не «все завершено»)', () => {
     const p = createParty(42, 'норма');
     partyBotScienceStep(p, { ...NO_SCIENCE_BASE, fireScientistsWhenDone: true });
     partyBotScienceStep(p, { ...NO_SCIENCE_BASE, fireScientistsWhenDone: true });
     expect(p.research.scientists).toHaveLength(2);
-  });
+  }, 30_000); // issue #377: явний тайм-аут замість дефолтних 5000 мс (під покриттям повільніше)
 
   it('SCIENCE_POLICY (Т.28, ADR-0091): два техноманти, лише протокол броні, цех — броня, звільнення після', () => {
     expect(SCIENCE_POLICY).toMatchObject({
@@ -340,7 +340,7 @@ describe('П11.8: partyBotScienceStep — детерміновані рішен�
       fireScientistsWhenDone: true,
     });
     expect(DEFAULT_PARTY_POLICY.fireScientistsWhenDone).toBe(false);
-  });
+  }, 30_000); // issue #377: явний тайм-аут замість дефолтних 5000 мс (під покриттям повільніше)
 
   it('стартує перший доступний проєкт за пріоритетом — один за крок', () => {
     const p = createParty(42, 'норма');
@@ -349,7 +349,7 @@ describe('П11.8: partyBotScienceStep — детерміновані рішен�
     // «аптечка» стартує першою доступною (80 кредитів, Т.19), слот один зайнятий
     expect(p.research.active.map((x) => x.id)).toEqual(['medkit']);
     expect(p.econ.money).toBe(220);
-  });
+  }, 30_000); // issue #377: явний тайм-аут замість дефолтних 5000 мс (під покриттям повільніше)
 
   it('проєкт не стартує без слота (слоти лабораторії — гейт ADR-0058)', () => {
     const p = createParty(42, 'норма');
@@ -358,7 +358,7 @@ describe('П11.8: partyBotScienceStep — детерміновані рішен�
     partyBotScienceStep(p, { ...NO_SCIENCE_BASE, scientistsUpTo: 0, projects: ['medkit'] });
     expect(p.research.active).toHaveLength(2); // слоти зайняті — нижчі пріоритети не стартуються
     expect(p.econ.money).toBe(300);
-  });
+  }, 30_000); // issue #377: явний тайм-аут замість дефолтних 5000 мс (під покриттям повільніше)
 
   it('цех: замовлення лише завершеного проєкту, за дефіцитом, одне в черзі', () => {
     const p = createParty(42, 'норма');
@@ -370,7 +370,7 @@ describe('П11.8: partyBotScienceStep — детерміновані рішен�
     expect(p.econ.money).toBe(260); // 40 кошти за замовлення (норма ×1.0)
     partyBotScienceStep(p, { ...NO_SCIENCE_BASE, scientistsUpTo: 0, workshopOrders: ['medkit'] });
     expect(p.workshop.queue).toHaveLength(1); // одне активне замовлення — дублі не копляться
-  });
+  }, 30_000); // issue #377: явний тайм-аут замість дефолтних 5000 мс (під покриттям повільніше)
 
   it('цех: без дефіциту замовлення немає (склад покриває потребу)', () => {
     const p = createParty(42, 'норма');
@@ -379,7 +379,7 @@ describe('П11.8: partyBotScienceStep — детерміновані рішен�
     partyBotScienceStep(p, { ...NO_SCIENCE_BASE, scientistsUpTo: 0, workshopOrders: ['medkit'] });
     expect(p.workshop.queue).toHaveLength(0);
     expect(p.econ.money).toBe(300);
-  });
+  }, 30_000); // issue #377: явний тайм-аут замість дефолтних 5000 мс (під покриттям повільніше)
 
   it('екіпірування: броня зі складу → +2 maxHp боєготовому; гарматний модуль → на винищувач', () => {
     const p = createParty(42, 'норма');
@@ -395,7 +395,7 @@ describe('П11.8: partyBotScienceStep — детерміновані рішен�
     partyBotScienceStep(p, { ...NO_SCIENCE_BASE, scientistsUpTo: 0, equip: true });
     expect(first.maxHp).toBe(12);
     expect(p.intercept.fighter.gunModule).toBe(true);
-  });
+  }, 30_000); // issue #377: явний тайм-аут замість дефолтних 5000 мс (під покриттям повільніше)
 
   it('гарматний модуль не ставиться поза базою (винищувач у польоті)', () => {
     const p = createParty(42, 'норма');
@@ -404,5 +404,5 @@ describe('П11.8: partyBotScienceStep — детерміновані рішен�
     partyBotScienceStep(p, { ...NO_SCIENCE_BASE, scientistsUpTo: 0, equip: true });
     expect(p.intercept.fighter.gunModule).toBeFalsy(); // гейт «лише на базі» (ADR-0058; поле опційне)
     expect(p.workshop.store['gun-module']).toBe(1);
-  });
+  }, 30_000); // issue #377: явний тайм-аут замість дефолтних 5000 мс (під покриттям повільніше)
 });
