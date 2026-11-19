@@ -220,6 +220,7 @@ export function createScreens(deps: ScreensDeps): Screens {
   function openMenu(): void {
     closeMenu();
     gameMenu.classList.remove('hidden'); // перемикання класу — без анімацій (ADR-0029)
+    el<HTMLButtonElement>('btn-menu-close').focus(); // Т.73: фокус на безпечну кнопку «Закрити»
   }
 
   function closeMenu(): void {
@@ -233,6 +234,7 @@ export function createScreens(deps: ScreensDeps): Screens {
     closeMenu();
     if (deps.hasUnsavedChanges()) {
       exitConfirm.classList.remove('hidden');
+      el<HTMLButtonElement>('btn-exit-no').focus(); // Т.73: фокус на безпечну кнопку «Скасувати»
       return;
     }
     deps.onExitToStart();

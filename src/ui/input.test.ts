@@ -111,13 +111,13 @@ function makeFixture(autoBusy = false, queue: Anim[] = []): Fixture {
   const battle = createBattleUI(ui, battleDeps);
   const busy = vi.fn(() => autoBusy);
   const confirmLastEvac = vi.fn(); // Т.71: вікно підтвердження — у тестах лише виклик
-  const input = createInput(ui, battle, { renderAll: vi.fn(), autoBusy: busy, confirmLastEvac, evacConfirmOpen: () => false });
+  const input = createInput(ui, battle, { renderAll: vi.fn(), autoBusy: busy, confirmLastEvac, overlayOpen: () => false });
   return {
     party,
     ui,
     battle,
     input,
-    deps: { renderAll: vi.fn(), autoBusy: busy, confirmLastEvac, evacConfirmOpen: () => false },
+    deps: { renderAll: vi.fn(), autoBusy: busy, confirmLastEvac, overlayOpen: () => false },
     binfo: () => document.getElementById('binfo')!.textContent ?? '',
   };
 }

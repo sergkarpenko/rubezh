@@ -35,6 +35,9 @@ const btn = (id: string): HTMLButtonElement => $(id) as HTMLButtonElement;
 // паузи між діями політика-ядра-за-гравця, поки бій не дійде до результату
 // (btn-auto-battle disabled у renderBattle після finishBattle).
 // Флоу «Авто → Стоп → ручна дія → Авто» — критерій 1 П13.3.
+// Т.73: jsdom ставить focus() у чергу через setImmediate — його не підробляємо, щоб лічильник таймерів
+// (vi.getTimerCount) рахував лише таймери гри (авто-бій, підсумок ходу), а не фокус у вікнах поверх бою.
+const PAGE_FAKE_TIMERS = { toNotFake: ['setImmediate', 'clearImmediate'] } as Parameters<typeof vi.useFakeTimers>[0];
 const AUTO_STEP_MS = 200;
 async function runAutoSteps(): Promise<void> {
   for (let i = 0; i < 6000 && !btn('btn-auto-battle').disabled; i++) {
@@ -42,7 +45,7 @@ async function runAutoSteps(): Promise<void> {
   }
 }
 async function runAutoBattle(): Promise<void> {
-  vi.useFakeTimers();
+  vi.useFakeTimers(PAGE_FAKE_TIMERS);
   try {
     btn('btn-auto-battle').click();
     await runAutoSteps();
@@ -62,7 +65,10 @@ function passDay(): void {
   for (let i = 0; i < 48; i++) btn('btn-tick').click();
 }
 
+// Т.73: під вікном «Як грати» першого візиту бій не відповідає на плитки й клавіші — гравець спершу закриває
+// його «Грати» (мишею кнопку «Нова партія» під вікном не натиснути); так само й тут.
 function startParty(seed = '42', preset = 'норма'): void {
+  if (!$('help-screen').classList.contains('hidden')) btn('btn-help-close').click();
   btn('btn-start-new').click();
   ($('new-game-seed') as HTMLInputElement).value = seed;
   ($('new-game-preset') as HTMLSelectElement).value = preset;
@@ -405,7 +411,7 @@ describe('UI-флоу прев’ю: геосцена → місія → бій 
     const cellClick = (x: number, y: number): void => {
       cv.dispatchEvent(new MouseEvent('click', { clientX: x * 48 + 24, clientY: y * 48 + 24 }));
     };
-    vi.useFakeTimers();
+    vi.useFakeTimers(PAGE_FAKE_TIMERS);
     try {
       // Авто: політика ядра веде загін — покроково (перша дія одразу), не миттєво
       btn('btn-auto-battle').click();
@@ -774,7 +780,7 @@ describe('панель збереження: 3 слоти, лише на гео�
   // останнім у блоці: запускає авто-бій (спільний стан тестів блоку)
   it('Т.48: авто-бій, запущений до виходу, за стартовим екраном не йде далі', async () => {
     const money = saveTickAndLaunch();
-    vi.useFakeTimers();
+    vi.useFakeTimers(PAGE_FAKE_TIMERS);
     try {
       btn('btn-auto-battle').click();
       await vi.advanceTimersByTimeAsync(AUTO_STEP_MS * 3); // авто-бій справді йде
@@ -1023,7 +1029,7 @@ describe('П6.14: UX прицілювання — обведення цілей,
 
   it('Т.46: зведений постріл і «Авто» — плитка пострілу не зведена ні в авто-бої, ні після «Стоп»; вибір лишається', () => {
     const armed = (id: string): boolean => btn(id).classList.contains('armed');
-    vi.useFakeTimers();
+    vi.useFakeTimers(PAGE_FAKE_TIMERS);
     try {
       btn('btn-snap').click(); // AP 3 — швидкий постріл зводиться
       expect(armed('btn-snap')).toBe(true);
@@ -1648,7 +1654,7 @@ describe('Т.53: меню і «Як грати» зупиняють авто-б�
     (document.querySelector('button.mission') as HTMLButtonElement).click();
     expect($('battle-panel').classList.contains('hidden')).toBe(false);
     // 2. фейк-таймери — як у блоці Т.48
-    vi.useFakeTimers();
+    vi.useFakeTimers(PAGE_FAKE_TIMERS);
     try {
       // 3. авто-бій справді запущений
       btn('btn-auto-battle').click();
@@ -1720,7 +1726,7 @@ describe('Т.55: тести після Т.53 — меню без авто-бою
   it('Т.55: «Налаштування» і «Незбережені зміни» відкриваються з меню вже після зупинки авто-бою', async () => {
     // 1. бій з попереднього тесту триває; фейк-таймери — як у блоці Т.53
     expect($('battle-panel').classList.contains('hidden')).toBe(false);
-    vi.useFakeTimers();
+    vi.useFakeTimers(PAGE_FAKE_TIMERS);
     try {
       // 2. авто-бій запущений
       btn('btn-auto-battle').click();
@@ -1866,7 +1872,7 @@ describe('Т.64: зупинка авто-бою в battle.close на сторі�
   };
 
   it('Т.64: вихід на стартовий екран без кліку «Меню» — авто-бій зупиняє battle.close', async () => {
-    vi.useFakeTimers();
+    vi.useFakeTimers(PAGE_FAKE_TIMERS);
     try {
       await launchAuto();
       btn('btn-menu-exit').click(); // вікно «Меню» не відкривали — stopAutoForWindow не викликано
@@ -1885,7 +1891,7 @@ describe('Т.64: зупинка авто-бою в battle.close на сторі�
   });
 
   it('Т.64: нова партія під час авто-бою — авто-бій зупиняє battle.close', async () => {
-    vi.useFakeTimers();
+    vi.useFakeTimers(PAGE_FAKE_TIMERS);
     try {
       await launchAuto();
       startParty('42'); // startNewParty → battle.close
@@ -2075,5 +2081,145 @@ describe('Т.72: підказка «Можна евакуюватись» на �
     expect(hints()[0].dataset.cat).toBe('battle');
     for (let i = 0; i < 5 && $('bresult').textContent === ''; i++) btn('btn-end').click();
     expect(hints()).toHaveLength(1);
+  });
+});
+
+// Т.73 (кандидат 77, рішення власника 19.11.2026): вікна поверх бою — «Меню», «Налаштування», «Як грати»,
+// «Незбережені зміни». Під вікном клавіші й плитки бою не діють; фокус — на безпечній кнопці вікна;
+// Esc закриває вікно; після закриття фокус — на кнопці топбару, що відкрила вікно.
+describe('Т.73: вікна поверх бою — клавіші, плитки, фокус і Esc', () => {
+  const press = (code: string, key: string): void => {
+    document.dispatchEvent(new KeyboardEvent('keydown', { key, code, bubbles: true }));
+  };
+  const tap = (x: number, y: number): void => {
+    $('battle').dispatchEvent(new MouseEvent('click', { clientX: x * 48 + 24, clientY: y * 48 + 24 }));
+  };
+  const open = (id: string): boolean => !$(id).classList.contains('hidden');
+  const focused = (): string => document.activeElement?.id ?? '';
+  const startBattle = (): void => {
+    startParty('42');
+    for (let i = 0; i < 1500 && document.querySelector('button.mission') === null; i++) btn('btn-tick').click();
+    (document.querySelector('button.mission') as HTMLButtonElement).click();
+    expect($('battle-panel').classList.contains('hidden')).toBe(false);
+    tap(2, 2); // оперативник на синій клітинці висадки (як у тесті Т.71)
+  };
+  // Під відкритим вікном: клавіші бою і плитки тулбара не міняють ні хід, ні рядок #binfo.
+  const battleFrozen = (): void => {
+    const turn = $('bctx-turn').textContent;
+    const info = $('binfo').textContent;
+    press('KeyE', 'e');
+    press('Digit1', '1');
+    press('KeyO', 'o');
+    press('KeyG', 'g');
+    press('KeyV', 'v');
+    btn('btn-snap').click();
+    btn('btn-evac').click();
+    btn('btn-end').click();
+    expect($('bctx-turn').textContent).toBe(turn);
+    expect($('binfo').textContent).toBe(info);
+  };
+
+  it('Т.73: під «Меню», «Налаштування», «Як грати» і «Незбережені зміни» клавіші й плитки бою не діють; фокус — на безпечній кнопці вікна', () => {
+    startBattle();
+    // 1. «Меню»: фокус на «Закрити»
+    btn('btn-menu').click();
+    expect(open('game-menu')).toBe(true);
+    expect(focused()).toBe('btn-menu-close');
+    battleFrozen();
+    // 2. «Налаштування» з меню: фокус на «Закрити» вікна
+    btn('btn-menu-settings').click();
+    expect(open('settings-dialog')).toBe(true);
+    expect(focused()).toBe('settings-close');
+    battleFrozen();
+    btn('settings-close').click();
+    // 3. «Як грати» з меню: фокус на «Грати»
+    btn('btn-menu').click();
+    btn('btn-menu-help').click();
+    expect(open('help-screen')).toBe(true);
+    expect(focused()).toBe('btn-help-close');
+    battleFrozen();
+    btn('btn-help-close').click();
+    // 4. «Як грати» кнопкою «?» у топбарі: так само
+    btn('btn-help').click();
+    expect(focused()).toBe('btn-help-close');
+    battleFrozen();
+    btn('btn-help-close').click();
+    // 5. «Незбережені зміни»: фокус на «Скасувати»
+    btn('btn-menu').click();
+    btn('btn-menu-exit').click();
+    expect(open('exit-confirm')).toBe(true);
+    expect(focused()).toBe('btn-exit-no');
+    battleFrozen();
+    btn('btn-exit-no').click();
+    // 6. без вікна клавіша бою знову діє: E — кінець ходу
+    const turn = $('bctx-turn').textContent;
+    press('KeyE', 'e');
+    expect($('bctx-turn').textContent).not.toBe(turn);
+  });
+
+  it('Т.73: Esc закриває вікно і не скидає зведений режим під ним; фокус повертається на кнопку топбару, що відкрила вікно', () => {
+    startBattle();
+    press('Digit1', '1'); // зведений «Швидкий» у вибраного оперативника
+    const info = $('binfo').textContent;
+    // 1. «Меню» → Esc: вікно закрите, режим під ним не скасовано, фокус — на «Меню»
+    btn('btn-menu').click();
+    press('Escape', 'Escape');
+    expect(open('game-menu')).toBe(false);
+    expect($('binfo').textContent).toBe(info);
+    expect(focused()).toBe('btn-menu');
+    // 2. «Меню» → «Налаштування» → Esc: фокус — на «Меню»
+    btn('btn-menu').click();
+    btn('btn-menu-settings').click();
+    press('Escape', 'Escape');
+    expect(open('settings-dialog')).toBe(false);
+    expect(open('game-menu')).toBe(false);
+    expect(focused()).toBe('btn-menu');
+    // 3. «?» → Esc: фокус — на «?»
+    btn('btn-help').click();
+    press('Escape', 'Escape');
+    expect(open('help-screen')).toBe(false);
+    expect(focused()).toBe('btn-help');
+    // 4. «Меню» → «Як грати» → «Грати»: фокус — на «Меню»
+    btn('btn-menu').click();
+    btn('btn-menu-help').click();
+    btn('btn-help-close').click();
+    expect(focused()).toBe('btn-menu');
+    // 5. «Незбережені зміни» → Esc: вікно закрите, бій на місці, фокус — на «Меню»
+    btn('btn-menu').click();
+    btn('btn-menu-exit').click();
+    press('Escape', 'Escape');
+    expect(open('exit-confirm')).toBe(false);
+    expect($('battle-panel').classList.contains('hidden')).toBe(false);
+    expect(focused()).toBe('btn-menu');
+    // 6. «Меню» → «Закрити»: фокус — на «Меню»
+    btn('btn-menu').click();
+    btn('btn-menu-close').click();
+    expect(focused()).toBe('btn-menu');
+    // 7. режим досі зведений: Esc без вікна його скасовує
+    expect($('binfo').textContent).toBe(info);
+    press('Escape', 'Escape');
+    expect($('binfo').textContent).toBe('Режим пострілу скасовано.');
+  });
+  it('Т.73: Esc закриває й вікно «Евакуювати останнього?» (оперативник лишається) і діалог нової партії на стартовому екрані', () => {
+    startBattle(); // вибрано оперативника на (2, 2)
+    press('KeyV', 'v');
+    tap(3, 2);
+    press('KeyV', 'v');
+    tap(2, 3);
+    press('KeyV', 'v');
+    expect(open('evac-confirm')).toBe(true);
+    press('Escape', 'Escape');
+    expect(open('evac-confirm')).toBe(false);
+    expect($('bresult').textContent).toBe('');
+    // стартовий екран: «Нова партія» → Esc — діалог закрито, партію не створено
+    btn('btn-menu').click();
+    btn('btn-menu-exit').click();
+    btn('btn-exit-yes').click();
+    expect(open('start-screen')).toBe(true);
+    btn('btn-start-new').click();
+    expect(open('new-game-dialog')).toBe(true);
+    press('Escape', 'Escape');
+    expect(open('new-game-dialog')).toBe(false);
+    expect(open('start-screen')).toBe(true);
   });
 });

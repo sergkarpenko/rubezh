@@ -74,6 +74,7 @@ export function createSettings(deps: SettingsDeps): Settings {
   function open(): void {
     render();
     dialog.classList.remove('hidden'); // перемикання класу — без анімацій (ADR-0029)
+    el<HTMLButtonElement>('settings-close').focus(); // Т.73: фокус на безпечну кнопку «Закрити»
   }
 
   function close(): void {
