@@ -134,7 +134,7 @@ describe('П8.5: оркестратор — повна партія (фіксо�
         expect(r.ticks).toBe(4 * TICKS_PER_DAY);
         expect(r.moneyByDay).toHaveLength(4);
         expect(r.readyByDay).toHaveLength(4);
-        expect(r.missionsWon + r.missionsLost).toBe(r.missionsLaunched);
+        expect(r.missionsWon + r.missionsLost + r.missionsEvacuated).toBe(r.missionsLaunched);
         // П11.8: ціна найму за пресетом (hirePrice): «легкий» 120, «норма» 100
         expect(r.hireSpent).toBe(r.hiredTotal * hirePrice(preset));
       }
