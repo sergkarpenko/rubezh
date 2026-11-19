@@ -33,7 +33,7 @@ describe('П8.5: оркестратор — детермінізм (ADR-0003)', 
     const a = simulateParty(42, 'норма');
     const b = simulateParty(42, 'норма');
     expect(JSON.stringify(b)).toBe(JSON.stringify(a));
-  });
+  }, 30_000); // issue #377: явний тайм-аут замість дефолтних 5000 мс (під покриттям повільніше)
 
   it('короткий горизонт теж відтворюваний (10 діб, усі три пресети)', () => {
     for (const preset of ['легкий', 'норма', 'складний'] as const) {
@@ -41,7 +41,7 @@ describe('П8.5: оркестратор — детермінізм (ADR-0003)', 
       const b = simulateParty(7, preset, { maxDays: 10 });
       expect(JSON.stringify(b)).toBe(JSON.stringify(a));
     }
-  });
+  }, 30_000); // issue #377: явний тайм-аут замість дефолтних 5000 мс (під покриттям повільніше)
 });
 
 // П10.3: третій пресет «складний» — каркас у ядрі; числа затверджено П10.4
@@ -115,7 +115,7 @@ describe('П8.5: оркестратор — повна партія (фіксо�
     expect(r.missionsLaunched).toBe(42);
     expect(r.missionsWon).toBe(35);
     expect(r.soldiersLost).toBe(50);
-  });
+  }, 30_000); // issue #377: явний тайм-аут замість дефолтних 5000 мс (під покриттям повільніше)
 
   it('банкрутство (ADR-0021): наука без найму, сід 26 «норма» — боєготових немає і грошей немає', () => {
     const r = simulateParty(26, 'норма', { policy: { ...SCIENCE_POLICY, name: 'sci-no-hire', hireUpTo: 0 } });
@@ -228,7 +228,7 @@ describe('П11.8: політика науки — ізоляція (критер
     const b = simulateParty(42, 'норма', { policy: zeroed });
     // розбіжність лише в імені політики — траєкторія байт-у-байт та сама
     expect(JSON.stringify(b)).toBe(JSON.stringify({ ...a, policy: 'zero-science' }));
-  });
+  }, 30_000); // issue #377: явний тайм-аут замість дефолтних 5000 мс (під покриттям повільніше)
 
   it('метрики науки нульові без науки; крива штату — нулі (партія не помічає науки)', () => {
     const r = simulateParty(42, 'норма');
