@@ -448,7 +448,9 @@ function newParty(seed: number, preset: DifficultyPreset = 'норма'): Party 
 }
 
 function unitName(id: string): string {
-  const u = ui.mission?.state.units.find((x) => x.id === id);
+  // Т.75: евакуйований уже поза units (evacuate спершу знімає його з поля) — ім'я шукаємо й у evacuated
+  const st = ui.mission?.state;
+  const u = st?.units.find((x) => x.id === id) ?? st?.evacuated?.find((x) => x.id === id);
   return u ? u.name : id;
 }
 

@@ -2226,8 +2226,11 @@ describe('Т.73: вікна поверх бою — клавіші, плитки
 
 // Т.75 (хвіст Т.73, межа (а) звіту): пастка фокусу — Tab і Shift+Tab не виводять фокус з відкритого вікна
 describe('Т.75: пастка фокусу у вікнах поверх гри', () => {
+  // jsdom сам фокус по Tab не рухає: на краях кола подію треба скасувати, інакше браузер зсуне фокус далі
   const tab = (shift = false): void => {
-    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', code: 'Tab', shiftKey: shift, bubbles: true, cancelable: true }));
+    const ev = new KeyboardEvent('keydown', { key: 'Tab', code: 'Tab', shiftKey: shift, bubbles: true, cancelable: true });
+    document.dispatchEvent(ev);
+    expect(ev.defaultPrevented).toBe(true);
   };
   const items = (id: string): HTMLButtonElement[] => [...$(id).querySelectorAll<HTMLButtonElement>('button')].filter((b) => !b.disabled);
   const focused = (): Element | null => document.activeElement;
@@ -2263,6 +2266,42 @@ describe('Т.75: пастка фокусу у вікнах поверх гри',
     document.dispatchEvent(ev);
     expect(ev.defaultPrevented).toBe(false);
     expect(focused()).toBe(btn('btn-menu'));
+  });
+
+  it('Т.75: вимкнена кнопка в коло не входить; у діалозі «Нова партія» коло починається з поля сіду', () => {
+    startParty('42');
+    btn('btn-menu').click();
+    const b = items('game-menu');
+    b[b.length - 1].disabled = true; // штучно: остання кнопка вимкнена — Tab з передостанньої йде на першу
+    b[b.length - 2].focus();
+    tab();
+    expect(focused()).toBe(b[0]);
+    b[b.length - 1].disabled = false;
+    btn('btn-menu-close').click();
+    // «Нова партія» на стартовому екрані: поле сіду і вибір складності — у колі
+    btn('btn-menu').click();
+    btn('btn-menu-exit').click();
+    if (!$('exit-confirm').classList.contains('hidden')) btn('btn-exit-yes').click();
+    btn('btn-start-new').click();
+    expect($('new-game-dialog').classList.contains('hidden')).toBe(false);
+    (document.activeElement as HTMLElement).blur(); // фокус поза діалогом
+    tab();
+    expect(focused()?.id).toBe('new-game-seed');
+    tab(true);
+    const last = [...$('new-game-dialog').querySelectorAll<HTMLElement>('button, input, select')].pop();
+    expect(focused()).toBe(last);
+  });
+
+  it('Т.75: рядок журналу бою — «⇧ Евакуйовано: <ім’я>» з іменем, а не id оперативника', () => {
+    startParty('42');
+    for (let i = 0; i < 1500 && document.querySelector('button.mission') === null; i++) btn('btn-tick').click();
+    (document.querySelector('button.mission') as HTMLButtonElement).click();
+    $('battle').dispatchEvent(new MouseEvent('click', { clientX: 2 * 48 + 24, clientY: 2 * 48 + 24 }));
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'v', code: 'KeyV', bubbles: true }));
+    const name = /^Евакуйовано: (.+?)\./.exec($('binfo').textContent ?? '')?.[1];
+    expect(name).toBeTruthy();
+    const lines = [...document.querySelectorAll('#log li')].map((li) => li.textContent);
+    expect(lines).toContain('⇧ Евакуйовано: ' + name);
   });
 
   it('Т.75: «Налаштування» і «Як грати» тримають фокус', () => {
