@@ -20,6 +20,8 @@ import {
   resolveAttack,
   throwGrenade,
   useMedkit,
+  evacuate,
+  EVAC_AP_COST,
   GRENADE_RANGE,
   HEAL_AP_COST,
   GRENADE_AP_COST,
@@ -30,21 +32,70 @@ import {
   type Unit,
   type Vec2,
 } from './combat';
-import { visibleEnemies } from './map';
+import { findPath, visibleEnemies } from './map';
 import { bestPathToNeighbors, bestShootMode, nearestEnemy, pathToward } from './ai-utils';
 import { aiStep } from './ai';
 import { ALIEN_SPAWN, SQUAD_SPAWN, missionOutcome } from './mission';
+
+// Т.76 (П15.5, ADR-0075): політика евакуації бота. Порожня політика
+// (жодне поле не задане) і її відсутність — бот не евакуює: бої байт-у-байт
+// як до Т.76. Умови читають лише те, що бачить гравець (живі на полі,
+// видимі вороги, HP свого солдата) — туман війни чесний (ADR-0006).
+export interface EvacPolicy {
+  // Солдат із hp ≤ частки maxHp (0 < частка < 1) відступає сам; решта б'ється.
+  woundedAtOrBelow?: number;
+  // Живих солдатів на полі ≤ N → відступають усі.
+  lastStanding?: number;
+  // Видимих ворогів більше, ніж живих солдатів на полі → відступають усі.
+  outnumbered?: boolean;
+}
+
+// Чи відступає солдат за політикою (порядок умов фіксований, без RNG).
+function retreating(state: GameState, u: Unit, evac: EvacPolicy): boolean {
+  const w = evac.woundedAtOrBelow;
+  if (w !== undefined && u.hp <= u.maxHp * w) return true;
+  const alive = state.units.filter((x) => x.side === 'player' && x.alive).length;
+  if (evac.lastStanding !== undefined && alive <= evac.lastStanding) return true;
+  if (evac.outnumbered && visibleEnemies(state, 'player').length > alive) return true;
+  return false;
+}
+
+// Крок відступу: у зоні висадки — евакуація (2 AP); не в зоні — рух до
+// найближчої вільної клітинки зони (рівна довжина — перша за порядком зони).
+// true — дія виконана; false — у зоні, але AP замало (чекати наступного ходу);
+// null — до зони шляху немає (солдат б'ється як звичайно).
+function retreatStep(state: GameState, u: Unit): boolean | null {
+  const zone = state.evacZone ?? [];
+  if (zone.some((c) => c.x === u.pos.x && c.y === u.pos.y)) {
+    if (u.ap < EVAC_AP_COST) return false;
+    evacuate(state, u.id);
+    return true;
+  }
+  let best: Vec2[] | null = null;
+  for (const c of zone) {
+    const p = findPath(state, u.pos, c);
+    if (p && p.length > 0 && (best === null || p.length < best.length)) best = p;
+  }
+  if (!best) return null;
+  moveUnit(state, u.id, best.slice(0, u.ap));
+  return true;
+}
 
 // Одна жадібна дія солдата: true — дія виконана (виконана дія завжди витрачає AP).
 // П11.4 (ADR-0058/0038): синхронізація з витратниками — лікування при пораненні
 // (аптечка, собі), граната при скупченні ворогів (≥2 у зоні вибуху і жодного
 // союзника — бот не платить дружнім вогнем). Рішення без RNG, порядок фіксований.
-function soldierStep(state: GameState, u: Unit): boolean {
+// Т.76: з політикою евакуації — відступ після аптечки (лікування першим).
+function soldierStep(state: GameState, u: Unit, evac?: EvacPolicy): boolean {
   if (!u.alive || u.ap <= 0) return false;
   const items = state.items?.[u.id];
   if (items?.medkit && u.hp < u.maxHp && u.ap >= HEAL_AP_COST) {
     useMedkit(state, u.id, u.id);
     return true;
+  }
+  if (evac && retreating(state, u, evac)) {
+    const r = retreatStep(state, u);
+    if (r !== null) return r;
   }
   const enemies = visibleEnemies(state, 'player');
   if (items?.grenade && u.ap >= GRENADE_AP_COST && enemies.length > 0) {
@@ -99,12 +150,15 @@ function grenadeTarget(state: GameState, u: Unit, enemies: Unit[]): Vec2 | null 
 
 // Хід гравця ботами: кожен живий солдат діє, доки є AP; потім кінець ходу.
 // Повертає кількість дій. Викликати лише в хід гравця.
-export function botTurn(state: GameState): number {
+// Т.76: evac — політика евакуації (без неї бот не евакуює). Евакуйований
+// зникає з units, але лишається в знімку циклу, і AP у нього ще є (евакуація
+// знімає лише 2) — повторну дію зупиняє перевірка state.units.includes(u).
+export function botTurn(state: GameState, evac?: EvacPolicy): number {
   if (state.activeSide !== 'player') throw new Error('botTurn: зараз не хід гравця');
   let actions = 0;
   for (const u of state.units.filter((x) => x.side === 'player' && x.alive)) {
     let guard = 0;
-    while (u.alive && u.ap > 0 && guard++ < 60 && soldierStep(state, u)) actions++;
+    while (u.alive && u.ap > 0 && guard++ < 60 && state.units.includes(u) && soldierStep(state, u, evac)) actions++;
   }
   endTurn(state);
   return actions;
@@ -122,10 +176,14 @@ export function aliensTurn(state: GameState): number {
 }
 
 // Авто-бій до перемоги/поразки (для демо-прев'ю). Повертає результат і кількість півходів.
-export function autoBattle(state: GameState, maxHalfTurns = 240): { outcome: ReturnType<typeof missionOutcome>; halfTurns: number } {
+export function autoBattle(
+  state: GameState,
+  maxHalfTurns = 240,
+  evac?: EvacPolicy
+): { outcome: ReturnType<typeof missionOutcome>; halfTurns: number } {
   let halfTurns = 0;
   while (missionOutcome(state) === 'триває' && halfTurns < maxHalfTurns) {
-    if (state.activeSide === 'player') botTurn(state);
+    if (state.activeSide === 'player') botTurn(state, evac);
     else aliensTurn(state);
     halfTurns++;
   }

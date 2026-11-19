@@ -29,7 +29,7 @@ import { creditMissionBonus, economyTick, hirePrice } from './economy';
 import { applyMissionResult, hireSoldier, hospitalTick, isBankrupt, missionRisksBankruptcy, missionSquad, readySoldiers } from './squad';
 import { FIGHTER_MAX_HP, FIGHTER_REPAIR_COST, interceptRound, interceptTick, repairTick, startIntercept, startRepair } from './intercept';
 import { BALANCED_POLICY, type InterceptPolicy } from './intercept-bot';
-import { autoBattle } from './ai-bot';
+import { autoBattle, type EvacPolicy } from './ai-bot';
 import { completeMission, createMission } from './mission';
 import {
   DEFAULT_PRESET,
@@ -82,6 +82,9 @@ export interface PartyBotPolicy {
   workshopOrders: ItemId[]; // порядок замовлень цеху (виготовляти за дефіцитом складу)
   equip: boolean; // екіпірувати готові предмети боєготових + гарматний модуль
   fireScientistsWhenDone: boolean; // Т.28: усі протоколи політики завершено — звільнити штат і більше не наймати
+  // Т.76 (П15.5, ADR-0075): політика евакуації бота в бою (ai-bot.ts). Немає —
+  // бот не евакуює, партії байт-у-байт як до Т.76.
+  evac?: EvacPolicy;
 }
 
 // Стандартна політика (X-COM-стиль): перехоплення — balanced (intercept-bot),
@@ -130,6 +133,8 @@ export interface PartySimResult {
   missionsLaunched: number;
   missionsWon: number;
   missionsLost: number;
+  missionsEvacuated: number; // Т.76: місії з результатом «евакуйовано» (не входять у missionsLost)
+  soldiersEvacuated: number; // Т.76: евакуйовані солдати за партію (зокрема в місіях-перемогах)
   hiredTotal: number;
   hireSpent: number;
   soldiersLost: number; // перма-смерть (ADR-0021)
@@ -317,8 +322,9 @@ export function partyBotScienceStep(party: Party, policy: PartyBotPolicy): void 
 
 export interface MissionStepInfo {
   launched: boolean;
-  outcome: 'перемога' | 'поразка' | null;
+  outcome: 'перемога' | 'поразка' | 'евакуйовано' | null;
   lost: number; // загиблі (перма-смерть)
+  evacuated: number; // Т.76: евакуйовані цієї місії (і при перемозі — частковий відступ)
   wounded: number; // поранені → лікарня
 }
 
@@ -332,7 +338,7 @@ export interface MissionStepInfo {
 // Без екіпірованих витратників items не передається — бій байт-у-байт
 // як до П11.8 (критерій П11.8.2). Одна місія за крок.
 export function partyBotMissionStep(party: Party, policy: PartyBotPolicy): MissionStepInfo {
-  const info: MissionStepInfo = { launched: false, outcome: null, lost: 0, wounded: 0 };
+  const info: MissionStepInfo = { launched: false, outcome: null, lost: 0, wounded: 0, evacuated: 0 };
   if (!policy.missions) return info;
   if (readySoldiers(party.roster).length < policy.missionSquadSize) return info;
   // Т.22 (ADR-0089): запобіжник останнього загону — без грошей на найм
@@ -344,8 +350,10 @@ export function partyBotMissionStep(party: Party, policy: PartyBotPolicy): Missi
   const consumables = deployConsumables(party.workshop, squad);
   const hasItems = Object.keys(consumables).length > 0;
   const mission = createMission(party.geo, target.id, hasItems ? { squad, items: consumables } : { squad });
-  const battle = autoBattle(mission.state); // ліміт півходів autoBattle — рідкісний тупик
-  const outcome: 'перемога' | 'поразка' = battle.outcome === 'перемога' ? 'перемога' : 'поразка';
+  const battle = autoBattle(mission.state, undefined, policy.evac); // ліміт півходів autoBattle — рідкісний тупик
+  // Т.76: «евакуйовано» — НЛО лишається, премії немає (completeMission); тупик — поразка, як і раніше.
+  const outcome: 'перемога' | 'поразка' | 'евакуйовано' =
+    battle.outcome === 'перемога' ? 'перемога' : battle.outcome === 'евакуйовано' ? 'евакуйовано' : 'поразка';
   completeMission(party.geo, mission.briefing.ufoId, outcome);
   const aftermath = applyMissionResult(party.roster, mission.state);
   removeLostEquipment(party.workshop, aftermath.lost); // броня й око — на склад (ADR-0091)
@@ -357,6 +365,7 @@ export function partyBotMissionStep(party: Party, policy: PartyBotPolicy): Missi
   info.outcome = outcome;
   info.lost = aftermath.lost.length;
   info.wounded = aftermath.wounded.length;
+  info.evacuated = mission.state.evacuated?.length ?? 0;
   return info;
 }
 
@@ -381,6 +390,8 @@ export function simulateParty(seed: number, preset: DifficultyPreset = DEFAULT_P
     missionsLaunched: 0,
     missionsWon: 0,
     missionsLost: 0,
+    missionsEvacuated: 0,
+    soldiersEvacuated: 0,
     hiredTotal: 0,
     hireSpent: 0,
     soldiersLost: 0,
@@ -449,7 +460,9 @@ export function simulateParty(seed: number, preset: DifficultyPreset = DEFAULT_P
     if (m.launched) {
       res.missionsLaunched += 1;
       if (m.outcome === 'перемога') res.missionsWon += 1;
+      else if (m.outcome === 'евакуйовано') res.missionsEvacuated += 1;
       else res.missionsLost += 1;
+      res.soldiersEvacuated += m.evacuated;
       res.soldiersLost += m.lost;
       res.soldiersWounded += m.wounded;
     }
