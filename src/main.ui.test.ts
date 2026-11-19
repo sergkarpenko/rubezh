@@ -1609,6 +1609,38 @@ describe('Т.43: «До події», зупинки «+1 доба» і проб
     expect(step.textContent).toBe('');
   });
 
+  it('Т.79: клік по «Наступний крок» — вкладка з кнопкою дії, кнопка у фокусі й підсвічена', () => {
+    startParty();
+    const step = btn('next-step');
+    expect(step.tagName).toBe('BUTTON');
+    $('status-tab-squad').click();
+    step.click(); // «рухайте час» — кнопка «До події»
+    expect(document.activeElement?.id).toBe('btn-event');
+    expect($('btn-event').classList.contains('step-target')).toBe(true);
+    expect($('status-tab-squad').classList.contains('active')).toBe(true); // вкладку не чіпає
+    btn('btn-event').click(); // зонд у повітрі
+    expect(step.textContent).toContain('перехопіть');
+    step.click();
+    expect($('status-tab-base').classList.contains('active')).toBe(true);
+    expect((document.activeElement as HTMLElement).classList.contains('intercept')).toBe(true);
+    btn('btn-event').click(); // приземлився
+    $('status-tab-squad').click();
+    step.click();
+    expect($('status-tab-base').classList.contains('active')).toBe(true);
+    expect((document.activeElement as HTMLElement).classList.contains('mission')).toBe(true);
+  });
+
+  it('Т.79: цілі рядка «Наступний крок» — на тих вкладках, які називає nextStep', () => {
+    startParty();
+    const tab = (id: string): string | undefined => document.getElementById(id)?.closest<HTMLElement>('section[data-tab]')?.dataset.tab;
+    expect(tab('btn-hire')).toBe('squad');
+    expect(tab('roster')).toBe('squad');
+    expect(tab('ufos')).toBe('base');
+    expect(tab('workshop')).toBe('base');
+    expect(tab('fighter')).toBe('base');
+    expect(document.getElementById('btn-event')?.closest('#topbar')).not.toBeNull();
+  });
+
   it('у бою «До події» неактивна, пробіл і клік в обхід disabled часу не рухають', () => {
     startParty();
     let launched = false;
