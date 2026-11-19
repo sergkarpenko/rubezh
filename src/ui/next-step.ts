@@ -117,7 +117,7 @@ export function nextStep(party: Party, ctx: NextStepContext): NextStep | null {
 }
 
 // Т.79: клік по рядку — вкладка, прокрутка до кнопки, підсвітка (CSS-анімація
-// .step-target, без таймерів) і фокус. Повертає кнопку або null, якщо її немає.
+// .step-target, без таймерів; знімається на animationend чи blur) і фокус. Повертає кнопку або null, якщо її немає.
 export function showStepTarget(target: StepTarget, setTab: (id: StatusTabId) => void): HTMLElement | null {
   if (target.tab !== null) setTab(target.tab);
   const found =
@@ -126,10 +126,15 @@ export function showStepTarget(target: StepTarget, setTab: (id: StatusTabId) => 
       : Array.from(document.querySelectorAll<HTMLElement>(target.selector ?? ''));
   const t = found.find((e) => !(e as HTMLButtonElement).disabled) ?? found[0];
   if (t === undefined) return null;
-  t.scrollIntoView?.({ block: 'nearest' });
+  t.scrollIntoView?.({ block: 'center' }); // центр — рамка спалаху не обрізається краєм вікна (аудит PR #393)
   t.classList.remove('step-target');
   void t.offsetWidth; // перезапуск анімації на повторний клік
   t.classList.add('step-target');
+  // клас знімається після спалахів або з втратою фокусу: статичні кнопки (#btn-event, #btn-hire)
+  // панелі не перемальовують, і рамка prefers-reduced-motion лишалась би назавжди (аудит PR #393)
+  const clear = (): void => t.classList.remove('step-target');
+  t.addEventListener('animationend', clear, { once: true });
+  t.addEventListener('blur', clear, { once: true });
   t.focus({ preventScroll: true });
   return t;
 }

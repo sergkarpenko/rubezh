@@ -1630,6 +1630,17 @@ describe('Т.43: «До події», зупинки «+1 доба» і проб
     expect((document.activeElement as HTMLElement).classList.contains('mission')).toBe(true);
   });
 
+  it('Т.79: цілі рядка «Наступний крок» — на тих вкладках, які називає nextStep', () => {
+    startParty();
+    const tab = (id: string): string | undefined => document.getElementById(id)?.closest<HTMLElement>('section[data-tab]')?.dataset.tab;
+    expect(tab('btn-hire')).toBe('squad');
+    expect(tab('roster')).toBe('squad');
+    expect(tab('ufos')).toBe('base');
+    expect(tab('workshop')).toBe('base');
+    expect(tab('fighter')).toBe('base');
+    expect(document.getElementById('btn-event')?.closest('#topbar')).not.toBeNull();
+  });
+
   it('у бою «До події» неактивна, пробіл і клік в обхід disabled часу не рухають', () => {
     startParty();
     let launched = false;

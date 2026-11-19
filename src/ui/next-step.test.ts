@@ -3,7 +3,7 @@
 // Т.43: рядок «Наступний крок». Тексти — дослівно з рішення власника
 // 15.11.2026; стан готується правкою партії createParty(42).
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { Ufo, UfoStatus } from '../core/geo';
 import { FIGHTER_MAX_HP } from '../core/intercept';
 import { createParty, type Party } from '../core/save';
@@ -286,6 +286,22 @@ describe('Т.79: showStepTarget — вкладка, підсвітка, фоку
     expect(tabs).toEqual([]);
     (document.getElementById('b') as HTMLButtonElement).disabled = true;
     expect(showStepTarget({ tab: null, selector: '#u button.m' }, () => {})?.id).toBe('a');
+  });
+  it('прокрутка до центру без прокрутки фокусом; клас знімається після анімації і з втратою фокусу', () => {
+    setup('<button id="x">x</button><button id="y">y</button>');
+    const x = document.getElementById('x')!;
+    const scroll = vi.fn();
+    x.scrollIntoView = scroll;
+    const focus = vi.spyOn(x, 'focus');
+    showStepTarget({ tab: null, id: 'x' }, () => {});
+    expect(scroll).toHaveBeenCalledWith({ block: 'center' });
+    expect(focus).toHaveBeenCalledWith({ preventScroll: true });
+    x.dispatchEvent(new Event('animationend'));
+    expect(x.classList.contains('step-target')).toBe(false);
+    showStepTarget({ tab: null, id: 'x' }, () => {});
+    expect(x.classList.contains('step-target')).toBe(true);
+    document.getElementById('y')!.focus(); // фокус пішов — рамки немає
+    expect(x.classList.contains('step-target')).toBe(false);
   });
   it('кнопки немає — null, без винятку', () => {
     setup('');
