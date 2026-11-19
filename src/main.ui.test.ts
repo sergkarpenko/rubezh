@@ -35,7 +35,7 @@ const btn = (id: string): HTMLButtonElement => $(id) as HTMLButtonElement;
 // паузи між діями політика-ядра-за-гравця, поки бій не дійде до результату
 // (btn-auto-battle disabled у renderBattle після finishBattle).
 // Флоу «Авто → Стоп → ручна дія → Авто» — критерій 1 П13.3.
-// T.73: jsdom ставить focus() у чергу через setImmediate, а також setInterval рендерингу
+// Т.73: jsdom ставить focus() у чергу через setImmediate, а також setInterval рендерингу
 // (Window._requestFocusFixup) — їх не підробляємо, щоб лічильник таймерів
 // (vi.getTimerCount) рахував лише таймери гри (авто-бій, підсумок ходу), а не фокус у вікнах поверх бою.
 const PAGE_FAKE_TIMERS = {
@@ -582,7 +582,7 @@ describe('панель збереження: 3 слоти, лише на гео�
     localStorage.clear(); // кожен тест блоку — на чистих слотах
     startParty('27');
     for (let i = 0; i < 1500 && document.querySelector('button.mission') === null; i++) btn('btn-tick').click();
-    btn('btn-save-1').click();
+    expect($('slot-1').textContent).toBe('—'); // issue #378: beforeEach не зберігає слот 1 — тести зберігають самі
   });
 
   it('критичний флоу: зберегти → «перезавантаження» (нова партія) → завантажити → жорсткий збіг стану', () => {
@@ -625,6 +625,7 @@ describe('панель збереження: 3 слоти, лише на гео�
   });
 
   it('розбіжність і відкат: тики після сейву → завантаження повертає стан точки збереження', () => {
+    btn('btn-save-1').click(); // сейв слота 1 у Д1 09:00 — до passDay (issue #378)
     passDay(); // доба вперед: дотація +75 (П8.6)
     expect($('clock').textContent).toBe('Д2 09:00');
     expect($('money').textContent).toBe('375');
@@ -635,6 +636,7 @@ describe('панель збереження: 3 слоти, лише на гео�
   });
 
   it('під час бою панель збереження вимкнена (ADR-0026: місія не переривається)', async () => {
+    btn('btn-save-1').click(); // сейв слота 1, щоб після бою load-1 був доступний (issue #378)
     (document.querySelector('button.mission') as HTMLButtonElement).click();
     expect($('battle-panel').classList.contains('hidden')).toBe(false);
     expect(btn('btn-save-1').disabled).toBe(true);
@@ -764,6 +766,7 @@ describe('панель збереження: 3 слоти, лише на гео�
   });
 
   it('Т.48: невдале завантаження останнього слота — лишаємось на стартовому екрані', () => {
+    btn('btn-save-1').click(); // сейв слота 1 у Д1 09:00 (issue #378)
     btn('btn-start-continue').click(); // слот 1 цілий — у гру
     expect($('start-screen').classList.contains('hidden')).toBe(true);
     exitToStart(false);
