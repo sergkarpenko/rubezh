@@ -248,10 +248,10 @@ describe('Т.44: reachableCells — зона ходу', () => {
     }
   });
 
-  it('великий ap: коли frontier спорожняється раніше за steps, зона точна; start в оточенні стін — порожньо', () => {
+  it('ap = Infinity: цикл зупиняється, коли frontier порожній; зона точна, оточений start — порожньо', () => {
     const g = setupGame();
-    expect(reachableCells(g, from, 1000).size).toBe(398);
+    expect(reachableCells(g, from, Infinity).size).toBe(398);
     const walled = setupGame(['1,2', '3,2', '2,1', '2,3']);
-    expect(reachableCells(walled, from, 1000).size).toBe(0);
+    expect(reachableCells(walled, from, Infinity).size).toBe(0);
   });
 });
