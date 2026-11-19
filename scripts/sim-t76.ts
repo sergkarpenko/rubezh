@@ -2,7 +2,7 @@
 // ADR-0075): ті самі партії simulateParty (src/core/party-bot.ts) з різними
 // умовами відступу бота в бою (EvacPolicy, src/core/ai-bot.ts). Ядро і правила
 // гри не змінюються. Поза CI, як sim-p11.8.ts:
-//   npx -y vite-node scripts/sim-t76.ts -- --variants none,w50 --presets норма --seeds 120 --out /tmp/t76.csv
+//   npx -y vite-node scripts/sim-t76.ts -- --variants none,w50 --presets норма --seeds 120 --out /tmp/t76/a.csv
 //   npx -y vite-node scripts/sim-t76.ts -- --summary /tmp/a.csv,/tmp/b.csv   — markdown-зведення CSV
 // Варіант — частини через «+» (політика без науки, DEFAULT_PARTY_POLICY, якщо немає sci):
 //   none   — без евакуації (чинний бот, референс);
@@ -65,7 +65,7 @@ function run(): void {
   const variants = (arg('--variants') ?? 'none').split(',');
   const presets = (arg('--presets') ?? 'легкий,норма,складний').split(',') as DifficultyPreset[];
   const seeds = Number(arg('--seeds') ?? 120);
-  const out = arg('--out') ?? 'dist/t76.csv';
+  const out = arg('--out') ?? '/tmp/t76.csv';
   const rows: string[] = [COLS.join(',')];
   for (const v of variants) {
     const policy = variantPolicy(v);

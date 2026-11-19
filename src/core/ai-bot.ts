@@ -52,9 +52,8 @@ export interface EvacPolicy {
 
 // Чи відступає солдат за політикою (порядок умов фіксований, без RNG).
 function retreating(state: GameState, u: Unit, evac: EvacPolicy): boolean {
-  if (!state.evacZone?.length) return false; // без зони висадки (демо-бій) евакуації немає
   const w = evac.woundedAtOrBelow;
-  if (w !== undefined && w > 0 && u.hp <= u.maxHp * w) return true;
+  if (w !== undefined && u.hp <= u.maxHp * w) return true;
   const alive = state.units.filter((x) => x.side === 'player' && x.alive).length;
   if (evac.lastStanding !== undefined && alive <= evac.lastStanding) return true;
   if (evac.outnumbered && visibleEnemies(state, 'player').length > alive) return true;
@@ -152,8 +151,8 @@ function grenadeTarget(state: GameState, u: Unit, enemies: Unit[]): Vec2 | null 
 // Хід гравця ботами: кожен живий солдат діє, доки є AP; потім кінець ходу.
 // Повертає кількість дій. Викликати лише в хід гравця.
 // Т.76: evac — політика евакуації (без неї бот не евакуює). Евакуйований
-// зникає з units, але лишається в знімку циклу: його AP вже витрачено на
-// евакуацію або залишок < 2 — наступна спроба вийде на перевірці зони/AP.
+// зникає з units, але лишається в знімку циклу, і AP у нього ще є (евакуація
+// знімає лише 2) — повторну дію зупиняє перевірка state.units.includes(u).
 export function botTurn(state: GameState, evac?: EvacPolicy): number {
   if (state.activeSide !== 'player') throw new Error('botTurn: зараз не хід гравця');
   let actions = 0;
