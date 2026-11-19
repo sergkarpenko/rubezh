@@ -247,4 +247,11 @@ describe('Т.44: reachableCells — зона ходу', () => {
       }
     }
   });
+
+  it('великий ap: коли frontier спорожняється раніше за steps, зона точна; start в оточенні стін — порожньо', () => {
+    const g = setupGame();
+    expect(reachableCells(g, from, 1000).size).toBe(398);
+    const walled = setupGame(['1,2', '3,2', '2,1', '2,3']);
+    expect(reachableCells(walled, from, 1000).size).toBe(0);
+  });
 });
