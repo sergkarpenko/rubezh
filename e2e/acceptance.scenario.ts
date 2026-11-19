@@ -612,6 +612,15 @@ test('сценарій приймання ADR-0030: партія → місія 
     expect(stepBox.below, 'рядок «Наступний крок» має бути під чипами шапки').toBe(true);
     expect(stepBox.wide, 'рядок «Наступний крок» — на всю ширину шапки').toBeGreaterThan(0.9);
     expect(stepBox.fits, 'текст рядка «Наступний крок» обрізано').toBe(true);
+    // Т.79: клік по рядку веде до кнопки дії: фокус і підсвітка на ній
+    await page.locator('#next-step').click();
+    const focused = await page.evaluate(() => {
+      const a = document.activeElement as HTMLElement | null;
+      return { id: a?.id ?? '', cls: a?.className ?? '', tag: a?.tagName ?? '' };
+    });
+    expect(focused.tag, 'клік по «Наступний крок» не дав фокус кнопці дії').toBe('BUTTON');
+    expect(focused.cls, 'кнопка дії не підсвічена').toContain('step-target');
+    expect(focused.id, 'фокус лишився на самому рядку').not.toBe('next-step');
     await page.locator('#btn-day').click();
     const dayTicks = mirror.dayWithStops();
     await expect(page.locator('#next-step')).toHaveText(stepText());

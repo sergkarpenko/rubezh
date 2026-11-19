@@ -3,6 +3,10 @@
 // крок» у шапці геосцени — одна порада за станом партії, перша, умова якої
 // виконана (згори вниз). Чиста функція: лише читає стан (ADR-0002 — ядро про
 // підказки не знає). Тексти затверджені власником дослівно.
+// Т.79 (кандидат 45; рішення власника 19.11.2026): клік по рядку показує, де діяти, —
+// відкриває вкладку колонки, прокручує до кнопки, підсвічує її і дає їй фокус; дію
+// гравець натискає сам. Порада після витраченого гелю чи гранати — окремий текст
+// («поповніть запас»), нижче за «видайте» і «ремонт».
 
 import { sciencePrice } from '../core/campaign';
 import { TICK_MINUTES, detectedUfos, missionTargets } from '../core/geo';
@@ -10,7 +14,8 @@ import { FIGHTER_MAX_HP, FIGHTER_REPAIR_COST } from '../core/intercept';
 import type { Party } from '../core/save';
 import { isBankrupt, readySoldiers } from '../core/squad';
 import { ITEM_IDS, WORKSHOP_CATALOG, type ItemId } from '../core/workshop';
-import { inAirCombat, readyToIssue } from './panels';
+import { EQUIP_ITEMS, inAirCombat, readyToIssue } from './panels';
+import type { StatusTabId } from './status-tabs';
 
 export const NEXT_STEP = {
   landed: (hours: number): string => 'Наступний крок: зонд приземлився — запустіть місію (вікно ' + hours + ' год)',
@@ -21,7 +26,29 @@ export const NEXT_STEP = {
   issue: 'Наступний крок: на складі є спорядження — видайте оперативникам',
   repair: 'Наступний крок: перехоплювач пошкоджений — замовте ремонт',
   time: 'Наступний крок: рухайте час — сенсорна сітка шукає зонди',
+  refill: 'Наступний крок: витратник закінчився — поповніть запас у «Кузні»', // Т.79
 } as const;
+
+// Т.79: куди веде клік по рядку — вкладка колонки (null — не перемикати) і кнопка:
+// id або селектор (перша активна з кількох, інакше перша).
+export interface StepTarget {
+  tab: StatusTabId | null;
+  id?: string;
+  selector?: string;
+}
+
+export interface NextStep {
+  text: string;
+  target: StepTarget;
+}
+
+// Т.79: витратники — гель і граната зникають, коли їх використано (П11.4).
+const CONSUMABLES: readonly ItemId[] = ['medkit', 'grenade'];
+
+// Предмет уже колись виготовлено: подія «produced» у журналі «Кузні» (журнал у сейві).
+function everProduced(party: Party, id: ItemId): boolean {
+  return party.workshop.log.some((e) => e.type === 'produced' && e.id === id);
+}
 
 // Предмет завершеного протоколу, якого зараз ніде немає (ні на складі, ні в черзі
 // «Кузні», ні в оперативників, ні на перехоплювачі), а кредитів на нього вистачає.
@@ -45,22 +72,64 @@ export interface NextStepContext {
 // «боєготових немає і на вербування бракує» настає одразу після витрати — порада
 // «вербуйте або чекайте» вела б до програшу (аудит PR #339).
 export function nextStepText(party: Party, ctx: NextStepContext): string | null {
+  return nextStep(party, ctx)?.text ?? null;
+}
+
+const order = (id: ItemId): StepTarget => ({ tab: 'base', id: 'btn-order-' + id });
+
+// Перша кнопка «спорядити» в ростері: оперативник без предмета, який є на складі.
+function issueTarget(party: Party): StepTarget {
+  for (const [itemId, slot] of EQUIP_ITEMS) {
+    if (party.workshop.store[itemId] <= 0) continue;
+    const s = party.roster.soldiers.find((x) => party.workshop.equipped[x.id]?.[slot] !== true);
+    if (s) return { tab: 'squad', id: 'btn-equip-' + s.id + '-' + slot };
+  }
+  return { tab: 'squad', selector: '#roster button' };
+}
+
+export function nextStep(party: Party, ctx: NextStepContext): NextStep | null {
   if (ctx.inBattle || ctx.gameOver || inAirCombat(party) || party.campaign.status !== 'триває') return null;
   if (isBankrupt(party.econ, party.roster, party.campaign.preset)) return null;
+  const mission: StepTarget = { tab: 'base', selector: '#ufos button.mission' };
   const ready = readySoldiers(party.roster).length;
   const fighter = party.intercept.fighter;
   const targets = missionTargets(party.geo);
   if (ready > 0) {
     const landed = targets.filter((u) => u.status === 'приземлився');
-    if (landed.length > 0) return NEXT_STEP.landed((Math.min(...landed.map((u) => u.landedTicksLeft)) * TICK_MINUTES) / 60);
-    if (targets.some((u) => u.status === 'збитий')) return NEXT_STEP.shotDown;
+    if (landed.length > 0)
+      return { text: NEXT_STEP.landed((Math.min(...landed.map((u) => u.landedTicksLeft)) * TICK_MINUTES) / 60), target: mission };
+    if (targets.some((u) => u.status === 'збитий')) return { text: NEXT_STEP.shotDown, target: mission };
   }
   const flying = detectedUfos(party.geo).some((u) => u.status === 'летить');
-  if (flying && fighter.status === 'на базі' && fighter.hp === FIGHTER_MAX_HP) return NEXT_STEP.inAir;
-  if (ready === 0) return NEXT_STEP.noReady;
-  if (ITEM_IDS.some((id) => canOrderNew(party, id))) return NEXT_STEP.order;
-  if (readyToIssue(party) > 0) return NEXT_STEP.issue;
+  if (flying && fighter.status === 'на базі' && fighter.hp === FIGHTER_MAX_HP)
+    return { text: NEXT_STEP.inAir, target: { tab: 'base', selector: '#ufos button.intercept' } };
+  if (ready === 0) return { text: NEXT_STEP.noReady, target: { tab: 'squad', id: 'btn-hire' } };
+  const toOrder = ITEM_IDS.filter((id) => canOrderNew(party, id));
+  const fresh = toOrder.find((id) => !CONSUMABLES.includes(id) || !everProduced(party, id));
+  if (fresh !== undefined) return { text: NEXT_STEP.order, target: order(fresh) };
+  if (readyToIssue(party) > 0) return { text: NEXT_STEP.issue, target: issueTarget(party) };
   // ремонт радимо, лише коли кнопка «Ремонт» активна (кредитів вистачає) — аудит PR #339
-  if (fighter.status === 'на базі' && fighter.hp < FIGHTER_MAX_HP && party.econ.money >= FIGHTER_REPAIR_COST) return NEXT_STEP.repair;
-  return NEXT_STEP.time;
+  if (fighter.status === 'на базі' && fighter.hp < FIGHTER_MAX_HP && party.econ.money >= FIGHTER_REPAIR_COST)
+    return { text: NEXT_STEP.repair, target: { tab: 'base', id: 'btn-repair' } };
+  // Т.79: витратник, що вже був і закінчився, — нижче за «видайте» і «ремонт»
+  if (toOrder.length > 0) return { text: NEXT_STEP.refill, target: order(toOrder[0]) };
+  return { text: NEXT_STEP.time, target: { tab: null, id: 'btn-event' } };
+}
+
+// Т.79: клік по рядку — вкладка, прокрутка до кнопки, підсвітка (CSS-анімація
+// .step-target, без таймерів) і фокус. Повертає кнопку або null, якщо її немає.
+export function showStepTarget(target: StepTarget, setTab: (id: StatusTabId) => void): HTMLElement | null {
+  if (target.tab !== null) setTab(target.tab);
+  const found =
+    target.id !== undefined
+      ? [document.getElementById(target.id)].filter((e): e is HTMLElement => e !== null)
+      : Array.from(document.querySelectorAll<HTMLElement>(target.selector ?? ''));
+  const t = found.find((e) => !(e as HTMLButtonElement).disabled) ?? found[0];
+  if (t === undefined) return null;
+  t.scrollIntoView?.({ block: 'nearest' });
+  t.classList.remove('step-target');
+  void t.offsetWidth; // перезапуск анімації на повторний клік
+  t.classList.add('step-target');
+  t.focus({ preventScroll: true });
+  return t;
 }

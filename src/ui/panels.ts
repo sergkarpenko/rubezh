@@ -49,7 +49,7 @@ export function hpColor(hp: number, maxHp: number): string {
 // П11.6 (ADR-0058): предмети спорядження у картці оперативника — коротка мітка,
 // ключ екіпірування і предмет каталогу «Кузні». Порядок фіксований (детермінізм).
 // П12.6 (ADR-0064): ключі каталогу англійські; назви — з каталогу (WORKSHOP_CATALOG).
-const EQUIP_ITEMS: [SoldierItemId, keyof SoldierEquipment, string][] = [
+export const EQUIP_ITEMS: [SoldierItemId, keyof SoldierEquipment, string][] = [
   ['armor', 'armor', 'броня'],
   ['optics', 'optics', 'око'],
   ['medkit', 'medkit', 'гель'],

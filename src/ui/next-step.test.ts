@@ -5,8 +5,9 @@
 
 import { describe, expect, it } from 'vitest';
 import type { Ufo, UfoStatus } from '../core/geo';
+import { FIGHTER_MAX_HP } from '../core/intercept';
 import { createParty, type Party } from '../core/save';
-import { nextStepText } from './next-step';
+import { NEXT_STEP, nextStep, nextStepText, showStepTarget } from './next-step';
 
 const GEO = { inBattle: false, gameOver: false };
 const text = (p: Party): string | null => nextStepText(p, GEO);
@@ -179,5 +180,116 @@ describe('Т.43: пріоритети і межі умов', () => {
     p.intercept.fighter.status = 'на базі';
     p.campaign.status = 'перемога';
     expect(text(p)).toBeNull();
+  });
+});
+
+describe('Т.79: витратник закінчився — окремий текст', () => {
+  const produced = (p: Party, id: 'medkit' | 'grenade'): void => {
+    p.workshop.log.push({ type: 'produced', id });
+  };
+  it('гель уже виготовляли і його ніде немає — «поповніть запас»; ще не виготовляли — «замовте»', () => {
+    const p = createParty(42);
+    p.research.completed.push('medkit');
+    p.econ.money = 10_000;
+    expect(text(p)).toBe('Наступний крок: протокол завершено — замовте предмет у «Кузні»');
+    produced(p, 'medkit');
+    expect(text(p)).toBe('Наступний крок: витратник закінчився — поповніть запас у «Кузні»');
+    expect(nextStep(p, GEO)?.target).toEqual({ tab: 'base', id: 'btn-order-medkit' });
+    p.workshop.store.medkit = 1; // гель на складі — уже не «поповніть», а «видайте»
+    expect(text(p)).toBe(NEXT_STEP.issue);
+  });
+  it('граната закінчилась — так само; без кредитів — «рухайте час»', () => {
+    const p = createParty(42);
+    p.research.completed.push('grenade');
+    produced(p, 'grenade');
+    p.econ.money = 59;
+    expect(text(p)).toBe(NEXT_STEP.time);
+    p.econ.money = 60;
+    expect(text(p)).toBe(NEXT_STEP.refill);
+  });
+  it('новий предмет — раніше за «видайте»; «поповніть» — нижче за «видайте» і «ремонт»', () => {
+    const p = createParty(42);
+    p.econ.money = 10_000;
+    p.research.completed.push('medkit', 'armor');
+    produced(p, 'medkit');
+    p.workshop.store.optics = 1;
+    expect(text(p)).toBe(NEXT_STEP.order); // броня ще не виготовлялась
+    p.research.completed = ['medkit'];
+    expect(text(p)).toBe(NEXT_STEP.issue);
+    p.workshop.store.optics = 0;
+    p.intercept.fighter.hp = 1;
+    expect(text(p)).toBe(NEXT_STEP.repair);
+    p.intercept.fighter.hp = FIGHTER_MAX_HP;
+    expect(text(p)).toBe(NEXT_STEP.refill);
+  });
+  it('модуль і постійні предмети «поповніть» не дають навіть після виготовлення', () => {
+    const p = createParty(42);
+    p.econ.money = 10_000;
+    p.research.completed.push('armor');
+    p.workshop.log.push({ type: 'produced', id: 'armor' });
+    expect(text(p)).toBe(NEXT_STEP.order);
+    p.research.completed = ['medkit'];
+    p.workshop.log.push({ type: 'produced', id: 'grenade' }); // виготовляли гранату, не гель
+    expect(text(p)).toBe(NEXT_STEP.order);
+  });
+});
+
+describe('Т.79: куди веде клік по рядку', () => {
+  it('ціль для кожного рядка', () => {
+    const t = (p: Party) => nextStep(p, GEO)?.target;
+    const p = createParty(42);
+    expect(t(p)).toEqual({ tab: null, id: 'btn-event' });
+    addUfo(p, 'летить');
+    expect(t(p)).toEqual({ tab: 'base', selector: '#ufos button.intercept' });
+    p.geo.ufos[0].status = 'приземлився';
+    expect(t(p)).toEqual({ tab: 'base', selector: '#ufos button.mission' });
+    p.geo.ufos[0].status = 'збитий';
+    expect(t(p)).toEqual({ tab: 'base', selector: '#ufos button.mission' });
+    p.geo.ufos = [];
+    woundAll(p);
+    expect(t(p)).toEqual({ tab: 'squad', id: 'btn-hire' });
+    p.roster.hospital = {};
+    p.econ.money = 10_000;
+    p.research.completed.push('optics');
+    expect(t(p)).toEqual({ tab: 'base', id: 'btn-order-optics' });
+    p.research.completed = [];
+    const [a, b] = p.roster.soldiers;
+    p.workshop.store.grenade = 1;
+    p.workshop.equipped[a.id] = { armor: false, optics: false, medkit: false, grenade: true };
+    expect(t(p)).toEqual({ tab: 'squad', id: 'btn-equip-' + b.id + '-grenade' }); // перший без гранати
+    p.workshop.store.grenade = 0;
+    p.intercept.fighter.hp = 1;
+    expect(t(p)).toEqual({ tab: 'base', id: 'btn-repair' });
+  });
+  it('без рядка — без цілі', () => {
+    expect(nextStep(createParty(42), { inBattle: true, gameOver: false })).toBeNull();
+  });
+});
+
+describe('Т.79: showStepTarget — вкладка, підсвітка, фокус', () => {
+  function setup(html: string): void {
+    document.body.innerHTML = html;
+  }
+  it('id: перемикає вкладку, ставить клас і фокус', () => {
+    setup('<button id="x">x</button>');
+    const tabs: string[] = [];
+    const r = showStepTarget({ tab: 'base', id: 'x' }, (id) => tabs.push(id));
+    expect(tabs).toEqual(['base']);
+    expect(r?.id).toBe('x');
+    expect(document.activeElement?.id).toBe('x');
+    expect(r?.classList.contains('step-target')).toBe(true);
+  });
+  it('селектор: перша активна кнопка, а якщо активних немає — перша; tab null — вкладку не чіпає', () => {
+    setup('<div id="u"><button class="m" id="a" disabled>a</button><button class="m" id="b">b</button></div>');
+    const tabs: string[] = [];
+    expect(showStepTarget({ tab: null, selector: '#u button.m' }, (id) => tabs.push(id))?.id).toBe('b');
+    expect(tabs).toEqual([]);
+    (document.getElementById('b') as HTMLButtonElement).disabled = true;
+    expect(showStepTarget({ tab: null, selector: '#u button.m' }, () => {})?.id).toBe('a');
+  });
+  it('кнопки немає — null, без винятку', () => {
+    setup('');
+    expect(showStepTarget({ tab: 'squad', id: 'nope' }, () => {})).toBeNull();
+    expect(showStepTarget({ tab: 'squad', selector: '#nope' }, () => {})).toBeNull();
   });
 });

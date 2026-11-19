@@ -37,7 +37,7 @@ import { GCELL } from './ui/grid';
 // Т.43: зупинки кнопок часу («До події», «+1 доба») — модуль src/ui/time-control.ts.
 import { isSpaceForEvent, runTime, type RunMode } from './ui/time-control';
 // Т.43: рядок «Наступний крок» у шапці — модуль src/ui/next-step.ts.
-import { nextStepText } from './ui/next-step';
+import { nextStep, showStepTarget, type StepTarget } from './ui/next-step';
 // пR.2 (ADR-0037): бойовище і флоу бою — модуль src/ui/battle.ts.
 import { createBattleUI, type BattleUIState } from './ui/battle';
 // П13.2 (ADR-0066): вертикальний тулбар бойових дій збоку — модуль src/ui/toolbar.ts.
@@ -250,6 +250,7 @@ function focusTopbarOpener(): void {
 // Т.7: вкладки статус-колонки — посилання для сигналу дій «Вузла» (renderAll);
 // null до ініціалізації DOM (node-середовище тестів модулів).
 let statusTabs: StatusTabs | null = null;
+let stepTarget: StepTarget | null = null; // Т.79: ціль рядка «Наступний крок» з останнього renderAll
 // пR.2 (ADR-0037): стан бою — явний об'єкт замість модульних let (мітигація
 // плану рефакторингу); ним спільно користуються модуль бою (src/ui/battle.ts)
 // і обробники вводу (нижче). Порядок оголошень — TDZ, див. docs/workflow.md.
@@ -547,8 +548,9 @@ function renderAll(): void {
   // Т.32: розкладка бою (index.html) — колонку вузла сховано, поле вписане у вікно
   el('layout').classList.toggle('in-battle', ui.mission !== null);
   // Т.43: одна порада за станом партії; у бою і після кінця гри рядок прихований
-  const step = nextStepText(party, { inBattle: ui.mission !== null, gameOver });
-  el('next-step').textContent = step ?? '';
+  const step = nextStep(party, { inBattle: ui.mission !== null, gameOver });
+  stepTarget = step?.target ?? null; // Т.79: куди веде клік по рядку
+  el('next-step').textContent = step?.text ?? '';
   el('next-step').classList.toggle('hidden', step === null);
   panels.renderCampaign();
   panels.renderGeo();
@@ -675,6 +677,10 @@ if (typeof document !== 'undefined') {
   // rubezh.settings.*), помилки сховища — тихо. Приглушення в бою — чинний
   // механізм #status.dimmed (П6.3): вкладки живуть у колонці.
   statusTabs = createStatusTabs();
+  // Т.79: клік по рядку «Наступний крок» показує кнопку дії (вкладка, прокрутка, підсвітка, фокус)
+  el('next-step').onclick = () => {
+    if (stepTarget !== null) showStepTarget(stepTarget, (id) => statusTabs?.set(id));
+  };
   // П14.6 (ADR-0072): іконки вкладок («Загін»/«Вузол»/«Система» статус-колонки
   // і фільтри журналу) — піксель-матриці кодом, узгоджені з тулбаром (П13.2);
   // canvas перед текстом, контракти кнопок не змінюються.
