@@ -307,6 +307,16 @@ describe('T.39: кнопка «Замовити в «Кузні»» на кар�
     expect(c).not.toContain('Загін'); // модуль не видається оперативникам
   });
 
+  it('Т.78 (аудит): модуль уже встановлено, другий на складі — лише «На складі: N», без підказки встановити', () => {
+    party.research.completed.push('gun-module');
+    party.workshop.store['gun-module'] = 1;
+    party.intercept.fighter.gunModule = true;
+    createResearchPanel(makeDeps()).render();
+    const c = card('Гарматний модуль перехоплювача').textContent!;
+    expect(c).toContain('На складі: 1');
+    expect(c).not.toContain('встановіть');
+  });
+
   it('у бою кнопка «Замовити в «Кузні»» вимкнена', () => {
     party.research.completed.push('medkit');
     createResearchPanel(makeDeps({ inBattle: () => true })).render();

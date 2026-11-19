@@ -357,16 +357,31 @@ describe('renderFighter: панель винищувача (П7.4)', () => {
     expect(f.party.workshop.log.at(-1)?.type).toBe('gun_module_removed');
   });
 
-  it('Т.78: перехоплювач не на базі — кнопка неактивна з причиною рядком; модуль лишається', () => {
-    const f = makeFixture();
-    f.party.intercept.fighter.gunModule = true;
-    f.party.intercept.fighter.status = 'ремонт';
-    f.party.intercept.fighter.repairTicksLeft = 3;
+  it('Т.78: перехоплювач не на базі (погоня, бій, ремонт) — кнопка неактивна з причиною рядком; модуль лишається', () => {
+    for (const status of ['погоня', 'бій', 'ремонт'] as const) {
+      const f = makeFixture();
+      f.party.intercept.fighter.gunModule = true;
+      f.party.intercept.fighter.status = status;
+      f.party.intercept.fighter.repairTicksLeft = 3;
+      f.panels.renderFighter();
+      const b = document.getElementById('btn-gun-remove') as HTMLButtonElement;
+      expect(b.disabled).toBe(true);
+      expect(b.nextElementSibling?.textContent).toBe('Лише у вузлі «Рубіж»: перехоплювач зараз — ' + status);
+      expect(document.getElementById('gun-module-state')!.textContent).toBe('Гарматний модуль: встановлено');
+    }
+  });
+
+  it('Т.78: і бій, і банкрутство — причина «Партію програно»; на базі — title з ефектом і кількістю на складі', () => {
+    const f = makeFixture({ inBattle: () => true, isGameOver: () => true });
+    f.party.workshop.store['gun-module'] = 2;
     f.panels.renderFighter();
-    const b = document.getElementById('btn-gun-remove') as HTMLButtonElement;
-    expect(b.disabled).toBe(true);
-    expect(b.nextElementSibling?.textContent).toBe('Лише у вузлі «Рубіж»: перехоплювач зараз — ремонт');
-    expect(document.getElementById('gun-module-state')!.textContent).toBe('Гарматний модуль: встановлено');
+    expect((document.getElementById('btn-gun-install') as HTMLButtonElement).nextElementSibling?.textContent).toBe('Партію програно');
+    const g = makeFixture();
+    g.party.workshop.store['gun-module'] = 2;
+    g.panels.renderFighter();
+    expect((document.getElementById('btn-gun-install') as HTMLButtonElement).title).toBe(
+      '+2 пошкодження за раунд повітряного бою · зі складу: 2'
+    );
   });
 
   it('Т.78: у бою і після банкрутства — кнопка неактивна з причиною', () => {

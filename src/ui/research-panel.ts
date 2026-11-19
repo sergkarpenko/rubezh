@@ -247,11 +247,14 @@ export function createResearchPanel(deps: ResearchPanelDeps): ResearchPanel {
           if (q) notes.push('У «Кузні»: виготовляється, ще ' + ticksText(q.ticksLeft));
           const onStore = party.workshop.store[itemId];
           if (onStore > 0) {
-            notes.push(
-              'На складі: ' +
-                onStore +
-                (itemId === 'gun-module' ? ' — встановіть у панелі «Перехоплювач»' : ' — видайте на вкладці «Загін»')
-            );
+            // Т.78 (аудит): модуль уже на перехоплювачі — другий не встановити, підказки на дію немає
+            const hint =
+              itemId !== 'gun-module'
+                ? ' — видайте на вкладці «Загін»'
+                : party.intercept.fighter.gunModule
+                  ? ''
+                  : ' — встановіть у панелі «Перехоплювач»';
+            notes.push('На складі: ' + onStore + hint);
           }
           for (const n of notes) {
             const note = document.createElement('div');
