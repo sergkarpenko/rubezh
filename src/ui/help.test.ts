@@ -67,6 +67,7 @@ describe('П9.1: екран «Як грати» — контент з конст
     expect(text).toContain('O');
     expect(text).toContain('гель');
     expect(text).toContain('граната');
+    expect(text).toContain('V — евакуація'); // П15.6: клавіша евакуації (Т.71) у довідці
     expect(text).toContain('E');
     expect(text).toContain('Esc');
   });
