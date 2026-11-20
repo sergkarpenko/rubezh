@@ -2054,7 +2054,7 @@ describe('Т.71: евакуація на сторінці — плитка, кл
     expect($('bresult').textContent).toContain('ЗАГІН ЕВАКУЙОВАНО — врятовані на базі, зонд Розриву лишається активним');
   });
 
-  it('Т.71: вихід на стартовий екран з відкритим вікном евакуації — вікно закривається разом із боєм', () => {
+  it('Т.71: вихід на стартовий екран відкриває евакуації', () => {
     startParty('42');
     for (let i = 0; i < 1500 && document.querySelector('button.mission') === null; i++) btn('btn-tick').click();
     (document.querySelector('button.mission') as HTMLButtonElement).click();
@@ -2334,7 +2334,7 @@ describe('Т.75: пастка фокусу у вікнах поверх гри',
     expect(focused()).toBe(b[0]);
   });
 
-  it('Т.75: вікно «evac-confirm» — пастка фокусу; закриття кнопками btn-evac-no і btn-evac-yes', () => {
+  it('Т.75: закриття кнопками «evac-confirm» — btn-evac-no і btn-evac-yes; пастка фокусу', () => {
     const tap = (x: number, y: number): void => {
       $('battle').dispatchEvent(new MouseEvent('click', { clientX: x * 48 + 24, clientY: y * 48 + 24 }));
     };
@@ -2351,6 +2351,7 @@ describe('Т.75: пастка фокусу у вікнах поверх гри',
       keyV();
     }
     expect($('evac-confirm').classList.contains('hidden')).toBe(false);
+    expect(items('evac-confirm')).toHaveLength(2);
     trapped('evac-confirm');
     keyV(); // під відкритим вікном клавіша V його не закриває
     expect($('evac-confirm').classList.contains('hidden')).toBe(false);
@@ -2368,6 +2369,7 @@ describe('Т.75: пастка фокусу у вікнах поверх гри',
     for (let i = 0; i < 30; i++) passDay();
     expect($('clock').textContent).toBe('Д31 00:00');
     expect($('campaign-victory').classList.contains('hidden')).toBe(false);
+    expect(items('campaign-victory')).toHaveLength(3);
     trapped('campaign-victory');
-  }, 30_000); // Т.43: 1440 кліків «+1 тек» замість 30 кліків «+1 доба» — явний тайм-аут, як у тесті «30 днів: настала доба 31»
+  }, 30_000); // Т.43: 1440 кліків «+1 тік» замість 30 кліків «+1 доба» — явний тайм-аут, як у тесті «30 діб: настала доба 31»
 });
