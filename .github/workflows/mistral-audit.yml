@@ -9,6 +9,9 @@
 # Чек не обов'язковий: збій API, зіпсована відповідь або відсутній секрет —
 # коментар «Аудиту не було» і зелений чек; червоний — лише самоперевірка.
 # PR з форку і Dependabot секрету не отримують — джоба пропускається.
+# ADR-0103 (Т.84): ключ — секрет MISTRAL_VIBE_API_KEY (ключ Vibe, оплата з плану Vibe);
+# у скрипт він іде змінною MISTRAL_API_KEY. Старий секрет MISTRAL_API_KEY (ключ Studio,
+# гаманець API) лишається в репозиторії, але джоба його не читає.
 name: mistral-audit
 
 on:
@@ -45,7 +48,7 @@ jobs:
         run: set -o pipefail; node scripts/mistral-audit-selftest.mjs | tee /dev/stderr | grep -q 'помилок 0$'
       - name: Аудит
         env:
-          MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
+          MISTRAL_API_KEY: ${{ secrets.MISTRAL_VIBE_API_KEY }}
           MISTRAL_MODEL: ${{ vars.MISTRAL_MODEL }}
           MISTRAL_REASONING: ${{ vars.MISTRAL_REASONING }}
           GITHUB_TOKEN: ${{ github.token }}

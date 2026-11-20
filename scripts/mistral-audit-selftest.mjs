@@ -721,7 +721,7 @@ export async function selfTest() {
     s = await scenario({ mistral: [reply(good)], key: '' });
     ok(
       'прохід: без секрету — без виклику API, коментар про збій',
-      s.mistral.length === 0 && s.result.reason.includes('MISTRAL_API_KEY') && s.result.posted
+      s.mistral.length === 0 && s.result.reason.includes('MISTRAL_VIBE_API_KEY') && s.result.posted
     );
     s = await scenario({ mistral: [{ status: 200, ok: true, json: async () => ({ choices: [{ message: { content: 'вибачте' } }] }) }] });
     ok('прохід: зіпсована відповідь — збій', !s.result.ok && s.result.reason === 'відповідь моделі — не JSON');
