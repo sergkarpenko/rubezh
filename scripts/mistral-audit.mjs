@@ -498,7 +498,7 @@ export async function run({ env, event, git, fetch, sleep, log }) {
   const model = /^[a-z0-9][a-z0-9.-]{2,60}$/.test(env.MISTRAL_MODEL ?? '') ? env.MISTRAL_MODEL : DEFAULT_MODEL;
   let result = { ok: false, model, head: pr.head.sha, desc: descHash(desc), descApi: live !== null };
   try {
-    if (!env.MISTRAL_API_KEY) throw new Error('у репозиторії немає секрету MISTRAL_API_KEY');
+    if (!env.MISTRAL_API_KEY) throw new Error('у репозиторії немає секрету MISTRAL_VIBE_API_KEY (змінна MISTRAL_API_KEY порожня)');
     const diff = collectDiff(git, pr.base.sha, pr.head.sha);
     const nonce = randomBytes(6).toString('hex');
     const rules = git('show', `${pr.base.sha}:AGENTS.md`);
