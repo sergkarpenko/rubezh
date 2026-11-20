@@ -597,7 +597,7 @@ describe('drainWorkshop: seen-трекінг подій цеху (П11.6)', () =
 // поранення чи смерті оперативника в бою з клітинками висадки, один раз за партію.
 describe('Т.72: підказка «Можна евакуюватись» (один раз за партію)', () => {
   const HINT =
-    'Підказка: оперативника можна евакуювати із зони висадки — плитка «Евакуація» або клавіша V, 2 AP. Евакуйовані повертаються на базу без премії.';
+    'Підказка: оперативника можна евакуювати із зони висадки — плитка «Евакуація» або клавіша V, 2 AP. Якщо евакуювати весь загін, премії за місію немає.';
   const hints = (): HTMLElement[] => [...document.querySelectorAll<HTMLElement>('#log li')].filter((li) => li.textContent === HINT);
   const shot = (targetId: string, hit: boolean, damage: number): GameEvent =>
     evBattle({ type: 'shot', shooterId: 'x', targetId, mode: 'snap', hit, damage });
