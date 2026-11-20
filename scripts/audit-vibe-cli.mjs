@@ -3,10 +3,12 @@
 // Викликає workflow `vibe-audit` (необов'язковий чек) двома кроками — `--self-test` і `audit` (ADR-0104):
 //   node scripts/audit-vibe-cli.mjs --self-test  — самоперевірка чистих функцій, без мережі;
 //   node scripts/audit-vibe-cli.mjs probe        — лише вручну (з Т.87 workflow не викликає), зі змінними
-//                                                  MISTRAL_API_KEY і VIBE_OUTPUT_DIR: один прямий POST
+//                                                  MISTRAL_API_KEY (і VIBE_OUTPUT_DIR — туди probe.txt): прямий POST
 //                                                  /v1/chat/completions ключем Vibe — код і тіло відповіді;
 //   node scripts/audit-vibe-cli.mjs audit        — `vibe --prompt-file …` у копії репозиторію,
 //                                                  знахідки з дослівною цитатою, коментар у PR «Аудит Vibe».
+// Відповідь без блоку JSON — один повтор у тій самій сесії (`--resume <session_id>` з export.json, ADR-0105):
+// «поверни лише блок JSON» з короткими межами RETRY; і після повтору без JSON — «Аудиту не було».
 // Збій, 402 чи відповідь без JSON — коментар «Аудиту не було» з причиною і код 0: чек мерж не блокує.
 // Знахідку, цитати якої немає ні у файлі на голові PR, ні в дифі, скрипт відкидає і називає в коментарі.
 // Vibe 3.1.3: `--disabled-tools write_file/edit` діє лише разом з `--auto-approve`, а `bash` (потрібен для пошуку
@@ -17,6 +19,7 @@ import { spawnSync, execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve, isAbsolute } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 export const MARKER = '<!-- vibe-audit -->';
 const API_URL = 'https://api.mistral.ai/v1/chat/completions';
@@ -27,6 +30,8 @@ const MIN_QUOTE = 6;
 const SEVERITIES = ['висока', 'середня', 'низька'];
 /** Межі прогону Vibe: ходи, ціна (орієнтовна, не стеля), час у секундах. */
 export const LIMITS = { turns: 60, price: 2, seconds: 1500 };
+/** Межі повтору «лише блок JSON» (ADR-0105): два ходи — на випадок, якщо модель ще раз викличе інструмент. */
+export const RETRY = { turns: 2, price: 0.5, seconds: 300 };
 
 export const cut = (s, n) => (String(s).length > n ? `${String(s).slice(0, n)}…` : String(s));
 
@@ -78,6 +83,15 @@ End your answer with exactly one fenced block in this format and nothing after i
  "file": "path/from/repo/root", "line": 1, "quote": "exact text", "text": "Ukrainian: what is wrong and how you verified it"}]}
 \`\`\`
 If there is nothing to report, return "findings": [].`;
+}
+
+/** Промпт повтору в тій самій сесії Vibe, коли відповідь без блоку JSON (ADR-0105). */
+export function retryPrompt() {
+  return `Your previous answer did not end with the required fenced \`\`\`json block, so the audit could not be read.
+Do not run any more checks and do not call tools. Reply with ONLY one fenced block in exactly the format from the
+first message — {"summary": …, "findings": [{"severity", "file", "line", "quote", "text"}]} — with at most ${MAX_FINDINGS}
+findings you have already verified, texts in Ukrainian, each quote copied verbatim from the file at the PR head or
+from the diff. If you have no verified findings, return "findings": []. Nothing before or after the block.`;
 }
 
 /** Останній блок ```json … ``` з відповіді (або останній об'єкт з ключем findings). */
@@ -155,7 +169,8 @@ export function renderComment(r) {
     ? `\n\nВідкинуто скриптом (${r.dropped.length}): ${r.dropped.map((d) => `${safe(cut(d.file || '—', 120))} — ${d.reason}`).join('; ')}.`
     : '';
   const summary = r.summary ? `${safe(cut(r.summary, MAX_FIELD))}\n\n` : '';
-  return `${head}${probe}${summary}${list}${drop}${usage}`;
+  const retried = r.retried ? '\n\nБлок JSON — з повтору «лише блок JSON» у тій самій сесії (ADR-0105).' : '';
+  return `${head}${probe}${summary}${list}${drop}${retried}${usage}`;
 }
 
 /** Рядок про прогін з export.json Vibe. */
@@ -233,6 +248,47 @@ export function vibeArgs({ work, promptFile, outDir, model, thinking }) {
   ];
 }
 
+/** Аргументи повтору: та сама сесія (модель і рівень міркування — з неї), короткі межі, запис файлів вимкнено. */
+export function resumeArgs({ work, sessionId, promptFile, outDir }) {
+  return [
+    '--workdir',
+    work,
+    '--resume',
+    sessionId,
+    '--prompt-file',
+    promptFile,
+    '--output',
+    'text',
+    '--output-dir',
+    outDir,
+    '--max-turns',
+    String(RETRY.turns),
+    '--max-price',
+    String(RETRY.price),
+    '--time-limit',
+    String(RETRY.seconds),
+    '--trust',
+    '--auto-approve',
+    '--disabled-tools',
+    'write_file',
+    '--disabled-tools',
+    'edit',
+  ];
+}
+
+/** Прогін Vibe: код виходу, вивід і export.json (зіпсований чи відсутній — null). */
+function runVibe(spawn, args, { env, outDir, seconds }) {
+  const run = spawn('vibe', args, { env, encoding: 'utf8', maxBuffer: 64 << 20, timeout: (seconds + 120) * 1000 });
+  const expFile = join(outDir, 'export.json');
+  let exp = null;
+  try {
+    exp = existsSync(expFile) ? JSON.parse(readFileSync(expFile, 'utf8')) : null;
+  } catch {
+    exp = null;
+  }
+  return { run, code: run.status ?? -1, exp };
+}
+
 /**
  * Аудит одного PR. git читає з оригінального checkout (вміст файлів — з об'єктів коміту голови PR,
  * а не з робочої теки: bash Vibe міг би її змінити); spawn запускає Vibe. Будь-який збій — коментар.
@@ -277,28 +333,33 @@ export async function audit({ env, fetch, log, spawn = spawnSync, gitRun }) {
     for (const k of ['GITHUB_TOKEN', 'ACTIONS_RUNTIME_TOKEN', 'ACTIONS_ID_TOKEN_REQUEST_TOKEN']) delete childEnv[k];
     const args = vibeArgs({ work: env.VIBE_WORKDIR, promptFile, outDir, model, thinking: env.VIBE_THINKING || 'medium' });
     log(`audit-vibe-cli: vibe ${args.join(' ')}`);
-    const run = spawn('vibe', args, { env: childEnv, encoding: 'utf8', maxBuffer: 64 << 20, timeout: (LIMITS.seconds + 120) * 1000 });
-    const code = run.status ?? -1;
-    const expFile = join(outDir, 'export.json');
-    let exp = null;
-    try {
-      exp = existsSync(expFile) ? JSON.parse(readFileSync(expFile, 'utf8')) : null;
-    } catch {
-      exp = null;
-    }
+    const { run, code, exp } = runVibe(spawn, args, { env: childEnv, outDir, seconds: LIMITS.seconds });
     usage = usageLine(exp, code);
     log(redact(`audit-vibe-cli: ${usage}\nstderr: ${cut(run.stderr ?? '', 3000)}`, [key]));
     if (code !== 0 && code !== 3) {
       const reason = exp?.error?.message ?? (run.error?.message || cut(run.stderr ?? '', 400) || `код ${code}`);
       return await say({ ok: false, reason: `Vibe CLI завершився з кодом ${code}: ${reason}`, usage });
     }
-    const parsed = extractFindings(run.stdout);
-    if (!parsed.ok) {
-      const limit = code === 3 ? `Vibe зупинився на ліміті (${exp?.stop_reason ?? 'код 3'}) до відповіді` : parsed.reason;
-      return await say({ ok: false, reason: limit, usage });
+    let parsed = extractFindings(run.stdout);
+    const first = code === 3 ? `Vibe зупинився на ліміті (${exp?.stop_reason ?? 'код 3'}) до відповіді` : parsed.reason;
+    let retried = false;
+    if (!parsed.ok && typeof exp?.session_id === 'string' && exp.session_id) {
+      // повтор «лише блок JSON» у тій самій сесії (ADR-0105): Vibe бачить усю свою попередню роботу
+      const retryDir = join(outDir, 'retry');
+      mkdirSync(retryDir, { recursive: true });
+      const retryFile = join(outDir, 'retry.md');
+      writeFileSync(retryFile, retryPrompt());
+      const rArgs = resumeArgs({ work: env.VIBE_WORKDIR, sessionId: exp.session_id, promptFile: retryFile, outDir: retryDir });
+      log(`audit-vibe-cli: повтор — vibe ${rArgs.join(' ')}`);
+      const again = runVibe(spawn, rArgs, { env: childEnv, outDir: retryDir, seconds: RETRY.seconds });
+      usage = `${usage}; повтор: ${usageLine(again.exp, again.code)}`;
+      log(redact(`audit-vibe-cli: повтор — ${usageLine(again.exp, again.code)}\nstderr: ${cut(again.run.stderr ?? '', 1500)}`, [key]));
+      parsed = again.code === 0 || again.code === 3 ? extractFindings(again.run.stdout) : parsed;
+      retried = true;
     }
+    if (!parsed.ok) return await say({ ok: false, reason: retried ? `${first}; повтор «лише блок JSON» теж без нього` : first, usage });
     const { kept, dropped } = verifyFindings(parsed.findings, { readFile, diff });
-    return await say({ ok: true, summary: parsed.summary, kept, dropped, usage });
+    return await say({ ok: true, summary: parsed.summary, kept, dropped, usage, retried });
   } catch (e) {
     return say({ ok: false, reason: `збій скрипта: ${cut(e.message, 300)}`, usage });
   }
@@ -389,8 +450,9 @@ async function selfTest() {
   writeFileSync(join(tmp, 'dir', 'f.ts'), 'export const answer = 43; // змінено «аудитором»\n');
   const outDir = join(tmp, 'out');
   mkdirSync(outDir);
-  const pass = async ({ stdout, status = 0, exportJson, envExtra = {}, crash = false }) => {
+  const pass = async ({ stdout, status = 0, exportJson, envExtra = {}, crash = false, retry }) => {
     const posted = [];
+    posted.calls = [];
     const fetch = async (url, o = {}) => {
       if (crash && url.includes('/pulls/')) return { ok: false, status: 500, text: async () => 'boom' };
       if (url.includes('/pulls/'))
@@ -399,10 +461,16 @@ async function selfTest() {
       posted.push(JSON.parse(o.body).body);
       return { ok: true, status: 201, json: async () => ({}) };
     };
+    rmSync(join(outDir, 'export.json'), { force: true });
+    rmSync(join(outDir, 'retry'), { recursive: true, force: true });
     const spawn = (cmd, args, opts) => {
-      if (exportJson !== undefined) writeFileSync(join(outDir, 'export.json'), exportJson);
+      posted.calls.push(args);
+      const again = args.includes('--resume');
+      const r = again ? (retry ?? { stdout: '', status: 1 }) : { stdout, status, exportJson };
+      const od = args[args.indexOf('--output-dir') + 1];
+      if (r.exportJson !== undefined) writeFileSync(join(od, 'export.json'), r.exportJson);
       if (opts.env.GITHUB_TOKEN) return { status: 2, stdout: '', stderr: 'TOKEN-LEAK' };
-      return { status, stdout, stderr: '' };
+      return { status: r.status ?? 0, stdout: r.stdout, stderr: '' };
     };
     const env = {
       GITHUB_REPOSITORY: 'o/r',
@@ -437,6 +505,44 @@ async function selfTest() {
     'прохід: ліміт і зіпсований export.json — коментар про ліміт',
     r[0].includes('ліміті (код 3)') && r[0].includes('export.json немає')
   );
+  // повтор «лише блок JSON» у тій самій сесії (ADR-0105)
+  const sess = '{"outcome":"finished","session_id":"S-1","usage":{}}';
+  r = await pass({ stdout: 'перевірив, без JSON', exportJson: sess, retry: { stdout: good, exportJson: sess } });
+  const ra = r.calls[1] ?? [];
+  check(
+    'повтор: без JSON — другий виклик з --resume S-1, без --model, межі 2 ходи, $0.5, 300 с',
+    r.calls.length === 2 &&
+      ra[ra.indexOf('--resume') + 1] === 'S-1' &&
+      !ra.includes('--model') &&
+      ra[ra.indexOf('--max-turns') + 1] === '2' &&
+      ra[ra.indexOf('--max-price') + 1] === '0.5' &&
+      ra[ra.indexOf('--time-limit') + 1] === '300' &&
+      ['write_file', 'edit'].every((t) => ra[ra.indexOf(t) - 1] === '--disabled-tools')
+  );
+  check(
+    'повтор: знахідки з повтору, позначка і два рядки прогону',
+    r[0].includes('answer = 42') && r[0].includes('з повтору') && r[0].includes('повтор: vibe')
+  );
+  check(
+    'повтор: промпт у файлі, export.json першого прогону не перезаписано',
+    readFileSync(join(outDir, 'retry.md'), 'utf8').includes('ONLY one fenced block') && existsSync(join(outDir, 'retry', 'export.json'))
+  );
+  r = await pass({ stdout: 'без JSON', exportJson: sess, retry: { stdout: 'знову без', exportJson: sess } });
+  check('повтор теж без JSON — «Аудиту не було» з обома причинами', r[0].includes('немає блоку JSON') && r[0].includes('теж без нього'));
+  r = await pass({ stdout: 'без JSON', exportJson: sess, retry: { stdout: good, status: 1 } });
+  check('повтор з кодом 1 — його вивід не читається', r[0].includes('теж без нього'));
+  r = await pass({ stdout: 'без JSON', exportJson: '{"outcome":"finished"}' });
+  check('без session_id повтору немає', r.calls.length === 1 && r[0].includes('немає блоку JSON') && !r[0].includes('повтор'));
+  r = await pass({ stdout: 'Stopped', status: 3, exportJson: '{"stop_reason":"time_limit","session_id":"S-2"}', retry: { stdout: good } });
+  check('ліміт (код 3) — повтор у сесії, знахідки є', r.calls.length === 2 && r[0].includes('answer = 42'));
+  r = await pass({ stdout: good, exportJson: sess });
+  check('JSON з першого разу — повтору немає', r.calls.length === 1 && !r[0].includes('з повтору'));
+  // кандидат 95: ручний probe без VIBE_OUTPUT_DIR і без ключа — без падіння
+  const probeEnv = { ...process.env };
+  delete probeEnv.VIBE_OUTPUT_DIR;
+  delete probeEnv.MISTRAL_API_KEY;
+  const pr = spawnSync(process.execPath, [fileURLToPath(import.meta.url), 'probe'], { env: probeEnv, encoding: 'utf8' });
+  check('probe без VIBE_OUTPUT_DIR — код 0', pr.status === 0 && pr.stdout.includes('секрету MISTRAL_VIBE_API_KEY немає'));
   r = await pass({ stdout: good, envExtra: { SETUP_OUTCOME: 'failure' } });
   check('прохід: збій встановлення — «Аудиту не було»', r[0].includes('встановлення залежностей'));
   r = await pass({ stdout: good, crash: true });
@@ -450,8 +556,11 @@ const mode = process.argv[2];
 if (mode === '--self-test') process.exit((await selfTest()) ? 1 : 0);
 else if (mode === 'probe') {
   const line = await probe({ fetch, key: process.env.MISTRAL_API_KEY, log: console.log });
-  mkdirSync(process.env.VIBE_OUTPUT_DIR, { recursive: true });
-  writeFileSync(join(process.env.VIBE_OUTPUT_DIR, 'probe.txt'), line);
+  // ручний запуск без VIBE_OUTPUT_DIR — лише вивід (кандидат 95)
+  if (process.env.VIBE_OUTPUT_DIR) {
+    mkdirSync(process.env.VIBE_OUTPUT_DIR, { recursive: true });
+    writeFileSync(join(process.env.VIBE_OUTPUT_DIR, 'probe.txt'), line);
+  }
   console.log(`audit-vibe-cli probe: ${line}`);
 } else if (mode === 'audit') {
   try {
