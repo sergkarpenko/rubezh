@@ -1,12 +1,14 @@
 // src/ui/next-step.ts
 // Т.43 (огляд Т.30, знахідка 1; рішення власника 15.11.2026): рядок «Наступний
-// крок» у шапці геосцени — одна порада за станом партії, перша, умова якої
+// крок» у заголовку геосцени — одна порада за станом партії, перша, умова якої
 // виконана (згори вниз). Чиста функція: лише читає стан (ADR-0002 — ядро про
 // підказки не знає). Тексти затверджені власником дослівно.
 // Т.79 (кандидат 45; рішення власника 19.11.2026): клік по рядку показує, де діяти, —
 // відкриває вкладку колонки, прокручує до кнопки, підсвічує її і дає їй фокус; дію
 // гравець натискає сам. Порада після витраченого гелю чи гранати — окремий текст
 // («поповніть запас»), нижче за «видайте» і «ремонт».
+// Т.80 (залишок кандидата 45; рішення власника 20.11.2026): рядок — у заголовку
+// «Геосцени»; порада «модуль на складі — встановіть» одразу після «видайте».
 
 import { sciencePrice } from '../core/campaign';
 import { TICK_MINUTES, detectedUfos, missionTargets } from '../core/geo';
@@ -14,7 +16,7 @@ import { FIGHTER_MAX_HP, FIGHTER_REPAIR_COST } from '../core/intercept';
 import type { Party } from '../core/save';
 import { isBankrupt, readySoldiers } from '../core/squad';
 import { ITEM_IDS, WORKSHOP_CATALOG, type ItemId } from '../core/workshop';
-import { EQUIP_ITEMS, inAirCombat, readyToIssue } from './panels';
+import { EQUIP_ITEMS, gunModuleReady, inAirCombat, readyToIssue } from './panels';
 import type { StatusTabId } from './status-tabs';
 
 export const NEXT_STEP = {
@@ -27,6 +29,7 @@ export const NEXT_STEP = {
   repair: 'Наступний крок: перехоплювач пошкоджений — замовте ремонт',
   time: 'Наступний крок: рухайте час — сенсорна сітка шукає зонди',
   refill: 'Наступний крок: витратник закінчився — поповніть запас у «Кузні»', // Т.79
+  install: 'Наступний крок: гарматний модуль на складі — встановіть на перехоплювач', // Т.80
 } as const;
 
 // Т.79: куди веде клік по рядку — вкладка колонки (null — не перемикати) і кнопка:
@@ -108,6 +111,8 @@ export function nextStep(party: Party, ctx: NextStepContext): NextStep | null {
   const fresh = toOrder.find((id) => !CONSUMABLES.includes(id) || !everProduced(party, id));
   if (fresh !== undefined) return { text: NEXT_STEP.order, target: order(fresh) };
   if (readyToIssue(party) > 0) return { text: NEXT_STEP.issue, target: issueTarget(party) };
+  // Т.80: модуль на складі — одразу після «видайте» (рішення власника 20.11.2026)
+  if (gunModuleReady(party)) return { text: NEXT_STEP.install, target: { tab: 'base', id: 'btn-gun-install' } };
   // ремонт радимо, лише коли кнопка «Ремонт» активна (кредитів вистачає) — аудит PR #339
   if (fighter.status === 'на базі' && fighter.hp < FIGHTER_MAX_HP && party.econ.money >= FIGHTER_REPAIR_COST)
     return { text: NEXT_STEP.repair, target: { tab: 'base', id: 'btn-repair' } };
