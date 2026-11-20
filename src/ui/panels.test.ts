@@ -11,7 +11,7 @@ import { createParty, type Party } from '../core/save';
 import { ARMOR_MAX_HP_BONUS, OPTICS_ACCURACY_BONUS } from '../core/workshop';
 import { GRENADE_DAMAGE, GRENADE_RANGE, HEAL_AMOUNT, HIT_CHANCE_CAP } from '../core/combat';
 import { initPixelSprites } from '../render';
-import { createPanels, hpColor, inAirCombat, readyToIssue, type PanelsDeps } from './panels';
+import { createPanels, gunModuleReady, hpColor, inAirCombat, readyToIssue, type PanelsDeps } from './panels';
 
 // Піксельний рушій (ADR-0031): тестовий мок фабрики offscreen-канвасів —
 // той самий патерн, що й у main.ui.test.ts (jsdom без пакета canvas).
@@ -251,6 +251,34 @@ describe('Т.7: nodeActions — дії, що чекають на вкладці 
     for (const over of [{ inBattle: () => true }, { isGameOver: () => true }]) {
       const f = makeFixture(over);
       expect(tickUntil(f.party, () => missionTargets(f.party.geo).length > 0)).toBe(true);
+      expect(f.panels.nodeActions()).toBe(0);
+    }
+  });
+});
+
+describe('Т.80: гарматний модуль на складі — дія на вкладці «Вузол»', () => {
+  it('модуль на складі, не встановлено, перехоплювач на базі — +1; інакше — 0', () => {
+    const f = makeFixture();
+    expect(f.panels.nodeActions()).toBe(0);
+    f.party.workshop.store['gun-module'] = 1;
+    expect(gunModuleReady(f.party)).toBe(true);
+    expect(f.panels.nodeActions()).toBe(1);
+    f.party.intercept.fighter.status = 'ремонт';
+    expect(gunModuleReady(f.party)).toBe(false); // не «на базі» — кнопка неактивна
+    expect(f.panels.nodeActions()).toBe(0);
+    f.party.intercept.fighter.status = 'на базі';
+    f.party.intercept.fighter.gunModule = true; // уже встановлено (другий на складі не ставиться)
+    expect(gunModuleReady(f.party)).toBe(false);
+    expect(f.panels.nodeActions()).toBe(0);
+    f.party.intercept.fighter.gunModule = false;
+    f.party.workshop.store['gun-module'] = 0;
+    expect(gunModuleReady(f.party)).toBe(false);
+  });
+
+  it('у тактичному бою і після банкрутства — 0, хоч модуль і чекає', () => {
+    for (const over of [{ inBattle: () => true }, { isGameOver: () => true }]) {
+      const f = makeFixture(over);
+      f.party.workshop.store['gun-module'] = 1;
       expect(f.panels.nodeActions()).toBe(0);
     }
   });

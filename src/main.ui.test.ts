@@ -1639,6 +1639,10 @@ describe('Т.43: «До події», зупинки «+1 доба» і проб
     expect(tab('workshop')).toBe('base');
     expect(tab('fighter')).toBe('base');
     expect(document.getElementById('btn-event')?.closest('#topbar')).not.toBeNull();
+    // Т.80: рядок — у заголовку «Геосцени» поруч із «Геосцена», не в шапці
+    expect($('next-step').closest('#topbar')).toBeNull();
+    expect($('next-step').parentElement?.id).toBe('geo-head');
+    expect($('next-step').previousElementSibling?.textContent).toBe('Геосцена');
   });
 
   it('у бою «До події» неактивна, пробіл і клік в обхід disabled часу не рухають', () => {

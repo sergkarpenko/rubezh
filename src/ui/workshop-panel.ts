@@ -115,7 +115,12 @@ export function createWorkshopPanel(deps: WorkshopPanelDeps): WorkshopPanel {
         }
         deps.renderAll();
       };
-      row.appendChild(order);
+      // Т.80: кнопка і причина — одна рядкова група: причина не відривається від кнопки
+      // залежно від шрифту машини (у CI переносилась під кнопку, локально — ні)
+      const line = document.createElement('span');
+      line.className = 'order-line';
+      line.appendChild(order);
+      row.appendChild(line);
       setWhy(order, ob.why); // Т.43
       catalog.appendChild(row);
     }

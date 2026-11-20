@@ -74,6 +74,15 @@ export function readyToIssue(party: Party): number {
   return n;
 }
 
+// Т.80 (кандидат 45): гарматний модуль можна встановити просто зараз — є на складі,
+// ще не встановлено, перехоплювач у вузлі «Рубіж» (ті самі умови, що в ядрі
+// installGunModule і в активній кнопці «Встановити модуль»). Спільна умова
+// сигналу вкладки «Вузол» (nodeActions) і поради «Наступний крок».
+export function gunModuleReady(party: Party): boolean {
+  const f = party.intercept.fighter;
+  return !f.gunModule && party.workshop.store['gun-module'] > 0 && f.status === 'на базі';
+}
+
 export function inAirCombat(party: Party): boolean {
   return party.intercept.fighter.status === 'бій';
 }
@@ -188,6 +197,7 @@ export function createPanels(deps: PanelsDeps): Panels {
     const party = deps.getParty();
     const targets = new Set(missionTargets(party.geo).map((u) => u.id));
     let n = party.intercept.fighter.status === 'бій' ? 1 : 0;
+    if (gunModuleReady(party)) n++; // Т.80: модуль на складі чекає встановлення
     for (const u of detectedUfos(party.geo)) {
       if (canIntercept(party, u)) n++;
       if (targets.has(u.id)) n++;

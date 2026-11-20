@@ -36,7 +36,7 @@ import { createPanels, inAirCombat, readyToIssue } from './ui/panels';
 import { GCELL } from './ui/grid';
 // Т.43: зупинки кнопок часу («До події», «+1 доба») — модуль src/ui/time-control.ts.
 import { isSpaceForEvent, runTime, type RunMode } from './ui/time-control';
-// Т.43: рядок «Наступний крок» у шапці — модуль src/ui/next-step.ts.
+// Т.43: рядок «Наступний крок» (Т.80 — у заголовку «Геосцени») — модуль src/ui/next-step.ts.
 import { nextStep, showStepTarget, type StepTarget } from './ui/next-step';
 // пR.2 (ADR-0037): бойовище і флоу бою — модуль src/ui/battle.ts.
 import { createBattleUI, type BattleUIState } from './ui/battle';

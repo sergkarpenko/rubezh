@@ -234,6 +234,43 @@ describe('Т.79: витратник закінчився — окремий те
   });
 });
 
+describe('Т.80: гарматний модуль на складі — «встановіть»', () => {
+  it('текст дослівно; лише коли модуль на складі, не встановлено і перехоплювач на базі', () => {
+    const p = createParty(42);
+    p.workshop.store['gun-module'] = 1;
+    expect(text(p)).toBe('Наступний крок: гарматний модуль на складі — встановіть на перехоплювач');
+    expect(nextStep(p, GEO)?.target).toEqual({ tab: 'base', id: 'btn-gun-install' });
+    p.intercept.fighter.status = 'ремонт';
+    expect(text(p)).toBe(NEXT_STEP.time);
+    p.intercept.fighter.status = 'на базі';
+    p.intercept.fighter.gunModule = true;
+    expect(text(p)).toBe(NEXT_STEP.time);
+  });
+  it('порядок: «видайте» → «встановіть» → «ремонт» → «поповніть»', () => {
+    const p = createParty(42);
+    p.econ.money = 10_000;
+    p.workshop.store['gun-module'] = 1;
+    p.workshop.store.optics = 1;
+    expect(text(p)).toBe(NEXT_STEP.issue);
+    p.workshop.store.optics = 0;
+    p.intercept.fighter.hp = 1;
+    p.research.completed.push('medkit');
+    p.workshop.log.push({ type: 'produced', id: 'medkit' });
+    expect(text(p)).toBe(NEXT_STEP.install);
+    p.workshop.store['gun-module'] = 0;
+    expect(text(p)).toBe(NEXT_STEP.repair);
+    p.intercept.fighter.hp = FIGHTER_MAX_HP;
+    expect(text(p)).toBe(NEXT_STEP.refill);
+  });
+  it('новий протокол («замовте») — раніше за «встановіть»', () => {
+    const p = createParty(42);
+    p.econ.money = 10_000;
+    p.workshop.store['gun-module'] = 1;
+    p.research.completed.push('armor');
+    expect(text(p)).toBe(NEXT_STEP.order);
+  });
+});
+
 describe('Т.79: куди веде клік по рядку', () => {
   it('ціль для кожного рядка', () => {
     const t = (p: Party) => nextStep(p, GEO)?.target;
