@@ -2066,6 +2066,56 @@ describe('Т.69: рядок #fighter-last лишається після прог
   });
 });
 
+// Т.78 (кандидат 55, після Т.66 і Т.69): рядок #fighter-last лишається після евакуації місії —
+// при outcome 'евакуйовано' completeMission не прибирає зонд з geo.ufos, тому рядок не зникає (на відміну від перемоги, Т.66).
+describe('кандидат 55: рядок #fighter-last лишається після евакуації місії', () => {
+  it('кандидат 55: сід 42, пресет «норма»: місія без тіків, евакуація трьох оперативників — рядок лишається', () => {
+    startParty('42');
+    // 1. кроки 1–2 Т.66: intercept → запуск перехоплення (запобіжник — 60 кліків), потім тики до #fighter-last (10 кліків)
+    let launched = false;
+    for (let i = 0; i < 60 && !launched; i++) {
+      const b = [...document.querySelectorAll<HTMLButtonElement>('button.intercept')].find((x) => !x.disabled);
+      if (b) {
+        b.click();
+        launched = true;
+      } else btn('btn-tick').click();
+    }
+    expect(launched).toBe(true);
+    for (let i = 0; i < 10 && document.getElementById('fighter-last') === null; i++) btn('btn-tick').click();
+    const abortedText = '✦ Зонд Розриву ufo1 приземлився — перехоплення перервано';
+    expect(document.getElementById('fighter-last')?.textContent).toBe(abortedText);
+    // 2. місія на ufo1 без тіків; поки бойова панель видима (#battle-panel видно) — #fighter-last є, з тим самим текстом
+    const mission = document.querySelector<HTMLButtonElement>('#ufos .ufo button.mission');
+    expect(mission).not.toBeNull();
+    expect(mission!.disabled).toBe(false);
+    mission!.click();
+    expect($('battle-panel').classList.contains('hidden')).toBe(false);
+    expect(document.querySelectorAll('#fighter-last')).toHaveLength(1);
+    expect(document.getElementById('fighter-last')?.textContent).toBe(abortedText);
+    // 3. евакуація всіх трьох оперативників як у Т.71: тап (2,2), (3,2), (2,3), далі клавіша V; наприкінці — btn-evac-yes
+    for (const [x, y] of [
+      [2, 2],
+      [3, 2],
+      [2, 3],
+    ] as const) {
+      $('battle').dispatchEvent(new MouseEvent('click', { clientX: x * 48 + 24, clientY: y * 48 + 24 }));
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'v', code: 'KeyV', bubbles: true }));
+    }
+    btn('btn-evac-yes').click();
+    expect($('bresult').textContent).toContain('ЗАГІН ЕВАКУЙОВАНО — врятовані на базі, зонд Розриву лишається активним');
+    // 4. картка результату: у #ufos .ufo — один зонд; #fighter-last — один, з тим самим текстом
+    expect(document.querySelectorAll('#ufos .ufo')).toHaveLength(1);
+    expect(document.querySelectorAll('#fighter-last')).toHaveLength(1);
+    expect(document.getElementById('fighter-last')?.textContent).toBe(abortedText);
+    // 5. btn-close → геосцена: кнопка місії одна (#ufos .ufo button.mission — одна), #fighter-last з тим самим текстом
+    btn('btn-close').click();
+    expect($('geo-panel').classList.contains('hidden')).toBe(false);
+    expect(document.querySelectorAll('#ufos .ufo button.mission')).toHaveLength(1);
+    expect(document.querySelectorAll('#fighter-last')).toHaveLength(1);
+    expect(document.getElementById('fighter-last')?.textContent).toBe(abortedText);
+  });
+});
+
 // Т.71 (ADR-0075, рішення власника 18.11.2026): вікно підтвердження евакуації останнього оперативника на сторінці.
 describe('Т.71: евакуація на сторінці — плитка, клавіша V і вікно підтвердження', () => {
   it('Т.71: сід 42, пресет «норма»: загін покидає поле з синіх клітинок; останнього — через вікно, «Скасувати» його лишає', () => {
