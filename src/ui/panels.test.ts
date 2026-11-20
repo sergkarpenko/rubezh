@@ -5,8 +5,7 @@
 // DOM-флоу застосунку лишається у main.ui.test.ts.
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { advanceTime, detectedUfos, geoClock, missionTargets } from '../core/geo';
-import { FIGHTER_MAX_HP, FIGHTER_REPAIR_COST, startIntercept } from '../core/intercept';
-import { hirePrice } from '../core/economy';
+import { FIGHTER_MAX_HP, startIntercept } from '../core/intercept';
 import type { DifficultyPreset } from '../core/campaign';
 import { createParty, type Party } from '../core/save';
 import { ARMOR_MAX_HP_BONUS, OPTICS_ACCURACY_BONUS } from '../core/workshop';
@@ -762,66 +761,94 @@ describe('Т.51: #fighter-last при відсутньому зонді поді
 });
 
 // issue #385 (кандидат 16): три структурні рядки-попередження в panels.ts мають показувати
-// hirePrice(preset) пресету партії, а не hirePrice() «норми» (100). Параметричні тести для
-// пресетів «легкий» (120) і «складний» (90); грошей — 90 і 120, щоб відповіді на цих пресетах
-// різнилися між собою і не збігалися з «нормою».
+// hirePrice(preset) пресету партії, а не hirePrice() «норми» (100). Очікування — таблицею
+// «пресет × гроші → текст або null» з літералами (ціни найму: «легкий» 120, «складний» 90).
+// Гроші 80/95/110: 80 < 90 — текст попередження на «складному»; 95 і 110 лежать між 90 і 120 —
+// розрізняють доступність вербування в ростері; жодна із сум не збігається з «нормою» (100),
+// тому заміна hirePrice(preset) → hirePrice() у кожному з трьох рядків дає червоним обидва пресети.
 describe('issue #385: hirePrice(preset) у попередженнях — пресети «легкий»/«складний»', () => {
-  const withPreset = (preset: DifficultyPreset, over: Partial<PanelsDeps> = {}): Fixture => {
+  const withPreset = (preset: DifficultyPreset): Fixture => {
     const party = createParty(42, preset);
-    const f = makeFixture({ getParty: () => party, ...over });
+    const f = makeFixture({ getParty: () => party });
     return { ...f, party };
   };
-  const presets: DifficultyPreset[] = ['легкий', 'складний'];
 
-  it.each(presets)('Т.24: .mission-warn — ціна найму пресету %s (грошей 90 і 120)', (preset) => {
+  // Т.24, .mission-warn: ready = 3 = SQUAD_SPAWN.length, попередження iff money < hirePrice(preset)
+  const missionWarn: { preset: DifficultyPreset; money: number; expected: string | null }[] = [
+    { preset: 'легкий', money: 80, expected: '⚠ Останній загін, а на вербування бракує (80 з 120): загине — банкрутство.' },
+    { preset: 'легкий', money: 95, expected: '⚠ Останній загін, а на вербування бракує (95 з 120): загине — банкрутство.' },
+    { preset: 'легкий', money: 110, expected: '⚠ Останній загін, а на вербування бракує (110 з 120): загине — банкрутство.' },
+    { preset: 'складний', money: 80, expected: '⚠ Останній загін, а на вербування бракує (80 з 90): загине — банкрутство.' },
+    { preset: 'складний', money: 95, expected: null },
+    { preset: 'складний', money: 110, expected: null },
+  ];
+  it.each(missionWarn)('Т.24: .mission-warn — пресет "$preset", грошей $money', ({ preset, money, expected }) => {
     const f = withPreset(preset);
     expect(tickUntil(f.party, () => missionTargets(f.party.geo).length > 0)).toBe(true);
     for (const s of f.party.roster.soldiers.slice(3)) f.party.roster.hospital[s.id] = 3; // ready = 3 = SQUAD_SPAWN.length
-    for (const money of [90, 120]) {
-      f.party.econ.money = money;
-      f.panels.renderUfos();
-      const warn = document.querySelector('.ufo .mission-warn');
-      if (money < hirePrice(preset)) {
-        expect(warn!.textContent).toBe(
-          '⚠ Останній загін, а на вербування бракує (' + money + ' з ' + hirePrice(preset) + '): загине — банкрутство.'
-        );
-      } else {
-        expect(warn).toBeNull();
-      }
-    }
+    f.party.econ.money = money;
+    f.panels.renderUfos();
+    const warn = document.querySelector('.ufo .mission-warn');
+    expect(warn?.textContent ?? null).toBe(expected);
   });
 
-  it.each(presets)('Т.26: #repair-warn — repair + hirePrice(preset) для пресету %s (грошей 90 і 120)', (preset) => {
+  // Т.26, #repair-warn: ready = 0, попередження iff money - 50 < hirePrice(preset)
+  const repairWarn: { preset: DifficultyPreset; money: number; expected: string | null }[] = [
+    {
+      preset: 'легкий',
+      money: 80,
+      expected: '⚠ Ремонт не почався сам: боєготових немає, а після ремонту не лишиться на вербування (80 з 170).',
+    },
+    {
+      preset: 'легкий',
+      money: 95,
+      expected: '⚠ Ремонт не почався сам: боєготових немає, а після ремонту не лишиться на вербування (95 з 170).',
+    },
+    {
+      preset: 'легкий',
+      money: 110,
+      expected: '⚠ Ремонт не почався сам: боєготових немає, а після ремонту не лишиться на вербування (110 з 170).',
+    },
+    {
+      preset: 'складний',
+      money: 80,
+      expected: '⚠ Ремонт не почався сам: боєготових немає, а після ремонту не лишиться на вербування (80 з 140).',
+    },
+    {
+      preset: 'складний',
+      money: 95,
+      expected: '⚠ Ремонт не почався сам: боєготових немає, а після ремонту не лишиться на вербування (95 з 140).',
+    },
+    {
+      preset: 'складний',
+      money: 110,
+      expected: '⚠ Ремонт не почався сам: боєготових немає, а після ремонту не лишиться на вербування (110 з 140).',
+    },
+  ];
+  it.each(repairWarn)('Т.26: #repair-warn — пресет "$preset", грошей $money', ({ preset, money, expected }) => {
     const f = withPreset(preset);
     f.party.intercept.fighter.hp = 0;
     for (const s of f.party.roster.soldiers) f.party.roster.hospital[s.id] = 3; // ready = 0
-    for (const money of [90, 120]) {
-      f.party.econ.money = money;
-      f.panels.renderFighter();
-      const warn = document.getElementById('repair-warn');
-      if (money - FIGHTER_REPAIR_COST < hirePrice(preset)) {
-        expect(warn!.textContent).toBe(
-          '⚠ Ремонт не почався сам: боєготових немає, а після ремонту не лишиться на вербування (' +
-            money +
-            ' з ' +
-            (FIGHTER_REPAIR_COST + hirePrice(preset)) +
-            ').'
-        );
-      } else {
-        expect(warn).toBeNull();
-      }
-    }
+    f.party.econ.money = money;
+    f.panels.renderFighter();
+    const warn = document.getElementById('repair-warn');
+    expect(warn?.textContent ?? null).toBe(expected);
   });
 
-  it.each(presets)('порожній ростер: hirePrice(party.campaign.preset) для пресету %s (грошей 90 і 120)', (preset) => {
+  // порожній ростер: доступність вербування iff money >= hirePrice(party.campaign.preset)
+  const roster: { preset: DifficultyPreset; money: number; expected: string }[] = [
+    { preset: 'легкий', money: 80, expected: 'Кредитів на вербування немає.' },
+    { preset: 'легкий', money: 95, expected: 'Кредитів на вербування немає.' },
+    { preset: 'легкий', money: 110, expected: 'Кредитів на вербування немає.' },
+    { preset: 'складний', money: 80, expected: 'Кредитів на вербування немає.' },
+    { preset: 'складний', money: 95, expected: 'Вербування доступне — кнопка «Вербувати оперативника».' },
+    { preset: 'складний', money: 110, expected: 'Вербування доступне — кнопка «Вербувати оперативника».' },
+  ];
+  it.each(roster)('порожній ростер — пресет "$preset", грошей $money', ({ preset, money, expected }) => {
     const f = withPreset(preset);
     f.party.roster.soldiers.length = 0;
-    for (const money of [90, 120]) {
-      f.party.econ.money = money;
-      f.panels.renderRoster();
-      const box = document.getElementById('roster')!;
-      if (money >= hirePrice(preset)) expect(box.textContent).toContain('Вербування доступне');
-      else expect(box.textContent).toContain('Кредитів на вербування немає.');
-    }
+    f.party.econ.money = money;
+    f.panels.renderRoster();
+    expect(document.getElementById('roster')!.textContent).toContain(expected);
   });
 });
