@@ -16,6 +16,7 @@ import {
   collectContext,
   collectDiff,
   descHash,
+  errorSnippet,
   markStale,
   mentions,
   parseReply,
@@ -405,6 +406,18 @@ export async function selfTest() {
     );
     const nc = renderComment({ ok: false, model: 'm', head, reason: 'API Mistral відповів кодом 401' });
     ok('коментар про збій', nc.startsWith(MARKER) && nc.includes('**Аудиту не було:** API Mistral відповів кодом 401.'));
+    ok(
+      'тіло помилки API: один рядок до 300 символів; порожнє і нечитабельне — позначка',
+      (await errorSnippet({ text: async () => ' {"message":\n "x"} ' + 'я'.repeat(400) })).length === 300 &&
+        (await errorSnippet({ text: async () => '{"m":\n1}' })) === '{"m": 1}' &&
+        (await errorSnippet({ text: async () => '' })) === '(тіло порожнє)' &&
+        (await errorSnippet({})) === '(тіло порожнє)' &&
+        (await errorSnippet({
+          text: async () => {
+            throw new Error('x');
+          },
+        })) === '(тіло не прочиталось)'
+    );
 
     // повний прохід з підставним fetch
     const KEY = 'sk-СЕКРЕТ-самоперевірки';

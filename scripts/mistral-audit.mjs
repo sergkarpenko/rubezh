@@ -329,6 +329,19 @@ export function renderComment(r) {
 }
 
 /** Виклик API Mistral: повтор на 429, 5xx і помилку мережі; інший код — одразу виняток. Ключ у тексти помилок не потрапляє. */
+/**
+ * Початок тіла відповіді API з помилкою — у журнал джоби, не в коментар PR (Т.81: 402 без причини).
+ * Перші 300 символів в один рядок; тіло, яке не прочиталось, — позначка.
+ */
+export async function errorSnippet(res) {
+  try {
+    const t = typeof res.text === 'function' ? await res.text() : '';
+    return t.replace(/\s+/g, ' ').trim().slice(0, 300) || '(тіло порожнє)';
+  } catch {
+    return '(тіло не прочиталось)';
+  }
+}
+
 export async function callMistral({ fetch, key, model, messages, sleep, effort }) {
   let last = 'невідома помилка';
   for (let attempt = 1; attempt <= ATTEMPTS; attempt++) {
@@ -351,6 +364,7 @@ export async function callMistral({ fetch, key, model, messages, sleep, effort }
       last = `API Mistral недоступний (${e?.name ?? 'помилка мережі'})`;
       continue;
     }
+    if (!res.ok) process.stderr.write(`mistral-audit: ${res.status} — ${await errorSnippet(res)}\n`);
     if (res.status === 429 || res.status >= 500) {
       last = `API Mistral відповів кодом ${res.status}`;
       continue;
