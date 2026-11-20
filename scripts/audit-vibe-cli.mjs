@@ -2,8 +2,9 @@
 // scripts/audit-vibe-cli.mjs — проба аудиту PR через Mistral Vibe CLI (ADR-0102, Т.82).
 // Викликає workflow `vibe-audit` (необов'язковий чек) двома кроками — `--self-test` і `audit` (ADR-0104):
 //   node scripts/audit-vibe-cli.mjs --self-test  — самоперевірка чистих функцій, без мережі;
-//   node scripts/audit-vibe-cli.mjs probe        — лише вручну (з Т.87 workflow не викликає): один прямий
-//                                                  POST /v1/chat/completions ключем Vibe — код і тіло відповіді;
+//   node scripts/audit-vibe-cli.mjs probe        — лише вручну (з Т.87 workflow не викликає), зі змінними
+//                                                  MISTRAL_API_KEY і VIBE_OUTPUT_DIR: один прямий POST
+//                                                  /v1/chat/completions ключем Vibe — код і тіло відповіді;
 //   node scripts/audit-vibe-cli.mjs audit        — `vibe --prompt-file …` у копії репозиторію,
 //                                                  знахідки з дослівною цитатою, коментар у PR «Аудит Vibe».
 // Збій, 402 чи відповідь без JSON — коментар «Аудиту не було» з причиною і код 0: чек мерж не блокує.
@@ -134,7 +135,7 @@ export function verifyFindings(findings, { readFile, diff }) {
 }
 
 export function renderComment(r) {
-  const head = `${MARKER}\n### Аудит Vibe (Mistral Vibe CLI${r.model ? `, ${safe(r.model)}` : ''}) — проба ADR-0102\n\n`;
+  const head = `${MARKER}\n### Аудит Vibe (Mistral Vibe CLI${r.model ? `, ${safe(r.model)}` : ''}) — ADR-0102, ADR-0104\n\n`;
   const probe = r.probe ? `Прямий виклик API ключем Vibe: ${safe(cut(r.probe, 400))}\n\n` : '';
   const usage = r.usage
     ? `\n\n<sub>${safe(r.usage)}. Знахідки — пропозиції: перевірити, підтверджені виправити, відхилені перелічити з причиною в описі PR.</sub>`
