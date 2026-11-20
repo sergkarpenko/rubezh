@@ -42,6 +42,14 @@ export function redact(s, secrets = []) {
   return out;
 }
 
+/** Вирізає секрети з усіх рядків об'єкта — до будь-якого cut, щоб на межі обрізання не лишився початок ключа. */
+export function scrub(v, secrets = []) {
+  if (typeof v === 'string') return redact(v, secrets);
+  if (Array.isArray(v)) return v.map((x) => scrub(x, secrets));
+  if (v && typeof v === 'object') return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, scrub(x, secrets)]));
+  return v;
+}
+
 /** Текст для коментаря: без HTML-коментарів і масок, що ламають розмітку. */
 export function safe(s) {
   return String(s ?? '')
@@ -306,7 +314,7 @@ export async function audit({ env, fetch, log, spawn = spawnSync, gitRun }) {
   const probeFile = join(outDir, 'probe.txt');
   const probeLine = existsSync(probeFile) ? readFileSync(probeFile, 'utf8').trim() : '';
   const say = async (r) => {
-    const text = redact(renderComment({ ...r, model, probe: probeLine }), [key]);
+    const text = redact(renderComment(scrub({ ...r, model, probe: probeLine }, [key])), [key]);
     await upsertComment(fetch, token, repo, number, text);
     log(text);
   };
@@ -337,7 +345,7 @@ export async function audit({ env, fetch, log, spawn = spawnSync, gitRun }) {
     usage = usageLine(exp, code);
     log(`audit-vibe-cli: ${redact(usage, [key])}\nstderr: ${cut(redact(run.stderr ?? '', [key]), 3000)}`);
     if (code !== 0 && code !== 3) {
-      const reason = exp?.error?.message ?? (run.error?.message || cut(run.stderr ?? '', 400) || `код ${code}`);
+      const reason = exp?.error?.message ?? (run.error?.message || cut(redact(run.stderr ?? '', [key]), 400) || `код ${code}`);
       return await say({ ok: false, reason: `Vibe CLI завершився з кодом ${code}: ${reason}`, usage });
     }
     let parsed = extractFindings(run.stdout);
@@ -362,7 +370,7 @@ export async function audit({ env, fetch, log, spawn = spawnSync, gitRun }) {
     const { kept, dropped } = verifyFindings(parsed.findings, { readFile, diff });
     return await say({ ok: true, summary: parsed.summary, kept, dropped, usage, retried: Boolean(retried) });
   } catch (e) {
-    return say({ ok: false, reason: `збій скрипта: ${cut(e.message, 300)}`, usage });
+    return say({ ok: false, reason: `збій скрипта: ${cut(redact(e.message, [key]), 300)}`, usage });
   }
 }
 
@@ -451,7 +459,7 @@ async function selfTest() {
   writeFileSync(join(tmp, 'dir', 'f.ts'), 'export const answer = 43; // змінено «аудитором»\n');
   const outDir = join(tmp, 'out');
   mkdirSync(outDir);
-  const pass = async ({ stdout, status = 0, exportJson, envExtra = {}, crash = false, retry }) => {
+  const pass = async ({ stdout, status = 0, exportJson, envExtra = {}, crash = false, retry, stderr }) => {
     const posted = [];
     posted.calls = [];
     const fetch = async (url, o = {}) => {
@@ -467,7 +475,7 @@ async function selfTest() {
     const spawn = (cmd, args, opts) => {
       posted.calls.push(args);
       const again = args.includes('--resume');
-      const r = again ? (retry ?? { stdout: '', status: 1 }) : { stdout, status, exportJson };
+      const r = again ? (retry ?? { stdout: '', status: 1 }) : { stdout, status, exportJson, stderr };
       const od = args[args.indexOf('--output-dir') + 1];
       if (r.exportJson !== undefined) writeFileSync(join(od, 'export.json'), r.exportJson);
       if (opts.env.GITHUB_TOKEN) return { status: 2, stdout: '', stderr: 'TOKEN-LEAK' };
@@ -538,6 +546,14 @@ async function selfTest() {
       readFileSync(join(outDir, 'retry', 'export.json'), 'utf8') === sessRetry
   );
   check('повтор: ключ на межі обрізання stderr не потрапляє в журнал', !r.logs.join('\n').includes('secret-key'));
+  r = await pass({ stdout: 'x', status: 2, stderr: `${'x'.repeat(395)}secret-key-123` });
+  check('код 2: ключ на межі обрізання причини не потрапляє в коментар і журнал', !`${r[0]}${r.logs.join('')}`.includes('sec'));
+  const longText = `${'т'.repeat(MAX_FIELD - 3)}secret-key-123`;
+  r = await pass({
+    stdout: good.replace('"text":"т secret-key-123"', `"text":"${longText}"`),
+    exportJson: sess,
+  });
+  check('текст знахідки: ключ на межі обрізання не потрапляє в коментар', r[0].includes('answer = 42') && !r[0].includes('sec'));
   r = await pass({ stdout: 'без JSON', exportJson: sess, retry: { stdout: 'знову без', exportJson: sess } });
   check('повтор теж без JSON — «Аудиту не було» з обома причинами', r[0].includes('немає блоку JSON') && r[0].includes('теж без нього'));
   r = await pass({ stdout: 'без JSON', exportJson: sess, retry: { stdout: good, status: 1 } });
