@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// scripts/audit-vibe-cli.mjs — проба аудиту PR через Mistral Vibe CLI (ADR-0102, Т.82).
+// scripts/audit-vibe-cli.mjs — аудит PR через Mistral Vibe CLI (проба ADR-0102, Т.82; з Т.87 — єдиний аудитор Mistral, ADR-0104).
 // Викликає workflow `vibe-audit` (необов'язковий чек) двома кроками — `--self-test` і `audit` (ADR-0104):
 //   node scripts/audit-vibe-cli.mjs --self-test  — самоперевірка чистих функцій, без мережі;
 //   node scripts/audit-vibe-cli.mjs probe        — лише вручну (з Т.87 workflow не викликає), зі змінними
