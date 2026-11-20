@@ -224,6 +224,8 @@ describe('П12.2: флоу стартового екрана і навігаці
   });
 
   it('сейв у флоу: тики → слот 1 (ADR-0026)', () => {
+    // Т.92: поодинці (`-t`) партії ще немає — запускаємо ту саму, що й попередній тест (сід 42, «норма»)
+    if (!$('start-screen').classList.contains('hidden')) startParty();
     for (let i = 0; i < 3; i++) btn('btn-tick').click();
     expect($('clock').textContent).toBe('Д1 01:30');
     btn('btn-save-1').click();
@@ -535,6 +537,7 @@ describe('критичний флоу економіки: найм → місі�
 
 describe('журнал з фільтрами-вкладками (П6.2, ADR-0027)', () => {
   // Стан продовжує флоу економіки: Д2 00:00, баланс 385, 6 солдатів.
+  // Т.92: навмисний ланцюжок — поодинці блок не йде; запускати разом із блоком економіки (`-t "критичний флоу економіки|журнал з фільтрами"`).
 
   it('вкладка ховає невідповідні записи, активна підсвічена, «Усе» повертає все', () => {
     const geoLi = document.querySelector('#log li[data-cat="geo"]') as HTMLElement;
@@ -863,13 +866,21 @@ describe('бойова фокусна зона (П6.3, ADR-0027)', () => {
   });
 
   it('після бою: dimmed знято, збереження активне', async () => {
+    // Т.92: поодинці (`-t`) бою ще немає — партія і перша місія (як у тесті контекст-стрічки вище)
+    if ($('battle-panel').classList.contains('hidden')) {
+      startParty();
+      for (let i = 0; i < 1500 && document.querySelector('button.mission') === null; i++) btn('btn-tick').click();
+      (document.querySelector('button.mission') as HTMLButtonElement).click();
+    }
     await runAutoBattle();
     expect($('bresult').textContent).toMatch(/ЗАЧИЩЕНО|ЗАГІН ВТРАЧЕНО/);
     btn('btn-close').click();
     expect($('geo-panel').classList.contains('hidden')).toBe(false);
     expect($('status').classList.contains('dimmed')).toBe(false);
     expect(btn('btn-save-1').disabled).toBe(false);
-    expect(btn('btn-load-1').disabled).toBe(false); // слот 1 має дані з флоу збереження вище
+    // Т.92: сейв тут, а не з флоу збереження в інших блоках — блок і тест проходять поодинці
+    btn('btn-save-1').click();
+    expect(btn('btn-load-1').disabled).toBe(false);
     expect(btn('btn-del-1').disabled).toBe(false);
   });
 });
