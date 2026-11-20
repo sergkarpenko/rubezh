@@ -153,7 +153,7 @@ export function createJournal(deps: JournalDeps): Journal {
         (e.type === 'grenade' && e.hits.some((h) => h.damage > 0 && op(h.unitId)));
       if (evacHurt && claimHint(deps.party().hints, 'evac')) {
         journal(
-          `Підказка: оперативника можна евакуювати із зони висадки — плитка «Евакуація» або клавіша V, ${EVAC_AP_COST} AP. Евакуйовані повертаються на базу без премії.`,
+          `Підказка: оперативника можна евакуювати із зони висадки — плитка «Евакуація» або клавіша V, ${EVAC_AP_COST} AP. Якщо евакуювати всіх, хто лишився на полі, премії за місію немає.`,
           '',
           'battle'
         );
