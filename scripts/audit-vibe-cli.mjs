@@ -97,11 +97,22 @@ export function extractFindings(text) {
 
 const norm = (s) => String(s).replace(/\s+/g, ' ').trim();
 
+/** Диф по файлах: шлях (a/ і b/ — для перейменування і видалення) → його частина дифа. */
+export function diffByFile(diff) {
+  const map = new Map();
+  for (const part of String(diff).split(/^(?=diff --git )/m)) {
+    const m = /^diff --git a\/(\S+) b\/(\S+)/.exec(part);
+    if (!m) continue;
+    for (const f of new Set([m[1], m[2]])) map.set(f, (map.get(f) ?? '') + part);
+  }
+  return map;
+}
+
 /** Залишає знахідки з цитатою у файлі на голові PR або в дифі; решту — у dropped з причиною. */
-export function verifyFindings(findings, { readFile, diff, names = [] }) {
+export function verifyFindings(findings, { readFile, diff }) {
   const kept = [];
   const dropped = [];
-  const nd = norm(diff);
+  const parts = diffByFile(diff);
   for (const f of findings.slice(0, MAX_FINDINGS)) {
     const file = String(f?.file ?? '');
     const quote = String(f?.quote ?? '');
@@ -112,8 +123,8 @@ export function verifyFindings(findings, { readFile, diff, names = [] }) {
     else {
       const content = readFile(file);
       const inFile = content !== null && norm(content).includes(norm(quote));
-      // файла немає на голові PR — цитата з дифа зараховується лише для файла, який PR видаляє
-      const inDiff = (content !== null || names.includes(file)) && nd.includes(norm(quote));
+      // цитата з дифа — лише з частини дифа цього самого файла (зокрема видаленого PR)
+      const inDiff = norm(parts.get(file) ?? '').includes(norm(quote));
       if (inFile || inDiff) kept.push({ ...f, where: inFile ? 'файл' : 'диф' });
       else bad(content === null ? 'файла немає на голові PR' : 'цитати немає ні у файлі, ні в дифі');
     }
@@ -285,7 +296,7 @@ export async function audit({ env, fetch, log, spawn = spawnSync, gitRun }) {
       const limit = code === 3 ? `Vibe зупинився на ліміті (${exp?.stop_reason ?? 'код 3'}) до відповіді` : parsed.reason;
       return await say({ ok: false, reason: limit, usage });
     }
-    const { kept, dropped } = verifyFindings(parsed.findings, { readFile, diff, names });
+    const { kept, dropped } = verifyFindings(parsed.findings, { readFile, diff });
     return await say({ ok: true, summary: parsed.summary, kept, dropped, usage });
   } catch (e) {
     return say({ ok: false, reason: `збій скрипта: ${cut(e.message, 300)}`, usage });
@@ -317,8 +328,9 @@ async function selfTest() {
       mk({ file: '../etc/passwd' }),
       mk({ text: '' }),
       mk({ file: 'd.ts', quote: '- old line' }),
+      mk({ quote: '- old line' }),
     ],
-    { readFile, diff: '-  old   line\n', names: ['b.ts'] }
+    { readFile, diff: 'diff --git a/b.ts b/b.ts\n-  old   line\ndiff --git a/a.ts b/a.ts\n+ only in a\n' }
   );
   check('цитата у файлі (пробіли нормалізовано) — лишається', v.kept[0]?.where === 'файл');
   check('цитата з дифа видаленого файла — лишається', v.kept[1]?.file === 'b.ts' && v.kept[1]?.where === 'диф' && v.kept.length === 2);
@@ -327,10 +339,14 @@ async function selfTest() {
     v.dropped.some((d) => d.reason.startsWith('цитати немає'))
   );
   check(
+    'цитата з дифа іншого файла — відкинуто',
+    v.dropped.filter((d) => d.file === 'a.ts' && d.reason.startsWith('цитати немає')).length === 2
+  );
+  check(
     'файла немає і його немає в дифі — відкинуто',
     v.dropped.some((d) => d.file === 'd.ts')
   );
-  check('коротка цитата, шлях з .., без тексту — відкинуто', v.dropped.length === 6);
+  check('коротка цитата, шлях з .., без тексту — відкинуто', v.dropped.length === 7);
   const many = verifyFindings(
     Array.from({ length: 12 }, () => mk({})),
     { readFile, diff: '' }
@@ -341,7 +357,7 @@ async function selfTest() {
   const c = renderComment({ ok: true, summary: 's', kept: v.kept, dropped: v.dropped, usage: 'u', probe: '402 — x', model: 'm' });
   check(
     'коментар має маркер, пробу, знахідки і відкинуті',
-    c.startsWith(MARKER) && c.includes('402 — x') && c.includes('Відкинуто скриптом (6)')
+    c.startsWith(MARKER) && c.includes('402 — x') && c.includes('Відкинуто скриптом (7)')
   );
   check('HTML-коментар у тексті знешкоджено', !renderComment({ ok: false, reason: '<!-- x -->' }).slice(MARKER.length).includes('<!--'));
   check('рядок прогону без export.json', usageLine(null, 2).includes('export.json немає'));
