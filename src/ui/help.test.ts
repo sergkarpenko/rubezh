@@ -8,6 +8,7 @@ import htmlRaw from '../../index.html?raw';
 // П10.2: version з package.json — єдине джерело числа (урок П9.1); тест
 // звіряє показ екрана з ним, дублювати версію в твердженні не можна.
 import pkg from '../../package.json';
+import { EVAC_AP_COST } from '../core/combat';
 import { BASE_LAB_SLOTS, SCIENTIST_SALARY } from '../core/research';
 import { createHelp, isFirstVisit, type Help } from './help';
 
@@ -126,5 +127,18 @@ describe('П9.1: відкриття/закриття і перший візит'
     ($('btn-help-close') as HTMLButtonElement).click();
     expect(help.isOpen()).toBe(false);
     expect($('help-screen').classList.contains('hidden')).toBe(true);
+  });
+});
+
+describe('Т.90: правило евакуації в «Як грати» (кандидат 91)', () => {
+  it('пункт «Евакуація» у легенді: плитка, клавіша V, ціна з ядра, без премії, перепитування', () => {
+    freshHelp();
+    const legend = [...$('help-screen').querySelectorAll('.help-cols > div')].find((d) => d.querySelector('h3')?.textContent === 'Легенда');
+    const text = legend?.textContent ?? '';
+    expect(text).toContain(
+      'Евакуація — плитка «Евакуація» або клавіша V, ' +
+        EVAC_AP_COST +
+        ' AP, лише з синьої клітинки висадки. Евакуйовані повертаються на базу без премії; останнього бійця гра перепитає.'
+    );
   });
 });

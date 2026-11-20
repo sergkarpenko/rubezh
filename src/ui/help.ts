@@ -8,6 +8,7 @@
 // змінюється (ADR-0002) — модуль лише імпортує його константи.
 
 import { DAILY_ALLOWANCE, HIRE_PRICE, MISSION_BONUS } from '../core/economy';
+import { EVAC_AP_COST } from '../core/combat';
 import { FIGHTER_REPAIR_COST } from '../core/intercept';
 import { SCORE_PER_MISSION_WON, SCORE_PER_MONEY, SCORE_PER_UFO_SHOT_DOWN, SCORE_PER_VETERAN_ALIVE, VICTORY_DAY } from '../core/campaign';
 import { BASE_LAB_SLOTS, SCIENTIST_SALARY } from '../core/research';
@@ -48,6 +49,10 @@ function helpHtml(): string {
     '<li><b>Зонди Розриву</b> — «розвідник» і «збирач»: у повітрі їх можна перехопити, приземлений відкриває вікно місії.</li>' +
     '<li><b>Перехоплення</b> — перехоплювач атакує зонд у повітрі; дистанцію бою вибираєте кожен раунд, можна відступити.</li>' +
     '<li><b>Місії</b> — загін оперативників висаджується до приземленого зонду; перемога дає премію, поразка — рани.</li>' +
+    // Т.90 (рішення власника 20.11.2026, кандидат 91): правило евакуації (ADR-0075); ціна — з ядра
+    '<li><b>Евакуація</b> — плитка «Евакуація» або клавіша V, ' +
+    EVAC_AP_COST +
+    ' AP, лише з синьої клітинки висадки. Евакуйовані повертаються на базу без премії; останнього бійця гра перепитає.</li>' +
     '</ul></div>' +
     '<div><h3>Мета кампанії</h3><ul>' +
     '<li>Вистояти <b>' +
