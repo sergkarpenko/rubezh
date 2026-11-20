@@ -2440,4 +2440,61 @@ describe('Т.75: пастка фокусу у вікнах поверх гри',
     tab();
     expect(focused()).toBe(b[0]);
   });
+
+  // Т.86 (кандидат 77): ще два вікна з коду пастки — підтвердження евакуації і екран перемоги кампанії
+  it('Т.86: вікно «Евакуювати останнього?» тримає фокус; після «Скасувати» Tab знову йде браузеру', () => {
+    const tap = (x: number, y: number): void => {
+      $('battle').dispatchEvent(new MouseEvent('click', { clientX: x * 48 + 24, clientY: y * 48 + 24 }));
+    };
+    const evac = (): void => {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'v', code: 'KeyV', bubbles: true }));
+    };
+    startParty('42');
+    for (let i = 0; i < 1500 && document.querySelector('button.mission') === null; i++) btn('btn-tick').click();
+    (document.querySelector('button.mission') as HTMLButtonElement).click();
+    // як у Т.71: троє з синіх клітинок (2,2), (3,2), (2,3); на останньому — вікно підтвердження
+    tap(2, 2);
+    evac();
+    tap(3, 2);
+    evac();
+    tap(2, 3);
+    evac();
+    expect($('evac-confirm').classList.contains('hidden')).toBe(false);
+    expect(items('evac-confirm').map((b) => b.id)).toEqual(['btn-evac-yes', 'btn-evac-no']);
+    trapped('evac-confirm');
+    btn('btn-evac-no').click();
+    expect($('evac-confirm').classList.contains('hidden')).toBe(true);
+    btn('btn-menu').focus();
+    const ev = new KeyboardEvent('keydown', { key: 'Tab', code: 'Tab', bubbles: true, cancelable: true });
+    document.dispatchEvent(ev);
+    expect(ev.defaultPrevented).toBe(false);
+    expect(focused()).toBe(btn('btn-menu'));
+  });
+
+  it('Т.86: екран перемоги кампанії тримає фокус на трьох кнопках', () => {
+    startParty('27'); // кнопки слотів з'являються лише в партії — тест проходить і поодинці
+    btn('btn-del-2').click();
+    btn('btn-del-3').click();
+    btn('btn-tick').click();
+    btn('btn-save-1').click();
+    const good = localStorage.getItem('rubezh.save.1') as string;
+    const won = JSON.parse(good) as { state: { campaign: { status: string } } };
+    won.state.campaign.status = 'перемога';
+    localStorage.setItem('rubezh.save.1', JSON.stringify(won));
+    try {
+      btn('btn-load-1').click();
+      expect($('campaign-victory').classList.contains('hidden')).toBe(false);
+      expect(items('campaign-victory').map((b) => b.id)).toEqual(['btn-continue', 'btn-play-again', 'btn-victory-exit']);
+      trapped('campaign-victory');
+      // всередині кола Tab — звичайний Tab браузера: подію не скасовано
+      btn('btn-play-again').focus();
+      const ev = new KeyboardEvent('keydown', { key: 'Tab', code: 'Tab', bubbles: true, cancelable: true });
+      document.dispatchEvent(ev);
+      expect(ev.defaultPrevented).toBe(false);
+      btn('btn-continue').click(); // «Грати далі» — екран перемоги не лишається відкритим для наступних тестів
+      expect($('campaign-victory').classList.contains('hidden')).toBe(true);
+    } finally {
+      localStorage.setItem('rubezh.save.1', good);
+    }
+  });
 });
