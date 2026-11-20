@@ -1,6 +1,6 @@
-# Проба аудиту PR через Mistral Vibe CLI (ADR-0102, Т.82) — поруч із `mistral-audit`, не замість нього.
+# Аудит PR через Mistral Vibe CLI (проба ADR-0102, Т.82; з Т.87 — єдиний аудитор Mistral, ADR-0104).
 # Ключ — секрет MISTRAL_VIBE_API_KEY (ключ Vibe з Code › Extensions, оплата з плану Vibe, а не з гаманця API).
-# Уся логіка — у scripts/audit-vibe-cli.mjs (самоперевірка, прямий виклик API, аудит); тут — лише виклики.
+# Уся логіка — у scripts/audit-vibe-cli.mjs (самоперевірка, аудит); тут — лише виклики.
 # Vibe працює в копії репозиторію з вимкненими write_file/edit; bash лишається (пошук, тести), тож цитати
 # знахідок скрипт звіряє з об'єктами коміту голови PR. Токена GitHub у Vibe немає, checkout без даних входу.
 # Чек не обов'язковий: збій чи 402 — коментар «Аудиту не було» і зелений чек; червоний — лише самоперевірка.
@@ -72,10 +72,6 @@ jobs:
           vibe --version
           mkdir -p "$VIBE_OUTPUT_DIR"
           cp -a "$GITHUB_WORKSPACE" "$VIBE_WORKDIR"
-      - name: Прямий виклик API ключем Vibe
-        env:
-          MISTRAL_API_KEY: ${{ secrets.MISTRAL_VIBE_API_KEY }}
-        run: node scripts/audit-vibe-cli.mjs probe
       - name: Аудит
         env:
           MISTRAL_API_KEY: ${{ secrets.MISTRAL_VIBE_API_KEY }}

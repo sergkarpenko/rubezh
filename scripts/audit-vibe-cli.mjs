@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 // scripts/audit-vibe-cli.mjs — проба аудиту PR через Mistral Vibe CLI (ADR-0102, Т.82).
-// Викликає workflow `vibe-audit` (необов'язковий чек) трьома кроками:
+// Викликає workflow `vibe-audit` (необов'язковий чек) двома кроками — `--self-test` і `audit` (ADR-0104):
 //   node scripts/audit-vibe-cli.mjs --self-test  — самоперевірка чистих функцій, без мережі;
-//   node scripts/audit-vibe-cli.mjs probe        — один прямий POST /v1/chat/completions ключем Vibe:
-//                                                  код і тіло відповіді — у журнал і у файл для коментаря;
+//   node scripts/audit-vibe-cli.mjs probe        — лише вручну (з Т.87 workflow не викликає): один прямий
+//                                                  POST /v1/chat/completions ключем Vibe — код і тіло відповіді;
 //   node scripts/audit-vibe-cli.mjs audit        — `vibe --prompt-file …` у копії репозиторію,
 //                                                  знахідки з дослівною цитатою, коментар у PR «Аудит Vibe».
 // Збій, 402 чи відповідь без JSON — коментар «Аудиту не було» з причиною і код 0: чек мерж не блокує.
