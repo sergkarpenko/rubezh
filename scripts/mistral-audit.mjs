@@ -328,8 +328,21 @@ export function renderComment(r) {
   return `${head}${cut(out.join('\n\n'), MAX_COMMENT)}${foot}`;
 }
 
-/** Виклик API Mistral: повтор на 429, 5xx і помилку мережі; інший код — одразу виняток. Ключ у тексти помилок не потрапляє. */
-export async function callMistral({ fetch, key, model, messages, sleep, effort }) {
+/**
+ * Початок тіла відповіді API з помилкою — у журнал джоби, не в коментар PR (Т.81: 402 без причини).
+ * Перші 300 символів в один рядок; тіло, яке не прочиталось, — позначка.
+ */
+export async function errorSnippet(res) {
+  try {
+    const t = typeof res.text === 'function' ? await res.text() : '';
+    return t.replace(/\s+/g, ' ').trim().slice(0, 300) || '(тіло порожнє)';
+  } catch {
+    return '(тіло не прочиталось)';
+  }
+}
+
+/** Виклик API Mistral: повтор на 429, 5xx і помилку мережі; інший код — одразу виняток. Ключ у тексти помилок не потрапляє. Тіло відповіді з помилкою — у `log`. */
+export async function callMistral({ fetch, key, model, messages, sleep, effort, log = () => {} }) {
   let last = 'невідома помилка';
   for (let attempt = 1; attempt <= ATTEMPTS; attempt++) {
     if (attempt > 1) await sleep(attempt * 10_000);
@@ -351,6 +364,7 @@ export async function callMistral({ fetch, key, model, messages, sleep, effort }
       last = `API Mistral недоступний (${e?.name ?? 'помилка мережі'})`;
       continue;
     }
+    if (!res.ok) log(`mistral-audit: ${res.status} — ${await errorSnippet(res)}`);
     if (res.status === 429 || res.status >= 500) {
       last = `API Mistral відповів кодом ${res.status}`;
       continue;
@@ -494,7 +508,7 @@ export async function run({ env, event, git, fetch, sleep, log }) {
     const messages = buildMessages({ ...desc, rules, diff: diff.text, omitted: diff.omitted, nonce, extra });
     // глибина міркування: змінна MISTRAL_REASONING (low, medium, high; off — параметр не надсилати), типово medium
     const effort = env.MISTRAL_REASONING === 'off' ? undefined : EFFORTS.includes(env.MISTRAL_REASONING) ? env.MISTRAL_REASONING : 'medium';
-    const reply = await callMistral({ fetch, key: env.MISTRAL_API_KEY, model, messages, sleep, effort });
+    const reply = await callMistral({ fetch, key: env.MISTRAL_API_KEY, model, messages, sleep, effort, log });
     result = {
       ...result,
       ok: true,

@@ -16,6 +16,7 @@ import {
   collectContext,
   collectDiff,
   descHash,
+  errorSnippet,
   markStale,
   mentions,
   parseReply,
@@ -405,6 +406,20 @@ export async function selfTest() {
     );
     const nc = renderComment({ ok: false, model: 'm', head, reason: 'API Mistral відповів кодом 401' });
     ok('коментар про збій', nc.startsWith(MARKER) && nc.includes('**Аудиту не було:** API Mistral відповів кодом 401.'));
+    ok(
+      'тіло помилки API: один рядок до 300 символів; порожнє і нечитабельне — позначка',
+      (await errorSnippet({ text: async () => ' {"message":\n "x"} ' + 'я'.repeat(400) })).length === 300 &&
+        (await errorSnippet({ text: async () => '{"m":\n1}' })) === '{"m": 1}' &&
+        (await errorSnippet({ text: async () => '' })) === '(тіло порожнє)' &&
+        (await errorSnippet({ text: async () => ' \n ' })) === '(тіло порожнє)' &&
+        (await errorSnippet({ text: async () => ' a ' })) === 'a' &&
+        (await errorSnippet({})) === '(тіло порожнє)' &&
+        (await errorSnippet({
+          text: async () => {
+            throw new Error('x');
+          },
+        })) === '(тіло не прочиталось)'
+    );
 
     // повний прохід з підставним fetch
     const KEY = 'sk-СЕКРЕТ-самоперевірки';
@@ -688,6 +703,15 @@ export async function selfTest() {
     ok(
       'прохід: 401 — без повторів, коментар про збій',
       !s.result.ok && s.mistral.length === 1 && JSON.parse(s.written[0].body).body.includes('Аудиту не було')
+    );
+    s = await scenario({
+      mistral: [{ status: 402, ok: false, text: async () => '{"type": "billing_wallet_depleted"}' }],
+    });
+    ok(
+      'прохід: 402 — тіло відповіді в журналі, не в коментарі, ключ не назовні',
+      s.logs.includes('mistral-audit: 402 — {"type": "billing_wallet_depleted"}') &&
+        !JSON.parse(s.written[0].body).body.includes('billing_wallet') &&
+        !leaks(s)
     );
     s = await scenario({ mistral: [{ status: 503, ok: false }, { status: 429, ok: false }, reply(good)] });
     ok('прохід: 503 і 429 — повтор, третя спроба вдала', s.result.ok && s.mistral.length === 3 && s.sleeps === 2);
