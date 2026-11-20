@@ -30,7 +30,7 @@ const MIN_QUOTE = 6;
 const SEVERITIES = ['висока', 'середня', 'низька'];
 /** Межі прогону Vibe: ходи, ціна (орієнтовна, не стеля), час у секундах. */
 export const LIMITS = { turns: 60, price: 2, seconds: 1500 };
-/** Межі повтору «лише блок JSON» (ADR-0105): два ходи — на випадок, якщо модель ще раз викличе інструмент. */
+/** Межі повтору «лише блок JSON» (ADR-0105): два ходи — на випадок, якщо модель ще раз викличе інструмент; ціна — не стеля. */
 export const RETRY = { turns: 2, price: 0.5, seconds: 300 };
 
 export const cut = (s, n) => (String(s).length > n ? `${String(s).slice(0, n)}…` : String(s));
@@ -335,14 +335,14 @@ export async function audit({ env, fetch, log, spawn = spawnSync, gitRun }) {
     log(`audit-vibe-cli: vibe ${args.join(' ')}`);
     const { run, code, exp } = runVibe(spawn, args, { env: childEnv, outDir, seconds: LIMITS.seconds });
     usage = usageLine(exp, code);
-    log(redact(`audit-vibe-cli: ${usage}\nstderr: ${cut(run.stderr ?? '', 3000)}`, [key]));
+    log(`audit-vibe-cli: ${redact(usage, [key])}\nstderr: ${cut(redact(run.stderr ?? '', [key]), 3000)}`);
     if (code !== 0 && code !== 3) {
       const reason = exp?.error?.message ?? (run.error?.message || cut(run.stderr ?? '', 400) || `код ${code}`);
       return await say({ ok: false, reason: `Vibe CLI завершився з кодом ${code}: ${reason}`, usage });
     }
     let parsed = extractFindings(run.stdout);
-    const first = code === 3 ? `Vibe зупинився на ліміті (${exp?.stop_reason ?? 'код 3'}) до відповіді` : parsed.reason;
-    let retried = false;
+    const first = code === 3 ? `Vibe зупинився на ліміті (${exp?.outcome ?? exp?.stop_reason ?? 'код 3'}) до відповіді` : parsed.reason;
+    let retried = '';
     if (!parsed.ok && typeof exp?.session_id === 'string' && exp.session_id) {
       // повтор «лише блок JSON» у тій самій сесії (ADR-0105): Vibe бачить усю свою попередню роботу
       const retryDir = join(outDir, 'retry');
@@ -353,13 +353,14 @@ export async function audit({ env, fetch, log, spawn = spawnSync, gitRun }) {
       log(`audit-vibe-cli: повтор — vibe ${rArgs.join(' ')}`);
       const again = runVibe(spawn, rArgs, { env: childEnv, outDir: retryDir, seconds: RETRY.seconds });
       usage = `${usage}; повтор: ${usageLine(again.exp, again.code)}`;
-      log(redact(`audit-vibe-cli: повтор — ${usageLine(again.exp, again.code)}\nstderr: ${cut(again.run.stderr ?? '', 1500)}`, [key]));
+      // ключ вирізається до обрізання: інакше на межі cut лишився б його початок
+      log(`audit-vibe-cli: повтор — ${usageLine(again.exp, again.code)}\nstderr: ${cut(redact(again.run.stderr ?? '', [key]), 1500)}`);
       parsed = again.code === 0 || again.code === 3 ? extractFindings(again.run.stdout) : parsed;
-      retried = true;
+      retried = again.code === 0 || again.code === 3 ? 'теж без нього' : `завершився з кодом ${again.code}`;
     }
-    if (!parsed.ok) return await say({ ok: false, reason: retried ? `${first}; повтор «лише блок JSON» теж без нього` : first, usage });
+    if (!parsed.ok) return await say({ ok: false, reason: retried ? `${first}; повтор «лише блок JSON» ${retried}` : first, usage });
     const { kept, dropped } = verifyFindings(parsed.findings, { readFile, diff });
-    return await say({ ok: true, summary: parsed.summary, kept, dropped, usage, retried });
+    return await say({ ok: true, summary: parsed.summary, kept, dropped, usage, retried: Boolean(retried) });
   } catch (e) {
     return say({ ok: false, reason: `збій скрипта: ${cut(e.message, 300)}`, usage });
   }
@@ -470,7 +471,7 @@ async function selfTest() {
       const od = args[args.indexOf('--output-dir') + 1];
       if (r.exportJson !== undefined) writeFileSync(join(od, 'export.json'), r.exportJson);
       if (opts.env.GITHUB_TOKEN) return { status: 2, stdout: '', stderr: 'TOKEN-LEAK' };
-      return { status: r.status ?? 0, stdout: r.stdout, stderr: '' };
+      return { status: r.status ?? 0, stdout: r.stdout, stderr: r.stderr ?? '' };
     };
     const env = {
       GITHUB_REPOSITORY: 'o/r',
@@ -482,7 +483,8 @@ async function selfTest() {
       PR_NUMBER: '5',
       ...envExtra,
     };
-    await audit({ env, fetch, log: () => {}, spawn });
+    posted.logs = [];
+    await audit({ env, fetch, log: (m) => posted.logs.push(String(m)), spawn });
     return posted;
   };
   const good =
@@ -507,7 +509,13 @@ async function selfTest() {
   );
   // повтор «лише блок JSON» у тій самій сесії (ADR-0105)
   const sess = '{"outcome":"finished","session_id":"S-1","usage":{}}';
-  r = await pass({ stdout: 'перевірив, без JSON', exportJson: sess, retry: { stdout: good, exportJson: sess } });
+  const sessRetry = '{"outcome":"finished","session_id":"S-1","steps":1,"usage":{}}';
+  const longErr = `${'x'.repeat(1490)}secret-key-123`;
+  r = await pass({
+    stdout: 'перевірив, без JSON',
+    exportJson: sess,
+    retry: { stdout: good, exportJson: sessRetry, stderr: longErr },
+  });
   const ra = r.calls[1] ?? [];
   check(
     'повтор: без JSON — другий виклик з --resume S-1, без --model, межі 2 ходи, $0.5, 300 с',
@@ -525,16 +533,34 @@ async function selfTest() {
   );
   check(
     'повтор: промпт у файлі, export.json першого прогону не перезаписано',
-    readFileSync(join(outDir, 'retry.md'), 'utf8').includes('ONLY one fenced block') && existsSync(join(outDir, 'retry', 'export.json'))
+    readFileSync(join(outDir, 'retry.md'), 'utf8').includes('ONLY one fenced block') &&
+      readFileSync(join(outDir, 'export.json'), 'utf8') === sess &&
+      readFileSync(join(outDir, 'retry', 'export.json'), 'utf8') === sessRetry
   );
+  check('повтор: ключ на межі обрізання stderr не потрапляє в журнал', !r.logs.join('\n').includes('secret-key'));
   r = await pass({ stdout: 'без JSON', exportJson: sess, retry: { stdout: 'знову без', exportJson: sess } });
   check('повтор теж без JSON — «Аудиту не було» з обома причинами', r[0].includes('немає блоку JSON') && r[0].includes('теж без нього'));
   r = await pass({ stdout: 'без JSON', exportJson: sess, retry: { stdout: good, status: 1 } });
-  check('повтор з кодом 1 — його вивід не читається', r[0].includes('теж без нього'));
+  check(
+    'повтор з кодом 1 — його вивід не читається, причина з кодом',
+    r[0].includes('завершився з кодом 1') && !r[0].includes('answer = 42')
+  );
+  r = await pass({ stdout: 'без JSON', exportJson: sess, retry: { stdout: 'Stopped', status: 3 } });
+  check(
+    'повтор з кодом 3 без JSON і без export.json — «Аудиту не було»',
+    r[0].includes('теж без нього') && r[0].includes('export.json немає')
+  );
   r = await pass({ stdout: 'без JSON', exportJson: '{"outcome":"finished"}' });
   check('без session_id повтору немає', r.calls.length === 1 && r[0].includes('немає блоку JSON') && !r[0].includes('повтор'));
-  r = await pass({ stdout: 'Stopped', status: 3, exportJson: '{"stop_reason":"time_limit","session_id":"S-2"}', retry: { stdout: good } });
+  r = await pass({
+    stdout: 'Stopped',
+    status: 3,
+    exportJson: '{"outcome":"turn_limit","stop_reason":"limit","session_id":"S-2"}',
+    retry: { stdout: good },
+  });
   check('ліміт (код 3) — повтор у сесії, знахідки є', r.calls.length === 2 && r[0].includes('answer = 42'));
+  r = await pass({ stdout: 'Stopped', status: 3, exportJson: '{"outcome":"turn_limit","stop_reason":"limit"}' });
+  check('ліміт без session_id — назва ліміту з outcome, повтору немає', r.calls.length === 1 && r[0].includes('ліміті (turn_limit)'));
   r = await pass({ stdout: good, exportJson: sess });
   check('JSON з першого разу — повтору немає', r.calls.length === 1 && !r[0].includes('з повтору'));
   // кандидат 95: ручний probe без VIBE_OUTPUT_DIR і без ключа — без падіння
