@@ -220,6 +220,21 @@ test('сценарій приймання ADR-0030: партія → місія 
     expect(whyBox.display, 'група кнопки й причини в «Кузні» — рядкова flex-група').toBe('inline-flex');
     expect(whyBox.dy, 'причина в «Кузні» з’їхала з лінії кнопки «Замовити»').toBeLessThanOrEqual(1);
     expect(whyBox.right, 'причина в «Кузні» має стояти праворуч від кнопки').toBe(true);
+    // довга причина («Недостатньо кредитів (ціна N)») ламається поруч із кнопкою, а не під неї
+    // (аудит PR #394: коротка причина вміщується за будь-якого правила)
+    const longWhy = await page.evaluate(() => {
+      const w = document.querySelector<HTMLElement>('#btn-order-armor + .btn-why')!;
+      const keep = w.textContent;
+      w.textContent = 'Недостатньо кредитів (ціна 128)';
+      const b = document.getElementById('btn-order-armor')!.getBoundingClientRect();
+      const r = w.getBoundingClientRect();
+      const row = w.closest('.ufo')!.getBoundingClientRect();
+      w.textContent = keep;
+      return { dy: Math.abs((r.top + r.bottom) / 2 - (b.top + b.bottom) / 2), right: r.left >= b.right, inRow: r.right <= row.right };
+    });
+    expect(longWhy.dy, 'довга причина в «Кузні» з’їхала з лінії кнопки').toBeLessThanOrEqual(1);
+    expect(longWhy.right, 'довга причина в «Кузні» має стояти праворуч від кнопки').toBe(true);
+    expect(longWhy.inRow, 'довга причина в «Кузні» виходить за рядок каталогу').toBe(true);
     expect(whyBox.color, 'колір рядка-причини — як у попередження .mission-warn').toBe('rgb(224, 166, 58)');
     await page.locator('#btn-sci-step-3').click();
     await expect(page.locator('#status-tab-squad')).toHaveClass(/active/);
@@ -277,12 +292,15 @@ test('сценарій приймання ADR-0030: партія → місія 
         row: r.top < h2.bottom && r.bottom > h2.top && r.left >= h2.right,
         fits: s.scrollWidth <= s.clientWidth,
         barTail: bar.bottom - acts.bottom,
+        headTail: document.getElementById('geo-head')!.getBoundingClientRect().bottom - h2.bottom,
       };
     });
     expect(stepSmall.h, 'рядок «Наступний крок» не видно на 1024×768').toBeGreaterThan(0);
     expect(stepSmall.row, 'рядок «Наступний крок» — праворуч від «Геосцена», в одному ряду').toBe(true);
     expect(stepSmall.fits, 'текст рядка «Наступний крок» обрізано на 1024×768').toBe(true);
     expect(stepSmall.barTail, 'шапка на 1024×768 має другий ряд під кнопками').toBeLessThanOrEqual(16);
+    // виграш висоти не має зникнути в заголовку «Геосцени»: під h2 — лише його поле 8 px
+    expect(stepSmall.headTail, 'заголовок «Геосцени» вищий за назву на 1024×768').toBeLessThanOrEqual(9);
     expect(bar.page, 'сторінка довша за вікно на 1024×768').toBeLessThanOrEqual(bar.win);
     await page.setViewportSize({ width: 1440, height: 900 });
   });
@@ -623,11 +641,13 @@ test('сценарій приймання ADR-0030: партія → місія 
         inBar: s.closest('#topbar') !== null,
         row: r.top < h2.bottom && r.bottom > h2.top && r.left >= h2.right,
         fits: s.scrollWidth <= s.clientWidth,
+        headTail: document.getElementById('geo-head')!.getBoundingClientRect().bottom - h2.bottom,
       };
     });
     expect(stepBox.inBar, 'рядок «Наступний крок» не має бути в шапці').toBe(false);
     expect(stepBox.row, 'рядок «Наступний крок» — праворуч від «Геосцена», в одному ряду').toBe(true);
     expect(stepBox.fits, 'текст рядка «Наступний крок» обрізано').toBe(true);
+    expect(stepBox.headTail, 'заголовок «Геосцени» вищий за назву').toBeLessThanOrEqual(9);
     // Т.79: клік по рядку веде до кнопки дії: фокус і підсвітка на ній
     await page.locator('#next-step').click();
     const focused = await page.evaluate(() => {
