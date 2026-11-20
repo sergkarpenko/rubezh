@@ -1,0 +1,84 @@
+# Проба аудиту PR через Mistral Vibe CLI (ADR-0102, Т.82) — поруч із `mistral-audit`, не замість нього.
+# Ключ — секрет MISTRAL_VIBE_API_KEY (ключ Vibe з Code › Extensions, оплата з плану Vibe, а не з гаманця API).
+# Уся логіка — у scripts/audit-vibe-cli.mjs (самоперевірка, прямий виклик API, аудит); тут — лише виклики.
+# Vibe працює в копії репозиторію з вимкненими write_file/edit; bash лишається (пошук, тести), тож цитати
+# знахідок скрипт звіряє з об'єктами коміту голови PR. Токена GitHub у Vibe немає, checkout без даних входу.
+# Чек не обов'язковий: збій чи 402 — коментар «Аудиту не було» і зелений чек; червоний — лише самоперевірка.
+# PR з форку і Dependabot секрету не отримують — джоба пропускається. Ручний запуск — номер PR гілки цього репозиторію.
+name: vibe-audit
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: Номер PR
+        required: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: vibe-audit-${{ github.event.pull_request.number || inputs.pr }}
+  cancel-in-progress: true
+
+jobs:
+  vibe-audit:
+    if: github.event_name == 'workflow_dispatch' || (github.event.pull_request.user.login != 'dependabot[bot]' && github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr }}
+      VIBE_VERSION: 3.1.3
+      VIBE_MODEL: ${{ vars.VIBE_MODEL }}
+      VIBE_THINKING: ${{ vars.VIBE_THINKING }}
+    steps:
+      - name: Ручний запуск — лише PR з гілки цього репозиторію
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: test "$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" --jq .head.repo.full_name)" = "$GITHUB_REPOSITORY"
+      - name: Теки прогону
+        # контекст runner недоступний у env джоби — шляхи задаємо тут
+        run: |
+          echo "VIBE_WORKDIR=$RUNNER_TEMP/vibe-work" >> "$GITHUB_ENV"
+          echo "VIBE_OUTPUT_DIR=$RUNNER_TEMP/vibe-out" >> "$GITHUB_ENV"
+      - uses: actions/checkout@v7
+        with:
+          # повна історія: спільний предок base...head; без збережених даних входу — Vibe не пушить
+          fetch-depth: 0
+          persist-credentials: false
+          # голова PR, а не merge-коміт: цитати знахідок звіряються з файлами гілки
+          ref: ${{ github.event.pull_request.head.sha || format('refs/pull/{0}/head', inputs.pr) }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Самоперевірка скрипта
+        run: set -o pipefail; node scripts/audit-vibe-cli.mjs --self-test | tee /dev/stderr | grep -q 'помилок 0$'
+      - name: Залежності і Vibe CLI
+        id: setup
+        # збій встановлення (npm, PyPI) — не червоний чек: аудит пише «Аудиту не було»
+        continue-on-error: true
+        shell: bash
+        run: |
+          npm ci
+          export PATH="$HOME/.local/bin:$PATH"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          pipx install uv
+          uv tool install "mistral-vibe==${VIBE_VERSION}"
+          vibe --version
+          mkdir -p "$VIBE_OUTPUT_DIR"
+          cp -a "$GITHUB_WORKSPACE" "$VIBE_WORKDIR"
+      - name: Прямий виклик API ключем Vibe
+        env:
+          MISTRAL_API_KEY: ${{ secrets.MISTRAL_VIBE_API_KEY }}
+        run: node scripts/audit-vibe-cli.mjs probe
+      - name: Аудит
+        env:
+          MISTRAL_API_KEY: ${{ secrets.MISTRAL_VIBE_API_KEY }}
+          GITHUB_TOKEN: ${{ github.token }}
+          SETUP_OUTCOME: ${{ steps.setup.outcome }}
+        run: node scripts/audit-vibe-cli.mjs audit
