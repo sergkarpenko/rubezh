@@ -2472,9 +2472,9 @@ describe('Т.75: пастка фокусу у вікнах поверх гри',
   });
 
   it('Т.86: екран перемоги кампанії тримає фокус на трьох кнопках', () => {
+    startParty('27'); // кнопки слотів з'являються лише в партії — тест проходить і поодинці
     btn('btn-del-2').click();
     btn('btn-del-3').click();
-    startParty('27');
     btn('btn-tick').click();
     btn('btn-save-1').click();
     const good = localStorage.getItem('rubezh.save.1') as string;
@@ -2491,6 +2491,8 @@ describe('Т.75: пастка фокусу у вікнах поверх гри',
       const ev = new KeyboardEvent('keydown', { key: 'Tab', code: 'Tab', bubbles: true, cancelable: true });
       document.dispatchEvent(ev);
       expect(ev.defaultPrevented).toBe(false);
+      btn('btn-continue').click(); // «Грати далі» — екран перемоги не лишається відкритим для наступних тестів
+      expect($('campaign-victory').classList.contains('hidden')).toBe(true);
     } finally {
       localStorage.setItem('rubezh.save.1', good);
     }
