@@ -45,7 +45,7 @@
 - Після аудиту PR легко виходить за 500 рядків (Т.37: 499 → 671): для кроку зі скриптом і самоперевіркою закладати запас або одразу планувати мітку `size-deviation` і писати це в описі PR.
 - Prettier розгортає довгі об'єктні літерали по рядку на поле; таблиця `Partial<Record<…>>` одним рядком дешевша (Т.33: 549 → 498).
 - `AGENTS.md` на `main` не проходить `prettier --check` — не форматувати його цілком. `scripts/*.ts` і `e2e/` поза `format:check` (він дивиться лише `src` та `index.html`) — `prettier --check` на свій файл. `docs/` — у `.prettierignore`: не форматується і не перевіряється.
-- `scripts/` з Т.102 (ADR-0106) — під ESLint (`npm run lint`: `.ts` і `.mjs`) і `tsc` (`tsconfig.scripts.json`, лише `scripts/*.ts`); тестів і `format:check` немає — закомічений скрипт усе одно запускати перед комітом. Новий скрипт `.ts` у підтеці `scripts/` під `tsc` не потрапить (`include` — `scripts/*.ts`).
+- `scripts/` з Т.102 (ADR-0106) — під ESLint (`npm run lint`: `.ts` і `.mjs`) і `tsc` (`tsconfig.scripts.json`, лише `scripts/*.ts`); lint-staged (pre-commit) скриптів не лінтує — лише `npm run lint` і CI; `.sh` і `.py` (`scripts/*.sh`, `geo-layout.py`, `vibe-step.py`, `scripts/assets/*.py`) поза будь-якими перевірками; тестів і `format:check` немає — закомічений скрипт усе одно запускати перед комітом. Новий скрипт `.ts` у підтеці `scripts/` під `tsc` не потрапить (`include` — `scripts/*.ts`).
 
 ## Клас PR і мерж (ADR-0094; `approve` — ADR-0052)
 
