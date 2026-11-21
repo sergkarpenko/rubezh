@@ -16,7 +16,9 @@
 // Т.100 (кандидат 22, варіант В власника): коротша панель — у картці «не розпочато»
 // немає рядка «Ціна» (ціна є на кнопці), «Час» коротший; картка з невиконаною
 // передумовою згорнута до назви з плашкою «після «…»»; у завершеній немає рядка
-// ефекту — він у підказці картки (title).
+// ефекту. В обох назва — кнопка «▸»: тап / клік / Enter показує рядок ефекту, ще раз —
+// ховає (рішення власника після аудиту: на iPad і телефоні підказку title не побачити).
+// Розгорнуті картки пам'ятає панель (поза сейвом), стан гри не змінюється.
 
 import {
   HIRE_SCIENTIST_PRICE,
@@ -58,6 +60,9 @@ export interface ResearchPanel {
 }
 
 export function createResearchPanel(deps: ResearchPanelDeps): ResearchPanel {
+  // Т.100: згорнуті й завершені картки, у яких гравець розгорнув рядок ефекту
+  const shown = new Set<string>();
+
   // Причина, чому проєкт не можна стартувати зараз (підказка на кнопці);
   // null — можна. Перевірки дублюють правила ядра лише для підказки —
   // джерело правди лишається throw'и startProject (ядро не дублюється).
@@ -65,7 +70,7 @@ export function createResearchPanel(deps: ResearchPanelDeps): ResearchPanel {
     const r = party.research;
     if (r.completed.includes(def.id)) return 'завершено';
     if (r.active.some((p) => p.id === def.id)) return 'у роботі';
-    if (def.prerequisite !== undefined && !r.completed.includes(def.prerequisite)) return 'спершу: «' + projectName(def.prerequisite) + '»';
+    // Т.100: невиконана передумова — картка згорнута без кнопки старту, причину показує плашка «після «…»»
     if (r.active.length >= r.slots) return 'немає вільного слота (' + r.active.length + '/' + r.slots + ')';
     const price = sciencePrice(def.cost, party.campaign.preset);
     if (party.econ.money < price) return 'недостатньо кредитів (ціна ' + price + ')';
@@ -215,20 +220,35 @@ export function createResearchPanel(deps: ResearchPanelDeps): ResearchPanel {
       card.appendChild(top);
       const effText = plainProjectEffect(def.id, ref);
       // Т.100: невиконана передумова — картка згорнута до назви з плашкою «після «…»»
-      // (ефект, ціна і кнопка з'являться, коли передумову завершено)
+      // (ціна і кнопка з'являться, коли передумову завершено)
       const folded = !done && !active && def.prerequisite !== undefined && !r.completed.includes(def.prerequisite);
-      if (folded) {
-        card.classList.add('folded');
-        card.title = effText;
-        catalog.appendChild(card);
-        continue;
-      }
-      if (done) {
-        card.title = effText; // Т.100: у завершеній картці ефект — лише в підказці
+      const eff = document.createElement('div');
+      eff.className = 'sci-eff';
+      eff.textContent = effText;
+      if (folded || done) {
+        // Т.100: рядок ефекту — за кнопкою-назвою; працює й у бою (лише вигляд панелі)
+        const open = shown.has(def.id);
+        const toggle = document.createElement('button');
+        toggle.id = 'btn-sci-eff-' + def.id;
+        toggle.className = 'sci-name sci-toggle';
+        toggle.textContent = (open ? '▾\u00a0' : '▸\u00a0') + def.name; // нерозривний пробіл: стрілка не лишається сама в рядку
+        toggle.setAttribute('aria-expanded', String(open));
+        toggle.title = open ? 'Сховати ефект' : 'Показати ефект';
+        toggle.onclick = () => {
+          if (shown.has(def.id)) shown.delete(def.id);
+          else shown.add(def.id);
+          renderResearchPanel();
+          document.getElementById(toggle.id)?.focus();
+        };
+        name.replaceWith(toggle);
+        card.title = effText; // для миші — і підказкою
+        if (open) card.appendChild(eff);
+        if (folded) {
+          card.classList.add('folded');
+          catalog.appendChild(card);
+          continue;
+        }
       } else {
-        const eff = document.createElement('div');
-        eff.className = 'sci-eff';
-        eff.textContent = effText;
         card.appendChild(eff);
       }
 

@@ -157,14 +157,14 @@ describe('ResearchPanel: каталог проєктів (картки T.39)', (
     expect(third.title).toContain('немає вільного слота');
   });
 
-  it('Т.100: T2 з невиконаною передумовою — картка згорнута до назви з плашкою «після «…»», ефект — у title', () => {
+  it('Т.100: T2 з невиконаною передумовою — картка згорнута до назви з плашкою «після «…»», ефект — у title і за кнопкою-назвою', () => {
     const panel = createResearchPanel(makeDeps());
     panel.render();
     const grenade = card('Імпульсна граната'); // «Імпульсна граната» після «Регенеративного гелю»
     expect(grenade.classList.contains('folded')).toBe(true);
     expect(grenade.children).toHaveLength(1); // лише рядок назви з плашкою
     expect(grenade.querySelector('.sci-badge')!.textContent).toBe('після «Регенеративний гель»');
-    expect(grenade.querySelector('button')).toBeNull();
+    expect(grenade.querySelector('button:not(.sci-toggle)')).toBeNull();
     expect(grenade.title).toContain('зачіпає і своїх');
     expect(document.getElementById('btn-start-4')).toBeNull();
     // передумову завершено — картка розгорнута: ефект, «Час», кнопка старту
@@ -186,7 +186,7 @@ describe('ResearchPanel: каталог проєктів (картки T.39)', (
     expect(medkit.querySelector('.sci-badge')!.textContent).toBe('завершено');
     expect(medkit.querySelector('.sci-badge')!.classList.contains('ok')).toBe(true);
     expect(medkit.querySelector('#btn-forge-medkit')).not.toBeNull();
-    expect(card('Розширення лабораторії').querySelector('button')).toBeNull(); // лише плашка
+    expect(card('Розширення лабораторії').querySelector('button:not(.sci-toggle)')).toBeNull(); // лише плашка і кнопка-назва (Т.100)
   });
 
   it('недостатньо коштів — кнопка вимкнена з ціною в підказці (title як зараз)', () => {
@@ -230,6 +230,47 @@ describe('T.39: плашки стану картки (перша умова зв
     const badge = card('Композитна броня').querySelector('.sci-badge')!;
     expect(badge.textContent).toBe('доступний');
     expect(badge.className).toBe('sci-badge'); // без додаткових класів
+  });
+});
+
+describe('Т.100: кнопка-назва показує ефект згорнутої і завершеної картки (тап, клік, Enter)', () => {
+  it('згорнута картка: «▸ Імпульсна граната» → рядок ефекту і «▾», ще раз — сховано; кнопки старту немає', () => {
+    const panel = createResearchPanel(makeDeps());
+    panel.render();
+    const t = (): HTMLButtonElement => el<HTMLButtonElement>('btn-sci-eff-grenade');
+    expect(t().textContent).toBe('▸\u00a0Імпульсна граната');
+    expect(t().getAttribute('aria-expanded')).toBe('false');
+    expect(card('Імпульсна граната').querySelector('.sci-eff')).toBeNull();
+    t().click();
+    expect(t().textContent).toBe('▾\u00a0Імпульсна граната');
+    expect(t().getAttribute('aria-expanded')).toBe('true');
+    expect(document.activeElement).toBe(t()); // фокус лишається на кнопці після перемальовки
+    const open = card('Імпульсна граната');
+    expect(open.querySelector('.sci-eff')!.textContent).toContain('зачіпає і своїх');
+    expect(open.querySelector('button:not(.sci-toggle)')).toBeNull();
+    panel.render(); // стан розгортання переживає перемальовку панелі
+    expect(card('Імпульсна граната').querySelector('.sci-eff')).not.toBeNull();
+    t().click();
+    expect(card('Імпульсна граната').querySelector('.sci-eff')).toBeNull();
+  });
+
+  it('завершена картка: ефект за кнопкою, «Замовити в «Кузні»» на місці; у бою кнопка-назва активна', () => {
+    party.research.completed.push('medkit');
+    let battle = false;
+    const panel = createResearchPanel({ ...makeDeps(), inBattle: () => battle });
+    panel.render();
+    expect(card('Регенеративний гель').querySelector('.sci-eff')).toBeNull();
+    battle = true;
+    panel.render();
+    const t = el<HTMLButtonElement>('btn-sci-eff-medkit');
+    expect(t.disabled).toBe(false);
+    t.click();
+    const medkit = card('Регенеративний гель');
+    expect(medkit.querySelector('.sci-eff')!.textContent).toContain('Лікує ' + HEAL_AMOUNT + ' HP');
+    expect(medkit.querySelector('#btn-forge-medkit')).not.toBeNull();
+    // картки «не розпочато» і «у роботі» — звичайна назва без кнопки, ефект рядком
+    expect(document.getElementById('btn-sci-eff-armor')).toBeNull();
+    expect(card('Композитна броня').querySelector('.sci-eff')).not.toBeNull();
   });
 });
 
