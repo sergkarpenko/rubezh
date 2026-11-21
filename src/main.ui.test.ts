@@ -1476,7 +1476,7 @@ describe('П12.5: зрозумілість розвитку — числові �
       .map((r) => r.textContent ?? '')
       .find((t) => t.includes(name)) ?? '';
 
-  it('флоу: вкладка «База» — ефекти протоколів видимі ДО старту (критерії 1–2)', () => {
+  it('флоу: вкладка «База» — ефекти протоколів до старту: рядком або (Т.100, згорнуті) у підказці й за кнопкою-назвою', () => {
     startParty();
     btn('status-tab-base').click();
     btn('btn-save-1').click(); // сейв — беремо реальні характеристики першого солдата
@@ -1495,10 +1495,14 @@ describe('П12.5: зрозумілість розвитку — числові �
         ' %'
     );
     expect(rowText('research', 'Регенеративний гель')).toContain('Лікує ' + HEAL_AMOUNT + ' HP');
-    expect(rowText('research', 'Імпульсна граната')).toContain('Пошкодження ' + GRENADE_DAMAGE[0] + '–' + GRENADE_DAMAGE[1]);
-    expect(rowText('research', 'Імпульсна граната')).toContain('зачіпає і своїх');
+    // Т.100: картки з невиконаною передумовою згорнуті — ефект у підказці картки (title)
+    const folded = (name: string): string =>
+      Array.from(document.querySelectorAll<HTMLElement>('#research .sci-card.folded')).find((c) => c.textContent!.includes(name))?.title ??
+      '';
+    expect(folded('Імпульсна граната')).toContain('Пошкодження ' + GRENADE_DAMAGE[0] + '–' + GRENADE_DAMAGE[1]);
+    expect(folded('Імпульсна граната')).toContain('зачіпає і своїх');
     expect(rowText('research', 'Розширення лабораторії')).toContain('протоколи в роботі одночасно замість');
-    expect(rowText('research', 'Гарматний модуль перехоплювача')).toContain('на ' + GUN_MODULE_DAMAGE + ' пошкодження більше за раунд');
+    expect(folded('Гарматний модуль перехоплювача')).toContain('на ' + GUN_MODULE_DAMAGE + ' пошкодження більше за раунд');
     // T.39: жоден проєкт не запущено — плашка «у роботі» немає (ефекти самі «до дії»)
     expect(document.querySelectorAll('#research .sci-badge.run')).toHaveLength(0);
   });

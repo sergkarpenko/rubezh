@@ -4,7 +4,7 @@
 // index.html (#research) + справжнє ядро (createParty/hireScientist/...) —
 // панель покриває DOM-механіку: найм/звільнення, слоти, каталог проєктів,
 // підказки причин, вимкненість у бою (прецедент збереження, критерій 1).
-// T.39 «Зрозуміла наука»: смуга кроків, картка протоколу (плашка, «Ціна», «Час ≈»),
+// T.39 «Зрозуміла наука»: смуга кроків, картка протоколу (плашка, «Час ≈»; Т.100 — без «Ціна», згорнуті картки),
 // кнопка «Замовити в «Кузні»» (btn-forge-…), ціни за пресетом.
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createParty, type Party } from '../core/save';
@@ -119,17 +119,18 @@ describe('T.39: смуга кроків «1. Дослідити → 2. Виго�
 });
 
 describe('ResearchPanel: каталог проєктів (картки T.39)', () => {
-  it('усі 6 проєктів каталогу — картки з кнопками старту; назви з каталогу', () => {
+  it('усі 6 проєктів каталогу — картки; кнопки старту — у 4 без передумови (Т.100: 2 згорнуті); назви з каталогу', () => {
     const panel = createResearchPanel(makeDeps());
     panel.render();
     expect(document.querySelectorAll('#research .sci-card')).toHaveLength(6);
-    expect(document.querySelectorAll<HTMLButtonElement>('[id^="btn-start-"]')).toHaveLength(6);
+    expect(document.querySelectorAll<HTMLButtonElement>('[id^="btn-start-"]')).toHaveLength(4);
+    expect(document.querySelectorAll('#research .sci-card.folded')).toHaveLength(2);
     expect(el('research').textContent).toContain('Композитна броня');
     expect(el('research').textContent).toContain('Імпульсна граната');
     expect(el('research').textContent).toContain('Гарматний модуль перехоплювача');
-    // не розпочато: «Ціна C кр.», «Час ≈ …», кнопка «Дослідити — C кр.» на всю ширину
+    // не розпочато: «Час ≈ …», кнопка «Дослідити — C кр.» на всю ширину; Т.100: окремого рядка «Ціна» немає
     const armor = card('Композитна броня');
-    expect(armor.textContent).toContain('Ціна');
+    expect(armor.textContent).not.toContain('Ціна');
     expect(armor.textContent).toContain('96 кр.');
     expect(armor.textContent).toContain('Час ≈');
     const start = el<HTMLButtonElement>('btn-start-0');
@@ -156,12 +157,24 @@ describe('ResearchPanel: каталог проєктів (картки T.39)', (
     expect(third.title).toContain('немає вільного слота');
   });
 
-  it('T2 з невиконаною передумовою — кнопка вимкнена з підказкою (title як зараз)', () => {
+  it('Т.100: T2 з невиконаною передумовою — картка згорнута до назви з плашкою «після «…»», ефект — у title і за кнопкою-назвою', () => {
     const panel = createResearchPanel(makeDeps());
     panel.render();
-    const grenade = el<HTMLButtonElement>('btn-start-4'); // «Імпульсна граната» після «Регенеративного гелю»
-    expect(grenade.disabled).toBe(true);
-    expect(grenade.title).toContain('спершу: «Регенеративний гель»');
+    const grenade = card('Імпульсна граната'); // «Імпульсна граната» після «Регенеративного гелю»
+    expect(grenade.classList.contains('folded')).toBe(true);
+    expect(grenade.children).toHaveLength(1); // лише рядок назви з плашкою
+    expect(grenade.querySelector('.sci-badge')!.textContent).toBe('після «Регенеративний гель»');
+    expect(grenade.querySelector('button:not(.sci-toggle)')).toBeNull();
+    expect(grenade.title).toContain('зачіпає і своїх');
+    expect(document.getElementById('btn-start-4')).toBeNull();
+    // передумову завершено — картка розгорнута: ефект, «Час», кнопка старту
+    party.research.completed.push('medkit');
+    panel.render();
+    const open = card('Імпульсна граната');
+    expect(open.classList.contains('folded')).toBe(false);
+    expect(open.querySelector('.sci-eff')!.textContent).toContain('зачіпає і своїх');
+    expect(open.textContent).toContain('Час ≈');
+    expect(el<HTMLButtonElement>('btn-start-4').textContent).toBe('Дослідити — 112 кр.');
   });
 
   it('завершений протокол-предмет — плашка «завершено» + кнопка «Замовити в «Кузні»»; «Розширення лабораторії» — лише плашка', () => {
@@ -173,7 +186,7 @@ describe('ResearchPanel: каталог проєктів (картки T.39)', (
     expect(medkit.querySelector('.sci-badge')!.textContent).toBe('завершено');
     expect(medkit.querySelector('.sci-badge')!.classList.contains('ok')).toBe(true);
     expect(medkit.querySelector('#btn-forge-medkit')).not.toBeNull();
-    expect(card('Розширення лабораторії').querySelector('button')).toBeNull(); // лише плашка
+    expect(card('Розширення лабораторії').querySelector('button:not(.sci-toggle)')).toBeNull(); // лише плашка і кнопка-назва (Т.100)
   });
 
   it('недостатньо коштів — кнопка вимкнена з ціною в підказці (title як зараз)', () => {
@@ -220,21 +233,64 @@ describe('T.39: плашки стану картки (перша умова зв
   });
 });
 
-describe('T.39: формули «Час ≈ …» (K техномантів, P очок, A протоколів у роботі)', () => {
-  it('K = 0: «Час ≈ 14 діб з одним техномантом, 7 — з двома» (друге число без «діб», текст плану дослівно)', () => {
-    createResearchPanel(makeDeps()).render();
-    expect(card('Композитна броня').textContent).toContain('Час ≈ 14 діб з одним техномантом, 7 — з двома');
+describe('Т.100: кнопка-назва показує ефект згорнутої і завершеної картки (тап, клік, Enter)', () => {
+  it('згорнута картка: «▸ Імпульсна граната» → рядок ефекту і «▾», ще раз — сховано; кнопки старту немає', () => {
+    const panel = createResearchPanel(makeDeps());
+    panel.render();
+    const t = (): HTMLButtonElement => el<HTMLButtonElement>('btn-sci-eff-grenade');
+    expect(t().textContent).toBe('▸\u00a0Імпульсна граната');
+    expect(t().getAttribute('aria-expanded')).toBe('false');
+    expect(card('Імпульсна граната').querySelector('.sci-eff')).toBeNull();
+    t().click();
+    expect(t().textContent).toBe('▾\u00a0Імпульсна граната');
+    expect(t().getAttribute('aria-expanded')).toBe('true');
+    expect(document.activeElement).toBe(t()); // фокус лишається на кнопці після перемальовки
+    const open = card('Імпульсна граната');
+    expect(open.querySelector('.sci-eff')!.textContent).toContain('зачіпає і своїх');
+    expect(open.querySelector('button:not(.sci-toggle)')).toBeNull();
+    panel.render(); // стан розгортання переживає перемальовку панелі
+    expect(card('Імпульсна граната').querySelector('.sci-eff')).not.toBeNull();
+    t().click();
+    expect(card('Імпульсна граната').querySelector('.sci-eff')).toBeNull();
   });
 
-  it('K = 1: «Час ≈ 14 діб з вашим техномантом»; K = 2: «Час ≈ 7 діб з вашими 2 техномантами» (орудний відмінок)', () => {
+  it('завершена картка: ефект за кнопкою, «Замовити в «Кузні»» на місці; у бою кнопка-назва активна', () => {
+    party.research.completed.push('medkit');
+    let battle = false;
+    const panel = createResearchPanel({ ...makeDeps(), inBattle: () => battle });
+    panel.render();
+    expect(card('Регенеративний гель').querySelector('.sci-eff')).toBeNull();
+    battle = true;
+    panel.render();
+    const t = el<HTMLButtonElement>('btn-sci-eff-medkit');
+    expect(t.disabled).toBe(false);
+    t.click();
+    const medkit = card('Регенеративний гель');
+    expect(medkit.querySelector('.sci-eff')!.textContent).toContain('Лікує ' + HEAL_AMOUNT + ' HP');
+    expect(medkit.querySelector('#btn-forge-medkit')).not.toBeNull();
+    // картки «не розпочато» і «у роботі» — звичайна назва без кнопки, ефект рядком
+    expect(document.getElementById('btn-sci-eff-armor')).toBeNull();
+    expect(card('Композитна броня').querySelector('.sci-eff')).not.toBeNull();
+  });
+});
+
+describe('T.39: формули «Час ≈ …» (K техномантів, P очок, A протоколів у роботі)', () => {
+  it('K = 0: «Час ≈ 14 діб, з двома — 7» (Т.100, варіант В; друге число без «діб»)', () => {
+    createResearchPanel(makeDeps()).render();
+    const rows = [...card('Композитна броня').querySelectorAll('.sci-row')].map((r) => r.textContent);
+    expect(rows).toEqual(['Час ≈ 14 діб, з двома — 7']);
+  });
+
+  it('K = 1: «Час ≈ 14 діб»; K = 2: «Час ≈ 7 діб» (Т.100: без «з вашим техномантом»)', () => {
     const panel = createResearchPanel(makeDeps());
     panel.render();
     (el('btn-hire-scientist') as HTMLButtonElement).click();
     panel.render();
-    expect(card('Композитна броня').textContent).toContain('Час ≈ 14 діб з вашим техномантом');
+    const time = (): (string | null)[] => [...card('Композитна броня').querySelectorAll('.sci-row')].map((r) => r.textContent);
+    expect(time()).toEqual(['Час ≈ 14 діб']);
     (el('btn-hire-scientist') as HTMLButtonElement).click();
     panel.render();
-    expect(card('Композитна броня').textContent).toContain('Час ≈ 7 діб з вашими 2 техномантами');
+    expect(time()).toEqual(['Час ≈ 7 діб']);
   });
 
   it('у роботі, K ≥ 1: D = ⌈(P − X) · A / K⌉ діб — «6 з 14 очок потоку · ще ≈ 16 діб» (A = 2, K = 1)', () => {
@@ -346,24 +402,27 @@ describe('T.39: ефекти протоколів простими словам�
     expect(card('Регенеративний гель').textContent).toContain(
       'Лікує ' + HEAL_AMOUNT + ' HP за ' + HEAL_AP_COST + ' AP; одна штука на місію'
     );
-    const grenade = card('Імпульсна граната').textContent!;
+    const grenade = card('Імпульсна граната').title; // Т.100: згорнута картка — ефект у title
     expect(grenade).toContain(
       'Пошкодження ' + GRENADE_DAMAGE[0] + '–' + GRENADE_DAMAGE[1] + ' у зоні хреста, дальність ' + GRENADE_RANGE + '; зачіпає і своїх'
     );
     expect(card('Розширення лабораторії').textContent).toContain('протоколи в роботі одночасно замість');
-    expect(card('Гарматний модуль перехоплювача').textContent).toContain('на ' + GUN_MODULE_DAMAGE + ' пошкодження більше за раунд');
+    expect(card('Гарматний модуль перехоплювача').title).toContain('на ' + GUN_MODULE_DAMAGE + ' пошкодження більше за раунд');
     expect(el('research').textContent).toContain('HP'); // числа є
     expect(el('research').textContent).not.toContain('->'); // старий формат «зараз -> стане» в картках відсутній
   });
 
-  it('ефект показується і в картках активного/завершеного протоколу', () => {
+  it('ефект: в активній картці — рядком; у завершеній (Т.100) — лише в підказці картки', () => {
     const panel = createResearchPanel(makeDeps());
     panel.render();
     (el('btn-start-0') as HTMLButtonElement).click(); // броня активна
     party.research.completed.push('medkit'); // гель завершено
     panel.render();
-    expect(card('Композитна броня').textContent).toContain('HP замість');
-    expect(card('Регенеративний гель').textContent).toContain('Лікує ' + HEAL_AMOUNT + ' HP');
+    expect(card('Композитна броня').querySelector('.sci-eff')!.textContent).toContain('HP замість');
+    const medkit = card('Регенеративний гель');
+    expect(medkit.querySelector('.sci-eff')).toBeNull();
+    expect(medkit.textContent).not.toContain('Лікує');
+    expect(medkit.title).toContain('Лікує ' + HEAL_AMOUNT + ' HP');
   });
 
   it('без ростеру — без порівняння «замість» (план: «без ростеру — без порівняння»)', () => {
@@ -420,7 +479,6 @@ describe('ResearchPanel: ціни за пресетом (T.29) — картки 
     );
     const price = sciencePrice(PROJECTS[0].cost, 'легкий');
     const armor = card('Композитна броня');
-    expect(armor.textContent).toContain('Ціна');
     expect(armor.textContent).toContain(price + ' кр.');
     const start = el('btn-start-0') as HTMLButtonElement;
     expect(start.textContent).toBe('Дослідити — ' + price + ' кр.');
