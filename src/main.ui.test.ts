@@ -198,8 +198,8 @@ async function mountPage(): Promise<void> {
 
 // Т.106: блок тестів сторінки — describe зі свіжою сторінкою (mountPage) перед першим тестом.
 // Блоки між собою незалежні: `npx vitest run src/main.ui.test.ts --sequence.shuffle` перемішує їх і
-// зелений, кожен блок зелений і поодинці (`-t "^<назва блоку> "`, дужки й крапки в назві — екранувати). Тести всередині блоку — сценарій у
-// заданому порядку (`shuffle: false`): частина з них продовжує стан попереднього тесту того самого блоку.
+// зелений, кожен блок зелений і поодинці (`-t "^<назва блоку> "`, дужки й крапки в назві — екранувати). Тести всередині блоку йдуть у
+// заданому порядку (`shuffle: false`); з Т.107 тест `describePage` не продовжує стан попереднього — такі блоки — `describeScenario`.
 function describePage(name: string, fn: () => void): void {
   describe(name, { shuffle: false }, () => {
     beforeAll(mountPage);
@@ -211,38 +211,77 @@ function describePage(name: string, fn: () => void): void {
 // попереднього (партія, бій, сейв, годинник). До Т.107 такий тест поодинці (`-t` на назву тесту) падав: стану
 // попередніх кроків не було. Тепер крок спершу проганяє тіла попередніх кроків блоку, яких на цій сторінці ще
 // не було, — з їхніми твердженнями; у повному прогоні вони вже пройдені, і крок іде одразу. Сценарій і
-// твердження ті самі, а кожен тест зелений і поодинці. Тайм-аут кроку — сума тайм-аутів кроків до нього
-// включно (поодинці крок робить і їхню роботу). Крок, що впав у повному прогоні, наступні не повторюють.
+// твердження ті самі, а кожен тест зелений і поодинці. Крок, що впав у повному прогоні, наступні не повторюють.
+// Межі: повторюються лише тіла кроків — хуки `beforeEach` і `retry` у блоці-сценарії не підходять; падіння
+// попереднього кроку поодинці звітується під назвою запущеного тесту (стек — на рядку повтору нижче).
+// Тайм-аут кроку — сума тайм-аутів кроків до нього включно (поодинці крок робить і їхню роботу); ціна — у
+// повному прогоні завислий пізній крок падає пізніше (у блоці з 14 кроків — через 70 с замість 5 с).
 type StepBody = () => void | Promise<void>;
-interface Step {
-  (name: string, fn: StepBody, timeout?: number): void;
-  each(cases: readonly string[]): (name: string, fn: (c: string) => void | Promise<void>, timeout?: number) => void;
-}
+type Step = (name: string, fn: StepBody, timeout?: number) => void;
+type Register = (name: string, fn: () => Promise<void>, timeout: number) => void;
 const STEP_TIMEOUT = 5_000; // типовий тайм-аут тесту vitest
-function describeScenario(name: string, fn: (step: Step) => void): void {
-  describePage(name, () => {
-    const bodies: StepBody[] = [];
-    let total = 0; // сума тайм-аутів зареєстрованих кроків
-    let done = 0; // скільки кроків уже пройдено на цій сторінці
-    const step = ((stepName: string, body: StepBody, timeout?: number) => {
-      const i = bodies.push(body) - 1;
-      total += timeout ?? STEP_TIMEOUT;
-      it(
-        stepName,
-        async () => {
-          while (done < i) await bodies[done++]();
-          done = i + 1;
-          await body();
-        },
-        total
-      );
-    }) as Step;
-    step.each = (cases) => (stepName, body, timeout) => {
-      for (const c of cases) step(stepName.replace('%s', c), () => body(c), timeout);
-    };
-    fn(step);
-  });
+function scenarioSteps(register: Register): Step {
+  const bodies: StepBody[] = [];
+  let total = 0; // сума тайм-аутів зареєстрованих кроків
+  let done = 0; // скільки кроків уже пройдено на цій сторінці
+  return (stepName, body, timeout) => {
+    const i = bodies.push(body) - 1;
+    total += timeout ?? STEP_TIMEOUT;
+    register(
+      stepName,
+      async () => {
+        while (done < i) await bodies[done++]();
+        done = i + 1;
+        await body();
+      },
+      total
+    );
+  };
 }
+function describeScenario(name: string, fn: (step: Step) => void): void {
+  describePage(name, () => fn(scenarioSteps((n, f, t) => it(n, f, t))));
+}
+
+// Т.107: механізм повтору — окремо від сторінки. У повному прогоні (CI) кроки не повторюються, тож поломку
+// повтору ловить лише цей тест: кроки реєструються у фейковий `register`, і тест запускає їх як поодинці.
+describe('Т.107: scenarioSteps — крок поодинці проганяє попередні', () => {
+  const build = (): { runs: Array<() => Promise<void>>; timeouts: number[]; log: number[] } => {
+    const runs: Array<() => Promise<void>> = [];
+    const timeouts: number[] = [];
+    const log: number[] = [];
+    const step = scenarioSteps((_n, f, t) => {
+      runs.push(f);
+      timeouts.push(t);
+    });
+    step('a', () => void log.push(0));
+    step('b', () => void log.push(1), 30_000);
+    step('c', () => void log.push(2));
+    return { runs, timeouts, log };
+  };
+
+  it('поодинці — попередні кроки по разу, у порядку; повний прогін — кожен крок по разу', async () => {
+    const alone = build();
+    await alone.runs[2]();
+    expect(alone.log).toEqual([0, 1, 2]);
+    const full = build();
+    for (const run of full.runs) await run();
+    expect(full.log).toEqual([0, 1, 2]);
+  });
+
+  it('крок, що впав, не повторюється; тайм-аут — сума тайм-аутів кроків до нього', async () => {
+    const { runs, timeouts, log } = build();
+    expect(timeouts).toEqual([5_000, 35_000, 40_000]);
+    const failing = scenarioSteps((_n, f) => runs.push(f));
+    failing('впаде', () => {
+      log.push(9);
+      throw new Error('крок');
+    });
+    failing('наступний', () => void log.push(10));
+    await expect(runs[3]()).rejects.toThrow('крок');
+    await runs[4]();
+    expect(log).toEqual([9, 10]);
+  });
+});
 
 // П12.2 (ADR-0065): критичний флоу екранів — «старт → нова партія → меню →
 // стартовий екран → продовжити». Детермінізм: сід 42; сейв/завантаження через
