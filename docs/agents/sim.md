@@ -27,12 +27,12 @@
 
 ## Команди
 
-- Симуляції `sim-p11.8.ts`: `cd <тека-1> && npx -y vite-node --root <клон> <клон>/scripts/sim-p11.8.ts -- --seeds 480 --policies default` (або `science`). Готовність — за файлом `dist/p11.8-parties.csv` у теці запуску. Розділ «Числа балансу» — з Т.21: доба «без повного загону» — наприкінці доби боєготових менше трьох; ростер = живі разом із лікарнею.
-- **Probe політик:** `npx -y vite-node scripts/probe-t23.ts -- --variants <список через кому> --presets норма --seeds 480 --out /tmp/x.csv > /tmp/x.log`. Частини варіанта через «+»: `none`, `sciN`, `afterN`, `resN`, `rh`, `rh2`, `p:armor.optics`, `fire`, `nofire`, `done:armor`, `gift`, `g:armor`, `c:armor=30`, `pc:`, `pp:`, `keep`, `eqN`. `trace-party.ts` пресет — `--preset`, `probe-t23.ts` — `--presets`.
+- Симуляції `sim-p11.8.ts`: `cd <тека-1> && node <клон>/scripts/run-ts.mjs <клон>/scripts/sim-p11.8.ts -- --seeds 480 --policies default` (або `science`). Готовність — за файлом `dist/p11.8-parties.csv` у теці запуску. Розділ «Числа балансу» — з Т.21: доба «без повного загону» — наприкінці доби боєготових менше трьох; ростер = живі разом із лікарнею.
+- **Probe політик:** `node scripts/run-ts.mjs scripts/probe-t23.ts -- --variants <список через кому> --presets норма --seeds 480 --out /tmp/x.csv > /tmp/x.log`. Частини варіанта через «+»: `none`, `sciN`, `afterN`, `resN`, `rh`, `rh2`, `p:armor.optics`, `fire`, `nofire`, `done:armor`, `gift`, `g:armor`, `c:armor=30`, `pc:`, `pp:`, `keep`, `eqN`. `trace-party.ts` пресет — `--preset`, `probe-t23.ts` — `--presets`.
 - **Probe каталогу:** ціни предметів і очки протоколів — частинами варіанта (`c:armor=30`, `pc:armor=48`, `pp:armor=14`; значення «норми», пресет множить сам).
 - **Probe констант-`const` через змінні середовища (Т.29):** копія `cp -r src scripts package.json tsconfig*.json vite.config.ts <тека>/probeNN` + символьне посилання на `node_modules`; `sed` робить з константи `Number(process.env.X ?? <чинне>)`; звірка копії — базовий варіант без змінних дає той самий CSV. Черга: файл рядків `ім'я|змінні|варіант` і власний скрипт-обгортка одного прогону (у репозиторії його немає), запущений як `xargs -P 2 -I{} <обгортка> "{}" <сіди> <тека>`.
-- `vite-node` зараз працює лише як `npx -y vite-node`.
-- **Probe політики евакуації бота (Т.76):** `npx -y vite-node scripts/sim-t76.ts -- --variants none,w50,last1 --seeds 120 --out /tmp/t76/a.csv`, зведення — `--summary a.csv,b.csv`. Клітинка «варіант × пресет» на 120 сідів — ≈ 1 хв (два процеси на двох ядрах). Варіант з евакуацією міняє кількість місій — порівнювати рахунок попарно за сідом з `none`.
+- Скрипти `scripts/*.ts` запускає `node scripts/run-ts.mjs <скрипт.ts> [аргументи]` (Т.103: `runnerImport` з `vite`, без залежностей); `npx -y vite-node` щоразу завантажував пакет. Прогін з іншої теки пише `dist/` у теку запуску.
+- **Probe політики евакуації бота (Т.76):** `node scripts/run-ts.mjs scripts/sim-t76.ts -- --variants none,w50,last1 --seeds 120 --out /tmp/t76/a.csv`, зведення — `--summary a.csv,b.csv`. Клітинка «варіант × пресет» на 120 сідів — ≈ 1 хв (два процеси на двох ядрах). Варіант з евакуацією міняє кількість місій — порівнювати рахунок попарно за сідом з `none`.
 
 ## Перевірка тестів
 

@@ -5,7 +5,7 @@
 // будує за станом партії. `--verify` звіряє варіанти `none` і `sci3` із
 // simulateParty (результат, тіки, місії, гроші за добами).
 // Поза CI, як sim-p11.8.ts і trace-party.ts:
-//   npx -y vite-node scripts/probe-t23.ts -- --variants sci3,sci1,rh --presets норма --seeds 480 --out dist/t23.csv
+//   node scripts/run-ts.mjs scripts/probe-t23.ts -- --variants sci3,sci1,rh --presets норма --seeds 480 --out dist/t23.csv
 // Варіант — частини через «+»:
 //   none    — без науки (DEFAULT_PARTY_POLICY);
 //   sciN    — штат техномантів не більше N (чинна політика після Т.28 — sci2: лише протокол
