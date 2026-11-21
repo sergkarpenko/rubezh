@@ -2681,7 +2681,12 @@ describe('Т.99: зупинки «До події» на сторінці і б�
   type S = {
     econ: { money: number };
     roster: { soldiers: { id: string }[]; hospital: Record<string, number> };
-    research: { scientists: { id: string; name: string }[]; hired: number; active: { id: string; invested: number }[] };
+    research: {
+      scientists: { id: string; name: string }[];
+      hired: number;
+      active: { id: string; invested: number }[];
+      completed: string[];
+    };
     workshop: { queue: { id: string; ticksLeft: number }[] };
     intercept: { fighter: { hp: number; status: string; repairTicksLeft?: number } };
   };
