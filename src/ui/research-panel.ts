@@ -9,7 +9,7 @@
 // T.39 «Зрозуміла наука» (docs/plans/t39-clear-science.md, тексти затверджені
 // власником): смуга кроків «дослідити → виготовити → видати» (чиста навігація,
 // кнопки смуги завжди активні, коли панель видима), шапка у три рядки, картка
-// протоколу з плашкою стану, ціною «Ціна … кр.» і часом «Час ≈ …» простими
+// протоколу з плашкою стану, ціною «Ціна … кр.» (Т.100: рядок прибрано) і часом «Час ≈ …» простими
 // словами, кнопка «Замовити в «Кузні»» на картці завершеного протоколу-предмета.
 // Ядро src/core не змінюється.
 //
@@ -233,7 +233,6 @@ export function createResearchPanel(deps: ResearchPanelDeps): ResearchPanel {
         toggle.className = 'sci-name sci-toggle';
         toggle.textContent = (open ? '▾\u00a0' : '▸\u00a0') + def.name; // нерозривний пробіл: стрілка не лишається сама в рядку
         toggle.setAttribute('aria-expanded', String(open));
-        toggle.title = open ? 'Сховати ефект' : 'Показати ефект';
         toggle.onclick = () => {
           if (shown.has(def.id)) shown.delete(def.id);
           else shown.add(def.id);

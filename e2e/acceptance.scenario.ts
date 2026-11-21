@@ -184,7 +184,8 @@ test('сценарій приймання ADR-0030: партія → місія 
     await expect(armor).not.toContainText('Ціна'); // Т.100: ціна — лише на кнопці
     await expect(armor).toContainText('Час ≈ 14 діб, з двома — 7'); // K = 0 (Т.100, варіант В)
     // Т.100: картки з невиконаною передумовою згорнуті до кнопки-назви з плашкою; панель на новій партії
-    // локально 1048 px на 1366 × 768 (до кроку 1516; docs/reports/t100/measure.mjs); межа з запасом на шрифти CI
+    // вікно сценарію тут 1440 × 900 (колонка тієї ж ширини): локально 1048 px, як на 1366 × 768 (до кроку 1516;
+    // docs/reports/t100/measure.mjs); межа з запасом на шрифти CI
     await expect(page.locator('#research .sci-card.folded')).toHaveCount(2);
     // у згорнутій картці — лише кнопка-назва; тап показує рядок ефекту
     await expect(page.locator('#research .sci-card.folded button:not(.sci-toggle)')).toHaveCount(0);
