@@ -210,8 +210,9 @@ export function createScreens(deps: ScreensDeps): Screens {
   // Т.58: рядок-пояснення стартового екрана (з Т.93 — банер угорі); порожній текст — сховати
   function showNote(text: string): void {
     const note = el('start-note');
-    note.textContent = text;
+    // Т.93: спершу показати, потім текст — live-регіон role="status" уже в дереві доступності, і зчитувач оголосить зміну
     note.classList.toggle('hidden', text === '');
+    note.textContent = text;
   }
 
   function hideDialogs(): void {
