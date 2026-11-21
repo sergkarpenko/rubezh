@@ -26,7 +26,7 @@ import htmlRaw from '../index.html?raw';
 import { ARMOR_MAX_HP_BONUS, OPTICS_ACCURACY_BONUS } from './core/workshop';
 import { GRENADE_DAMAGE, HEAL_AMOUNT, HIT_CHANCE_CAP } from './core/combat';
 import { GUN_MODULE_DAMAGE } from './core/intercept';
-import { AnimEngine } from './core/render-core';
+import type { AnimEngine } from './core/render-core';
 
 const $ = (id: string): HTMLElement => document.getElementById(id) as HTMLElement;
 const btn = (id: string): HTMLButtonElement => $(id) as HTMLButtonElement;
@@ -119,9 +119,6 @@ beforeAll(async () => {
   // (onIdle → пауза) покриває render.test.ts на фейковому планувальнику.
   vi.stubGlobal('requestAnimationFrame', undefined);
   vi.stubGlobal('cancelAnimationFrame', undefined);
-  // Реальна розмітка: body з index.html (script через innerHTML не виконується).
-  document.body.innerHTML = htmlRaw.match(/<body[^>]*>([\s\S]*)<\/body>/)![1];
-
   // No-op контекст малювання (П6.14: з журналом операцій — рамки цілей і
   // плашки шансу перевіряються рядком «метод(аргументи)»): усі виклики —
   // порожні, присвоєння властивостей — так.
@@ -159,18 +156,63 @@ beforeAll(async () => {
       toJSON: () => '',
     } as DOMRect;
   };
-
-  // Імпортуємо main.ts ПІСЛЯ розмітки: на рівні модуля він прив'язує обробники
-  // (за typeof document) і робить перший renderAll.
-  await import('./main');
 });
+
+// Т.106 (кандидат 13): кожен блок describe — на свіжій сторінці. До Т.106 main.ts імпортувався
+// один раз на файл, і блоки ділили партію, сховище, відкриті вікна й таймери: з
+// `--sequence.shuffle` падало 33–35 тестів (сіди 1–3). Тепер mountPage перед блоком знімає обробники
+// document/window попереднього модуля, чистить сховище й журнал канви, ставить свіжу розмітку і
+// заново імпортує main.ts (vi.resetModules) — блок не бачить, що робили блоки до нього.
+type Listener = [EventTarget, string, EventListenerOrEventListenerObject, boolean | AddEventListenerOptions | undefined];
+let pageListeners: Listener[] = [];
+// Т.106: клас рушія анімацій того модуля render-core, який імпортував свіжий main.ts (після
+// vi.resetModules статичний імпорт файла тестів — уже інший клас, і шпигун на ньому нічого не бачить).
+let PageAnimEngine: typeof AnimEngine;
+async function mountPage(): Promise<void> {
+  vi.useRealTimers(); // відкладені фейк-таймери попереднього блоку (авто-бій, плашка ходу) скинуто
+  for (const [t, type, fn, opts] of pageListeners) t.removeEventListener(type, fn, opts);
+  pageListeners = [];
+  memoryStorage.clear(); // сейви, налаштування, позначка першого візиту «Як грати»
+  canvasOps.length = 0;
+  // Реальна розмітка: body з index.html (script через innerHTML не виконується).
+  document.body.innerHTML = htmlRaw.match(/<body[^>]*>([\s\S]*)<\/body>/)![1];
+  // Обробники main.ts на document і window живуть довше за розмітку — записуємо їх, щоб зняти
+  // перед наступним блоком (інакше старий модуль відповідав би на клавіші поруч із новим).
+  const targets: EventTarget[] = [document, window];
+  const spies = targets.map((t) =>
+    vi.spyOn(t, 'addEventListener').mockImplementation(function (this: EventTarget, type, fn, opts) {
+      if (fn) pageListeners.push([t, type, fn, opts]);
+      EventTarget.prototype.addEventListener.call(t, type, fn, opts);
+    })
+  );
+  try {
+    vi.resetModules();
+    // Імпортуємо main.ts ПІСЛЯ розмітки: на рівні модуля він прив'язує обробники
+    // (за typeof document) і робить перший renderAll.
+    await import('./main');
+    ({ AnimEngine: PageAnimEngine } = await import('./core/render-core'));
+  } finally {
+    for (const spy of spies) spy.mockRestore();
+  }
+}
+
+// Т.106: блок тестів сторінки — describe зі свіжою сторінкою (mountPage) перед першим тестом.
+// Блоки між собою незалежні: `npx vitest run src/main.ui.test.ts --sequence.shuffle` перемішує їх і
+// зелений, кожен блок зелений і поодинці (`-t "^<назва блоку> "`, дужки й крапки в назві — екранувати). Тести всередині блоку — сценарій у
+// заданому порядку (`shuffle: false`): частина з них продовжує стан попереднього тесту того самого блоку.
+function describePage(name: string, fn: () => void): void {
+  describe(name, { shuffle: false }, () => {
+    beforeAll(mountPage);
+    fn();
+  });
+}
 
 // П12.2 (ADR-0065): критичний флоу екранів — «старт → нова партія → меню →
 // стартовий екран → продовжити». Детермінізм: сід 42; сейв/завантаження через
 // реальну панель (ADR-0026); переходи — без rAF-анімацій, 0 перерисовок
 // канви (ADR-0029). Стартовий стан (порожні слоти, «Як грати» першого візиту)
-// — лише тут: describe виконується першим у файлі.
-describe('П12.2: флоу стартового екрана і навігації (ADR-0065, ADR-0013)', () => {
+// — свіжий у кожному блоці (Т.106, mountPage), тут лише перевіряється.
+describePage('П12.2: флоу стартового екрана і навігації (ADR-0065, ADR-0013)', () => {
   it('стартовий екран: логотип, меню, версія; партії немає; «Продовжити» вимкнено без сейвів', () => {
     // перший візит (П9.1): «Як грати» показано поверх стартового екрана
     expect($('help-screen').classList.contains('hidden')).toBe(false);
@@ -284,7 +326,7 @@ describe('П12.2: флоу стартового екрана і навігаці
   });
 });
 
-describe('UI-флоу прев’ю: геосцена → місія → бій → результат (ADR-0013)', () => {
+describePage('UI-флоу прев’ю: геосцена → місія → бій → результат (ADR-0013)', () => {
   it('нова партія через флоу: стартовий стан гри — годинник, ростер, фінанси, панель бою прихована', () => {
     // П12.2: партія через хелпер флоу (стартовий екран → діалог); ініціалізацію
     // без партії покрито describe'ом П12.2 вище
@@ -467,7 +509,7 @@ describe('UI-флоу прев’ю: геосцена → місія → бій 
   });
 });
 
-describe('критичний флоу економіки: найм → місія → поранення → одужання (П4.5, ADR-0021)', () => {
+describePage('критичний флоу економіки: найм → місія → поранення → одужання (П4.5, ADR-0021)', () => {
   // Сід 27 детермінований: перша місія — «розвідник» на 18-му тіку; авто-бій —
   // перемога, Олена гине, Іван поранений 3/10 → лікарня 14 тіків; премія +110.
   // Т.18 (ADR-0087): до симетричної лінії вогню флоу йшов на сіді 42 — там
@@ -535,9 +577,14 @@ describe('критичний флоу економіки: найм → місі�
   });
 });
 
-describe('журнал з фільтрами-вкладками (П6.2, ADR-0027)', () => {
-  // Стан продовжує флоу економіки: Д2 00:00, баланс 385, 6 солдатів.
-  // Т.92: навмисний ланцюжок — поодинці блок не йде; запускати разом із блоком економіки (`-t "критичний флоу економіки|журнал з фільтрами"`).
+describePage('журнал з фільтрами-вкладками (П6.2, ADR-0027)', () => {
+  // Т.106: блок самодостатній — до Т.106 стан продовжував флоу економіки (Д2 00:00, баланс 385).
+  // Своя партія на тому самому сіді 27 і повна доба: є записи геосцени (зонди) і економіки (дотація).
+  beforeAll(() => {
+    startParty('27');
+    passDay();
+    expect($('clock').textContent).toBe('Д2 00:00');
+  });
 
   it('вкладка ховає невідповідні записи, активна підсвічена, «Усе» повертає все', () => {
     const geoLi = document.querySelector('#log li[data-cat="geo"]') as HTMLElement;
@@ -567,7 +614,8 @@ describe('журнал з фільтрами-вкладками (П6.2, ADR-0027
 
   it('новий запис під активним фільтром видимий, під іншим — приховується', () => {
     btn('log-tab-econ').click();
-    btn('btn-hire').click(); // 385 → 285 (два записи: «Найм» + «Витрати»)
+    expect($('money').textContent).toBe('375'); // 300 + дотація 75
+    btn('btn-hire').click(); // 375 → 275 (два записи: «Найм» + «Витрати»)
     const hireLi = Array.from(document.querySelectorAll('#log li[data-cat="econ"]')).find((li) =>
       li.textContent!.includes('Вербування')
     ) as HTMLElement;
@@ -576,11 +624,11 @@ describe('журнал з фільтрами-вкладками (П6.2, ADR-0027
     expect(hireLi.style.display).toBe('none');
     btn('log-tab-all').click();
     expect(hireLi.style.display).toBe('');
-    expect($('money').textContent).toBe('285');
+    expect($('money').textContent).toBe('275');
   });
 });
 
-describe('панель збереження: 3 слоти, лише на геосцені (П5.3, ADR-0026, ADR-0013)', () => {
+describePage('панель збереження: 3 слоти, лише на геосцені (П5.3, ADR-0026, ADR-0013)', () => {
   beforeEach(() => {
     localStorage.clear(); // кожен тест блоку — на чистих слотах
     startParty('27');
@@ -745,7 +793,7 @@ describe('панель збереження: 3 слоти, лише на гео�
 
   // Т.48 (рішення власника «Зупиняти все»): вихід закриває бій одразу, а не «Продовжити»
   it('Т.48: вихід на стартовий екран із бою закриває бій; з геосцени — лише скидає анімації', () => {
-    const cancel = vi.spyOn(AnimEngine.prototype, 'cancel');
+    const cancel = vi.spyOn(PageAnimEngine.prototype, 'cancel');
     try {
       saveTickAndLaunch();
       cancel.mockClear();
@@ -815,7 +863,7 @@ describe('панель збереження: 3 слоти, лише на гео�
   });
 });
 
-describe('бойова фокусна зона (П6.3, ADR-0027)', () => {
+describePage('бойова фокусна зона (П6.3, ADR-0027)', () => {
   it('розмітка: тулбар дій збоку (П13.2, ADR-0066), бойовище — квадрат (ширина колонки, кап 960px — П14.3)', () => {
     const panel = htmlRaw.match(/<section class="panel hidden" id="battle-panel">[\s\S]*?<\/section>/)![0];
     expect(panel).not.toContain('id="bcontrols"'); // нижня смуга кнопок вилучена (ADR-0066)
@@ -887,7 +935,7 @@ describe('бойова фокусна зона (П6.3, ADR-0027)', () => {
   });
 });
 
-describe('керування: гарячі клавіші і тач-патерн (П6.4, ADR-0027)', () => {
+describePage('керування: гарячі клавіші і тач-патерн (П6.4, ADR-0027)', () => {
   const key = (k: string, code: string, target: EventTarget = document): void => {
     target.dispatchEvent(new KeyboardEvent('keydown', { key: k, code: code, bubbles: true }));
   };
@@ -967,7 +1015,7 @@ describe('керування: гарячі клавіші і тач-патерн
   });
 });
 
-describe('П6.14: UX прицілювання — обведення цілей, шанс біля клітинки, кнопки без AP', () => {
+describePage('П6.14: UX прицілювання — обведення цілей, шанс біля клітинки, кнопки без AP', () => {
   const tap = (x: number, y: number): void => {
     $('battle').dispatchEvent(new MouseEvent('click', { clientX: x * 48 + 24, clientY: y * 48 + 24 }));
   };
@@ -1076,7 +1124,7 @@ describe('П6.14: UX прицілювання — обведення цілей,
 // П7.4 (ADR-0021/0032): критичний флоу економіки винищувача — «запуск → бій →
 // пошкодження → ремонт → знову готовий». Ремонт — гроші + тіки (патерн лікарні);
 // під час ремонту запуск перехоплення заблокований; банкрутство не змінюється.
-describe('П7.4: винищувач — запуск → бій → пошкодження → ремонт → знову готовий', () => {
+describePage('П7.4: винищувач — запуск → бій → пошкодження → ремонт → знову готовий', () => {
   const fighterText = (): string => $('fighter').textContent ?? '';
   const interceptBtn = (): HTMLButtonElement | null => {
     for (const b of document.querySelectorAll<HTMLButtonElement>('button.intercept')) {
@@ -1146,7 +1194,7 @@ describe('П7.4: винищувач — запуск → бій → пошкод
 
 // П7.5 (ADR-0026/0032): прев'ю UI повітряного бою — контекст-стрічка у фокусній зоні
 // (видима лише під час погоні/бою), збереження вимкнене в повітряному бою.
-describe('П7.5: повітряний бій — контекст-стрічка і збереження', () => {
+describePage('П7.5: повітряний бій — контекст-стрічка і збереження', () => {
   const fighterText = (): string => $('fighter').textContent ?? '';
   const interceptBtn = (): HTMLButtonElement | null => {
     for (const b of document.querySelectorAll<HTMLButtonElement>('button.intercept')) {
@@ -1214,7 +1262,7 @@ describe('П7.5: повітряний бій — контекст-стрічка
   });
 });
 
-describe('П8.3a: перемога кампанії — 30 діб → екран → «Грати далі» (endless), рахунок зафіксований', () => {
+describePage('П8.3a: перемога кампанії — 30 діб → екран → «Грати далі» (endless), рахунок зафіксований', () => {
   it('підготовка: нова партія — екрана перемоги нема, кампанія «триває»', () => {
     startParty();
     expect($('clock').textContent).toBe('Д1 00:00');
@@ -1255,7 +1303,7 @@ describe('П8.3a: перемога кампанії — 30 діб → екран
 // екіпірувати → бойова дія» — суто через DOM реального застосунку (кнопки
 // панелей, гарячі клавіші M/G, тап-тап бойовища). Детермінізм — сід 42,
 // «норма»; час ганяємо кнопками доби/тіків, бій — фіксованими кліками.
-describe('П11.6: критичний флоу «дослідити → виробити → екіпірувати → бойова дія» (ADR-0013)', () => {
+describePage('П11.6: критичний флоу «дослідити → виробити → екіпірувати → бойова дія» (ADR-0013)', () => {
   const key = (code: string): void => {
     document.dispatchEvent(new KeyboardEvent('keydown', { code, bubbles: true }));
   };
@@ -1368,7 +1416,7 @@ describe('П11.6: критичний флоу «дослідити → виро�
   });
 });
 
-describe('П12.4: вкладки статус-колонки «Загін»/«База»/«Система» (ADR-0065)', () => {
+describePage('П12.4: вкладки статус-колонки «Загін»/«База»/«Система» (ADR-0065)', () => {
   const colPanels = (): HTMLElement[] => Array.from(document.querySelectorAll('#status section.panel[data-tab]'));
   const visible = (p: HTMLElement): boolean => !p.classList.contains('hidden');
   const visibleTitles = (): string[] =>
@@ -1449,7 +1497,7 @@ describe('П12.4: вкладки статус-колонки «Загін»/«Б
   });
 });
 
-describe('Т.78: гарматний модуль вручну — панель «Перехоплювач» на сторінці', () => {
+describePage('Т.78: гарматний модуль вручну — панель «Перехоплювач» на сторінці', () => {
   it('модуль зі складу: «Встановити» → рядок стану і запис журналу «Вузол»; «Зняти» → назад на склад', () => {
     startParty();
     btn('btn-save-1').click();
@@ -1470,7 +1518,7 @@ describe('Т.78: гарматний модуль вручну — панель �
   });
 });
 
-describe('П12.5: зрозумілість розвитку — числові ефекти до дії (ADR-0065)', () => {
+describePage('П12.5: зрозумілість розвитку — числові ефекти до дії (ADR-0065)', () => {
   const rowText = (root: string, name: string): string =>
     Array.from(document.querySelectorAll('#' + root + ' .ufo, #' + root + ' .sci-card'))
       .map((r) => r.textContent ?? '')
@@ -1522,7 +1570,7 @@ describe('П12.5: зрозумілість розвитку — числові �
   });
 });
 
-describe('Т.43: «До події», зупинки «+1 доба» і пробіл', () => {
+describePage('Т.43: «До події», зупинки «+1 доба» і пробіл', () => {
   const clock = (): string | null => $('clock').textContent;
   const ufoCount = (): number => document.querySelectorAll('#ufos .ufo').length;
   // повертає defaultPrevented: істина лише для пробілу, що зрушив час
@@ -1745,7 +1793,7 @@ describe('Т.43: «До події», зупинки «+1 доба» і проб
   });
 });
 
-describe('Т.98: гарячі клавіші геосцени D / T / N', () => {
+describePage('Т.98: гарячі клавіші геосцени D / T / N', () => {
   const key = (code: string, target: EventTarget = document): boolean => {
     const ev = new KeyboardEvent('keydown', { code, key: code.slice(3).toLowerCase(), bubbles: true, cancelable: true });
     target.dispatchEvent(ev);
@@ -1836,7 +1884,7 @@ describe('Т.98: гарячі клавіші геосцени D / T / N', () => 
 });
 
 // Т.51: рядок #fighter-last має зникати, коли зонд події (приземлився → ufo_left) вже не в geo.ufos.
-describe('Т.51: переривання перехоплення при приземленні зонда — журнал і панель #fighter-last', () => {
+describePage('Т.51: переривання перехоплення при приземленні зонда — журнал і панель #fighter-last', () => {
   it('сід 42, пресет «норма»: ufo1 виявлено, старт перехоплення, abort (ufo_landed); після ufo_left рядка немає', () => {
     startParty();
     const interceptBtn = (): HTMLButtonElement | null => {
@@ -1885,7 +1933,7 @@ describe('Т.51: переривання перехоплення при приз
 
 // Т.53 (висновок аудиту PR #348, Т.48; план — docs/plans/t53-menu-auto-battle.md, Т.52/PR #352): меню і «Як грати»
 // поверх бою зупиняють авто-бій, як плитка «Стоп» (рішення власника 16.11.2026 «Зупиняти»).
-describe('Т.53: меню і «Як грати» зупиняють авто-бій', () => {
+describePage('Т.53: меню і «Як грати» зупиняють авто-бій', () => {
   const cap = (): string => (document.querySelector('#btn-auto-battle .tb-cap') as HTMLElement | null)?.textContent ?? '';
 
   it('Т.53: клік «Меню» і «?» під час авто-бою зупиняє авто-бій: плитка «Авто», таймерів 0, журнал стоїть', async () => {
@@ -1940,7 +1988,7 @@ describe('Т.53: меню і «Як грати» зупиняють авто-б�
 
 // Т.55 (висновки аудитів PR #353, Т.53; план — docs/plans/t55-tests-after-t53.md): тести тримають перевірку
 // `busy` у `stopAutoForWindow` і зупинку авто-бою на шляху до вікон «Налаштування» та «Незбережені зміни».
-describe('Т.55: тести після Т.53 — меню без авто-бою і вікна з меню', () => {
+describePage('Т.55: тести після Т.53 — меню без авто-бою і вікна з меню', () => {
   const cap = (): string => (document.querySelector('#btn-auto-battle .tb-cap') as HTMLElement | null)?.textContent ?? '';
 
   it('Т.55: «Меню» і «?» у ручному бою не перемальовують бій', () => {
@@ -2014,7 +2062,7 @@ describe('Т.55: тести після Т.53 — меню без авто-бою
 
 // Т.58 (кандидат 54, решта після Т.48; план — docs/plans/t58-after-exit-to-start.md): пояснення невдалого
 // «Продовжити» і вихід з екрана перемоги (рішення власника 17.11.2026).
-describe('Т.58: стартовий екран після невдалого «Продовжити» і вихід з екрана перемоги', () => {
+describePage('Т.58: стартовий екран після невдалого «Продовжити» і вихід з екрана перемоги', () => {
   const hidden = (id: string): boolean => $(id).classList.contains('hidden');
   // нова партія, один тік, сейв у слот 1 — єдиний, отже останній активний.
   // Т.89: партія — першою, бо кнопки слотів з'являються лише в партії (як у Т.86) — тест проходить і поодинці
@@ -2099,7 +2147,7 @@ describe('Т.58: стартовий екран після невдалого «�
 // авто-бій раніше, ніж battle.close, тож зупинку в battle.close на сторінці тримають лише ці тести —
 // кнопки виходу і нової партії клікаються без кліку «Меню»: гравець так не може, зате так видно саму зупинку
 // в battle.close і її зв'язок у src/main.ts (stopAuto: () => autoBattle.stop()).
-describe('Т.64: зупинка авто-бою в battle.close на сторінці', () => {
+describePage('Т.64: зупинка авто-бою в battle.close на сторінці', () => {
   const cap = (): string => (document.querySelector('#btn-auto-battle .tb-cap') as HTMLElement | null)?.textContent ?? '';
   // сід 27, пресет «норма»: місія, авто-бій справді йде (плитка «Стоп», таймер є)
   const launchAuto = async (): Promise<void> => {
@@ -2158,7 +2206,7 @@ describe('Т.64: зупинка авто-бою в battle.close на сторі�
 // Т.66 (кандидат 55, після Т.51; план — docs/plans/t66-fighter-last-mission.md): рядок #fighter-last
 // після перерваного перехоплення (зонд приземлився) зникає, коли місію на цьому зонді виграно, — зонда
 // вже немає в geo.ufos (completeMission), хоча відліт ufo_left так і не настав. Досі це тримав лише тест модуля.
-describe('Т.66: рядок #fighter-last зникає після виграної місії', () => {
+describePage('Т.66: рядок #fighter-last зникає після виграної місії', () => {
   it('Т.66: сід 42, пресет «норма»: перехоплення ufo1 перервано приземленням, місію на ufo1 виграно — рядка немає', async () => {
     startParty();
     // 1. тикаємо, доки не з'явиться активна кнопка перехоплення (запобіжник — 60 кліків), і клікаємо її
@@ -2204,7 +2252,7 @@ describe('Т.66: рядок #fighter-last зникає після виграно
 // Т.69 (кандидат 55, після Т.66; план — docs/plans/t69-fighter-last-lost.md): рядок #fighter-last
 // після перерваного перехоплення (зонд приземлився) лишається, коли місію на цьому зонді програно, — зонд
 // лишається в geo.ufos (completeMission). Виграну місію тримає тест Т.66; евакуйованої зі сторінки не досягти.
-describe('Т.69: рядок #fighter-last лишається після програної місії', () => {
+describePage('Т.69: рядок #fighter-last лишається після програної місії', () => {
   it('Т.69: сід 36, пресет «складний»: перехоплення ufo1 перервано приземленням, місію на ufo1 програно — рядок лишається', async () => {
     startParty('36', 'складний');
     // 1. тикаємо, доки не з'явиться активна кнопка перехоплення (запобіжник — 60 кліків), і клікаємо її
@@ -2244,7 +2292,7 @@ describe('Т.69: рядок #fighter-last лишається після прог
 
 // Т.78 (кандидат 55, після Т.66 і Т.69): рядок #fighter-last лишається після евакуації місії —
 // при outcome 'евакуйовано' completeMission не прибирає зонд з geo.ufos, тому рядок не зникає (на відміну від перемоги, Т.66).
-describe('кандидат 55: рядок #fighter-last лишається після евакуації місії', () => {
+describePage('кандидат 55: рядок #fighter-last лишається після евакуації місії', () => {
   it('кандидат 55: сід 42, пресет «норма»: місія без тіків, евакуація трьох оперативників — рядок лишається', () => {
     startParty('42');
     // 1. кроки 1–2 Т.66: intercept → запуск перехоплення (запобіжник — 60 кліків), потім тики до #fighter-last (10 кліків)
@@ -2293,7 +2341,7 @@ describe('кандидат 55: рядок #fighter-last лишається пі�
 });
 
 // Т.71 (ADR-0075, рішення власника 18.11.2026): вікно підтвердження евакуації останнього оперативника на сторінці.
-describe('Т.71: евакуація на сторінці — плитка, клавіша V і вікно підтвердження', () => {
+describePage('Т.71: евакуація на сторінці — плитка, клавіша V і вікно підтвердження', () => {
   it('Т.71: сід 42, пресет «норма»: загін покидає поле з синіх клітинок; останнього — через вікно, «Скасувати» його лишає', () => {
     const key = (code: string): void => {
       document.dispatchEvent(new KeyboardEvent('keydown', { key: code.slice(3).toLowerCase(), code, bubbles: true }));
@@ -2359,7 +2407,7 @@ describe('Т.71: евакуація на сторінці — плитка, кл
 
 // Т.72 (рішення власника 18.11.2026): разова підказка «Можна евакуюватись» на сторінці —
 // після першого поранення чи смерті оперативника в бою місії, один раз за партію.
-describe('Т.72: підказка «Можна евакуюватись» на сторінці', () => {
+describePage('Т.72: підказка «Можна евакуюватись» на сторінці', () => {
   it('Т.72: сід 42, пресет «норма»: до першого поранення оперативника підказки немає, після — рівно одна, у вкладці «Бій»', () => {
     const HINT =
       'Підказка: оперативника можна евакуювати із зони висадки — плитка «Евакуація» або клавіша V, 2 AP. Якщо евакуювати всіх, хто лишився на полі, премії за місію немає.';
@@ -2381,7 +2429,7 @@ describe('Т.72: підказка «Можна евакуюватись» на �
 // Т.73 (кандидат 77, рішення власника 19.11.2026): вікна поверх бою — «Меню», «Налаштування», «Як грати»,
 // «Незбережені зміни». Під вікном клавіші й плитки бою не діють; фокус — на безпечній кнопці вікна;
 // Esc закриває вікно; після закриття фокус — на кнопці топбару, що відкрила вікно.
-describe('Т.73: вікна поверх бою — клавіші, плитки, фокус і Esc', () => {
+describePage('Т.73: вікна поверх бою — клавіші, плитки, фокус і Esc', () => {
   const press = (code: string, key: string): void => {
     document.dispatchEvent(new KeyboardEvent('keydown', { key, code, bubbles: true }));
   };
@@ -2519,7 +2567,7 @@ describe('Т.73: вікна поверх бою — клавіші, плитки
 });
 
 // Т.75 (хвіст Т.73, межа (а) звіту): пастка фокусу — Tab і Shift+Tab не виводять фокус з відкритого вікна
-describe('Т.75: пастка фокусу у вікнах поверх гри', () => {
+describePage('Т.75: пастка фокусу у вікнах поверх гри', () => {
   // jsdom сам фокус по Tab не рухає: на краях кола подію треба скасувати, інакше браузер зсуне фокус далі
   const tab = (shift = false): void => {
     const ev = new KeyboardEvent('keydown', { key: 'Tab', code: 'Tab', shiftKey: shift, bubbles: true, cancelable: true });
@@ -2676,7 +2724,7 @@ describe('Т.75: пастка фокусу у вікнах поверх гри',
 // Т.99 (кандидат 46): зупинки часу на сторінці — наука, «Кузня», ремонт, банкрутство посеред прогону,
 // відліт зонда (не подія зупинки — рішення власника) і gameOver у рядку «Наступний крок».
 // Стан — правкою сейва в слоті 1 (як у тесті одужання Т.43); кожна зупинка — проти контролю без події.
-describe('Т.99: зупинки «До події» на сторінці і банкрутство посеред прогону', () => {
+describePage('Т.99: зупинки «До події» на сторінці і банкрутство посеред прогону', () => {
   const clock = (): string | null => $('clock').textContent;
   const minutes = (c: string | null): number => {
     const m = /^Д(\d+) (\d\d):(\d\d)$/.exec(c ?? '')!;
@@ -2834,7 +2882,8 @@ describe('Т.99: зупинки «До події» на сторінці і б�
     expect(clock()).toBe('Д2 00:00');
     expect($('money').textContent).toBe('БАНКРУТ');
     for (let i = 0; i < 9; i++) btn('btn-tick').onclick!(new MouseEvent('click') as PointerEvent);
-    expect(clock()).toBe('Д2 04:30');
+    // Т.106: якщо тут не Д2 04:30 — обробник «+1 тік» уже перевіряє gameOver, тест переробити (див. коментар над тестом)
+    expect(clock(), 'обхід disabled «+1 тік» не просунув час').toBe('Д2 04:30');
     expect($('ready').textContent).toBe('6/6');
     expect($('money').textContent).toBe('БАНКРУТ');
     expect($('next-step').classList.contains('hidden')).toBe(true);
