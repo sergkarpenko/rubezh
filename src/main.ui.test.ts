@@ -2711,8 +2711,14 @@ describe('Т.99: зупинки «До події» на сторінці і б�
       scientists(s, 1);
       s.research.active = [{ id: 'armor', invested: 13 }]; // 14 точок — бракує однієї
     };
-    load(base); // контроль: без протоколу о Д2 00:00 зупинки немає
+    // контроль: той самий техномант, зарплата і точки о Д2 00:00, але протоколу бракує двох точок — зупинки немає
+    load(base, (s) => {
+      almost(s);
+      s.research.active[0].invested = 12;
+    });
     btn('btn-event').click();
+    expect(logText()).toContain('⚑ Потік: +1 (доба 1)');
+    expect(logText()).not.toContain('Протокол завершено');
     expect(minutes(clock())).toBeGreaterThan(minutes('Д2 00:00'));
     load(base, almost);
     expect(logText()).not.toContain('Протокол завершено');
@@ -2728,6 +2734,7 @@ describe('Т.99: зупинки «До події» на сторінці і б�
     startParty();
     const base = saveBase(); // Д1 00:00; перша подія без правки — виявлення зонда о Д1 09:30 (тест Т.43)
     const order = (s: S): void => {
+      s.research.completed = ['medkit']; // замовити можна лише досліджений предмет (orderItem)
       s.workshop.queue = [{ id: 'medkit', ticksLeft: 3 }];
     };
     load(base, order);
@@ -2803,6 +2810,8 @@ describe('Т.99: зупинки «До події» на сторінці і б�
 
   // gameOver лишається і тоді, коли умова банкрутства вже не виконується (nextStep сам перевіряє лише isBankrupt):
   // тіки в обхід disabled повертають оперативників із лазарету — рядок прихований саме через gameOver.
+  // Обхід тримається на тому, що обробник «+1 тік» (main.ts) gameOver не перевіряє: якщо таку перевірку додадуть,
+  // тест треба переробити (довести до гравця стан «gameOver, але не isBankrupt» іншим шляхом).
   it('після банкрутства рядок «Наступний крок» прихований, навіть коли боєготові повернулись', () => {
     startParty();
     for (let i = 0; i < 4; i++) btn('btn-event').click(); // Д1 13:30
