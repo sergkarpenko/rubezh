@@ -331,9 +331,14 @@ test('сценарій приймання ADR-0030: партія → місія 
     expect(narrow.row, 'найдовша порада на 920 px — не в одному ряду з «Геосцена»').toBe(true);
     expect(narrow.fits, 'найдовшу пораду обрізано на 920 px').toBe(true);
     expect(narrow.headTail, 'заголовок «Геосцени» вищий за назву на 920 px').toBeLessThanOrEqual(9);
+    // межа @media: 940 px — префікс сховано, 941 px — видно (аудит Vibe PR #412)
+    const prefixAt = async (width: number): Promise<string> => {
+      await page.setViewportSize({ width, height: 800 });
+      return page.evaluate(() => getComputedStyle(document.querySelector('#next-step .ns-prefix')!).display);
+    };
+    expect(await prefixAt(940), 'префікс «Наступний крок:» видно на 940 px').toBe('none');
+    expect(await prefixAt(941), 'префікс «Наступний крок:» сховано на 941 px').not.toBe('none');
     await page.setViewportSize({ width: 1440, height: 900 });
-    const wide = await page.evaluate(() => getComputedStyle(document.querySelector('#next-step .ns-prefix')!).display);
-    expect(wide, 'префікс «Наступний крок:» сховано на 1440 px').not.toBe('none');
   });
 
   await test.step('Т.47: «Продовжити» після виходу з бою — сейв завантажено, старого бою немає', async () => {

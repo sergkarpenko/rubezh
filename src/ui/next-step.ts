@@ -99,14 +99,17 @@ export function renderNextStep(btn: HTMLElement, text: string | null): void {
   }
   btn.setAttribute('aria-label', text);
   const hasPrefix = text.startsWith(NEXT_STEP_PREFIX);
-  const prefix = document.createElement('span');
-  prefix.className = 'ns-prefix';
-  prefix.textContent = hasPrefix ? NEXT_STEP_PREFIX : '';
   const rest = document.createElement('span');
   rest.className = 'ns-rest';
   rest.textContent = hasPrefix ? text.slice(NEXT_STEP_PREFIX.length) : text;
-  if (hasPrefix) btn.append(prefix, rest);
-  else btn.append(rest);
+  if (!hasPrefix) {
+    btn.append(rest);
+    return;
+  }
+  const prefix = document.createElement('span');
+  prefix.className = 'ns-prefix';
+  prefix.textContent = NEXT_STEP_PREFIX;
+  btn.append(prefix, rest);
 }
 
 // Перша кнопка «спорядити» в ростері: оперативник без предмета, який є на складі.
