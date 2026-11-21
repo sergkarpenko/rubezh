@@ -172,7 +172,7 @@ test('сценарій приймання ADR-0030: партія → місія 
     await page.locator('#status-tab-squad').click();
   });
 
-  // T.39 «Зрозуміла наука»: картка протоколу (назва, плашка, «Ціна», «Час ≈»), смуга кроків
+  // T.39 «Зрозуміла наука»: картка протоколу (назва, плашка, «Час ≈»; Т.100 — без «Ціна», згорнуті картки), смуга кроків
   // («3. Видати» перемикає на «Загін»), лічильник на вкладці «Загін», розмір «Як грати» на 1366 × 768 і 1024 × 768.
   await test.step('T.39: панель «Дослідження», крок «3. Видати», довідка на 1366 × 768', async () => {
     await page.locator('#status-tab-base').click();
@@ -181,8 +181,16 @@ test('сценарій приймання ADR-0030: партія → місія 
     const armor = cards.first();
     await expect(armor.locator('.sci-name')).toHaveText('Композитна броня');
     await expect(armor.locator('.sci-badge')).toHaveText('потрібен техномант'); // техномантів 0, кредитів вистачає
-    await expect(armor).toContainText('Ціна 96 кр.');
-    await expect(armor).toContainText('Час ≈ 14 діб з одним техномантом, 7 — з двома'); // K = 0
+    await expect(armor).not.toContainText('Ціна'); // Т.100: ціна — лише на кнопці
+    await expect(armor).toContainText('Час ≈ 14 діб, з двома — 7'); // K = 0 (Т.100, варіант В)
+    // Т.100: картки з невиконаною передумовою згорнуті до назви з плашкою; панель на новій партії
+    // локально 1048 px на 1366 × 768 (до кроку 1516; docs/reports/t100/measure.mjs); межа з запасом на шрифти CI
+    await expect(page.locator('#research .sci-card.folded')).toHaveCount(2);
+    await expect(page.locator('#research .sci-card.folded button')).toHaveCount(0);
+    const researchH = await page.evaluate(() =>
+      Math.round(document.getElementById('research')!.closest('section')!.getBoundingClientRect().height)
+    );
+    expect(researchH, 'висота панелі «Дослідження»').toBeLessThanOrEqual(1200);
     await expect(armor.locator('#btn-start-0')).toHaveText('Дослідити — 96 кр.');
     await expect(page.locator('#btn-hire-scientist')).toHaveText('Вербувати техноманта — 100 кр.');
     // смуга кроків: три кнопки; «3. Видати» перемикає вкладку на «Загін»

@@ -12,6 +12,11 @@
 // протоколу з плашкою стану, ціною «Ціна … кр.» і часом «Час ≈ …» простими
 // словами, кнопка «Замовити в «Кузні»» на картці завершеного протоколу-предмета.
 // Ядро src/core не змінюється.
+//
+// Т.100 (кандидат 22, варіант В власника): коротша панель — у картці «не розпочато»
+// немає рядка «Ціна» (ціна є на кнопці), «Час» коротший; картка з невиконаною
+// передумовою згорнута до назви з плашкою «після «…»»; у завершеній немає рядка
+// ефекту — він у підказці картки (title).
 
 import {
   HIRE_SCIENTIST_PRICE,
@@ -81,14 +86,11 @@ export function createResearchPanel(deps: ResearchPanelDeps): ResearchPanel {
   }
 
   // T.39: «Час ≈ …» простими словами. K — техномантів, P — очок протоколу.
+  // Т.100 (варіант В): K ≥ 1 — «Час ≈ D діб» з наявним штатом; K = 0 — «Час ≈ P діб, з двома — ⌈P/2⌉»
+  // (друге число без слова «діб», як у тексті Т.39).
   function timeTextNotStarted(points: number, scientists: number): string {
-    if (scientists >= 1) {
-      const d = Math.ceil(points / scientists);
-      // K = 1 — «з вашим техномантом»; K ≥ 2 — орудний відмінок «з вашими N техномантами»
-      return 'Час ≈ ' + daysText(d) + (scientists === 1 ? ' з вашим техномантом' : ' з вашими ' + scientists + ' техномантами');
-    }
-    // K = 0 — затверджений текст плану: друге число без слова «діб»
-    return 'Час ≈ ' + daysText(points) + ' з одним техномантом, ' + Math.ceil(points / 2) + ' — з двома';
+    if (scientists >= 1) return 'Час ≈ ' + daysText(Math.ceil(points / scientists));
+    return 'Час ≈ ' + daysText(points) + ', з двома — ' + Math.ceil(points / 2);
   }
 
   function renderResearchPanel(): void {
@@ -211,10 +213,24 @@ export function createResearchPanel(deps: ResearchPanelDeps): ResearchPanel {
       bs.textContent = badge.text;
       top.append(name, bs);
       card.appendChild(top);
-      const eff = document.createElement('div');
-      eff.className = 'sci-eff';
-      eff.textContent = plainProjectEffect(def.id, ref);
-      card.appendChild(eff);
+      const effText = plainProjectEffect(def.id, ref);
+      // Т.100: невиконана передумова — картка згорнута до назви з плашкою «після «…»»
+      // (ефект, ціна і кнопка з'являться, коли передумову завершено)
+      const folded = !done && !active && def.prerequisite !== undefined && !r.completed.includes(def.prerequisite);
+      if (folded) {
+        card.classList.add('folded');
+        card.title = effText;
+        catalog.appendChild(card);
+        continue;
+      }
+      if (done) {
+        card.title = effText; // Т.100: у завершеній картці ефект — лише в підказці
+      } else {
+        const eff = document.createElement('div');
+        eff.className = 'sci-eff';
+        eff.textContent = effText;
+        card.appendChild(eff);
+      }
 
       if (done) {
         // T.39: завершений протокол-предмет (усі, крім «Розширення лабораторії»):
@@ -284,16 +300,13 @@ export function createResearchPanel(deps: ResearchPanelDeps): ResearchPanel {
         }
         card.appendChild(row);
       } else {
-        // не розпочато: «Ціна C кр.», «Час ≈ …», кнопка на всю ширину;
+        // не розпочато: «Час ≈ …», кнопка на всю ширину з ціною (Т.100: окремого рядка «Ціна» немає);
         // активна тільки коли reason null (ті самі правила, що в ядрі startProject)
         const price = sciencePrice(def.cost, preset);
-        const cRow = document.createElement('div');
-        cRow.className = 'sci-row';
-        cRow.innerHTML = 'Ціна <b>' + price + ' кр.</b>';
         const tRow = document.createElement('div');
         tRow.className = 'sci-row';
         tRow.textContent = timeTextNotStarted(def.points, scientists);
-        card.append(cRow, tRow);
+        card.append(tRow);
         const start = document.createElement('button');
         start.id = 'btn-start-' + i;
         start.className = 'research wide'; // не 'mission': той клас — семантика запуску місії
