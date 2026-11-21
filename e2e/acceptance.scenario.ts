@@ -789,7 +789,7 @@ test('Т.61: екран перемоги і рядок-пояснення ста
     await expect(page.locator('#campaign-victory')).toBeHidden();
   });
 
-  await test.step('невдале «Продовжити»: рядок-пояснення над кнопками меню, кольором помилки на непрозорій підкладці', async () => {
+  await test.step('невдале «Продовжити»: рядок-пояснення — банер угорі екрана (Т.93), нічого не накриває, кольором помилки на непрозорій підкладці', async () => {
     await expect(page.locator('#start-note')).toBeHidden();
     await page.evaluate((s) => localStorage.setItem('rubezh.save.1', s), JSON.stringify(bad));
     await page.locator('#btn-start-continue').click();
@@ -803,9 +803,12 @@ test('Т.61: екран перемоги і рядок-пояснення ста
       const m = await t61Look(page, 'start-note');
       const first = await t61Look(page, 'btn-start-new');
       t61Visible(m, label + ': рядок-пояснення');
-      const gap = first.top - m.bottom;
-      expect(gap, label + ': рядок не над першою кнопкою меню або далі за проміжок меню').toBeGreaterThanOrEqual(0);
-      expect(gap, label + ': рядок не над першою кнопкою меню або далі за проміжок меню').toBeLessThanOrEqual(12);
+      // Т.93 (рішення власника 21.11.2026): банер угорі екрана — над логотипом, не накриває ні його, ні підпис, ні меню
+      expect(m.top, label + ': рядок-пояснення не вгорі екрана').toBeLessThanOrEqual(24);
+      for (const sel of ['#start-logo', '.start-tagline', '#btn-start-new']) {
+        const top = await page.locator(sel).evaluate((e) => e.getBoundingClientRect().top);
+        expect(top, label + ': рядок-пояснення накриває ' + sel).toBeGreaterThanOrEqual(m.bottom);
+      }
       expect(Math.abs(m.w - first.w), label + ': рядок вужчий чи ширший за кнопки меню').toBeLessThanOrEqual(1);
       const [r, g, b] = m.color as [number, number, number];
       expect(r - Math.max(g, b), label + ': колір тексту — не колір помилки').toBeGreaterThanOrEqual(80);

@@ -57,12 +57,14 @@ export interface Screens {
 function startScreenHtml(version: string): string {
   return (
     '<div class="start-box">' +
+    // Т.93 (рішення власника 21.11.2026): пояснення невдалого «Продовжити» — банер угорі екрана,
+    // поза стеком меню: над кнопками воно накривало підпис під логотипом (кандидат 63 (а))
+    '<p class="start-note hidden" id="start-note" role="status"></p>' +
     '<div class="start-hero">' +
     '<h1 class="start-logo" id="start-logo"><span class="start-logo-text">РУБІЖ</span></h1>' +
     '<p class="start-tagline">Остання лінія оборони людства проти Аномалії «Розрив»</p>' +
     '</div>' +
     '<div class="start-menu">' +
-    '<p class="start-note hidden" id="start-note"></p>' +
     '<button id="btn-start-new">Нова партія</button>' +
     '<button id="btn-start-continue">Продовжити</button>' +
     '<button id="btn-start-settings" title="Налаштування гри — зберігаються у браузері">Налаштування</button>' +
@@ -205,11 +207,12 @@ export function createScreens(deps: ScreensDeps): Screens {
     hideDialogs();
   }
 
-  // Т.58: рядок-пояснення над меню стартового екрана; порожній текст — сховати
+  // Т.58: рядок-пояснення стартового екрана (з Т.93 — банер угорі); порожній текст — сховати
   function showNote(text: string): void {
     const note = el('start-note');
-    note.textContent = text;
+    // Т.93: спершу показати, потім текст — live-регіон role="status" уже в дереві доступності, і зчитувач оголосить зміну
     note.classList.toggle('hidden', text === '');
+    note.textContent = text;
   }
 
   function hideDialogs(): void {
