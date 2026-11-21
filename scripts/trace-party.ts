@@ -4,7 +4,7 @@
 // кожну місію та в якому стані настало банкрутство. Ядро не змінюється;
 // `--verify` звіряє кожну партію із simulateParty (результат, тіки, число місій).
 // Поза CI, як sim-p11.8.ts:
-//   npx -y vite-node scripts/trace-party.ts -- --policy science --seeds 480
+//   node scripts/run-ts.mjs scripts/trace-party.ts -- --policy science --seeds 480
 //   … --variant guard+repairfix    — варіанти політики бота (константи гри ті самі)
 //   … --no-bankrupt                — грати далі після банкрутства (контрфакт)
 //   … --out dist/trace.json        — записи партій у файл

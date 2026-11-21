@@ -2,7 +2,7 @@
 // У git з Т.6b (2026-11-10). Під час П15.3 файл був untracked: він виживає під
 // `git stash`, тож той самий скрипт виконувався на гілці та на стані ≡ main —
 // порівняння байт-у-байт (docs/reports/p15.3-probe.md).
-// Запуск: npx vite-node scripts/probe-p15.3.ts --out dist/probe-branch.json
+// Запуск: node scripts/run-ts.mjs scripts/probe-p15.3.ts --out dist/probe-branch.json
 // Методика: simulateParty (сіди × 3 пресети, повний горизонт 30 діб) +
 // дзеркальний replay циклу simulateParty (party-bot.ts) з інлайновим кроком
 // місії — доступ до бойових логів для формальної перевірки «жодного evac_unit»;
