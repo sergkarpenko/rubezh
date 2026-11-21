@@ -741,6 +741,44 @@ const t61Visible = (b: Awaited<ReturnType<typeof t61Look>>, label: string): void
   expect(b.fits, label + ': текст обрізано').toBe(true);
 };
 
+// Т.94 (рішення власника 21.11.2026, варіант А): малі й низькі вікна — стовпчик (портрет) або дві колонки
+// (альбомні до 480 px); перетин рамок (і по висоті, і по ширині) — накриття
+const T94_VIEWPORTS = [
+  { width: 320, height: 568 },
+  { width: 375, height: 667 },
+  { width: 568, height: 320 },
+  { width: 640, height: 360 },
+  { width: 667, height: 375 },
+];
+const t94Layout = async (page: Page, label: string): Promise<void> => {
+  const m = await page.evaluate(() => {
+    const sels = ['#start-note', '#start-logo', '.start-tagline', '#start-screen .start-menu', '.start-version'];
+    const boxes = sels
+      .map((sel) => [sel, document.querySelector(sel)] as const)
+      .filter(([, e]) => e !== null && !e.classList.contains('hidden'))
+      .map(([sel, e]) => {
+        const r = e!.getBoundingClientRect();
+        return { sel, t: r.top, b: r.bottom, l: r.left, r: r.right };
+      });
+    const sc = document.getElementById('start-screen')!;
+    return { boxes, w: innerWidth, h: innerHeight, scroll: sc.scrollHeight - sc.clientHeight };
+  });
+  expect(m.scroll, label + ': стартовий екран прокручується').toBeLessThanOrEqual(1);
+  for (const x of m.boxes) {
+    expect(x.t >= 0 && x.l >= 0 && x.b <= m.h && x.r <= m.w, label + ': ' + x.sel + ' за краєм вікна').toBe(true);
+  }
+  for (const [i, a] of m.boxes.entries())
+    for (const b of m.boxes.slice(i + 1)) {
+      const cross = Math.min(a.b, b.b) - Math.max(a.t, b.t) > 0 && Math.min(a.r, b.r) - Math.max(a.l, b.l) > 0;
+      expect(cross, label + ': ' + a.sel + ' накриває ' + b.sel).toBe(false);
+    }
+  for (const id of ['btn-start-new', 'btn-start-continue', 'btn-start-settings', 'btn-start-help']) {
+    const b = await t61Look(page, id);
+    expect(b.onTop, label + ': #' + id + ' перекрито').toBe(true);
+    expect(b.h, label + ': #' + id + ' нижча за тач-ціль 44 px').toBeGreaterThanOrEqual(44);
+  }
+};
+
 test('Т.61: екран перемоги і рядок-пояснення стартового екрана — видно на трьох розмірах вікна', async ({ page }) => {
   const errors = watchErrors(page);
   await page.goto('./');
@@ -789,6 +827,14 @@ test('Т.61: екран перемоги і рядок-пояснення ста
     await expect(page.locator('#campaign-victory')).toBeHidden();
   });
 
+  await test.step('Т.94: малі й низькі вікна без банера — нічого не накрито, усе у вікні, без прокрутки', async () => {
+    for (const size of T94_VIEWPORTS) {
+      await page.setViewportSize(size);
+      await t94Layout(page, 'Т.94 ' + size.width + ' × ' + size.height);
+    }
+    await page.setViewportSize({ width: 1440, height: 900 });
+  });
+
   await test.step('невдале «Продовжити»: рядок-пояснення — банер угорі екрана (Т.93), нічого не накриває, кольором помилки на непрозорій підкладці', async () => {
     await expect(page.locator('#start-note')).toBeHidden();
     await page.evaluate((s) => localStorage.setItem('rubezh.save.1', s), JSON.stringify(bad));
@@ -813,6 +859,14 @@ test('Т.61: екран перемоги і рядок-пояснення ста
       const [r, g, b] = m.color as [number, number, number];
       expect(r - Math.max(g, b), label + ': колір тексту — не колір помилки').toBeGreaterThanOrEqual(80);
       expect(m.background[3] ?? 1, label + ': підкладка рядка прозора').toBeGreaterThanOrEqual(0.9);
+    }
+    for (const size of T94_VIEWPORTS) {
+      await page.setViewportSize(size);
+      const label = 'Т.94 з банером ' + size.width + ' × ' + size.height;
+      await t94Layout(page, label);
+      const m = await t61Look(page, 'start-note');
+      t61Visible(m, label + ': рядок-пояснення');
+      expect(m.top, label + ': рядок-пояснення не вгорі екрана').toBeLessThanOrEqual(24);
     }
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.evaluate((s) => localStorage.setItem('rubezh.save.1', s), good);
