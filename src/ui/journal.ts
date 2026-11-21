@@ -353,8 +353,8 @@ export function workshopEventText(e: WorkshopEvent): { text: string; cls: string
     case 'equipment_returned':
       return { text: '⚑ Кузня: спорядження ' + e.soldierId + ' повернуто на склад (' + e.items.map(itemName).join(', ') + ')', cls: '' };
     case 'gun_module_installed':
-      return { text: '⚑ Кузня: гарматний модуль перехоплювача на перехоплювачі', cls: '' };
+      return { text: '⚑ Кузня: гарматний модуль встановлено на перехоплювач', cls: '' };
     case 'gun_module_removed':
-      return { text: '⚑ Кузня: гарматний модуль перехоплювача знято на склад', cls: '' };
+      return { text: '⚑ Кузня: гарматний модуль знято з перехоплювача → склад', cls: '' };
   }
 }

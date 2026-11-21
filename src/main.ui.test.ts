@@ -1462,10 +1462,10 @@ describe('Т.78: гарматний модуль вручну — панель �
     expect($('gun-module-state').textContent).toBe('Гарматний модуль: встановлено');
     expect(document.getElementById('btn-gun-install')).toBeNull();
     const texts = (): string[] => Array.from(document.querySelectorAll('#log li[data-cat="base"]')).map((li) => li.textContent ?? '');
-    expect(texts().some((t) => t.includes('гарматний модуль перехоплювача на перехоплювачі'))).toBe(true);
+    expect(texts().some((t) => t === '⚑ Кузня: гарматний модуль встановлено на перехоплювач')).toBe(true);
     btn('btn-gun-remove').click();
     expect(document.getElementById('gun-module-state')).toBeNull();
-    expect(texts().some((t) => t.includes('гарматний модуль перехоплювача знято на склад'))).toBe(true);
+    expect(texts().some((t) => t === '⚑ Кузня: гарматний модуль знято з перехоплювача → склад')).toBe(true);
     expect(document.getElementById('btn-gun-install')).not.toBeNull(); // модуль знову на складі
   });
 });
