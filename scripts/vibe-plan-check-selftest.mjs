@@ -14,7 +14,10 @@ let failed = 0;
 let total = 0;
 const ok = (name, cond) => {
   total++;
-  if (!cond) console.log(`ПРОВАЛ: ${name}`) || failed++;
+  if (!cond) {
+    console.log(`ПРОВАЛ: ${name}`);
+    failed++;
+  }
 };
 const eq = (name, a, b) => ok(`${name}: є «${a}», очікувалось «${b}»`, String(a) === String(b));
 

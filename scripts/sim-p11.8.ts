@@ -25,7 +25,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { DEFAULT_PARTY_POLICY, MISSION_SQUAD_SIZE, SCIENCE_POLICY, simulateParty, type PartySimResult } from '../src/core/party-bot';
 import { VICTORY_DAY, type DifficultyPreset } from '../src/core/campaign';
-import type { ProjectId } from '../src/core/research';
+import { PROJECTS, projectName } from '../src/core/research';
 
 const ALL_PRESETS: DifficultyPreset[] = ['легкий', 'норма', 'складний'];
 const ALL_POLICIES = { default: DEFAULT_PARTY_POLICY, science: SCIENCE_POLICY } as const;
@@ -194,13 +194,15 @@ for (const preset of PRESETS) {
   if (!rs) continue;
   out.push(`## Завершені проєкти, «${preset}» (політика science, ${rs.length} партій)`);
   out.push('');
-  const ids: ProjectId[] = ['легка броня', 'оптичний приціл', 'аптечка', 'розширення лабораторії', 'осколкова граната', 'гарматний модуль'];
+  // Т.102: id — з каталогу ядра (раніше тут були назви на кшталт «легка броня», які
+  // після перейменування на 'armor'… не збігались, і таблиця тихо лишалась нульовою).
+  const ids = PROJECTS.map((p) => p.id);
   out.push('| Проєкт | Партій, що завершили | Середній день завершення |');
   out.push('| --- | --- | --- |');
   for (const id of ids) {
     const done = rs.filter((r) => r.completedProjects.includes(id));
     // день завершення — із кривої штату не витягнути; рахуємо по завершеним до кінця партії
-    out.push(`| ${id} | ${done.length} (${round1((100 * done.length) / rs.length)}%) | — |`);
+    out.push(`| ${projectName(id)} | ${done.length} (${round1((100 * done.length) / rs.length)}%) | — |`);
   }
   out.push('');
 }
@@ -209,7 +211,7 @@ for (const preset of PRESETS) {
 out.push('## Крива грошей (середні наприкінці доби)');
 out.push('');
 out.push(`| Доба |${POLICIES.flatMap((p) => PRESETS.map((x) => ` ${p}/${x} |`)).join('')}`);
-out.push(`| --- |${POLICIES.flatMap((p) => PRESETS.map(() => ' --- |')).join('')}`);
+out.push(`| --- |${POLICIES.flatMap(() => PRESETS.map(() => ' --- |')).join('')}`);
 for (const day of [5, 10, 15, 20, 25, 30]) {
   out.push(
     `| Д${day} |${POLICIES.flatMap((p) => PRESETS.map((x) => ` ${curveAt(byCell.get(`${p}/${x}`)!, (r) => r.moneyByDay, day)} |`)).join('')}`

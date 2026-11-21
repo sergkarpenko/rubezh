@@ -5,7 +5,7 @@
 **Мова:** Ukrainian (коментарі, помилки, коміти)  
 **Контекст:** проект "Рубіж" — AI-native SDLC
 
-**Оновлення:** Додано чіткий розподіл ролей Vibe Work та Vibe Code (ADR-0042, ADR-0043, ADR-0044, ADR-0045-0048); 2026-11-14 — тег кроку ставить workflow (ADR-0093), PR класу `auto` (ADR-0094), звірка застарілих рядків (Т.36); 2026-11-15 — довідники агентів у `docs/agents/` (ADR-0096), два аудитори PR постійно (ADR-0097), контекст аудитора Mistral (ADR-0098), самоперевірка аудитора окремим файлом (ADR-0099); 2026-11-19 — схему «Vibe Code — виконавець за планом Claude» згорнуто, задачі для Vibe — issue з міткою `vibe` (ADR-0100); 2026-11-20 — режим Issues закрито, Mistral — лише аудитор PR (ADR-0101); проба аудиту через Vibe CLI в CI — workflow `vibe-audit` (ADR-0102); `mistral-audit` — на ключі Vibe (ADR-0103); контрольна точка проби: `mistral-audit` вимкнено, другий аудитор PR — `vibe-audit`, розділи про ролі Vibe Work / Vibe Code переписано під фактичну схему (ADR-0104); відповідь `vibe-audit` без блоку JSON — повтор «лише блок JSON» у тій самій сесії (ADR-0105)
+**Оновлення:** Додано чіткий розподіл ролей Vibe Work та Vibe Code (ADR-0042, ADR-0043, ADR-0044, ADR-0045-0048); 2026-11-14 — тег кроку ставить workflow (ADR-0093), PR класу `auto` (ADR-0094), звірка застарілих рядків (Т.36); 2026-11-15 — довідники агентів у `docs/agents/` (ADR-0096), два аудитори PR постійно (ADR-0097), контекст аудитора Mistral (ADR-0098), самоперевірка аудитора окремим файлом (ADR-0099); 2026-11-19 — схему «Vibe Code — виконавець за планом Claude» згорнуто, задачі для Vibe — issue з міткою `vibe` (ADR-0100); 2026-11-20 — режим Issues закрито, Mistral — лише аудитор PR (ADR-0101); проба аудиту через Vibe CLI в CI — workflow `vibe-audit` (ADR-0102); `mistral-audit` — на ключі Vibe (ADR-0103); контрольна точка проби: `mistral-audit` вимкнено, другий аудитор PR — `vibe-audit`, розділи про ролі Vibe Work / Vibe Code переписано під фактичну схему (ADR-0104); відповідь `vibe-audit` без блоку JSON — повтор «лише блок JSON» у тій самій сесії (ADR-0105); 2026-11-21 — `scripts/` під `tsc` і ESLint (ADR-0106)
 
 ---
 
@@ -178,7 +178,9 @@ npm test
 npx tsc --noEmit
 # Ядро без DOM (ADR-0002/0079): src/core компілюється без lib.dom
 npx tsc --noEmit -p tsconfig.core.json
-# Лінт, зокрема правила ядра (ADR-0079): Math.random/годинник/імпорти поза src/core
+# Скрипти scripts/*.ts з типами Node (ADR-0106)
+npx tsc --noEmit -p tsconfig.scripts.json
+# Лінт (src і scripts, ADR-0106), зокрема правила ядра (ADR-0079): Math.random/годинник/імпорти поза src/core
 npm run lint
 # typedoc = генерація довідки API (ADR-0016/0019)
 npm run docs
@@ -355,6 +357,7 @@ git ls-remote --tags https://github.com/sergkarpenko/rubezh.git iter-X.Y
 | ADR-0103 | Аудитор `mistral-audit` — на ключі Vibe: джоба бере секрет `MISTRAL_VIBE_API_KEY` (оплата з плану Vibe, а не з гаманця API) тією самою змінною `MISTRAL_API_KEY`; скрипт, модель і контекст без змін; старий секрет `MISTRAL_API_KEY` лишається, видалення — за рішенням власника (доповнює ADR-0095/0097/0098/0102/0018; Т.84) | accepted | 2026-11-20 |
 | ADR-0104 | Контрольна точка проби Vibe CLI (ADR-0102 п. 8; за 5 PR унікальних підтверджених знахідок: `vibe-audit` — 6, `mistral-audit` — 0): лишається `vibe-audit`, workflow `mistral-audit` видалено, скрипти `scripts/mistral-audit*.mjs` заморожено; з `vibe-audit` прибрано прямий виклик API; розділи `AGENTS.md` про ролі Vibe Work / Vibe Code переписано під фактичну схему (частково Supersedes: ADR-0097, ADR-0095 п. 1, ADR-0099 п. 2, ADR-0101 п. 3, ADR-0102 п. 3, ADR-0103 п. 1; доповнює ADR-0102 п. 8, ADR-0103 п. 5, ADR-0100/0101/0042/0018; Т.87) | accepted | 2026-11-20 |
 | ADR-0105 | `vibe-audit`: стабільний формат відповіді — відповідь без блоку JSON (або зупинка на ліміті) дає один повтор «лише блок JSON» у тій самій сесії (`vibe --resume <session_id>` з `export.json`, межі 2 ходи, $0,5, 300 с, файли в `retry/`); `--output json` відхилено — це обгортка виводу; ручний `probe` без `VIBE_OUTPUT_DIR` не падає; workflow без змін (доповнює ADR-0102/0104/0018; Т.88) | accepted | 2026-11-20 |
+| ADR-0106 | `scripts/` під `tsc` і ESLint: `npm run lint` — `eslint src scripts`; `tsconfig.scripts.json` (`types: ["node"]`, `scripts/*.ts`) і залежність `@types/node` (ADR-0012); крок `npx tsc --noEmit -p tsconfig.scripts.json` у джобі `test`; помилки виправлено — у `sim-p11.8.ts` таблиця завершених проєктів шукала старі id (доповнює ADR-0076/0079/0012/0018/0015; Т.102) | accepted | 2026-11-21 |
 
 **Нове рішення?** Створювати новий ADR з полем Supersedes.
 
