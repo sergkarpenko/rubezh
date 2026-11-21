@@ -748,6 +748,8 @@ const T94_VIEWPORTS = [
   { width: 800, height: 600 },
   { width: 568, height: 270 },
   { width: 320, height: 568 },
+  { width: 320, height: 480 }, // Т.96: з банером тут була прокрутка 32 px
+  { width: 320, height: 512 },
   { width: 375, height: 667 },
   { width: 568, height: 320 },
   { width: 640, height: 360 },
