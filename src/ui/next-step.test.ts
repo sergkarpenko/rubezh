@@ -4,10 +4,10 @@
 // 15.11.2026; стан готується правкою партії createParty(42).
 
 import { describe, expect, it, vi } from 'vitest';
-import type { Ufo, UfoStatus } from '../core/geo';
+import { TICK_MINUTES, type Ufo, type UfoStatus } from '../core/geo';
 import { FIGHTER_MAX_HP } from '../core/intercept';
 import { createParty, type Party } from '../core/save';
-import { NEXT_STEP, nextStep, nextStepText, showStepTarget } from './next-step';
+import { NEXT_STEP, NEXT_STEP_PREFIX, nextStep, nextStepText, renderNextStep, showStepTarget } from './next-step';
 
 const GEO = { inBattle: false, gameOver: false };
 const text = (p: Party): string | null => nextStepText(p, GEO);
@@ -272,34 +272,155 @@ describe('Т.80: гарматний модуль на складі — «вст�
 });
 
 describe('Т.79: куди веде клік по рядку', () => {
-  it('ціль для кожного рядка', () => {
-    const t = (p: Party) => nextStep(p, GEO)?.target;
+  // Т.97 (аудит Т.79): таблиця — по рядку на кожен ключ NEXT_STEP; новий ключ без
+  // рядка таблиці валить тест «таблиця покриває всі ключі»
+  type Key = keyof typeof NEXT_STEP;
+  const ready = (): Party => {
     const p = createParty(42);
-    expect(t(p)).toEqual({ tab: null, id: 'btn-event' });
-    addUfo(p, 'летить');
-    expect(t(p)).toEqual({ tab: 'base', selector: '#ufos button.intercept' });
-    p.geo.ufos[0].status = 'приземлився';
-    expect(t(p)).toEqual({ tab: 'base', selector: '#ufos button.mission' });
-    p.geo.ufos[0].status = 'збитий';
-    expect(t(p)).toEqual({ tab: 'base', selector: '#ufos button.mission' });
-    p.geo.ufos = [];
-    woundAll(p);
-    expect(t(p)).toEqual({ tab: 'squad', id: 'btn-hire' });
-    p.roster.hospital = {};
     p.econ.money = 10_000;
-    p.research.completed.push('optics');
-    expect(t(p)).toEqual({ tab: 'base', id: 'btn-order-optics' });
-    p.research.completed = [];
-    const [a, b] = p.roster.soldiers;
-    p.workshop.store.grenade = 1;
-    p.workshop.equipped[a.id] = { armor: false, optics: false, medkit: false, grenade: true };
-    expect(t(p)).toEqual({ tab: 'squad', id: 'btn-equip-' + b.id + '-grenade' }); // перший без гранати
-    p.workshop.store.grenade = 0;
-    p.intercept.fighter.hp = 1;
-    expect(t(p)).toEqual({ tab: 'base', id: 'btn-repair' });
+    return p;
+  };
+  const CASES: Record<Key, { party: () => Party; target: (p: Party) => object }> = {
+    landed: {
+      party: () => {
+        const p = ready();
+        addUfo(p, 'приземлився');
+        return p;
+      },
+      target: (p) => ({ tab: 'base', id: 'btn-mission-' + p.geo.ufos[0].id }),
+    },
+    shotDown: {
+      party: () => {
+        const p = ready();
+        addUfo(p, 'збитий');
+        return p;
+      },
+      target: (p) => ({ tab: 'base', id: 'btn-mission-' + p.geo.ufos[0].id }),
+    },
+    inAir: {
+      party: () => {
+        const p = ready();
+        addUfo(p, 'летить');
+        return p;
+      },
+      target: () => ({ tab: 'base', selector: '#ufos button.intercept' }),
+    },
+    noReady: {
+      party: () => {
+        const p = ready();
+        woundAll(p);
+        return p;
+      },
+      target: () => ({ tab: 'squad', id: 'btn-hire' }),
+    },
+    order: {
+      party: () => {
+        const p = ready();
+        p.research.completed.push('optics');
+        return p;
+      },
+      target: () => ({ tab: 'base', id: 'btn-order-optics' }),
+    },
+    issue: {
+      party: () => {
+        const p = ready();
+        p.workshop.store.grenade = 1;
+        const a = p.roster.soldiers[0];
+        p.workshop.equipped[a.id] = { armor: false, optics: false, medkit: false, grenade: true };
+        return p;
+      },
+      target: (p) => ({ tab: 'squad', id: 'btn-equip-' + p.roster.soldiers[1].id + '-grenade' }), // перший без гранати
+    },
+    install: {
+      party: () => {
+        const p = ready();
+        p.workshop.store['gun-module'] = 1;
+        return p;
+      },
+      target: () => ({ tab: 'base', id: 'btn-gun-install' }),
+    },
+    repair: {
+      party: () => {
+        const p = ready();
+        p.intercept.fighter.hp = 1;
+        return p;
+      },
+      target: () => ({ tab: 'base', id: 'btn-repair' }),
+    },
+    time: { party: () => createParty(42), target: () => ({ tab: null, id: 'btn-event' }) },
+    refill: {
+      party: () => {
+        const p = ready();
+        p.research.completed.push('medkit');
+        p.workshop.log.push({ type: 'produced', id: 'medkit' });
+        return p;
+      },
+      target: () => ({ tab: 'base', id: 'btn-order-medkit' }),
+    },
+  };
+  it('таблиця покриває всі ключі NEXT_STEP', () => {
+    expect(Object.keys(CASES).sort()).toEqual(Object.keys(NEXT_STEP).sort());
+  });
+  for (const key of Object.keys(CASES) as Key[]) {
+    it('ціль рядка «' + key + '»', () => {
+      const p = CASES[key].party();
+      const step = nextStep(p, GEO)!;
+      const want = NEXT_STEP[key];
+      expect(step.text).toBe(typeof want === 'string' ? want : want((8 * TICK_MINUTES) / 60)); // addUfo: вікно 8 тіків
+      expect(step.target).toEqual(CASES[key].target(p));
+    });
+  }
+  it('Т.97: «запустіть місію» веде до зонда з найменшим вікном, а не до першого', () => {
+    const p = createParty(42);
+    addUfo(p, 'приземлився', true, 12);
+    addUfo(p, 'збитий');
+    addUfo(p, 'приземлився', true, 4);
+    addUfo(p, 'приземлився', true, 4); // рівне вікно — перший з рівних
+    const step = nextStep(p, GEO)!;
+    expect(step.text).toBe(NEXT_STEP.landed((4 * TICK_MINUTES) / 60));
+    expect(step.target).toEqual({ tab: 'base', id: 'btn-mission-u2' });
+  });
+  it('Т.97: збитий зонд — перший збитий серед цілей місій; невиявлений не рахується', () => {
+    const p = createParty(42);
+    addUfo(p, 'летить', false);
+    addUfo(p, 'збитий', false);
+    addUfo(p, 'збитий');
+    expect(nextStep(p, GEO)?.target).toEqual({ tab: 'base', id: 'btn-mission-u2' });
   });
   it('без рядка — без цілі', () => {
     expect(nextStep(createParty(42), { inBattle: true, gameOver: false })).toBeNull();
+  });
+});
+
+describe('Т.97: renderNextStep — префікс окремим span (варіант В власника)', () => {
+  it('префікс і решта — два span; textContent і aria-label — повний текст', () => {
+    const b = document.createElement('button');
+    b.classList.add('hidden');
+    renderNextStep(b, NEXT_STEP.install);
+    expect(b.classList.contains('hidden')).toBe(false);
+    expect(b.textContent).toBe(NEXT_STEP.install);
+    expect(b.getAttribute('aria-label')).toBe(NEXT_STEP.install);
+    expect(b.querySelector('.ns-prefix')?.textContent).toBe(NEXT_STEP_PREFIX);
+    expect(b.querySelector('.ns-rest')?.textContent).toBe('гарматний модуль на складі — встановіть на перехоплювач');
+  });
+  it('кожна порада починається з префікса', () => {
+    for (const v of Object.values(NEXT_STEP)) expect((typeof v === 'string' ? v : v(1)).startsWith(NEXT_STEP_PREFIX)).toBe(true);
+  });
+  it('null — рядок прихований і порожній; повторний виклик не дублює span', () => {
+    const b = document.createElement('button');
+    renderNextStep(b, NEXT_STEP.time);
+    renderNextStep(b, NEXT_STEP.repair);
+    expect(b.querySelectorAll('span')).toHaveLength(2);
+    renderNextStep(b, null);
+    expect(b.classList.contains('hidden')).toBe(true);
+    expect(b.textContent).toBe('');
+    expect(b.hasAttribute('aria-label')).toBe(false);
+  });
+  it('текст без префікса — один span решти', () => {
+    const b = document.createElement('button');
+    renderNextStep(b, 'інше');
+    expect(b.querySelector('.ns-prefix')).toBeNull();
+    expect(b.textContent).toBe('інше');
   });
 });
 

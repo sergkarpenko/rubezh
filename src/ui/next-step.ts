@@ -9,6 +9,9 @@
 // («поповніть запас»), нижче за «видайте» і «ремонт».
 // Т.80 (залишок кандидата 45; рішення власника 20.11.2026): рядок — у заголовку
 // «Геосцени»; порада «модуль на складі — встановіть» одразу після «видайте».
+// Т.97 (залишки аудитів Т.79–Т.80, кандидат 45): ціль «запустіть місію» — кнопка
+// зонда з найменшим вікном (id btn-mission-<зонд>), а не перша активна; на вікнах
+// до 940 px префікс «Наступний крок:» заміняє стрілка «→» (варіант В власника 21.11.2026).
 
 import { sciencePrice } from '../core/campaign';
 import { TICK_MINUTES, detectedUfos, missionTargets } from '../core/geo';
@@ -79,6 +82,32 @@ export function nextStepText(party: Party, ctx: NextStepContext): string | null 
 }
 
 const order = (id: ItemId): StepTarget => ({ tab: 'base', id: 'btn-order-' + id });
+// Т.97: кнопка «Запустити місію» конкретного зонда (id ставить renderUfos у panels.ts)
+const mission = (ufoId: string): StepTarget => ({ tab: 'base', id: 'btn-mission-' + ufoId });
+
+// Т.97 (варіант В власника 21.11.2026): префікс — окремим span, щоб CSS на вікнах
+// до 940 px ховав його і ставив стрілку «→» перед рештою; textContent рядка — повний
+// текст поради, aria-label — теж (читач екрана чує «Наступний крок: …» на будь-якому вікні).
+export const NEXT_STEP_PREFIX = 'Наступний крок: ';
+
+export function renderNextStep(btn: HTMLElement, text: string | null): void {
+  btn.replaceChildren();
+  btn.classList.toggle('hidden', text === null);
+  if (text === null) {
+    btn.removeAttribute('aria-label');
+    return;
+  }
+  btn.setAttribute('aria-label', text);
+  const hasPrefix = text.startsWith(NEXT_STEP_PREFIX);
+  const prefix = document.createElement('span');
+  prefix.className = 'ns-prefix';
+  prefix.textContent = hasPrefix ? NEXT_STEP_PREFIX : '';
+  const rest = document.createElement('span');
+  rest.className = 'ns-rest';
+  rest.textContent = hasPrefix ? text.slice(NEXT_STEP_PREFIX.length) : text;
+  if (hasPrefix) btn.append(prefix, rest);
+  else btn.append(rest);
+}
 
 // Перша кнопка «спорядити» в ростері: оперативник без предмета, який є на складі.
 function issueTarget(party: Party): StepTarget {
@@ -93,15 +122,18 @@ function issueTarget(party: Party): StepTarget {
 export function nextStep(party: Party, ctx: NextStepContext): NextStep | null {
   if (ctx.inBattle || ctx.gameOver || inAirCombat(party) || party.campaign.status !== 'триває') return null;
   if (isBankrupt(party.econ, party.roster, party.campaign.preset)) return null;
-  const mission: StepTarget = { tab: 'base', selector: '#ufos button.mission' };
   const ready = readySoldiers(party.roster).length;
   const fighter = party.intercept.fighter;
   const targets = missionTargets(party.geo);
   if (ready > 0) {
     const landed = targets.filter((u) => u.status === 'приземлився');
-    if (landed.length > 0)
-      return { text: NEXT_STEP.landed((Math.min(...landed.map((u) => u.landedTicksLeft)) * TICK_MINUTES) / 60), target: mission };
-    if (targets.some((u) => u.status === 'збитий')) return { text: NEXT_STEP.shotDown, target: mission };
+    if (landed.length > 0) {
+      // Т.97: та сама кнопка, чиє вікно в тексті, — зонд з найменшим вікном (перший з рівних)
+      const soonest = landed.reduce((a, u) => (u.landedTicksLeft < a.landedTicksLeft ? u : a));
+      return { text: NEXT_STEP.landed((soonest.landedTicksLeft * TICK_MINUTES) / 60), target: mission(soonest.id) };
+    }
+    const shot = targets.find((u) => u.status === 'збитий');
+    if (shot !== undefined) return { text: NEXT_STEP.shotDown, target: mission(shot.id) };
   }
   const flying = detectedUfos(party.geo).some((u) => u.status === 'летить');
   if (flying && fighter.status === 'на базі' && fighter.hp === FIGHTER_MAX_HP)

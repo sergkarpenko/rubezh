@@ -245,6 +245,7 @@ export function createPanels(deps: PanelsDeps): Panels {
       if (targets.has(u.id)) {
         const btn = document.createElement('button');
         btn.className = 'mission';
+        btn.id = 'btn-mission-' + u.id; // Т.97: ціль рядка «Наступний крок» — кнопка цього зонда
         btn.textContent = '▶ Запустити місію';
         // П4.5 (ADR-0021): поранені в лікарні не боєготові — місію запускати ніким
         const ready = readySoldiers(party.roster).length;

@@ -302,7 +302,38 @@ test('сценарій приймання ADR-0030: партія → місія 
     // виграш висоти не має зникнути в заголовку «Геосцени»: під h2 — лише його поле 8 px
     expect(stepSmall.headTail, 'заголовок «Геосцени» вищий за назву на 1024×768').toBeLessThanOrEqual(9);
     expect(bar.page, 'сторінка довша за вікно на 1024×768').toBeLessThanOrEqual(bar.win);
+    // Т.97 (варіант В власника 21.11.2026): до 940 px префікс «Наступний крок:» заміняє стрілка;
+    // на 920 × 800 найдовша порада (решта підставлена в span тимчасово) — в одному ряду з «Геосцена»
+    await page.setViewportSize({ width: 920, height: 800 });
+    const LONGEST = 'гарматний модуль на складі — встановіть на перехоплювач';
+    const narrow = await page.evaluate((longest) => {
+      const s = document.getElementById('next-step')!;
+      const rest = s.querySelector<HTMLElement>('.ns-rest')!;
+      const was = rest.textContent;
+      const full = s.textContent ?? '';
+      rest.textContent = longest;
+      const r = s.getBoundingClientRect();
+      const h2 = document.querySelector('#geo-head h2')!.getBoundingClientRect();
+      const out = {
+        prefix: getComputedStyle(s.querySelector('.ns-prefix')!).display,
+        arrow: getComputedStyle(rest, '::before').content,
+        label: s.getAttribute('aria-label') === full && full.startsWith('Наступний крок: '),
+        row: r.top < h2.bottom && r.bottom > h2.top && r.left >= h2.right,
+        fits: s.scrollWidth <= s.clientWidth,
+        headTail: document.getElementById('geo-head')!.getBoundingClientRect().bottom - h2.bottom,
+      };
+      rest.textContent = was;
+      return out;
+    }, LONGEST);
+    expect(narrow.prefix, 'префікс «Наступний крок:» видно на 920 px').toBe('none');
+    expect(narrow.arrow, 'стрілки перед порадою немає на 920 px').toBe('"→ "');
+    expect(narrow.label, 'aria-label — не повний текст поради з префіксом').toBe(true);
+    expect(narrow.row, 'найдовша порада на 920 px — не в одному ряду з «Геосцена»').toBe(true);
+    expect(narrow.fits, 'найдовшу пораду обрізано на 920 px').toBe(true);
+    expect(narrow.headTail, 'заголовок «Геосцени» вищий за назву на 920 px').toBeLessThanOrEqual(9);
     await page.setViewportSize({ width: 1440, height: 900 });
+    const wide = await page.evaluate(() => getComputedStyle(document.querySelector('#next-step .ns-prefix')!).display);
+    expect(wide, 'префікс «Наступний крок:» сховано на 1440 px').not.toBe('none');
   });
 
   await test.step('Т.47: «Продовжити» після виходу з бою — сейв завантажено, старого бою немає', async () => {

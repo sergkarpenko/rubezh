@@ -1643,6 +1643,58 @@ describe('Т.43: «До події», зупинки «+1 доба» і проб
     expect((document.activeElement as HTMLElement).classList.contains('mission')).toBe(true);
   });
 
+  // Т.97 (аудит Т.79): id динамічних цілей (btn-order-<предмет>, btn-equip-<оперативник>-<слот>,
+  // btn-gun-install, btn-mission-<зонд>) — на справжній сторінці: стан правкою сейва, клік по рядку,
+  // фокус — на кнопці з id, який називає nextStep
+  it('Т.97: клік по рядку дає фокус кнопці з id цілі — для кожної динамічної цілі на сторінці', () => {
+    startParty();
+    btn('btn-save-1').click();
+    const base = localStorage.getItem('rubezh.save.1')!;
+    type S = {
+      econ: { money: number };
+      research: { completed: string[] };
+      workshop: { store: Record<string, number>; log: { type: string; id: string }[] };
+      intercept: { fighter: { hp: number } };
+      roster: { soldiers: { id: string }[] };
+    };
+    const load = (edit: (s: S) => void): void => {
+      const save = JSON.parse(base) as { state: S };
+      save.state.econ.money = 10_000;
+      edit(save.state);
+      localStorage.setItem('rubezh.save.1', JSON.stringify(save));
+      btn('btn-load-1').click();
+      btn('next-step').click();
+    };
+    const first = (JSON.parse(base) as { state: S }).state.roster.soldiers[0].id;
+    const cases: [string, (s: S) => void, string][] = [
+      ['order', (s) => s.research.completed.push('optics'), 'btn-order-optics'],
+      ['issue', (s) => (s.workshop.store.grenade = 1), 'btn-equip-' + first + '-grenade'],
+      ['install', (s) => (s.workshop.store['gun-module'] = 1), 'btn-gun-install'],
+      ['repair', (s) => (s.intercept.fighter.hp = 1), 'btn-repair'],
+      [
+        'refill',
+        (s) => {
+          s.research.completed.push('medkit');
+          s.workshop.log.push({ type: 'produced', id: 'medkit' });
+        },
+        'btn-order-medkit',
+      ],
+    ];
+    for (const [name, edit, id] of cases) {
+      load(edit);
+      expect(document.activeElement?.id, name).toBe(id);
+    }
+    // зонд приземлився: фокус — на кнопці місії саме цього зонда
+    localStorage.setItem('rubezh.save.1', base);
+    btn('btn-load-1').click();
+    btn('btn-event').click(); // зонд у повітрі
+    btn('btn-event').click(); // приземлився
+    btn('next-step').click();
+    const ufo = document.querySelector('#ufos button.mission')!;
+    expect(ufo.id).toMatch(/^btn-mission-/);
+    expect(document.activeElement).toBe(ufo);
+  });
+
   it('Т.79: цілі рядка «Наступний крок» — на тих вкладках, які називає nextStep', () => {
     startParty();
     const tab = (id: string): string | undefined => document.getElementById(id)?.closest<HTMLElement>('section[data-tab]')?.dataset.tab;

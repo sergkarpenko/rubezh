@@ -37,7 +37,7 @@ import { GCELL } from './ui/grid';
 // Т.43: зупинки кнопок часу («До події», «+1 доба») — модуль src/ui/time-control.ts.
 import { isSpaceForEvent, runTime, type RunMode } from './ui/time-control';
 // Т.43: рядок «Наступний крок» (Т.80 — у заголовку «Геосцени») — модуль src/ui/next-step.ts.
-import { nextStep, showStepTarget, type StepTarget } from './ui/next-step';
+import { nextStep, renderNextStep, showStepTarget, type StepTarget } from './ui/next-step';
 // пR.2 (ADR-0037): бойовище і флоу бою — модуль src/ui/battle.ts.
 import { createBattleUI, type BattleUIState } from './ui/battle';
 // П13.2 (ADR-0066): вертикальний тулбар бойових дій збоку — модуль src/ui/toolbar.ts.
@@ -550,8 +550,7 @@ function renderAll(): void {
   // Т.43: одна порада за станом партії; у бою і після кінця гри рядок прихований
   const step = nextStep(party, { inBattle: ui.mission !== null, gameOver });
   stepTarget = step?.target ?? null; // Т.79: куди веде клік по рядку
-  el('next-step').textContent = step?.text ?? '';
-  el('next-step').classList.toggle('hidden', step === null);
+  renderNextStep(el('next-step'), step?.text ?? null); // Т.97: префікс окремим span
   panels.renderCampaign();
   panels.renderGeo();
   panels.renderUfos();
