@@ -160,7 +160,7 @@ beforeAll(async () => {
 
 // Т.106 (кандидат 13): кожен блок describe — на свіжій сторінці. До Т.106 main.ts імпортувався
 // один раз на файл, і блоки ділили партію, сховище, відкриті вікна й таймери: з
-// `--sequence.shuffle` падало 26–34 тести. Тепер mountPage перед блоком знімає обробники
+// `--sequence.shuffle` падало 33–35 тестів (сіди 1–3). Тепер mountPage перед блоком знімає обробники
 // document/window попереднього модуля, чистить сховище й журнал канви, ставить свіжу розмітку і
 // заново імпортує main.ts (vi.resetModules) — блок не бачить, що робили блоки до нього.
 type Listener = [EventTarget, string, EventListenerOrEventListenerObject, boolean | AddEventListenerOptions | undefined];
@@ -198,7 +198,7 @@ async function mountPage(): Promise<void> {
 
 // Т.106: блок тестів сторінки — describe зі свіжою сторінкою (mountPage) перед першим тестом.
 // Блоки між собою незалежні: `npx vitest run src/main.ui.test.ts --sequence.shuffle` перемішує їх і
-// зелений, кожен блок зелений і поодинці (`-t "^<назва блоку> "`). Тести всередині блоку — сценарій у
+// зелений, кожен блок зелений і поодинці (`-t "^<назва блоку> "`, дужки й крапки в назві — екранувати). Тести всередині блоку — сценарій у
 // заданому порядку (`shuffle: false`): частина з них продовжує стан попереднього тесту того самого блоку.
 function describePage(name: string, fn: () => void): void {
   describe(name, { shuffle: false }, () => {
@@ -614,8 +614,8 @@ describePage('журнал з фільтрами-вкладками (П6.2, ADR-
 
   it('новий запис під активним фільтром видимий, під іншим — приховується', () => {
     btn('log-tab-econ').click();
-    const moneyBefore = Number($('money').textContent);
-    btn('btn-hire').click(); // −100 (два записи: «Найм» + «Витрати»)
+    expect($('money').textContent).toBe('375'); // 300 + дотація 75
+    btn('btn-hire').click(); // 375 → 275 (два записи: «Найм» + «Витрати»)
     const hireLi = Array.from(document.querySelectorAll('#log li[data-cat="econ"]')).find((li) =>
       li.textContent!.includes('Вербування')
     ) as HTMLElement;
@@ -624,7 +624,7 @@ describePage('журнал з фільтрами-вкладками (П6.2, ADR-
     expect(hireLi.style.display).toBe('none');
     btn('log-tab-all').click();
     expect(hireLi.style.display).toBe('');
-    expect($('money').textContent).toBe(String(moneyBefore - 100));
+    expect($('money').textContent).toBe('275');
   });
 });
 
