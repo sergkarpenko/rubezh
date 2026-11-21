@@ -304,14 +304,15 @@ describe('П13.4: лого стартового екрана — ассет з �
 describe('Т.58: пояснення невдалого «Продовжити», requestExit', () => {
   const TEXT = 'Не вдалося завантажити збереження. Почніть нову гру.';
 
-  it('Т.58: невдале «Продовжити» показує рядок над меню; showStart його прибирає; вдале — рядка немає', () => {
+  it('Т.58: невдале «Продовжити» показує рядок-пояснення (Т.93 — банер угорі); showStart його прибирає; вдале — рядка немає', () => {
     expect(CONTINUE_FAILED_TEXT).toBe(TEXT);
     let ok = false;
     const screens = createScreens(makeDeps({ hasSaves: () => true, continueDisabledReason: () => '', onContinue: () => ok }));
     screens.showStart();
     expect(visible('start-note')).toBe(false);
     expect($('start-note').textContent).toBe('');
-    expect($('start-note').nextElementSibling).toBe($('btn-start-new')); // рядок — над кнопками меню
+    expect($('start-note').parentElement?.classList.contains('start-box')).toBe(true); // Т.93: банер поза стеком меню
+    expect($('start-note').getAttribute('role')).toBe('status');
     btn('btn-start-continue').click();
     expect(screens.current()).toBe('стартовий');
     expect(visible('start-note')).toBe(true);
