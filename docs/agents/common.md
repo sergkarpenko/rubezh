@@ -35,7 +35,7 @@
 ## Старт роботи з кодом
 
 - Свіжий клон → `npm ci` (≈ 1 хв) → прогони «до».
-- Локальний чекліст для кроку з кодом: `npx tsc --noEmit` (+ `-p tsconfig.core.json`, `-p tsconfig.e2e.json`), `npm run lint`, `npm run format:check`, `npm test`, `npm run docs`, `npm run test:e2e`. Після коміту виправлень за аудитом `npx tsc --noEmit` — знову перед пушем, навіть коли змінено лише тест: vitest і pre-commit типів не перевіряють (спостереження сесії після мержу Т.99; факт — у записі Т.100).
+- Локальний чекліст для кроку з кодом: `npx tsc --noEmit` (+ `-p tsconfig.core.json`, `-p tsconfig.e2e.json`, `-p tsconfig.scripts.json`), `npm run lint`, `npm run format:check`, `npm test`, `npm run docs`, `npm run test:e2e`. Після коміту виправлень за аудитом `npx tsc --noEmit` — знову перед пушем, навіть коли змінено лише тест: vitest і pre-commit типів не перевіряють (спостереження сесії після мержу Т.99; факт — у записі Т.100).
 - Сценарій e2e без встановленого браузера Playwright: `E2E_CHROME=/шлях/до/chrome npm run test:e2e` (≈ 15 с); з `E2E_URL=…` — проти вже піднятої збірки.
 - Pre-commit хук (`scripts/pre-commit.sh`) ганяє повні тести і перевіряє заборонені файли: `tsconfig.json`, `vite.config.ts`; `package.json` і `.github/workflows/` — лише разом із файлом у `docs/adr/` у тому самому коміті (виняток — зміна самого поля `version`, ADR-0070). Не комітити під час симуляцій.
 
@@ -45,7 +45,7 @@
 - Після аудиту PR легко виходить за 500 рядків (Т.37: 499 → 671): для кроку зі скриптом і самоперевіркою закладати запас або одразу планувати мітку `size-deviation` і писати це в описі PR.
 - Prettier розгортає довгі об'єктні літерали по рядку на поле; таблиця `Partial<Record<…>>` одним рядком дешевша (Т.33: 549 → 498).
 - `AGENTS.md` на `main` не проходить `prettier --check` — не форматувати його цілком. `scripts/*.ts` і `e2e/` поза `format:check` (він дивиться лише `src` та `index.html`) — `prettier --check` на свій файл. `docs/` — у `.prettierignore`: не форматується і не перевіряється.
-- `scripts/` не перевіряє ні `tsc`, ні lint, ні тести — закомічений скрипт запускати перед комітом.
+- `scripts/` з Т.102 (ADR-0106) — під ESLint (`npm run lint`: `.ts` і `.mjs`) і `tsc` (`tsconfig.scripts.json`, лише `scripts/*.ts`); тестів і `format:check` немає — закомічений скрипт усе одно запускати перед комітом. Новий скрипт `.ts` у підтеці `scripts/` під `tsc` не потрапить (`include` — `scripts/*.ts`).
 
 ## Клас PR і мерж (ADR-0094; `approve` — ADR-0052)
 

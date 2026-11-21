@@ -12,8 +12,8 @@
     "test:mutation": "stryker run",
     "build": "vite build",
     "prepare": "husky",
-    "lint": "eslint src",
-    "lint:fix": "eslint src --fix",
+    "lint": "eslint src scripts",
+    "lint:fix": "eslint src scripts --fix",
     "format": "prettier --write src index.html",
     "format:check": "prettier --check src index.html",
     "docs": "typedoc"
@@ -31,6 +31,7 @@
     "@playwright/test": "^1.65.1",
     "@stryker-mutator/core": "^10.1.1",
     "@stryker-mutator/vitest-runner": "^10.1.1",
+    "@types/node": "^22.20.5",
     "@vitest/coverage-v8": "^5.1.0",
     "eslint": "^10.15.0",
     "eslint-config-prettier": "^10.1.8",
