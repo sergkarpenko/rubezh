@@ -72,15 +72,41 @@ export function runTime(mode: RunMode, party: Party, tick: () => void, halted: (
   return done;
 }
 
-// Пробіл на геосцені = «До події» — завжди, і з фокусом на кнопці (рішення
-// власника 15.11.2026: після кліку мишею фокус лишається на кнопці, і пробіл
-// не має її повторювати; фокус із кнопки знімає обробник у main.ts). З поля
-// вводу, переліку чи текстового поля пробіл лишається звичайним символом.
-export function isSpaceForEvent(ev: KeyboardEvent): boolean {
+// Пробіл на геосцені = «До події» (рішення власника 15.11.2026: після кліку
+// мишею фокус лишається на кнопці, і пробіл не має її повторювати; фокус із
+// кнопки знімає обробник у main.ts). Т.98 (рішення власника 21.11.2026):
+// кнопку, вибрану з клавіатури (`keyboardFocus`: після Tab чи N, до наступного
+// натискання вказівника), пробіл натискає сам, як звичайна кнопка браузера.
+// :focus-visible для цього не годиться: Chrome вмикає його вже на keydown
+// пробілу і після кліку мишею. З поля вводу, переліку чи текстового поля
+// пробіл лишається звичайним символом.
+export function isSpaceForEvent(ev: KeyboardEvent, keyboardFocus = false): boolean {
   if (ev.code !== 'Space' && ev.key !== ' ') return false;
   if (ev.repeat || ev.ctrlKey || ev.metaKey || ev.altKey) return false;
   const t = ev.target;
   if (!(t instanceof HTMLElement)) return true;
+  if (keyboardFocus && t instanceof HTMLButtonElement) return false;
+  return !isTypingElement(t);
+}
+
+function isTypingElement(t: HTMLElement): boolean {
   const tag = t.tagName;
-  return !(tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || t.isContentEditable);
+  return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || t.isContentEditable;
+}
+
+// Т.98 (рішення власника 21.11.2026): гарячі клавіші геосцени — за фізичною
+// клавішею (ev.code, незалежно від розкладки), як клавіші бою: D — «+1 доба»,
+// T — «+1 тік», N — «Наступний крок» (вкладка і фокус на кнопці дії, далі Enter
+// чи пробіл). Без утримання і модифікаторів; з поля вводу не діють.
+export type GeoHotkey = 'day' | 'tick' | 'next';
+
+const GEO_HOTKEYS: Partial<Record<string, GeoHotkey>> = { KeyD: 'day', KeyT: 'tick', KeyN: 'next' };
+
+export function geoHotkey(ev: KeyboardEvent): GeoHotkey | null {
+  const key = GEO_HOTKEYS[ev.code];
+  if (key === undefined) return null;
+  if (ev.repeat || ev.ctrlKey || ev.metaKey || ev.altKey || ev.shiftKey) return null;
+  const t = ev.target;
+  if (t instanceof HTMLElement && isTypingElement(t)) return null;
+  return key;
 }

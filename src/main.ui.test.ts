@@ -1553,16 +1553,27 @@ describe('Т.43: «До події», зупинки «+1 доба» і проб
     expect(clock()).toBe(firstDetection);
   });
 
-  it('пробіл із поля вводу не діє; з фокусом на кнопці — «До події», а не ця кнопка (фокус знято)', () => {
+  it('пробіл із поля вводу не діє; з кнопки без рамки фокусу — «До події», а не ця кнопка', () => {
     startParty();
     const before = clock();
     expect(space($('new-game-seed'))).toBe(false);
     expect(clock()).toBe(before);
-    btn('btn-tick').focus();
-    expect(document.activeElement).toBe(btn('btn-tick'));
-    expect(space(btn('btn-tick'))).toBe(true);
+    expect(space(btn('btn-tick'))).toBe(true); // подія з кнопки, що не у фокусі (як після кліку мишею — :focus-visible немає)
     expect(clock()).toBe(firstDetection); // не +30 хв від «+1 тік»
-    expect(document.activeElement).not.toBe(btn('btn-tick'));
+  });
+
+  it('Т.98: кнопку, вибрану клавішею Tab, пробіл не перехоплює — її натискає браузер; після вказівника — знову «До події»', () => {
+    startParty();
+    const before = clock();
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', code: 'Tab', bubbles: true }));
+    btn('btn-tick').focus();
+    expect(space(btn('btn-tick'))).toBe(false);
+    expect(clock()).toBe(before);
+    expect(document.activeElement).toBe(btn('btn-tick'));
+    btn('btn-tick').dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    expect(space(btn('btn-tick'))).toBe(true);
+    expect(clock()).toBe(firstDetection);
+    expect(document.activeElement).not.toBe(btn('btn-tick')); // фокус знято
   });
 
   it.each(['help-screen', 'game-menu', 'settings-dialog', 'new-game-dialog', 'exit-confirm', 'campaign-victory'])(
@@ -1726,6 +1737,81 @@ describe('Т.43: «До події», зупинки «+1 доба» і проб
     const before = clock();
     expect(space()).toBe(false);
     btn('btn-event').onclick!(new MouseEvent('click') as PointerEvent);
+    expect(clock()).toBe(before);
+  });
+});
+
+describe('Т.98: гарячі клавіші геосцени D / T / N', () => {
+  const key = (code: string, target: EventTarget = document): boolean => {
+    const ev = new KeyboardEvent('keydown', { code, key: code.slice(3).toLowerCase(), bubbles: true, cancelable: true });
+    target.dispatchEvent(ev);
+    return ev.defaultPrevented;
+  };
+  const clock = (): string | null => $('clock').textContent;
+
+  it('T — «+1 тік», D — «+1 доба»: те саме, що клік по кнопці', () => {
+    startParty();
+    expect(key('KeyT')).toBe(true);
+    expect(clock()).toBe('Д1 00:30');
+    startParty();
+    btn('btn-day').click();
+    const byClick = clock();
+    startParty();
+    expect(key('KeyD')).toBe(true);
+    expect(clock()).toBe(byClick);
+  });
+
+  it('N — те саме, що клік по «Наступний крок»: фокус на кнопці дії', () => {
+    startParty();
+    $('status-tab-squad').click();
+    expect(key('KeyN')).toBe(true);
+    expect(document.activeElement?.id).toBe('btn-event');
+    expect($('btn-event').classList.contains('step-target')).toBe(true);
+    const before = clock();
+    expect(key('Space', btn('btn-event'))).toBe(false); // фокус після N — з клавіатури: кнопку тисне браузер
+    expect(clock()).toBe(before);
+    $('clock').dispatchEvent(new Event('pointerdown', { bubbles: true }));
+  });
+
+  it('підказки кнопок і «Як грати» називають клавіші', () => {
+    expect(btn('btn-tick').title).toBe('Час іде на 30 хв (T)');
+    expect(btn('btn-day').title).toBe('Час іде добу; стає раніше, коли зонд виявлено або він приземлився (D)');
+    expect(btn('next-step').title).toBe('Показати кнопку дії (N)');
+    btn('btn-help').click();
+    expect($('help-screen').textContent).toContain('«+1 тік (30 хв)» (T)');
+    expect($('help-screen').textContent).toContain('«+1 доба» (D)');
+    expect($('help-screen').textContent).toContain('N — «Наступний крок»');
+    btn('btn-help-close').click();
+  });
+
+  it.each(['help-screen', 'game-menu', 'exit-confirm'])('під відкритим вікном #%s клавіші не діють', (id) => {
+    startParty();
+    $(id).classList.remove('hidden');
+    expect(key('KeyT')).toBe(false);
+    expect(key('KeyD')).toBe(false);
+    expect(clock()).toBe('Д1 00:00');
+    $(id).classList.add('hidden');
+  });
+
+  it('з поля вводу і на стартовому екрані клавіші не діють', () => {
+    startParty();
+    expect(key('KeyT', $('new-game-seed'))).toBe(false);
+    expect(clock()).toBe('Д1 00:00');
+    btn('btn-menu').click();
+    btn('btn-menu-exit').click();
+    if (!$('exit-confirm').classList.contains('hidden')) btn('btn-exit-yes').click();
+    expect(key('KeyT')).toBe(false);
+    expect(key('KeyN')).toBe(false);
+  });
+
+  it('у бою D / T / N не діють (час стоїть, клавіша не перехоплена)', () => {
+    startParty();
+    for (let i = 0; i < 1500 && document.querySelector('button.mission') === null; i++) btn('btn-tick').click();
+    (document.querySelector('button.mission') as HTMLButtonElement).click();
+    const before = clock();
+    expect(key('KeyT')).toBe(false);
+    expect(key('KeyD')).toBe(false);
+    expect(key('KeyN')).toBe(false);
     expect(clock()).toBe(before);
   });
 });
