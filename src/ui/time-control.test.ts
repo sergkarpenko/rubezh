@@ -7,7 +7,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Ufo } from '../core/geo';
 import { createParty, type Party } from '../core/save';
-import { isSpaceForEvent, runTime, shouldStop, stopEvents, takeSnapshot, type RunMode, type StopEvent } from './time-control';
+import { geoHotkey, isSpaceForEvent, runTime, shouldStop, stopEvents, takeSnapshot, type RunMode, type StopEvent } from './time-control';
 
 function ufo(id: string, detected: boolean): Ufo {
   return { id, kind: 'розвідник', pos: { x: 1, y: 1 }, target: { x: 1, y: 1 }, status: 'приземлився', detected, landedTicksLeft: 8 } as Ufo;
@@ -164,11 +164,52 @@ describe('Т.43: пробіл (isSpaceForEvent)', () => {
     ['input', false],
     ['textarea', false],
     ['select', false],
-    ['button', true], // рішення власника 15.11.2026: пробіл — «До події» і з фокусом на кнопці
+    ['button', true], // рішення власника 15.11.2026: пробіл — «До події» і з фокусом на кнопці після кліку мишею
   ] as const)('пробіл із фокусом на <%s> — %s', (tag, expected) => {
     const t = document.createElement(tag);
     document.body.appendChild(t);
     expect(isSpaceForEvent(ev({ key: ' ', code: 'Space' }, t))).toBe(expected);
+    t.remove();
+  });
+
+  it('Т.98: кнопку, вибрану з клавіатури, пробіл натискає сам — не «До події»', () => {
+    const b = document.createElement('button');
+    document.body.appendChild(b);
+    expect(isSpaceForEvent(ev({ key: ' ', code: 'Space' }, b), true)).toBe(false);
+    expect(isSpaceForEvent(ev({ key: ' ', code: 'Space' }, b), false)).toBe(true); // після кліку мишею
+    expect(isSpaceForEvent(ev({ key: ' ', code: 'Space' }), true)).toBe(true); // фокусу на кнопці немає
+    b.remove();
+  });
+});
+
+describe('Т.98: гарячі клавіші геосцени (geoHotkey)', () => {
+  const ev = (init: KeyboardEventInit, target?: HTMLElement): KeyboardEvent => {
+    const e = new KeyboardEvent('keydown', { bubbles: true, ...init });
+    (target ?? document.body).dispatchEvent(e);
+    return e;
+  };
+
+  it.each([
+    ['KeyD', 'd', 'day'],
+    ['KeyT', 't', 'tick'],
+    ['KeyN', 'n', 'next'],
+    ['KeyD', 'в', 'day'], // українська розкладка — та сама фізична клавіша
+    ['KeyE', 'e', null],
+    ['Space', ' ', null],
+  ] as const)('%s («%s») — %s', (code, key, expected) => {
+    expect(geoHotkey(ev({ code, key }))).toBe(expected);
+  });
+
+  it('утримання і модифікатори клавішу не дають', () => {
+    expect(geoHotkey(ev({ code: 'KeyD', repeat: true }))).toBeNull();
+    for (const mod of ['ctrlKey', 'metaKey', 'altKey', 'shiftKey'] as const)
+      expect(geoHotkey(ev({ code: 'KeyD', [mod]: true }))).toBeNull();
+  });
+
+  it.each(['input', 'textarea', 'select'] as const)('з <%s> клавіша — звичайний символ', (tag) => {
+    const t = document.createElement(tag);
+    document.body.appendChild(t);
+    expect(geoHotkey(ev({ code: 'KeyD', key: 'd' }, t))).toBeNull();
     t.remove();
   });
 });

@@ -35,7 +35,7 @@ import { createAmbient } from './ui/ambient';
 import { createPanels, inAirCombat, readyToIssue } from './ui/panels';
 import { GCELL } from './ui/grid';
 // Т.43: зупинки кнопок часу («До події», «+1 доба») — модуль src/ui/time-control.ts.
-import { isSpaceForEvent, runTime, type RunMode } from './ui/time-control';
+import { geoHotkey, isSpaceForEvent, runTime, type RunMode } from './ui/time-control';
 // Т.43: рядок «Наступний крок» (Т.80 — у заголовку «Геосцени») — модуль src/ui/next-step.ts.
 import { nextStep, renderNextStep, showStepTarget, type StepTarget } from './ui/next-step';
 // пR.2 (ADR-0037): бойовище і флоу бою — модуль src/ui/battle.ts.
@@ -633,10 +633,27 @@ if (typeof document !== 'undefined') {
   el('btn-day').onclick = () => runClock('day');
   el('btn-event').onclick = () => runClock('event');
   // Пробіл на геосцені = «До події»: кнопка активна, поверх гри немає вікна чи стартового екрана.
+  // Т.98: D / T / N — «+1 доба», «+1 тік», «Наступний крок» з тими самими умовами, поза боєм.
+  // Фокус «з клавіатури» — після Tab чи N до наступного натискання мишею чи пальцем.
+  let keyboardFocus = false;
+  document.addEventListener('pointerdown', () => (keyboardFocus = false), true);
   document.addEventListener('keydown', (ev) => {
-    if (!isSpaceForEvent(ev)) return;
+    if (ev.key === 'Tab') keyboardFocus = true;
+    const hotkey = geoHotkey(ev);
+    if (hotkey === null && !isSpaceForEvent(ev, keyboardFocus)) return;
     if (party === null || screens?.current() !== 'гра') return;
     if (overlayOpen()) return; // Т.43; Т.73: та сама перевірка overlayOpen()
+    if (hotkey !== null) {
+      if (ui.mission) return;
+      const target = el<HTMLButtonElement>(hotkey === 'day' ? 'btn-day' : hotkey === 'tick' ? 'btn-tick' : 'next-step');
+      if (target.disabled || target.classList.contains('hidden')) return;
+      ev.preventDefault();
+      const before = document.activeElement;
+      target.click();
+      // фокус перейшов на кнопку дії з клавіатури; ціль не знайдено — прапорець не чіпати
+      if (hotkey === 'next' && document.activeElement !== before) keyboardFocus = true;
+      return;
+    }
     const b = el<HTMLButtonElement>('btn-event');
     if (b.disabled) return;
     ev.preventDefault();

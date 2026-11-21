@@ -712,6 +712,25 @@ test('сценарій приймання ADR-0030: партія → місія 
     const spaceTicks = mirror.toEvent();
     await expect(clock).toHaveText(mirror.clock());
     expect(spaceTicks, 'пробіл після «+1 тік» має пройти більше одного тіку — інакше крок не відрізняє його від кнопки').toBeGreaterThan(1);
+    // Т.98: кнопку, вибрану клавішею Tab (рамка фокусу), пробіл натискає сам — «+1 тік», а не «До події»;
+    // T / D — «+1 тік» / «+1 доба», N — «Наступний крок» (фокус на кнопці дії)
+    await page.locator('#btn-event').click();
+    mirror.toEvent();
+    await expect(clock).toHaveText(mirror.clock());
+    await page.keyboard.press('Shift+Tab');
+    await expect(page.locator('#btn-tick')).toBeFocused();
+    await page.keyboard.press('Space');
+    mirror.tick();
+    await expect(clock).toHaveText(mirror.clock());
+    await page.keyboard.press('t');
+    mirror.tick();
+    await expect(clock).toHaveText(mirror.clock());
+    await page.keyboard.press('d');
+    mirror.dayWithStops();
+    await expect(clock).toHaveText(mirror.clock());
+    await expect(page.locator('#next-step')).toHaveText(stepText());
+    await page.keyboard.press('n');
+    await expect(page.locator(':focus'), 'N не дав фокус кнопці дії').toHaveClass(/step-target/);
     // на сіді сценарію хоч одна з двох кнопок стає раніше за добу — інакше крок нічого не перевіряє
     expect(Math.min(dayTicks, eventTicks), 'зупинка на події раніше за 48 тіків').toBeLessThan(TICKS_PER_DAY);
     await expect(page.locator('#ufos .ufo')).toHaveCount(mirror.detected().length);

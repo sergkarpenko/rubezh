@@ -1319,9 +1319,9 @@
         <span class="chip">Боєготові: <b id="ready">—</b></span>
       </div>
       <div class="actions">
-        <button id="btn-tick">+1 тік (30 хв)</button>
+        <button id="btn-tick" title="Час іде на 30 хв (T)">+1 тік (30 хв)</button>
         <button id="btn-event" title="Час іде до першої події, найдовше 1 добу (пробіл)">До події</button>
-        <button id="btn-day">+1 доба</button>
+        <button id="btn-day" title="Час іде добу; стає раніше, коли зонд виявлено або він приземлився (D)">+1 доба</button>
         <!-- П12.2 (ADR-0065): кнопка «Меню» у топбарі — «Налаштування» (П12.3,
              вікно settings.ts), «Як грати», «На стартовий екран» -->
         <button id="btn-menu" title="Меню: налаштування, «Як грати», вихід на стартовий екран">Меню</button>
@@ -1335,7 +1335,7 @@
                не другим рядком шапки (шапка 78 → 58 px); у бою прихований; Т.79 — кнопка: клік показує кнопку дії -->
           <div id="geo-head">
             <h2>Геосцена</h2>
-            <button id="next-step" class="hidden"></button>
+            <button id="next-step" class="hidden" title="Показати кнопку дії (N)"></button>
           </div>
           <canvas id="geo" width="768" height="432"></canvas
           ><!-- GCELL 48 → 16×9 = 768×432 (WORLD_H 8→9 за фідбеком П14.8: зона радара вписується точно) -->
