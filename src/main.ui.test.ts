@@ -870,6 +870,7 @@ describe('бойова фокусна зона (П6.3, ADR-0027)', () => {
     if ($('battle-panel').classList.contains('hidden')) {
       startParty();
       for (let i = 0; i < 1500 && document.querySelector('button.mission') === null; i++) btn('btn-tick').click();
+      expect(document.querySelector('button.mission')).not.toBeNull();
       (document.querySelector('button.mission') as HTMLButtonElement).click();
     }
     await runAutoBattle();
@@ -878,7 +879,8 @@ describe('бойова фокусна зона (П6.3, ADR-0027)', () => {
     expect($('geo-panel').classList.contains('hidden')).toBe(false);
     expect($('status').classList.contains('dimmed')).toBe(false);
     expect(btn('btn-save-1').disabled).toBe(false);
-    // Т.92: сейв тут, а не з флоу збереження в інших блоках — блок і тест проходять поодинці
+    // Т.92: сейв тут, а не з флоу збереження в інших блоках — блок і тест проходять поодинці;
+    // у повному прогоні це перезаписує слот 1 і додає рядок журналу — наступний блок стартує нову партію
     btn('btn-save-1').click();
     expect(btn('btn-load-1').disabled).toBe(false);
     expect(btn('btn-del-1').disabled).toBe(false);
