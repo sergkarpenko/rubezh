@@ -648,8 +648,10 @@ if (typeof document !== 'undefined') {
       const target = el<HTMLButtonElement>(hotkey === 'day' ? 'btn-day' : hotkey === 'tick' ? 'btn-tick' : 'next-step');
       if (target.disabled || target.classList.contains('hidden')) return;
       ev.preventDefault();
-      if (hotkey === 'next') keyboardFocus = true; // фокус на кнопці дії — з клавіатури
+      const before = document.activeElement;
       target.click();
+      // фокус перейшов на кнопку дії з клавіатури; ціль не знайдено — прапорець не чіпати
+      if (hotkey === 'next' && document.activeElement !== before) keyboardFocus = true;
       return;
     }
     const b = el<HTMLButtonElement>('btn-event');

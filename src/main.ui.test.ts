@@ -1748,6 +1748,7 @@ describe('Т.98: гарячі клавіші геосцени D / T / N', () => 
     return ev.defaultPrevented;
   };
   const clock = (): string | null => $('clock').textContent;
+  const space = (target: EventTarget): boolean => key('Space', target);
 
   it('T — «+1 тік», D — «+1 доба»: те саме, що клік по кнопці', () => {
     startParty();
@@ -1784,14 +1785,28 @@ describe('Т.98: гарячі клавіші геосцени D / T / N', () => 
     btn('btn-help-close').click();
   });
 
-  it.each(['help-screen', 'game-menu', 'exit-confirm'])('під відкритим вікном #%s клавіші не діють', (id) => {
+  it('N з прихованим рядком «Наступний крок» нічого не робить і клавішу не перехоплює', () => {
     startParty();
-    $(id).classList.remove('hidden');
-    expect(key('KeyT')).toBe(false);
-    expect(key('KeyD')).toBe(false);
-    expect(clock()).toBe('Д1 00:00');
-    $(id).classList.add('hidden');
+    $('next-step').classList.add('hidden');
+    btn('btn-day').focus();
+    expect(key('KeyN')).toBe(false);
+    expect(document.activeElement?.id).toBe('btn-day');
+    expect(space(btn('btn-day'))).toBe(true); // фокус не з клавіатури — пробіл і далі «До події»
+    $('next-step').classList.remove('hidden');
   });
+
+  it.each(['help-screen', 'game-menu', 'settings-dialog', 'new-game-dialog', 'exit-confirm', 'campaign-victory', 'evac-confirm'])(
+    'під відкритим вікном #%s клавіші не діють',
+    (id) => {
+      startParty();
+      $(id).classList.remove('hidden');
+      expect(key('KeyT')).toBe(false);
+      expect(key('KeyD')).toBe(false);
+      expect(key('KeyN')).toBe(false);
+      expect(clock()).toBe('Д1 00:00');
+      $(id).classList.add('hidden');
+    }
+  );
 
   it('з поля вводу і на стартовому екрані клавіші не діють', () => {
     startParty();
