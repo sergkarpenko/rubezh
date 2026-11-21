@@ -779,16 +779,16 @@
         color: #6d7d92;
         text-shadow: 0 1px 6px rgba(6, 10, 20, 0.8);
       }
-      /* Т.94 (рішення власника 21.11.2026, варіант А): у вікнах, нижчих за 720 px, абсолютна
-         сітка П14.7 накривала підпис і логотип меню, а банер Т.93 — «Нову партію». Тут —
+      /* Т.94 (рішення власника 21.11.2026, варіант А): у вікнах до 760 px заввишки абсолютна
+         сітка П14.7 накривала підпис і логотип меню (підпис — аж до 740 px заввишки), а банер
+         Т.93 — «Нову партію». Тут —
          потік: банер, герой, меню, версія одним стовпчиком; логотип — від висоти вікна.
          Банер лишається вгорі (Т.93), герой і меню — посередині вільного місця під ним
-         (margin-top: auto), версія — внизу; safe center: вищий за вікно стовпчик не ховає верх */
-      @media (max-height: 720px) {
-        #start-screen {
-          align-items: safe center;
-        }
+         (margin-top: auto), версія — внизу; margin-block: auto замість центрування батька —
+         вищий за вікно стовпчик не ховає верх і там, де немає `safe center` (аудит Т.94) */
+      @media (max-height: 760px) {
         .start-box {
+          margin-block: auto;
           display: flex;
           flex-direction: column;
           align-items: center;
@@ -805,6 +805,7 @@
         }
         .start-box .start-logo {
           width: min(300px, 62vw, 24vh);
+          width: min(300px, 62vw, 24svh);
         }
         .start-box .start-hero,
         .start-box .start-version {
@@ -817,8 +818,9 @@
           gap: 8px;
         }
       }
-      /* Т.94: альбомні телефони (до 480 px заввишки) — дві колонки: логотип з підписом
-         ліворуч, меню праворуч, банер і версія — на всю ширину */
+      /* Т.94: альбомні телефони (до 480 px заввишки) — дві колонки: банер і логотип з підписом
+         ліворуч, меню праворуч на всю висоту, версія — на всю ширину. Банер у лівій колонці,
+         а не окремим рядком: так на 568 × 270 з банером немає прокрутки (аудит Т.94) */
       @media (max-height: 480px) and (orientation: landscape) {
         .start-box {
           display: grid;
@@ -829,7 +831,11 @@
           column-gap: 24px;
           row-gap: 4px;
         }
-        .start-box .start-note,
+        .start-box .start-note {
+          grid-column: 1;
+          grid-row: 1;
+          width: 100%;
+        }
         .start-box .start-version {
           grid-column: 1 / -1;
         }
@@ -841,7 +847,7 @@
         }
         .start-box .start-menu {
           grid-column: 2;
-          grid-row: 2;
+          grid-row: 1 / 3;
           width: min(300px, 100%);
         }
         .start-box .start-version {
@@ -850,6 +856,7 @@
         }
         .start-box .start-logo {
           width: min(300px, 40vw, 40vh);
+          width: min(300px, 40vw, 40svh);
         }
         .start-box .start-tagline {
           font-size: 11px;

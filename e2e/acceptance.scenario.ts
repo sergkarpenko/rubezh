@@ -741,9 +741,12 @@ const t61Visible = (b: Awaited<ReturnType<typeof t61Look>>, label: string): void
   expect(b.fits, label + ': текст обрізано').toBe(true);
 };
 
-// Т.94 (рішення власника 21.11.2026, варіант А): малі й низькі вікна — стовпчик (портрет) або дві колонки
-// (альбомні до 480 px); перетин рамок (і по висоті, і по ширині) — накриття
+// Т.94 (рішення власника 21.11.2026, варіант А): вікна до 760 px заввишки — стовпчик, альбомні до 480 px —
+// дві колонки; перетин рамок (і по висоті, і по ширині) — накриття
 const T94_VIEWPORTS = [
+  { width: 1280, height: 740 },
+  { width: 800, height: 600 },
+  { width: 568, height: 270 },
   { width: 320, height: 568 },
   { width: 375, height: 667 },
   { width: 568, height: 320 },
@@ -828,6 +831,10 @@ test('Т.61: екран перемоги і рядок-пояснення ста
   });
 
   await test.step('Т.94: малі й низькі вікна без банера — нічого не накрито, усе у вікні, без прокрутки', async () => {
+    // вище за 760 px — розкладка П14.7 без змін: меню на 48 px над низом екрана з відступом 16 px
+    await page.setViewportSize({ width: 1366, height: 768 });
+    const menuBottom = await page.locator('#start-screen .start-menu').evaluate((e) => e.getBoundingClientRect().bottom);
+    expect(menuBottom, '1366 × 768: меню не на місці П14.7').toBe(768 - 64);
     for (const size of T94_VIEWPORTS) {
       await page.setViewportSize(size);
       await t94Layout(page, 'Т.94 ' + size.width + ' × ' + size.height);
