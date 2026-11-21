@@ -1780,7 +1780,7 @@ describe('Т.98: гарячі клавіші геосцени D / T / N', () => 
     btn('btn-help').click();
     expect($('help-screen').textContent).toContain('«+1 тік (30 хв)» (T)');
     expect($('help-screen').textContent).toContain('«+1 доба» (D)');
-    expect($('help-screen').textContent).toContain('N — «Наступний крок»');
+    expect($('help-screen').textContent).toContain('Esc — скасувати · N — «Наступний крок».');
     btn('btn-help-close').click();
   });
 
