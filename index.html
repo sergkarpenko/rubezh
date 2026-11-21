@@ -779,6 +779,93 @@
         color: #6d7d92;
         text-shadow: 0 1px 6px rgba(6, 10, 20, 0.8);
       }
+      /* Т.94 (рішення власника 21.11.2026, варіант А): у вікнах до 760 px заввишки абсолютна
+         сітка П14.7 накривала підпис і логотип меню (підпис — аж до 740 px заввишки), а банер
+         Т.93 — «Нову партію». Тут —
+         потік: банер, герой, меню, версія одним стовпчиком; логотип — від висоти вікна.
+         Банер лишається вгорі (Т.93), герой і меню — посередині вільного місця під ним
+         (margin-top: auto), версія — внизу; margin-block: auto замість центрування батька —
+         вищий за вікно стовпчик не ховає верх і там, де немає `safe center` (аудит Т.94) */
+      @media (max-height: 760px) {
+        .start-box {
+          margin-block: auto;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 14px;
+          height: auto;
+          min-height: 100%;
+        }
+        .start-box .start-hero,
+        .start-box .start-menu,
+        .start-box .start-note,
+        .start-box .start-version {
+          position: static;
+          transform: none;
+        }
+        .start-box .start-logo {
+          width: min(300px, 62vw, 24vh);
+          width: min(300px, 62vw, 24svh);
+        }
+        .start-box .start-hero,
+        .start-box .start-version {
+          margin-top: auto;
+        }
+        .start-box .start-tagline {
+          margin-top: 8px;
+        }
+        .start-box .start-menu {
+          gap: 8px;
+        }
+      }
+      /* Т.94: альбомні телефони (до 480 px заввишки) — дві колонки: банер і логотип з підписом
+         ліворуч, меню праворуч на всю висоту, версія — на всю ширину. Банер у лівій колонці,
+         а не окремим рядком: так на 568 × 270 з банером немає прокрутки (аудит Т.94) */
+      @media (max-height: 480px) and (orientation: landscape) {
+        .start-box {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+          grid-template-rows: auto 1fr auto;
+          align-items: center;
+          justify-items: center;
+          column-gap: 24px;
+          row-gap: 4px;
+        }
+        .start-box .start-note {
+          grid-column: 1;
+          grid-row: 1;
+          width: 100%;
+        }
+        .start-box .start-version {
+          grid-column: 1 / -1;
+        }
+        .start-box .start-hero {
+          grid-column: 1;
+          grid-row: 2;
+          width: 100%;
+          margin-top: 0;
+        }
+        .start-box .start-menu {
+          grid-column: 2;
+          grid-row: 1 / 3;
+          width: min(300px, 100%);
+        }
+        .start-box .start-version {
+          grid-row: 3;
+          margin-top: 0;
+        }
+        .start-box .start-logo {
+          width: min(300px, 40vw, 40vh);
+          width: min(300px, 40vw, 40svh);
+        }
+        .start-box .start-tagline {
+          font-size: 11px;
+          letter-spacing: 0.15em;
+        }
+        .start-box .start-menu button {
+          padding: 8px 16px;
+        }
+      }
       /* П12.2 (ADR-0065): модальні вікна навігації — діалог нової партії,
          меню гри, підтвердження виходу (без анімацій — перемикання класів);
          П12.3: вікно «Налаштування» — той самий патерн */
