@@ -869,6 +869,7 @@ See `docs/plans/refactoring.md` and `docs/workflow-archive/linia-pr.md` (арх�
     - Зроблено: `"types": []` у `tsconfig.json`; ADR-0107; рядок у `AGENTS.md`; порада в `docs/agents/common.md`. Коміт із `tsconfig.json` — з `--no-verify` (хук блокує файл механічно; прецедент П10.2), перевірки хука прогнано вручну.
     - Перевірка: той самий `process.env` у файлі UI з новим `tsconfig.json` — `TS2591`, код 2; `tsconfig.json`, `tsconfig.core.json`, `tsconfig.scripts.json`, `tsconfig.e2e.json`, `tsconfig.typedoc.json` — код 0; `npm test` 48 / 1326; `npm run lint`, `npm run format:check`, `npm run docs` — 0; e2e — у CI.
     - Аудит (PR #419): Opus — 2 дрібниці, блокерів немає: `/// <reference types="node" />` чи `import type … from 'vite'` в одному файлі `src` повертає глобали Node усій програмі — застереження дописано в ADR-0107 і `docs/agents/common.md`.
+    - Аудит Vibe CLI (PR #419): 1 дрібниця — дата в шапці `AGENTS.md` лишалась 2026-11-20 (давнє, з Т.102) — виправлено на 2026-11-21.
     - Модель сесії — Opus 5.5 medium.
     - Урок: немає
 - **Backlog (відкладено рішенням власника на плануванні Фази 14):** евакуація з місії (→ взято темою Фази 15, рішення власника 2026-10-25); туман із блокуванням огляду юнітами; кілька винищувачів; оборона бази; дозор party-bot (зміна політики — окремий ADR + перезапуск probe-симуляцій П8.5/П11.8).
