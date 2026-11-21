@@ -2668,3 +2668,172 @@ describe('Т.75: пастка фокусу у вікнах поверх гри',
     }
   });
 });
+
+// Т.99 (кандидат 46): зупинки часу на сторінці — наука, «Кузня», ремонт, банкрутство посеред прогону,
+// відліт зонда (не подія зупинки — рішення власника) і gameOver у рядку «Наступний крок».
+// Стан — правкою сейва в слоті 1 (як у тесті одужання Т.43); кожна зупинка — проти контролю без події.
+describe('Т.99: зупинки «До події» на сторінці і банкрутство посеред прогону', () => {
+  const clock = (): string | null => $('clock').textContent;
+  const minutes = (c: string | null): number => {
+    const m = /^Д(\d+) (\d\d):(\d\d)$/.exec(c ?? '')!;
+    return (Number(m[1]) - 1) * 1440 + Number(m[2]) * 60 + Number(m[3]);
+  };
+  type S = {
+    econ: { money: number };
+    roster: { soldiers: { id: string }[]; hospital: Record<string, number> };
+    research: {
+      scientists: { id: string; name: string }[];
+      hired: number;
+      active: { id: string; invested: number }[];
+      completed: string[];
+    };
+    workshop: { queue: { id: string; ticksLeft: number }[] };
+    intercept: { fighter: { hp: number; status: string; repairTicksLeft?: number } };
+  };
+  // збереження поточного стану і завантаження його правленої копії; повертає незмінений сейв (контроль)
+  const saveBase = (): string => {
+    btn('btn-save-1').click();
+    return localStorage.getItem('rubezh.save.1')!;
+  };
+  const load = (base: string, edit?: (s: S) => void): void => {
+    const save = JSON.parse(base) as { state: S };
+    edit?.(save.state);
+    localStorage.setItem('rubezh.save.1', JSON.stringify(save));
+    btn('btn-load-1').click();
+  };
+  const scientists = (s: S, n: number): void => {
+    s.research.scientists = Array.from({ length: n }, (_, i) => ({ id: 'sc-' + (i + 1), name: 'Техномант ' + (i + 1) }));
+    s.research.hired = n;
+  };
+  const logText = (): string => $('log').textContent;
+
+  it('завершений протокол зупиняє «До події» на тіку завершення, «+1 доба» — ні', () => {
+    startParty();
+    for (let i = 0; i < 47; i++) btn('btn-tick').click(); // Д1 23:30: наука рахується на межі доби
+    expect(clock()).toBe('Д1 23:30');
+    const base = saveBase();
+    const almost = (s: S): void => {
+      scientists(s, 1);
+      s.research.active = [{ id: 'armor', invested: 13 }]; // 14 точок — бракує однієї
+    };
+    // контроль: той самий техномант, зарплата і точки о Д2 00:00, але протоколу бракує двох точок — зупинки немає
+    load(base, (s) => {
+      almost(s);
+      s.research.active[0].invested = 12;
+    });
+    btn('btn-event').click();
+    expect(logText()).toContain('⚑ Потік: +1 (доба 1)');
+    expect(logText()).not.toContain('Протокол завершено');
+    expect(minutes(clock())).toBeGreaterThan(minutes('Д2 00:00'));
+    load(base, almost);
+    expect(logText()).not.toContain('Протокол завершено');
+    btn('btn-event').click();
+    expect(clock()).toBe('Д2 00:00');
+    expect(logText()).toContain('⚑ Протокол завершено: Композитна броня ✓');
+    load(base, almost);
+    btn('btn-day').click();
+    expect(minutes(clock())).toBeGreaterThan(minutes('Д2 00:00'));
+  });
+
+  it('виготовлений предмет «Кузні» зупиняє «До події» до виявлення зонда, «+1 доба» — ні', () => {
+    startParty();
+    const base = saveBase(); // Д1 00:00; перша подія без правки — виявлення зонда о Д1 09:30 (тест Т.43)
+    const order = (s: S): void => {
+      s.research.completed = ['medkit']; // замовити можна лише досліджений предмет (orderItem)
+      s.workshop.queue = [{ id: 'medkit', ticksLeft: 3 }];
+    };
+    load(base, order);
+    btn('btn-event').click();
+    expect(clock()).toBe('Д1 01:30');
+    expect(logText()).toContain('⚑ Кузня: виготовлено «Регенеративний гель» → склад ✓');
+    load(base, order);
+    btn('btn-day').click();
+    expect(clock()).toBe('Д1 09:30');
+  });
+
+  it('завершений ремонт перехоплювача зупиняє «До події», «+1 доба» — ні', () => {
+    startParty();
+    const base = saveBase();
+    const repair = (s: S): void => {
+      s.intercept.fighter.hp = 1;
+      s.intercept.fighter.status = 'ремонт';
+      s.intercept.fighter.repairTicksLeft = 2;
+    };
+    load(base, repair);
+    btn('btn-event').click();
+    expect(clock()).toBe('Д1 01:00');
+    expect(logText()).toContain('✦ Ремонт перехоплювача завершено — знову боєготовий');
+    load(base, repair);
+    btn('btn-day').click();
+    expect(clock()).toBe('Д1 09:30');
+  });
+
+  it('відліт зонда, що сидить, — не подія зупинки: «До події» проходить повз вікна місій (рішення власника)', () => {
+    startParty();
+    for (let i = 0; i < 4; i++) btn('btn-event').click(); // сід 42: Д1 13:30 — обидва зонди сидять, вікна 1,5 і 4 год
+    expect(clock()).toBe('Д1 13:30');
+    expect(document.querySelectorAll('#ufos button.mission').length).toBe(2);
+    const base = saveBase();
+    // еталон: тіками до відльоту обох
+    for (let i = 0; i < 48 && document.querySelector('#ufos button.mission') !== null; i++) btn('btn-tick').click();
+    expect(document.querySelector('#ufos button.mission')).toBeNull();
+    const departed = minutes(clock());
+    load(base);
+    btn('btn-event').click();
+    expect(minutes(clock())).toBeGreaterThan(departed); // наступна зупинка — виявлення нового зонда
+    expect(document.querySelector('#ufos button.mission')).toBeNull();
+  });
+
+  // Банкрутство настає на межі доби: дотація +75, утримання 8 техномантів −80 → 95 < 100 (найм на «нормі»),
+  // а боєготових немає — усі в лазареті (одужають уже після банкрутства). Сід 42: з Д1 13:30 наступна
+  // подія — виявлення зонда о Д2 02:00, тож зупинка о Д2 00:00 — лише від банкрутства.
+  it('банкрутство посеред прогону зупиняє «До події» на тому тіку; без нього прогін іде далі', () => {
+    startParty();
+    for (let i = 0; i < 4; i++) btn('btn-event').click();
+    expect(clock()).toBe('Д1 13:30');
+    const base = saveBase();
+    const broke = (money: number) => (s: S) => {
+      s.econ.money = money;
+      scientists(s, 8);
+      for (const u of s.roster.soldiers) s.roster.hospital[u.id] = 60;
+    };
+    load(base, broke(200)); // контроль: 200 + 75 − 80 = 195 — не банкрут
+    expect($('ready').textContent).toBe('0/6');
+    btn('btn-event').click();
+    expect(clock()).toBe('Д2 02:00');
+    expect(btn('btn-event').disabled).toBe(false);
+    load(base, broke(100));
+    expect($('money').textContent).toBe('100');
+    expect(btn('btn-event').disabled).toBe(false);
+    btn('btn-event').click();
+    expect(clock()).toBe('Д2 00:00');
+    expect($('money').textContent).toBe('БАНКРУТ');
+    expect(logText()).toContain('✗ Банкрутство: немає боєготових оперативників і кредитів на вербування — партію програно.');
+    for (const id of ['btn-event', 'btn-day', 'btn-tick']) expect(btn(id).disabled, id).toBe(true);
+    expect($('next-step').classList.contains('hidden')).toBe(true);
+  });
+
+  // gameOver лишається і тоді, коли умова банкрутства вже не виконується (nextStep сам перевіряє лише isBankrupt):
+  // тіки в обхід disabled повертають оперативників із лазарету — рядок прихований саме через gameOver.
+  // Обхід тримається на тому, що обробник «+1 тік» (main.ts) gameOver не перевіряє: якщо таку перевірку додадуть,
+  // тест треба переробити (довести до гравця стан «gameOver, але не isBankrupt» іншим шляхом).
+  it('після банкрутства рядок «Наступний крок» прихований, навіть коли боєготові повернулись', () => {
+    startParty();
+    for (let i = 0; i < 4; i++) btn('btn-event').click(); // Д1 13:30
+    const base = saveBase();
+    load(base, (s) => {
+      s.econ.money = 100;
+      scientists(s, 8);
+      for (const u of s.roster.soldiers) s.roster.hospital[u.id] = 30; // 21 тік до Д2 00:00, ще 9 — до Д2 04:30
+    });
+    btn('btn-event').click(); // Д1 13:30 → Д2 00:00: банкрутство раніше одужання
+    expect(clock()).toBe('Д2 00:00');
+    expect($('money').textContent).toBe('БАНКРУТ');
+    for (let i = 0; i < 9; i++) btn('btn-tick').onclick!(new MouseEvent('click') as PointerEvent);
+    expect(clock()).toBe('Д2 04:30');
+    expect($('ready').textContent).toBe('6/6');
+    expect($('money').textContent).toBe('БАНКРУТ');
+    expect($('next-step').classList.contains('hidden')).toBe(true);
+    expect($('next-step').textContent).toBe('');
+  });
+});
