@@ -1280,6 +1280,11 @@
         }
       }
       @media (max-height: 480px) and (orientation: landscape) {
+        /* вузький альбом (568 × 320) потрапляє і в блок до 599 px — плитки повертаємо збоку (аудит PR #435) */
+        #layout.in-battle #battle-stage {
+          flex-direction: row;
+          align-items: flex-start;
+        }
         #layout.in-battle #battle {
           flex: none;
           width: min(100% - 144px, 100svh - 24px);

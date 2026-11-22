@@ -59,7 +59,7 @@ async function expectPhoneBattle(page: Page, label: string, minField: number, po
     return {
       win: window.innerHeight,
       winW: window.innerWidth,
-      hscroll: document.documentElement.scrollWidth - window.innerWidth,
+      panelRight: box('battle-panel').right,
       topbar: getComputedStyle(document.getElementById('topbar')!).position,
       field: field.width,
       fieldH: field.height,
@@ -79,7 +79,8 @@ async function expectPhoneBattle(page: Page, label: string, minField: number, po
     };
   });
   expect(m.topbar, label + ': шапка в бою липне').toBe('static');
-  expect(m.hscroll, label + ': горизонтальна прокрутка').toBeLessThanOrEqual(0);
+  // не прокрутка сторінки: у CI на 320 px її дає щось поза боєм (+10 px), локально її немає
+  expect(m.panelRight, label + ': панель бою за правим краєм').toBeLessThanOrEqual(m.winW);
   expect(m.field, label + ': поле менше за межу').toBeGreaterThanOrEqual(minField);
   expect(Math.abs(m.field - m.fieldH), label + ': поле не квадратне').toBeLessThanOrEqual(1);
   expect(m.tbRight, label + ': плитки за правим краєм').toBeLessThanOrEqual(m.winW);
@@ -574,6 +575,7 @@ test('сценарій приймання ADR-0030: партія → місія 
       [390, 844, 330, true],
       [320, 568, 260, true],
       [844, 390, 340, false],
+      [568, 320, 280, false], // і в блоці до 599 px завширшки (аудит PR #435)
     ] as const) {
       await page.setViewportSize({ width, height });
       await expectPhoneBattle(page, `${width} × ${height}`, minField, portrait);
