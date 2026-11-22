@@ -25,6 +25,12 @@ concurrency:
   group: vibe-audit-${{ github.event.pull_request.number || inputs.pr }}
   cancel-in-progress: true
 
+# ADR-0113: кожен крок run: — під bash з pipefail (bash --noprofile --norc -eo pipefail);
+# без цього рядка крок іде під bash -e, і код першої команди конвеєра губиться.
+defaults:
+  run:
+    shell: bash
+
 jobs:
   vibe-audit:
     if: github.event_name == 'workflow_dispatch' || (github.event.pull_request.user.login != 'dependabot[bot]' && github.event.pull_request.head.repo.full_name == github.repository)

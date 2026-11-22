@@ -15,6 +15,12 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+# ADR-0113: кожен крок run: — під bash з pipefail (bash --noprofile --norc -eo pipefail);
+# без цього рядка крок іде під bash -e, і код першої команди конвеєра губиться.
+defaults:
+  run:
+    shell: bash
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -25,6 +31,15 @@ jobs:
           node-version: 22
       # ADR-0076: строго за lockfile (урок П9.4 — дрейф node_modules від lockfile)
       - run: npm ci
+      # ADR-0113: кожен workflow задає defaults.run.shell: bash (pipefail) — новий workflow
+      # без цього блоку червонить чек test
+      - name: Workflow — bash з pipefail
+        run: |
+          missing="$(grep -L -x -F -e '    shell: bash' .github/workflows/*.yml || true)"
+          if [ -n "$missing" ]; then
+            for f in $missing; do echo "::error file=$f::немає defaults.run.shell: bash (ADR-0113)"; done
+            exit 1
+          fi
       # ADR-0076: гейти типів, лінту і формату — у CI, а не лише в pre-commit.
       # tsc перевіряє і тестові файли: vitest типи не перевіряє, typedoc тести виключає.
       - run: npx tsc --noEmit

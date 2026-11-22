@@ -32,6 +32,12 @@ concurrency:
   group: mutation-${{ github.ref }}
   cancel-in-progress: true
 
+# ADR-0113: кожен крок run: — під bash з pipefail (bash --noprofile --norc -eo pipefail);
+# без цього рядка крок іде під bash -e, і код першої команди конвеєра губиться.
+defaults:
+  run:
+    shell: bash
+
 jobs:
   mutation:
     runs-on: ubuntu-latest
