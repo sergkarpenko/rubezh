@@ -515,6 +515,7 @@ test('сценарій приймання ADR-0030: партія → місія 
     for (const [width, height, minField] of [
       [1024, 600, 380],
       [1366, 600, 480],
+      [900, 700, 390], // ширина контейнера < висота + 144: поле обмежене шириною (аудит PR #433)
     ] as const) {
       await page.setViewportSize({ width, height });
       await expectBattleFits(page, `${width} × ${height}`, minField);

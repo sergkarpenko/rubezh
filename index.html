@@ -1191,7 +1191,8 @@
             grid-template-columns: repeat(2, 64px);
             align-content: start;
           }
-          #battle {
+          #layout.in-battle #battle {
+            /* специфічність як у правилі −74px вище, інакше воно виграє (аудит PR #433) */
             width: min(100cqw - 144px, 100cqh, 960px);
           }
         }
