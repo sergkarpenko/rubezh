@@ -394,6 +394,26 @@
         color: #7d8794;
         font-size: 12px;
       }
+      /* Т.122 (рішення власника 22.11.2026, варіант Б): вузька панель — кроки стовпчиком зі стрілками ↓.
+         Межа — найменша ширина смуги в рядок зі шрифтом CI (DejaVu Sans): 268 px; панель на ноутбуці — 272 */
+      #research {
+        container: sci / inline-size;
+      }
+      @container sci (max-width: 269px) {
+        .sci-steps {
+          flex-direction: column;
+        }
+        .sci-steps .arr {
+          align-self: flex-start;
+          padding-left: 10px;
+          line-height: 1;
+          transform: rotate(90deg);
+        }
+        .sci-steps button b {
+          display: inline;
+          margin-right: 4px;
+        }
+      }
       .sci-head {
         font-size: 12px;
         color: #aab3bf;
@@ -408,6 +428,7 @@
       }
       .sci-top {
         display: flex;
+        flex-wrap: wrap; /* Т.122: бейдж, що не вміщується поруч із назвою, — під назвою */
         justify-content: space-between;
         gap: 6px;
         align-items: baseline;
@@ -418,8 +439,7 @@
         font-weight: 600;
       }
       .sci-top button.sci-toggle {
-        flex: 1 1 0;
-        min-width: 0;
+        flex: 1 1 auto; /* Т.122: не вужча за найдовше слово назви — не налазить на бейдж */
         background: none;
         border: none;
         padding: 0;

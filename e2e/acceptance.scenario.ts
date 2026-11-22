@@ -60,6 +60,12 @@ async function expectPhoneBattle(page: Page, label: string, minField: number, po
       win: window.innerHeight,
       winW: window.innerWidth,
       panelRight: box('battle-panel').right,
+      page: document.documentElement.scrollWidth,
+      // Т.122: панель «Дослідження» (у бою — під полем) — нічого за її правим краєм
+      research: Math.max(
+        0,
+        ...[...document.querySelectorAll('#research *')].map((e) => e.getBoundingClientRect().right - box('research').right)
+      ),
       topbar: getComputedStyle(document.getElementById('topbar')!).position,
       field: field.width,
       fieldH: field.height,
@@ -79,8 +85,10 @@ async function expectPhoneBattle(page: Page, label: string, minField: number, po
     };
   });
   expect(m.topbar, label + ': шапка в бою липне').toBe('static');
-  // не прокрутка сторінки: у CI на 320 px її дає щось поза боєм (+10 px), локально її немає
   expect(m.panelRight, label + ': панель бою за правим краєм').toBeLessThanOrEqual(m.winW);
+  // Т.122: прокрутку 10 px на 320 px у CI давала панель «Дослідження» (шрифт CI ширший) — гейт знову на всю сторінку
+  expect(m.research, label + ': вміст «Дослідження» за правим краєм панелі').toBeLessThanOrEqual(0.5);
+  expect(m.page, label + ': сторінка ширша за вікно').toBeLessThanOrEqual(m.winW);
   expect(m.field, label + ': поле менше за межу').toBeGreaterThanOrEqual(minField);
   expect(Math.abs(m.field - m.fieldH), label + ': поле не квадратне').toBeLessThanOrEqual(1);
   expect(m.tbRight, label + ': плитки за правим краєм').toBeLessThanOrEqual(m.winW);
