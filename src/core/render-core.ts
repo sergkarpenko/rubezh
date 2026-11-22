@@ -217,16 +217,18 @@ export function pathLabelScale(px: number): number {
   return Math.max(1, (px * PATH_LABEL_MIN_CSS) / 15);
 }
 // Т.119 (рішення власника, варіант А; замість «над ціллю» Т.44, що закривало клітинку над ціллю):
-// плашка праворуч від клітинки цілі з відступом 2 px × k, а якщо праворуч не вміщується (ближче 2 px
-// до краю канви) — ліворуч; по вертикалі — по центру клітинки, притиснута в межі квадратної канви
-// з відступом 2 px. Не закриває ні клітинку над ціллю, ні кінець шляху, що приходить у ціль.
-export function pathLabelBox(goal: { x: number; y: number }, cell: number, textW: number, cw: number, k = 1): LabelBox {
+// плашка збоку від клітинки цілі з відступом 2 px × k — праворуч, а якщо шлях приходить у ціль справа
+// (fromRight; аудит PR #434: інакше плашка лягала на кінець шляху і клітинку оперативника) — ліворуч;
+// якщо обраний бік не вміщується (ближче 2 px до краю канви) — інший. По вертикалі — по центру
+// клітинки, притиснута в межі квадратної канви з відступом 2 px. Клітинку над ціллю не закриває.
+export function pathLabelBox(goal: { x: number; y: number }, cell: number, textW: number, cw: number, k = 1, fromRight = false): LabelBox {
   const cy = goal.y * cell + cell / 2;
   const w = Math.ceil(textW + PATH_LABEL_PAD * k);
   const h = Math.round(PATH_LABEL_H * k);
   const m = Math.round(2 * k);
   const right = goal.x * cell + cell + m;
-  const x = right + w <= cw - 2 ? right : Math.max(2, goal.x * cell - m - w);
+  const left = goal.x * cell - m - w;
+  const x = fromRight ? (left >= 2 ? left : right) : right + w <= cw - 2 ? right : Math.max(2, left);
   return { x, y: Math.round(Math.min(Math.max(cy - h / 2, 2), cw - h - 2)), w, h };
 }
 

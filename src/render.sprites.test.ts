@@ -1387,6 +1387,30 @@ describe('Т.44: drawPathPreview — шлях лінією і ціна біля 
     expect(calls(s.ops, 'fillText')).toEqual([['9 AP', 338, 216.5]]);
   });
 
+  it("Т.119: шрифт округлюється вгору — 768 × 1024 (поле 572, px = 960 / 572): 21 px buffer'а, 12,5 CSS px, а не 20 (11,9)", () => {
+    const s = seqCtx();
+    drawPathPreview(s.ctx, { ...base, path: [{ x: 5, y: 4 }], ap: 9, affordable: true, px: 960 / 572 });
+    expect(sets(s.ops, 'font')).toEqual(['bold 21px monospace']);
+  });
+
+  it('аудит PR #434: шлях приходить у ціль справа — плашка ліворуч, не на кінці шляху', () => {
+    const s = seqCtx();
+    drawPathPreview(s.ctx, { ...base, from: { x: 6, y: 4 }, path: [{ x: 5, y: 4 }], ap: 1, affordable: true });
+    expect(calls(s.ops, 'fillRect')).toEqual([[192, 206, 46, 21]]);
+    const t = seqCtx();
+    drawPathPreview(t.ctx, {
+      ...base,
+      from: { x: 7, y: 4 },
+      path: [
+        { x: 6, y: 4 },
+        { x: 5, y: 3 },
+      ],
+      ap: 2,
+      affordable: true,
+    });
+    expect(calls(t.ops, 'fillRect')[0]![0]).toBe(192); // передостання (6,4) правіше за ціль (5,3)
+  });
+
   it('Т.119: px ≤ 1,25 — розміри Т.44 без змін', () => {
     const a = seqCtx();
     const b = seqCtx();

@@ -755,7 +755,8 @@ export function drawPathPreview(ctx: CanvasRenderingContext2D, p: PathPreview): 
   ctx.arc(gx, gy, Math.max(PATH_END_R, 3.5 * px), 0, Math.PI * 2);
   ctx.fill();
   const text = p.ap + ' AP';
-  const box = pathLabelBox(goal, p.cell, text.length * PATH_LABEL_CHAR_W * k, p.cw, k);
+  const prev = p.path.length > 1 ? p.path[p.path.length - 2]! : p.from; // клітинка перед ціллю
+  const box = pathLabelBox(goal, p.cell, text.length * PATH_LABEL_CHAR_W * k, p.cw, k, prev.x > goal.x);
   ctx.fillStyle = PATH_LABEL_BG;
   ctx.fillRect(box.x, box.y, box.w, box.h);
   ctx.lineWidth = Math.max(1, Math.round(k));

@@ -843,10 +843,16 @@ describe('Т.44: зона ходу вибраного оперативника �
     f.ui.hoverPath = [{ x: 5, y: 4 }];
     f.ui.hoverAp = 1;
     const cv = document.getElementById('battle') as HTMLCanvasElement;
-    expect(render(f).some((o) => o === 'set:font=bold 15px monospace')).toBe(true); // jsdom: clientWidth 0 → px 1
+    const before = render(f);
+    expect(before.some((o) => o === 'set:font=bold 15px monospace')).toBe(true); // jsdom: clientWidth 0 → px 1
     Object.defineProperty(cv, 'clientWidth', { configurable: true, value: cv.width / 2.5 });
     try {
-      expect(render(f).some((o) => o === 'set:font=bold 30px monospace')).toBe(true); // 12 CSS px
+      const ops = render(f);
+      expect(ops.some((o) => o === 'set:font=bold 30px monospace')).toBe(true); // 12 CSS px
+      // межа туману: 1,4 CSS px × 2,5 = 3,5 px buffer'а (аудит PR #434: px у drawNightTerrain тест не тримав)
+      const border = (o: string[]): string | undefined => o[o.indexOf('set:strokeStyle=rgba(125,215,255,0.6)') + 1];
+      expect(border(before)).toBe('set:lineWidth=2');
+      expect(border(ops)).toBe('set:lineWidth=3.5');
     } finally {
       delete (cv as unknown as { clientWidth?: number }).clientWidth;
     }
