@@ -2,8 +2,8 @@
 
 - Статус: accepted (мерж PR власником = «схвалюю» — конвенція ADR-0052)
 - Дата: 2026-11-22
-- Частково Supersedes: ADR-0110 (п. 2 — у lint-staged для `e2e/**/*.ts` лише `prettier --write`; п. 3 — ESLint для `e2e/` поза кроком), ADR-0106 (охоплення `npm run lint` — `eslint src scripts`)
-- Доповнює: ADR-0015 (ESLint + Prettier), ADR-0076 (гейт лінту в CI), ADR-0080 (сценарій приймання в `e2e/`), ADR-0108 (lint-staged для `scripts/`), ADR-0012 (зміна `package.json` — з ADR і авторизацією власника)
+- Частково Supersedes: ADR-0110 (п. 2 — у lint-staged для `e2e/**/*.ts` лише `prettier --write`; п. 3 — ESLint для `e2e/` поза кроком), ADR-0106 (охоплення `npm run lint` — `eslint src scripts`), ADR-0080 (наслідок «`e2e/` лишається поза `npm run lint` і `format:check`»; частину про `format:check` замінив ADR-0110)
+- Доповнює: ADR-0015 (ESLint + Prettier), ADR-0076 (гейт лінту в CI), ADR-0108 (lint-staged для `scripts/`), ADR-0012 (зміна `package.json` — з ADR і авторизацією власника)
 - Автор: Claude Code (рішення власника 22.11.2026 на фініші Т.111 кнопкою — «ESLint для e2e/ (Recommended)»; кандидат 110 — з Т.111)
 
 ## Контекст
