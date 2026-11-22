@@ -571,7 +571,7 @@ describeScenario('UI-флоу прев’ю: геосцена → місія →
         for (let i = 0; i < 600 && !ok() && !btn('btn-auto-battle').disabled; i++) await vi.advanceTimersByTimeAsync(AUTO_STEP_MS);
       };
       await stepUntil(() => plate.className === '');
-      expect(plate.textContent).toBe('ХІД ДЕМОНІВ РОЗРИВУ…Демони діють. Зачекайте.');
+      expect(plate.textContent).toBe('ХІД ДЕМОНІВ РОЗРИВУ…Демони діють. Зачекайте.'); // Т.117: в авто-бої пропуску немає
       expect($('bctx-turn').textContent).toBe('хід демонів Розриву');
       btn('btn-auto-battle').click(); // «Стоп» посеред ходу демонів — плашка «діють» зникає
       expect(plate.className).toBe('hidden');

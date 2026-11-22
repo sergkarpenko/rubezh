@@ -739,10 +739,17 @@ if (typeof document !== 'undefined') {
   };
   const bc = el<HTMLCanvasElement>('battle');
   // Т.33: до обробника кліку; Т.116: під час авто-бою клік підсумок не прибирає
-  bc.addEventListener('click', () => {
-    if (!autoBattle.busy) battle.dismissTurnPlate();
+  bc.addEventListener('click', (ev) => {
+    if (autoBattle.busy) return;
+    // Т.117: клік під час плашки «діють» лише пропускає анімації ходу демонів — до обробника поля не доходить
+    if (battle.skipAlienTurn()) ev.stopImmediatePropagation();
+    else battle.dismissTurnPlate();
   });
   bc.addEventListener('click', input.battleCanvasClick);
+  // Т.117 (аудит): підпис «Клік / пробіл / Esc — пропустити» стоїть на самій плашці — клік по ній теж пропускає
+  el('bturn').addEventListener('click', () => {
+    if (!autoBattle.busy) battle.skipAlienTurn();
+  });
   bc.addEventListener('mousemove', input.battleCanvasHover);
   bc.addEventListener('mouseleave', input.battleCanvasLeave);
   // ADR-0027 (П6.4): гарячі клавіші — на document (бій у фокусі канви не потрібен)

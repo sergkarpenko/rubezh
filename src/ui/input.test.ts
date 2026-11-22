@@ -291,6 +291,54 @@ describe('input: обробники вводу бою (тап-тап, зведе
     expect(f.binfo()).toBe('Вибір знято.');
   });
 
+  it('Т.117: пробіл і Esc під час плашки «діють» лише пропускають її; без плашки Esc — як раніше', () => {
+    const f = makeFixture();
+    launchMission(f);
+    const s = f.ui.mission!.state.units.find((u) => u.side === 'player')!;
+    f.ui.selectedId = s.id;
+    let acting = true;
+    f.battle.skipAlienTurn = () => {
+      const was = acting;
+      acting = false;
+      return was;
+    };
+    const prevented: string[] = [];
+    const key = (k: string): void =>
+      f.input.onKeyDown({ key: k, code: k, preventDefault: () => prevented.push(k) } as unknown as KeyboardEvent);
+    key(' ');
+    expect(prevented).toEqual([' ']);
+    acting = true;
+    key('Escape');
+    expect(f.ui.selectedId).toBe(s.id); // Esc пропустив плашку, вибір не знято
+    key('Escape');
+    expect(f.ui.selectedId).toBeNull();
+    expect(prevented).toEqual([' ', 'Escape']);
+  });
+
+  it('Т.117 (аудит): автоповтор пробілу після пропуску підсумок не прибирає; фокус з кнопки знято', () => {
+    const f = makeFixture();
+    launchMission(f);
+    let acting = true;
+    f.battle.skipAlienTurn = () => {
+      const was = acting;
+      acting = false;
+      return was;
+    };
+    const dismiss = vi.fn();
+    f.battle.dismissTurnPlate = dismiss;
+    const b = document.createElement('button');
+    document.body.append(b);
+    b.focus();
+    const key = (repeat: boolean): void =>
+      f.input.onKeyDown({ key: ' ', code: 'Space', repeat, preventDefault: () => {} } as unknown as KeyboardEvent);
+    key(false);
+    expect(document.activeElement).not.toBe(b);
+    key(true);
+    key(true);
+    expect(dismiss).not.toHaveBeenCalled();
+    b.remove();
+  });
+
   it('гарячі клавіші ігноруються у полях вводу (сід)', () => {
     const f = makeFixture();
     launchMission(f);
@@ -722,7 +770,7 @@ describe('Т.71: евакуація (плитка і клавіша V)', () => {
     keyV(f);
     expect(f.binfo()).toBe('Евакуація — лише з синьої клітинки висадки.');
     f.battle.renderBattle();
-    expect(cap()).toBe('не на висадці');
+    expect(cap()).toBe('поза зоною');
     expect((document.getElementById('btn-evac') as HTMLButtonElement).disabled).toBe(true);
     s!.pos = { x: 2, y: 2 };
     s!.ap = 1;

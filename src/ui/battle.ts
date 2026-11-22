@@ -53,7 +53,14 @@ import { el } from './dom';
 import { BCELL } from './grid';
 import { type LogCat } from './journal';
 import { byGender, ticksText } from './text';
-import { resultCardHtml, summarizeAlienTurn, TURN_PLATE_ACTING, TURN_PLATE_DONE, TURN_PLATE_MIN_MS } from './battle-feedback';
+import {
+  resultCardHtml,
+  summarizeAlienTurn,
+  TURN_PLATE_ACTING,
+  TURN_PLATE_DONE,
+  TURN_PLATE_MIN_MS,
+  TURN_PLATE_SKIP,
+} from './battle-feedback';
 import type { AmbientBattleScene, AmbientUnitView } from './ambient';
 
 // П15.2 (ADR-0075): третій результат бою «евакуйовано» — той самий виклик
@@ -120,6 +127,7 @@ export interface BattleUI {
   enqueueAnims(prevLen: number): void; // П6.8: нові події логу бою → анімації
   alienTurnDone(prevLen: number, info: string): void; // Т.33: плашка ходу демонів, потім підсумок і підказка info
   dismissTurnPlate(force?: boolean): void; // Т.33: перша дія гравця прибирає підсумок
+  skipAlienTurn(): boolean; // Т.117: ручний бій — обірвати анімації ходу демонів, одразу підсумок; true — плашку пропущено
   autoAlienTurn(from: number | null): void; // Т.116: авто-бій — null: хід демонів почався (плашка), число: скінчився (підсумок подій від from)
   autoStopped(): void; // Т.116: авто-бій зупинено — плашка «діють» зникає, підсумок лишається
 }
@@ -175,7 +183,9 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
   }
 
   // Т.33: плашка ходу демонів. acting — анімації ще грають, хід гравця не починається; далі — підсумок до першої дії.
-  let plate: { acting: boolean; lines: string[] } | null = null;
+  // skip — пропуск плашки «діють» (Т.117), лише в ручному бою
+  type TurnPlate = { acting: boolean; skip: (() => void) | null; lines: string[] };
+  let plate: TurnPlate | null = null;
   let plateTimer: ReturnType<typeof setTimeout> | null = null;
 
   function dropPlate(): void {
@@ -195,20 +205,41 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
     const mission = ui.mission;
     if (!mission) return;
     dropPlate();
-    const p = { acting: deps.hasRaf(), lines: summarizeAlienTurn(mission.state.log.slice(prevLen), mission.state.units, visibleCells()) };
+    const p: TurnPlate = {
+      acting: deps.hasRaf(),
+      skip: null,
+      lines: summarizeAlienTurn(mission.state.log.slice(prevLen), mission.state.units, visibleCells()),
+    };
     plate = p;
+    const finish = (): void => {
+      if (plateTimer !== null) clearTimeout(plateTimer);
+      plateTimer = null;
+      p.acting = false;
+      p.skip = null;
+      binfo(info);
+      deps.renderAll();
+    };
     const settle = (): void => {
       if (deps.anim.active() !== null || deps.anim.queued().length > 0) {
         plateTimer = setTimeout(settle, 100);
         return;
       }
-      plateTimer = null;
-      p.acting = false;
-      binfo(info);
-      deps.renderAll();
+      finish();
     };
     binfo(p.acting ? '' : info);
-    if (p.acting) plateTimer = setTimeout(settle, TURN_PLATE_MIN_MS);
+    if (!p.acting) return;
+    plateTimer = setTimeout(settle, TURN_PLATE_MIN_MS);
+    // Т.117: пропуск — черга анімацій скидається, стан ядра вже застосовано, підсумок той самий
+    p.skip = () => {
+      deps.anim.cancel();
+      finish();
+    };
+  }
+
+  function skipAlienTurn(): boolean {
+    if (plate?.skip == null) return false;
+    plate.skip();
+    return true;
   }
 
   // Т.116 (рішення власника, варіант Б): в авто-бої — та сама плашка, поки ходять демони, і той самий підсумок,
@@ -220,8 +251,8 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
     dropPlate();
     plate =
       from === null
-        ? { acting: true, lines: [] }
-        : { acting: false, lines: summarizeAlienTurn(mission.state.log.slice(from), mission.state.units, visibleCells()) };
+        ? { acting: true, skip: null, lines: [] }
+        : { acting: false, skip: null, lines: summarizeAlienTurn(mission.state.log.slice(from), mission.state.units, visibleCells()) };
   }
 
   function autoStopped(): void {
@@ -232,11 +263,13 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
     const box = el('bturn');
     box.classList.toggle('hidden', plate === null);
     box.classList.toggle('done', plate !== null && !plate.acting);
-    const lines = plate === null ? [] : plate.acting ? [...TURN_PLATE_ACTING] : [TURN_PLATE_DONE, ...plate.lines];
+    const acting = plate?.skip != null ? [...TURN_PLATE_ACTING, TURN_PLATE_SKIP] : [...TURN_PLATE_ACTING]; // в авто-бої пропуску немає
+    const lines = plate === null ? [] : plate.acting ? acting : [TURN_PLATE_DONE, ...plate.lines];
     box.replaceChildren(
       ...lines.map((t, i) => {
         const d = document.createElement(i === 0 ? 'b' : 'div');
         d.textContent = t;
+        if (t === TURN_PLATE_SKIP) d.className = 'bturn-skip';
         return d;
       })
     );
@@ -583,7 +616,7 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
           ? hint + ' — не вистачає AP (потрібно ' + cost + ')'
           : hint;
       const noItem = sel !== undefined && !hasItem;
-      tileReason(b, noItem ? (mode === 'medkit' ? 'немає гелю' : 'немає гранати') : noAp ? 'мало AP' : null);
+      tileReason(b, noItem ? (mode === 'medkit' ? 'без гелю' : 'без гранат') : noAp ? 'мало AP' : null);
       b.classList.toggle('armed', ui.itemMode === mode);
     }
 
@@ -601,7 +634,7 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
         : evWhy === 'ap'
           ? evHint + ' — не вистачає AP (потрібно ' + EVAC_AP_COST + ')'
           : evHint;
-    tileReason(ev, evWhy === 'cell' ? 'не на висадці' : evWhy === 'ap' ? 'мало AP' : null);
+    tileReason(ev, evWhy === 'cell' ? 'поза зоною' : evWhy === 'ap' ? 'мало AP' : null);
   }
 
   function close(): void {
@@ -736,6 +769,7 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
     enqueueAnims: enqueueBattleAnims,
     alienTurnDone,
     dismissTurnPlate,
+    skipAlienTurn,
     autoAlienTurn,
     autoStopped,
   };

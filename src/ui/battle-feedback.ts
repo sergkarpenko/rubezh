@@ -7,6 +7,8 @@ import { byGender } from './text';
 export const TURN_PLATE_MIN_MS = 1000; // плашка ходу демонів: поки грають анімації, і не менше цього часу
 export const TURN_PLATE_ACTING = ['ХІД ДЕМОНІВ РОЗРИВУ…', 'Демони діють. Зачекайте.'] as const;
 export const TURN_PLATE_DONE = 'ХІД ДЕМОНІВ РОЗРИВУ — ПІДСУМОК';
+// Т.117 (рішення власника): у ручному бою клік по полю, пробіл або Esc пропускають анімації ходу демонів
+export const TURN_PLATE_SKIP = 'Клік / пробіл / Esc — пропустити';
 
 // Рядки підсумку за подіями ходу демонів (події від endTurn до кінця aliensTurn).
 export function summarizeAlienTurn(events: readonly GameEvent[], units: readonly Unit[], visible: ReadonlySet<string>): string[] {

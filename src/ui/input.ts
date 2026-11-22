@@ -648,6 +648,19 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
   function onKeyDown(ev: KeyboardEvent): void {
     if (isTypingTarget(ev.target)) return;
     if (deps.overlayOpen()) return; // Т.73: під відкритим вікном клавіші бою не діють
+    // Т.117: пробіл або Esc під час плашки «діють» — пропуск анімацій ходу демонів, інших дій ця клавіша не робить.
+    // Аудит: автоповтор утриманої клавіші не прибирає підсумок; фокус знято — відпускання пробілу не натисне кнопку («Авто»)
+    if (ev.key === ' ' || ev.key === 'Escape') {
+      if (ev.repeat) {
+        ev.preventDefault();
+        return;
+      }
+      if (battle.skipAlienTurn()) {
+        ev.preventDefault();
+        if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+        return;
+      }
+    }
     // Т.33: клавіша дії прибирає підсумок ходу демонів; Т.116: під час авто-бою — ні (підсумок до наступного ходу демонів)
     if (!deps.autoBusy()) battle.dismissTurnPlate();
     if (ev.code === 'Digit1' || ev.key === '1') armFire('snap');
