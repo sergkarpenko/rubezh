@@ -510,8 +510,11 @@
         border: 1px solid #232a36;
         border-radius: 6px;
       }
+      /* Т.126 (ідея власника в Т.125: «кнопка прилягає до тексту»): кнопка картки зонда — окремим
+         рядком під координатами, а не в рядку тексту */
       .ufo button {
-        margin-top: 6px;
+        display: block;
+        margin-top: 8px;
       }
       .meta {
         color: #7d8794;
@@ -762,13 +765,26 @@
         color: #d7e4f7;
         margin: 16px 0;
       }
+      /* Т.126 (ADR-0116): кнопки екрана перемоги — зелене скло в наборі Т.124 (об'єм, відблиск);
+         наведення — зелене світіння (бірюзову рамку набору перекривало правило з #id) */
       #campaign-victory .btn-play-again {
-        background: #12301c;
+        background: linear-gradient(180deg, #1d4a2c 0%, #10291a 100%);
         border-color: #7fe2a0;
-        color: #7fe2a0;
+        color: #9ff0bb;
         padding: 12px 24px;
         font-size: 16px;
         margin-top: 16px;
+        box-shadow:
+          inset 0 1px 0 rgba(255, 255, 255, 0.12),
+          0 2px 4px rgba(0, 0, 0, 0.45);
+      }
+      @media (hover: hover) {
+        #campaign-victory .btn-play-again:hover:not(:disabled) {
+          border-color: #c8ffd9;
+          box-shadow:
+            inset 0 1px 0 rgba(255, 255, 255, 0.16),
+            0 0 14px rgba(127, 226, 160, 0.5);
+        }
       }
       /* П9.1 (Фаза 9): екран «Як грати» — оверлей; контент генерує src/ui/help.ts */
       #help-screen {
@@ -863,14 +879,133 @@
         z-index: 90;
         padding: 16px;
         overflow: auto;
+        isolation: isolate;
+      }
+      /* Т.126 (ADR-0116, рішення власника «Як на відео»): постійна анімація стартового екрана —
+         іскри (16 с), «дихання» кільця (6 с) і відблиск по ньому (9 с). Лише CSS: іскри й кільце —
+         transform і opacity (композитор, без перемальовки сторінки), відблиск — кут градієнта
+         (перемальовка лише свого шару); на прихованому екрані (display: none) не йде. Вимикають
+         тумблер «Анімація» (клас anim-off, src/main.ts) і системне «менше руху». Іскри — шар
+         position: fixed на все вікно (не додає прокрутки), вищий за вікно на період візерунка:
+         зсув на період дає безшовний цикл */
+      #start-screen::before {
+        content: '';
+        position: fixed;
+        left: 0;
+        right: 0;
+        top: 0;
+        height: calc(100vh + 1320px);
+        z-index: 0;
+        pointer-events: none;
+        background-image:
+          radial-gradient(circle, rgba(125, 243, 255, 0.95) 0 1.5px, transparent 2.5px),
+          radial-gradient(circle, rgba(0, 229, 255, 0.8) 0 1px, transparent 2px),
+          radial-gradient(circle, rgba(255, 46, 136, 0.85) 0 1.2px, transparent 2.2px),
+          radial-gradient(circle, rgba(255, 199, 107, 0.8) 0 1px, transparent 2px);
+        background-size:
+          230px 264px,
+          170px 220px,
+          310px 330px,
+          260px 440px;
+        background-position:
+          20px 40px,
+          90px 120px,
+          160px 10px,
+          40px 200px;
+        opacity: 0.7;
+        animation: start-sparks 16s linear infinite;
+      }
+      /* 1320 — спільне кратне висот плиток візерунка (264, 220, 330, 440): кінець циклу = початок */
+      @keyframes start-sparks {
+        from {
+          transform: translateY(0);
+        }
+        to {
+          transform: translateY(-1320px);
+        }
+      }
+      /* Т.126: кільце навколо логотипа — світла рамка (::before) і відблиск, що біжить по ній (::after);
+         позиція — від героя, розміри від вікна: на макеті не впливають */
+      .start-hero {
+        isolation: isolate;
+      }
+      .start-hero::before,
+      .start-hero::after {
+        content: '';
+        position: absolute;
+        left: 50%;
+        top: 42%;
+        width: min(420px, 86vw, 62vh);
+        aspect-ratio: 1;
+        z-index: -1;
+        pointer-events: none;
+        border-radius: 50%;
+        transform: translate(-50%, -50%);
+      }
+      .start-hero::before {
+        border: 2px solid rgba(0, 229, 255, 0.55);
+        box-shadow:
+          0 0 28px rgba(0, 229, 255, 0.45),
+          inset 0 0 36px rgba(0, 229, 255, 0.3),
+          0 0 80px rgba(255, 46, 136, 0.18);
+        animation: start-ring 6s ease-in-out infinite;
+      }
+      .start-hero::after {
+        background: conic-gradient(from var(--start-sweep), transparent 0 80%, rgba(125, 243, 255, 0.85) 99%, transparent 100%);
+        -webkit-mask: radial-gradient(closest-side, transparent 84%, #000 86%, #000 90%, transparent 92%);
+        mask: radial-gradient(closest-side, transparent 84%, #000 86%, #000 90%, transparent 92%);
+        animation: start-sweep 9s linear infinite;
+      }
+      @keyframes start-ring {
+        0%,
+        100% {
+          opacity: 0.55;
+          transform: translate(-50%, -50%) scale(0.985);
+        }
+        50% {
+          opacity: 1;
+          transform: translate(-50%, -50%) scale(1.015);
+        }
+      }
+      /* відблиск обертається кутом градієнта, а не transform: повернутий квадрат шару виходив би
+         діагоналлю за вікно і давав прокрутку вбік на вузьких вікнах (e2e Т.126, 320 × 512) */
+      @property --start-sweep {
+        syntax: '<angle>';
+        inherits: false;
+        initial-value: 0deg;
+      }
+      @keyframes start-sweep {
+        to {
+          --start-sweep: 360deg;
+        }
+      }
+      /* вимкнено — кадр спокою: іскри на місці, кільце світиться рівно, відблиску немає */
+      #start-screen.anim-off::before,
+      #start-screen.anim-off .start-hero::before {
+        animation: none;
+      }
+      #start-screen.anim-off .start-hero::after {
+        animation: none;
+        display: none;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        #start-screen::before,
+        #start-screen .start-hero::before {
+          animation: none;
+        }
+        #start-screen .start-hero::after {
+          animation: none;
+          display: none;
+        }
       }
       /* П14.7: .start-box — не панель, а координатна сітка на весь екран:
          лого+tagline у центрі (темний просвіт кільця кадру Б1), меню —
          вертикальний стек у lower-center, версія внизу. Позиціонування
-         абсолютне, без анімацій (ADR-0029/0073). Клас .start-menu також у
+         абсолютне; анімація — лише шари вище (Т.126, ADR-0116). Клас .start-menu також у
          діалозі «Меню» гри — скоуп позиціонування тільки через .start-box */
       .start-box {
         position: relative;
+        z-index: 1;
         width: 100%;
         height: 100%;
         text-align: center;
@@ -914,13 +1049,24 @@
         height: auto;
         margin: 0 auto;
       }
+      /* Т.126 (ADR-0116): логотип без прямокутника — маска-еліпс і змішування screen (темне тло
+         ассета зникає), збільшення лише відображення (transform — макет без змін) */
+      .start-box .start-logo-img {
+        -webkit-mask-image: radial-gradient(ellipse 62% 56% at 50% 50%, #000 45%, transparent 100%);
+        mask-image: radial-gradient(ellipse 62% 56% at 50% 50%, #000 45%, transparent 100%);
+        mix-blend-mode: screen;
+        transform: scale(1.35);
+        filter: saturate(1.3) contrast(1.1) drop-shadow(0 0 14px rgba(0, 229, 255, 0.5));
+      }
       .start-tagline {
         margin: 14px 0 0;
         font-size: 13px;
         text-transform: uppercase;
         letter-spacing: 0.25em;
-        color: #7d8794;
-        text-shadow: 0 2px 10px rgba(6, 10, 20, 0.8);
+        color: #b6ecf5; /* Т.126: бірюзовий підпис зі світінням (був сірий #7d8794) */
+        text-shadow:
+          0 0 12px rgba(0, 229, 255, 0.6),
+          0 2px 8px rgba(6, 10, 20, 0.9);
       }
       .start-menu {
         display: flex;
@@ -941,11 +1087,68 @@
         padding: 12px 16px;
         font-size: 15px;
       }
+      /* Т.126 (ADR-0116): ігрове меню — скошені кути (clip-path), скло з бірюзово-рожевим
+         градієнтом, бірюзова риска зліва, великі літери. Рамка — тінь усередині (зовнішню тінь
+         clip-path обрізав би), тому наведення — сильніше внутрішнє світіння */
       .start-box .start-menu button {
+        position: relative;
         min-height: 44px;
-        background: rgba(6, 10, 20, 0.55);
-        border-color: rgba(49, 67, 95, 0.9);
+        border-color: transparent; /* рамка лишається (розмір кнопки як на main), видно тінь усередині */
+        border-radius: 0;
+        color: #dff9ff;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
         text-shadow: 0 1px 4px rgba(6, 10, 20, 0.75);
+        background:
+          linear-gradient(90deg, rgba(0, 229, 255, 0.24), rgba(6, 14, 26, 0.84) 30%, rgba(6, 14, 26, 0.84) 70%, rgba(255, 46, 136, 0.2)),
+          rgba(6, 10, 20, 0.7);
+        clip-path: polygon(14px 0, 100% 0, 100% calc(100% - 14px), calc(100% - 14px) 100%, 0 100%, 0 14px);
+        box-shadow:
+          inset 0 0 0 1px rgba(0, 229, 255, 0.6),
+          inset 0 1px 0 rgba(255, 255, 255, 0.12);
+        -webkit-backdrop-filter: blur(6px);
+        backdrop-filter: blur(6px);
+      }
+      .start-box .start-menu button::before {
+        content: '';
+        position: absolute;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        width: 4px;
+        background: #00e5ff;
+        box-shadow: 0 0 12px #00e5ff;
+      }
+      @media (hover: hover) {
+        .start-box .start-menu button:hover:not(:disabled) {
+          color: #fff;
+          box-shadow:
+            inset 0 0 0 1px #7df3ff,
+            inset 0 0 22px rgba(0, 229, 255, 0.45);
+        }
+      }
+      .start-box .start-menu button:disabled::before {
+        background: #4a5a72;
+        box-shadow: none;
+      }
+      /* Т.126 (рішення власника «Б. Бурштинова»): «Нова партія» — головна дія, бурштин набору Т.124;
+         світіння — filter (не обрізається clip-path) */
+      .start-box .start-menu #btn-start-new {
+        background: linear-gradient(90deg, #ffe0a6, #ffc76b 35%, #e08a1a);
+        color: #1a1204;
+        text-shadow: none;
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45);
+        filter: drop-shadow(0 0 14px rgba(255, 179, 71, 0.6));
+      }
+      .start-box .start-menu #btn-start-new::before {
+        background: #fff3d6;
+        box-shadow: 0 0 12px #ffc76b;
+      }
+      @media (hover: hover) {
+        .start-box .start-menu #btn-start-new:hover {
+          filter: brightness(1.08) drop-shadow(0 0 20px rgba(255, 179, 71, 0.8));
+          box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55);
+        }
       }
       /* Т.58: пояснення невдалого «Продовжити»; Т.93 — банер угорі екрана
          (над кнопками воно накривало підпис під логотипом), ширина — як у меню */
@@ -972,8 +1175,10 @@
         bottom: 12px;
         margin: 0;
         font-size: 11px;
-        color: #6d7d92;
-        text-shadow: 0 1px 6px rgba(6, 10, 20, 0.8);
+        color: #c6d4e8; /* Т.126: на світлому кільці #6d7d92 майже не читався */
+        text-shadow:
+          0 0 3px #060a14,
+          0 1px 6px rgba(6, 10, 20, 0.9);
       }
       /* Т.94 (рішення власника 21.11.2026, варіант А): у вікнах до 760 px заввишки абсолютна
          сітка П14.7 накривала підпис і логотип меню (підпис — аж до 740 px заввишки), а банер
@@ -1007,6 +1212,12 @@
         .start-box .start-version {
           margin-top: auto;
         }
+        /* Т.126: кільце героя (::before / ::after) — від героя, а не від .start-box */
+        .start-box .start-hero {
+          position: relative;
+          top: auto;
+          left: auto;
+        }
         .start-box .start-tagline {
           margin-top: 8px;
         }
@@ -1016,8 +1227,10 @@
       }
       /* Т.94: альбомні телефони (до 480 px заввишки) — дві колонки: банер і логотип з підписом
          ліворуч, меню праворуч на всю висоту, версія — на всю ширину. Банер у лівій колонці,
-         а не окремим рядком: так на 568 × 270 з банером немає прокрутки (аудит Т.94) */
-      @media (max-height: 480px) and (orientation: landscape) {
+         а не окремим рядком: так на 568 × 270 з банером немає прокрутки (аудит Т.94).
+         Т.126 (залишок кандидата 102, рішення власника): поріг 480 → 560 px — на альбомних 481–515 px
+         з банером стовпчик був вищий за вікно (до 31 px зі шрифтом CI) */
+      @media (max-height: 560px) and (orientation: landscape) {
         .start-box {
           display: grid;
           grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
@@ -1077,6 +1290,28 @@
         }
         .start-box .start-tagline {
           margin-top: 6px;
+        }
+      }
+      /* Т.126 (залишок кандидата 102, рішення власника): портрет до 480 px заввишки — з банером
+         стовпчик був вищий за вікно (320 × 460 — 7 px, 320 × 420 — 42 px): кнопки 44 px (тач-ціль
+         не менша), логотип — 14 % висоти, підпис 11 px, проміжки 6 px */
+      @media (max-height: 480px) and (orientation: portrait) {
+        .start-box {
+          gap: 6px;
+        }
+        .start-box .start-logo {
+          width: min(300px, 62vw, 14vh);
+          width: min(300px, 62vw, 14svh);
+        }
+        .start-box .start-tagline {
+          font-size: 11px;
+          letter-spacing: 0.15em;
+        }
+        .start-box .start-menu {
+          gap: 6px;
+        }
+        .start-box .start-menu button {
+          padding: 8px 16px;
         }
       }
       /* П12.2 (ADR-0065): модальні вікна навігації — діалог нової партії,

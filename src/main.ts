@@ -817,7 +817,23 @@ if (typeof document !== 'undefined') {
   // стан — аудіо-модуль (ADR-0059), персист поза сейвом (ADR-0026).
   // П14.8 (ADR-0073): секція «Анімація» — тумблер ambient (ambient-модуль —
   // єдине джерело стану; перемикання зупиняє/поновлює цикл без перезапуску).
-  const settings = createSettings({ sound, ambient });
+  // Т.126 (ADR-0116): анімація стартового екрана (CSS) — той самий тумблер «Анімація»:
+  // вимкнено — клас anim-off на #start-screen; синхронізація на старті і після перемикання.
+  const syncStartAnim = (): void => {
+    document.getElementById('start-screen')?.classList.toggle('anim-off', !ambient.enabled());
+  };
+  syncStartAnim();
+  const settings = createSettings({
+    sound,
+    ambient: {
+      enabled: () => ambient.enabled(),
+      toggle: () => {
+        const on = ambient.toggle();
+        syncStartAnim();
+        return on;
+      },
+    },
+  });
   // П12.2 (ADR-0065): каркас екранів — зв'язування з панеллю збереження
   // («Продовжити» — останній активний слот, ADR-0026), «Як грати» (help.ts
   // без змін) і стартом нової партії (сід + складність з діалогу).
