@@ -48,6 +48,28 @@ async function tap(page: Page, cell: Vec2): Promise<void> {
   });
 }
 
+// Т.123 (ADR-0114): векторні іконки — svg заданого розміру в межах своєї кнопки, малюнок не порожній.
+// Розмір і місце задає CSS (без правила svg має 300 × 150 і розпирає кнопку) — від шрифту не залежить.
+async function expectIcons(page: Page, selector: string, size: number, count: number): Promise<void> {
+  const icons = await page.evaluate(
+    (sel) =>
+      [...document.querySelectorAll(sel)].map((i) => {
+        const r = i.getBoundingClientRect();
+        const b = i.parentElement!.getBoundingClientRect();
+        return {
+          w: r.width,
+          h: r.height,
+          inside: r.left >= b.left && r.right <= b.right && r.top >= b.top && r.bottom <= b.bottom,
+          parts: i.childElementCount,
+        };
+      }),
+    selector
+  );
+  expect(icons.length, selector).toBe(count);
+  for (const i of icons) expect(i, selector).toEqual({ w: size, h: size, inside: true, parts: expect.any(Number) });
+  expect(Math.min(...icons.map((i) => i.parts)), selector).toBeGreaterThan(0);
+}
+
 // Т.120 (кандидат 115): бій на телефоні. Вертикально — плитки під полем, поле з плитками вміщується
 // у вікно; горизонтально — поле у висоту вікна, плитки поруч; шапка в бою не липне.
 async function expectPhoneBattle(page: Page, label: string, minField: number, portrait: boolean): Promise<void> {
@@ -203,6 +225,7 @@ test('сценарій приймання ADR-0030: партія → місія 
     await expect(page.locator('#ufos button.mission')).toHaveCount(mirror.targets().length);
     // Т.7: дія чекає на вкладці «Вузол» — лічильник видно з вкладки «Загін»
     await expect(page.locator('#status-tab-base .tab-badge')).toBeVisible();
+    await expectIcons(page, '#status-tabs button svg.tab-icon', 16, 3); // Т.123: іконки вкладок колонки стану
   });
 
   // Т.31: геосцена, журнал і колонка стану — в одному екрані; сторінка не
@@ -530,6 +553,7 @@ test('сценарій приймання ADR-0030: партія → місія 
     // Т.71: плитка «Евакуація» — 2 AP, клавіша V
     await expect(page.locator('#btoolbar .tb-key')).toHaveText(['1', '2', '3', 'O', 'M', 'G', 'V', 'E']);
     await expect(page.locator('#btoolbar .tb-ap')).toHaveText(['3 AP', '5 AP', '4 AP', '3 AP', '4 AP', '4 AP', '2 AP']); // snap, aimed, auto, дозор, гель, граната, евакуація
+    await expectIcons(page, '#btoolbar button svg.tb-icon', 36, 9); // Т.123: іконки плиток дій
     // Т.44: туман знебарвлено — у клітинках туману (без стіни, декору, юніта і м'якого краю) середній розкид
     // каналів max(R,G,B) − min(R,G,B) у центральній ділянці 24 × 24 px не більший за 9 (до Т.44 — 13,6–18,3);
     // видимі клітинки кольорові. Пікселі канви від шрифту машини не залежать.

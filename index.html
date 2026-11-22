@@ -162,17 +162,17 @@
         border-radius: 0;
         padding: 8px;
       }
-      /* П14.6 (ADR-0072): іконки вкладок — піксель-матриці кодом
-         (src/ui/tab-icons.ts, патерн тулбара П13.2): canvas перед текстом,
-         буфер 1:1 12px + pixelated — чітко і на retina; контракти кнопок
-         (id, класи, dataset, текст) не змінюються (урок П11.6) */
-      #status-tabs button canvas.tab-icon,
-      #log-tabs button canvas.tab-icon {
-        width: 12px;
-        height: 12px;
-        image-rendering: pixelated;
-        vertical-align: -2px;
-        margin-right: 4px;
+      /* Т.123 (ADR-0114): іконки вкладок — векторні (src/ui/icons.ts), svg перед
+         текстом, над підписом по центру (канва П14.6 теж стояла окремим рядком —
+         загальне правило canvas { display: block }); малюнок 16 px у рядку 12 px
+         колишньої канви — від'ємні поля лишають кнопці ті самі розміри; контракти
+         кнопок (id, класи, dataset, текст) не змінюються (урок П11.6) */
+      #status-tabs button svg.tab-icon,
+      #log-tabs button svg.tab-icon {
+        display: block;
+        width: 16px;
+        height: 16px;
+        margin: -2px auto;
       }
       h2 {
         font-size: 12px;
@@ -292,8 +292,15 @@
       #btoolbar button[hidden] {
         display: none; /* Т.71 (аудит): display: flex вище перекриває атрибут hidden */
       }
-      #btoolbar button canvas {
-        background: transparent;
+      /* Т.123 (ADR-0114): векторна іконка в коробці 36 px колишньої канви — плитка
+         тих самих розмірів; малюнок 28 px зсунуто вниз, під ціну в AP і клавішу */
+      #btoolbar button svg.tb-icon {
+        flex: none;
+        box-sizing: border-box;
+        width: 36px;
+        height: 36px;
+        padding: 7px 4px 0;
+        filter: drop-shadow(0 0 3px rgba(0, 229, 255, 0.5));
       }
       #btoolbar button .tb-cap {
         font-size: 10px; /* П13.5: підпис під більшою іконкою */
