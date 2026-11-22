@@ -987,8 +987,8 @@ const t61Visible = (b: Awaited<ReturnType<typeof t61Look>>, label: string): void
   expect(b.fits, label + ': текст обрізано').toBe(true);
 };
 
-// Т.94 (рішення власника 21.11.2026, варіант А): вікна до 760 px заввишки — стовпчик, альбомні до 480 px —
-// дві колонки; перетин рамок (і по висоті, і по ширині) — накриття
+// Т.94 (рішення власника 21.11.2026, варіант А): вікна до 760 px заввишки — стовпчик, альбомні до 480 px
+// (з Т.126 — до 560 px) — дві колонки; перетин рамок (і по висоті, і по ширині) — накриття
 const T94_VIEWPORTS = [
   { width: 1280, height: 740 },
   { width: 800, height: 600 },
@@ -1006,6 +1006,10 @@ const T94_VIEWPORTS = [
   { width: 720, height: 481 },
   { width: 800, height: 500 },
   { width: 900, height: 515 },
+  // Т.126 (аудит PR #440): нова межа двох колонок — альбомні до 560 px і перші вікна над нею
+  { width: 1024, height: 540 },
+  { width: 700, height: 560 },
+  { width: 1000, height: 561 },
 ];
 const t94Layout = async (page: Page, label: string): Promise<void> => {
   const m = await page.evaluate(() => {
@@ -1105,14 +1109,14 @@ test('Т.61: екран перемоги і рядок-пояснення ста
         return {
           sparks: getComputedStyle(sc, '::before').animationName,
           ring: getComputedStyle(hero, '::before').animationName,
-          sweep: getComputedStyle(hero, '::after').display,
-          blend: logo ? getComputedStyle(logo).mixBlendMode : 'screen', // без ассета — текстовий логотип
+          sweep: [getComputedStyle(hero, '::after').display, getComputedStyle(hero, '::after').animationName],
+          mask: logo !== null && getComputedStyle(logo).maskImage.startsWith('radial-gradient'), // ассет є у збірці
           main: [nb.backgroundImage.includes('linear-gradient'), nb.color],
           menu: [help.clipPath.startsWith('polygon'), help.textTransform],
         };
       });
-    const on = { sparks: 'start-sparks', ring: 'start-ring', sweep: 'block', blend: 'screen' };
-    const still = { sparks: 'none', ring: 'none', sweep: 'none', blend: 'screen' };
+    const on = { sparks: 'start-sparks', ring: 'start-ring', sweep: ['block', 'start-sweep'], mask: true };
+    const still = { sparks: 'none', ring: 'none', sweep: ['none', 'none'], mask: true };
     const kit = { main: [true, 'rgb(26, 18, 4)'], menu: [true, 'uppercase'] };
     expect(await look()).toEqual({ ...on, ...kit });
     await page.locator('#btn-start-settings').click();

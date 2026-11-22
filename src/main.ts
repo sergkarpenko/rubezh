@@ -151,7 +151,7 @@ const sound = createSound();
 // поранених) з гейтами: тумблер «Анімація» (rubezh.settings.ambient поза
 // сейвом, патерн звуку ADR-0059), видимість документа, typeof-rAF (jsdom —
 // 0 кадрів, прецедент П6.16), тротлер ≤ 10 fps. Репейнт — активна сцена
-// (бій або геосцена); стартовий екран не анімується (П14.7). Створюється
+// (бій або геосцена); ambient-цикл на стартовому екрані не малює (його анімація — лише CSS, ADR-0116). Створюється
 // ДО модулів бою/панелей (deps-об'єкти беруть його за значенням — TDZ),
 // сам читає стан лише через ліниві замикання.
 const ambient = createAmbient({
@@ -163,7 +163,7 @@ const ambient = createAmbient({
   active: () => partyOnScreen,
   repaint: () => {
     if (party === null) return; // партії немає — 0 перерисовок (стартовий екран П12.2)
-    if (!el('start-screen').classList.contains('hidden')) return; // П14.7: стартовий екран — 0 нових анімацій
+    if (!el('start-screen').classList.contains('hidden')) return; // П14.7: ambient-цикл стартовий екран не малює (анімація стартового — CSS, ADR-0116)
     if (ui.mission !== null) battle.renderBattle();
     else panels.renderGeo();
   },
