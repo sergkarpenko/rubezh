@@ -35,7 +35,7 @@
 ```bash
 npm install            # також встановлює pre-commit hook (Husky)
 npm test               # усі тести (vitest): ядро + DOM-флоу + наскрізна партія
-npm run lint           # ESLint (src/)
+npm run lint           # ESLint (src/, scripts/, e2e/)
 npm run format:check   # Prettier (src/, index.html, scripts/**/*.{ts,mjs}, e2e/)
 npm run build          # прод-збірка (vite → dist/)
 npm run docs           # TypeDoc-довідка API (HTML у dist/api)
