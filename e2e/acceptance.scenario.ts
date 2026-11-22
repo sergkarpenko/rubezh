@@ -370,6 +370,13 @@ test('сценарій приймання ADR-0030: партія → місія 
     const logBeforeAuto = await page.locator('#log').innerHTML();
     await page.locator('#btn-auto-battle').click();
     await expect.poll(() => page.locator('#log').innerHTML(), { timeout: 15_000 }).not.toBe(logBeforeAuto);
+    // Т.116 (варіант Б): і в авто-бої хід демонів — плашка, далі підсумок (бій без дзеркала — лише вигляд і заголовок)
+    const plate = page.locator('#bturn');
+    await expect(plate).toHaveText('ХІД ДЕМОНІВ РОЗРИВУ…Демони діють. Зачекайте.', { timeout: AUTO_BATTLE_TIMEOUT_MS });
+    await expect(page.locator('#bctx-turn')).toHaveText('хід демонів Розриву');
+    await expect(plate).toHaveClass('done', { timeout: AUTO_BATTLE_TIMEOUT_MS });
+    await expect(plate).toContainText(/^ХІД ДЕМОНІВ РОЗРИВУ — ПІДСУМОК.*Демонів у полі зору: \d+$/);
+    await expect(page.locator('#btn-auto-battle')).toContainText('Стоп'); // підсумок авто-бій не зупиняє
     await page.locator('#btn-menu').click();
     await page.locator('#btn-menu-exit').click();
     await page.locator('#btn-exit-yes').click();

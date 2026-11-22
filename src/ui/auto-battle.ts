@@ -30,6 +30,8 @@ export interface AutoBattleDeps {
   hasRaf: boolean; // без rAF (тестове середовище) анімації не ставляться (П6.8)
   visibleCells?: () => ReadonlySet<string>; // П14.4: туман для чисел пошкоджень (без нього — без фільтра)
   maxHalfTurns?: number; // ліміт півходів (прецедент демо 240; тести звужують)
+  onAlienTurn?: (from: number | null) => void; // Т.116: хід демонів почався (null) або скінчився — події логу від from
+  onStop?: () => void; // Т.116: авто-бій зупинено (будь-якою причиною)
 }
 
 const AUTO_PAUSE_MS = 160;
@@ -38,6 +40,7 @@ export class AutoBattleDriver {
   private steps: DemoSteps | null = null; // не null — триває авто-бій
   private timer: ReturnType<typeof setTimeout> | null = null;
   private waitIdle = false; // черга анімацій дії відтворюється — пауза після onIdle
+  private alienFrom: number | null = null; // Т.116: індекс логу на початку ходу демонів (до endTurn загону)
 
   constructor(private readonly deps: AutoBattleDeps) {}
 
@@ -61,6 +64,8 @@ export class AutoBattleDriver {
   stop(): void {
     this.steps = null;
     this.waitIdle = false;
+    this.alienFrom = null;
+    this.deps.onStop?.();
     if (this.timer !== null) {
       clearTimeout(this.timer);
       this.timer = null;
@@ -84,6 +89,11 @@ export class AutoBattleDriver {
     this.steps = new DemoSteps(this.deps.maxHalfTurns ?? 240);
     this.deps.onStart?.(); // Т.46: до першого кроку — його renderBattle малює плитки вже без режиму
     this.deps.binfo('Авто-бій: загін веде політика ядра. «Стоп» — керування вручну.');
+    // Т.116: старт посеред ходу демонів (після «Стоп») — плашка одразу, підсумок — від цієї точки
+    if (mission.state.activeSide === 'alien') {
+      this.alienFrom = mission.state.log.length;
+      this.deps.onAlienTurn?.(null);
+    }
     this.next();
   }
 
@@ -96,7 +106,16 @@ export class AutoBattleDriver {
     const mission = this.deps.getMission();
     if (!mission || !this.steps) return;
     const prevLen = mission.state.log.length;
+    const sideBefore = mission.state.activeSide;
     const r = this.steps.step(mission.state);
+    // Т.116: зміна сторони — плашка ходу демонів або підсумок (до renderBattle — він їх малює)
+    if (sideBefore === 'player' && mission.state.activeSide === 'alien') {
+      this.alienFrom = prevLen;
+      this.deps.onAlienTurn?.(null);
+    } else if (sideBefore === 'alien' && mission.state.activeSide === 'player') {
+      this.deps.onAlienTurn?.(this.alienFrom ?? prevLen);
+      this.alienFrom = null;
+    }
     this.deps.renderBattle();
     // Фідбек власника (П13.3): результат вирішено ПОСЕРЕД півходу — останній
     // демон Розриву вбитий (чи загін загинув у хід демонів) — авто-бій

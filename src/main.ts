@@ -344,6 +344,8 @@ const autoBattle = new AutoBattleDriver({
   onStart: () => input.disarm(), // Т.46: зведений постріл чи витратник авто-бій знімає
   hasRaf,
   visibleCells: battle.visibleCells, // П14.4: туман для чисел пошкоджень авто-бою
+  onAlienTurn: (from) => battle.autoAlienTurn(from), // Т.116: плашка і підсумок ходу демонів в авто-бої
+  onStop: () => battle.autoStopped(),
 });
 
 // пR.2 (ADR-0037): панель збереження (П5.3, ADR-0026) — модуль src/ui/save-panel.ts;
@@ -706,7 +708,9 @@ if (typeof document !== 'undefined') {
   createToolbar(el('btoolbar'), {
     onAction: (id) => {
       if (overlayOpen()) return; // Т.73: під відкритим вікном плитки тулбара не діють (було evac-confirm у Т.71)
-      battle.dismissTurnPlate(id === 'auto-battle'); // Т.33: дія гравця прибирає підсумок ходу демонів
+      // Т.33: дія гравця прибирає підсумок ходу демонів; «Авто» — і плашку; Т.116: «Стоп» підсумок лишає (до першої дії)
+      if (id !== 'auto-battle') battle.dismissTurnPlate();
+      else if (!autoBattle.busy) battle.dismissTurnPlate(true);
       if (id === 'snap' || id === 'aimed' || id === 'auto') input.armFire(id);
       else if (id === 'ow') input.armOverwatch();
       else if (id === 'medkit') input.armMedkit();
