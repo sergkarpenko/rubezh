@@ -120,6 +120,8 @@ export interface BattleUI {
   enqueueAnims(prevLen: number): void; // П6.8: нові події логу бою → анімації
   alienTurnDone(prevLen: number, info: string): void; // Т.33: плашка ходу демонів, потім підсумок і підказка info
   dismissTurnPlate(force?: boolean): void; // Т.33: перша дія гравця прибирає підсумок
+  autoAlienTurn(from: number | null): void; // Т.116: авто-бій — null: хід демонів почався (плашка), число: скінчився (підсумок подій від from)
+  autoStopped(): void; // Т.116: авто-бій зупинено — плашка «діють» зникає, підсумок лишається
 }
 
 // П6.14: валідні цілі стрільця — живі видимі прибульці (туман, ADR-0006) у
@@ -207,6 +209,23 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
     };
     binfo(p.acting ? '' : info);
     if (p.acting) plateTimer = setTimeout(settle, TURN_PLATE_MIN_MS);
+  }
+
+  // Т.116 (рішення власника, варіант Б): в авто-бої — та сама плашка, поки ходять демони, і той самий підсумок,
+  // коли хід повернувся загону; підсумок тримається до наступного ходу демонів, після «Стоп» — до першої дії.
+  // Темп авто-бою не змінюється: плашка не чекає анімацій і TURN_PLATE_MIN_MS.
+  function autoAlienTurn(from: number | null): void {
+    const mission = ui.mission;
+    if (!mission) return;
+    dropPlate();
+    plate =
+      from === null
+        ? { acting: true, lines: [] }
+        : { acting: false, lines: summarizeAlienTurn(mission.state.log.slice(from), mission.state.units, visibleCells()) };
+  }
+
+  function autoStopped(): void {
+    if (plate?.acting === true) dropPlate();
   }
 
   function renderTurnPlate(): void {
@@ -717,5 +736,7 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
     enqueueAnims: enqueueBattleAnims,
     alienTurnDone,
     dismissTurnPlate,
+    autoAlienTurn,
+    autoStopped,
   };
 }

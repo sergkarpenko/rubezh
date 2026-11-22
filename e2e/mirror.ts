@@ -35,7 +35,14 @@ import { completeMission, createMission, missionOutcome, type Mission, type Miss
 import { createParty, type Party } from '../src/core/save';
 import { applyMissionResult, hospitalTick, missionSquad, readySoldiers } from '../src/core/squad';
 import { deployConsumables } from '../src/core/workshop';
-import { TURN_PLATE_DONE, summarizeAlienTurn } from '../src/ui/battle-feedback';
+import { TURN_PLATE_DONE } from '../src/ui/battle-feedback';
+import { byGender } from '../src/ui/text';
+
+// Т.116: знімок загону на початку ходу демонів — для оракула підсумку, незалежного від summarizeAlienTurn.
+interface SquadSnapshot {
+  from: number; // індекс логу до передачі ходу демонам
+  hp: Map<string, number>; // HP живих оперативників
+}
 
 export interface MoveOption {
   cell: Vec2;
@@ -145,6 +152,43 @@ export class CoreMirror {
 
   turnSummary = ''; // Т.33: підсумок останнього ходу демонів
 
+  private snapshot(): SquadSnapshot {
+    return { from: this.state.log.length, hp: new Map(this.squad().map((u) => [u.id, u.hp])) };
+  }
+
+  // Т.116 (кандидат 20): текст #bturn після ходу демонів — власний розрахунок, а не summarizeAlienTurn:
+  // втрати HP — різниця зі знімком загону (порядок — за першим влучанням); постріли, загиблі й дозор — з логу.
+  private summaryText(snap: SquadSnapshot): string {
+    const events = this.state.log.slice(snap.from);
+    const unit = (id: string): Unit => this.state.units.find((u) => u.id === id) as Unit;
+    const alienShots = events.filter((e) => e.type === 'shot' && unit(e.shooterId).side === 'alien');
+    const hits = alienShots.filter((e) => e.type === 'shot' && e.hit);
+    const lines = [
+      alienShots.length === 0 ? 'Демони не атакували.' : 'Пострілів по загону: ' + alienShots.length + ', влучань: ' + hits.length,
+    ];
+    const firstHit = (id: string): number => hits.findIndex((e) => e.type === 'shot' && e.targetId === id);
+    const hurt = [...snap.hp.keys()]
+      .map(unit)
+      .filter((u) => u.alive && u.hp < (snap.hp.get(u.id) as number))
+      .sort((a, b) => firstHit(a.id) - firstHit(b.id));
+    for (const u of hurt) lines.push(u.name + ': −' + ((snap.hp.get(u.id) as number) - u.hp) + ' HP');
+    for (const e of events)
+      if (e.type === 'death' && snap.hp.has(e.unitId)) {
+        const u = unit(e.unitId);
+        lines.push('✝ ' + u.name + ' ' + byGender(u.name, 'загинув', 'загинула'));
+      }
+    for (const e of events) {
+      if (e.type !== 'shot' || unit(e.shooterId).side !== 'player') continue;
+      const killed = events.some((d) => d.type === 'death' && d.unitId === e.targetId && d.killerId === e.shooterId);
+      lines.push('Дозор: ' + unit(e.shooterId).name + ' — ' + (e.hit ? 'влучання' + (killed ? ', демона знищено' : '') : 'промах'));
+    }
+    const seen = this.seen();
+    lines.push(
+      'Демонів у полі зору: ' + this.state.units.filter((u) => u.side === 'alien' && u.alive && seen.has(u.pos.x + ',' + u.pos.y)).length
+    );
+    return TURN_PLATE_DONE + lines.join('');
+  }
+
   get state(): GameState {
     if (this.mission === null) throw new Error('Дзеркало: місію не запущено');
     return this.mission.state;
@@ -219,11 +263,11 @@ export class CoreMirror {
   // Кінець ходу гравця: передача ходу і синхронний хід демонів (input.ts
   // endPlayerTurn). Повертає кількість дій демонів — її показує підказка бою.
   endPlayerTurn(): number {
-    const from = this.state.log.length;
+    const snap = this.snapshot();
     endTurn(this.state);
     const actions = aliensTurn(this.state);
-    // Т.33: текст підсумку ходу демонів (#bturn) — за подіями цього ходу і туманом
-    this.turnSummary = TURN_PLATE_DONE + summarizeAlienTurn(this.state.log.slice(from), this.state.units, this.seen()).join('');
+    // Т.33: текст підсумку ходу демонів (#bturn) — за подіями цього ходу і туманом (Т.116: незалежний розрахунок)
+    this.turnSummary = this.summaryText(snap);
     return actions;
   }
 

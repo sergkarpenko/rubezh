@@ -389,3 +389,76 @@ describe('критерій 2 П13.3: події логу і детермінов
     expect(JSON.stringify(second.state.log)).toBe(JSON.stringify(first.state.log));
   });
 });
+
+// Т.116 (рішення власника, варіант Б): драйвер повідомляє про хід демонів — null на початку
+// (плашка «діють»), індекс логу на кінці (підсумок подій ходу); «Стоп» — onStop.
+describe('Т.116: onAlienTurn — плашка і підсумок ходу демонів в авто-бої', () => {
+  it('початок ходу демонів — null одразу після endTurn загону; кінець — індекс логу до endTurn загону', async () => {
+    const mission = ongoingMission();
+    const calls: { from: number | null; side: string; len: number }[] = [];
+    const deps = makeDeps(mission, {
+      onAlienTurn: (from) => calls.push({ from, side: mission.state.activeSide, len: mission.state.log.length }),
+      maxHalfTurns: 4,
+    });
+    const d = new AutoBattleDriver(deps);
+    d.start();
+    await driveToEnd(d);
+    expect(calls.length).toBeGreaterThanOrEqual(3); // хоча б один повний хід демонів і початок наступного
+    // почергово: початок (null, хід уже в демонів) → кінець (індекс, хід знову в загону)
+    calls.forEach((c, k) => {
+      expect(c.from === null, 'виклик ' + k).toBe(k % 2 === 0);
+      expect(c.side, 'виклик ' + k).toBe(k % 2 === 0 ? 'alien' : 'player');
+    });
+    // кінець ходу посилається на лог до endTurn загону: перша подія підсумку — передача ходу демонам
+    for (const c of calls.filter((x) => x.from !== null)) {
+      const e = mission.state.log[c.from as number];
+      expect(e.type).toBe('turn');
+    }
+    // кінець ходу — від початку саме цього ходу: подій попереднього ходу загону підсумок не захоплює
+    expect(calls[1].from).toBe(calls[0].len - 1);
+  });
+
+  it('старт посеред ходу демонів (після «Стоп») — плашка одразу, підсумок від точки старту', async () => {
+    const mission = ongoingMission();
+    endTurn(mission.state); // хід уже в демонів
+    const calls: (number | null)[] = [];
+    const startLen = mission.state.log.length;
+    const d = new AutoBattleDriver(makeDeps(mission, { onAlienTurn: (from) => calls.push(from), maxHalfTurns: 1 }));
+    d.start();
+    expect(calls[0]).toBeNull();
+    await driveToEnd(d);
+    expect(calls[1]).toBe(startLen);
+  });
+
+  it('«Стоп», перемога і ліміт півходів викликають onStop; onAlienTurn без залежності не потрібен', async () => {
+    const onStop = vi.fn();
+    const d = new AutoBattleDriver(makeDeps(ongoingMission(), { onStop }));
+    d.start();
+    d.toggle();
+    expect(onStop).toHaveBeenCalledTimes(1);
+    const duel = new AutoBattleDriver(makeDeps(duelMission(), { onStop }));
+    duel.start();
+    await driveToEnd(duel);
+    expect(onStop).toHaveBeenCalledTimes(2);
+    const limited = new AutoBattleDriver(makeDeps(ongoingMission(), { onStop, maxHalfTurns: 1 }));
+    limited.start();
+    await driveToEnd(limited);
+    expect(limited.busy).toBe(false);
+    expect(onStop).toHaveBeenCalledTimes(3);
+  });
+
+  it('«Стоп» і «Авто» посеред ходу демонів — підсумок від початку ходу, а не від точки повторного старту', async () => {
+    const mission = ongoingMission();
+    const calls: (number | null)[] = [];
+    const d = new AutoBattleDriver(makeDeps(mission, { onAlienTurn: (from) => calls.push(from) }));
+    d.start();
+    for (let i = 0; i < 600 && calls.length === 0; i++) await vi.advanceTimersByTimeAsync(160);
+    expect(calls).toEqual([null]); // хід демонів почався
+    const begin = mission.state.log.length - 1; // подія turn — передача ходу демонам
+    d.stop();
+    d.start();
+    for (let i = 0; i < 600 && calls.length < 3; i++) await vi.advanceTimersByTimeAsync(160);
+    expect(calls.slice(0, 3)).toEqual([null, null, begin]);
+    d.stop();
+  });
+});
