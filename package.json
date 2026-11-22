@@ -14,8 +14,8 @@
     "prepare": "husky",
     "lint": "eslint src scripts",
     "lint:fix": "eslint src scripts --fix",
-    "format": "prettier --write src index.html",
-    "format:check": "prettier --check src index.html",
+    "format": "prettier --write src index.html \"scripts/**/*.{ts,mjs}\"",
+    "format:check": "prettier --check src index.html \"scripts/**/*.{ts,mjs}\"",
     "docs": "typedoc"
   },
   "lint-staged": {
