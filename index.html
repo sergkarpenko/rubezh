@@ -310,7 +310,7 @@
         position: absolute;
         top: 2px;
         left: 3px;
-        font: 700 9px/1 monospace;
+        font: 700 10px/1 monospace; /* Т.117: 9 → 10 px */
         color: #00e5ff;
       }
       #btoolbar .tb-key {
@@ -323,9 +323,8 @@
       }
       #btoolbar button .tb-cap.tb-why {
         color: #ff9c9c;
-        font-size: 8.5px; /* «немає гранати» — у 58 px плитки */
-        line-height: 11px; /* як у підпису: плитка не міняє висоту */
-        letter-spacing: -0.3px;
+        /* Т.117: 10 px, як підпис дії; короткі причини («без гранат» — найдовша) вміщуються в 58 px плитки */
+        line-height: 1.1; /* як у підпису: плитка не міняє висоту */
       }
       #btoolbar button.armed {
         background: #0f2c36;
@@ -536,6 +535,11 @@
       #bturn b {
         display: block;
         color: #ff2e88;
+      }
+      #bturn .bturn-skip {
+        margin-top: 2px;
+        font-size: 11px;
+        color: #c98aa8;
       }
       #bturn.done {
         border-color: #3a4152;

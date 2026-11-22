@@ -83,16 +83,22 @@ async function expectBattleFits(page: Page, label: string, minField: number): Pr
 // оперативника і звіряємо його рядок HP/AP. Після ходу демонів це ловить
 // розбіжність у їхніх пострілах і реакційному вогні дозору.
 // Т.33: «Кінець» → плашка ходу демонів (хід гравця ще не починається) → підсумок ходу в правій частині панелі.
-async function endTurnOnPage(page: Page, mirror: CoreMirror): Promise<number> {
+// Т.117: skip — пропуск плашки тапом по оперативнику (тап до поля не доходить: вибір не змінюється) або пробілом.
+async function endTurnOnPage(page: Page, mirror: CoreMirror, skip: 'tap' | 'space' | null = null): Promise<number> {
   await page.locator('#btn-end').click();
   const actions = mirror.endPlayerTurn();
   if (mirror.outcome() !== 'триває') return actions;
   const plate = page.locator('#bturn');
-  await expect(plate).toHaveText('ХІД ДЕМОНІВ РОЗРИВУ…Демони діють. Зачекайте.');
+  await expect(plate).toHaveText('ХІД ДЕМОНІВ РОЗРИВУ…Демони діють. Зачекайте.Клік / пробіл / Esc — пропустити');
   await expect(page.locator('#btn-end')).toBeDisabled();
   await expect(page.locator('#bctx-turn')).toHaveText('хід демонів Розриву');
   await expect(page.locator('#binfo')).toHaveText('');
-  await expect(plate).toHaveClass('done');
+  const unitBefore = await page.locator('#bctx-unit').textContent();
+  if (skip === 'tap') await tap(page, mirror.squad()[0].pos);
+  if (skip === 'space') await page.keyboard.press('Space');
+  // без пропуску плашка тримається ≥ 1 с; пропуск дає підсумок одразу
+  await expect(plate).toHaveClass('done', skip === null ? {} : { timeout: 500 });
+  await expect(page.locator('#bctx-unit')).toHaveText(unitBefore ?? '');
   await expect(plate).toHaveText(mirror.turnSummary);
   return actions;
 }
@@ -543,7 +549,7 @@ test('сценарій приймання ADR-0030: партія → місія 
     };
     await expect.poll(drawn, { message: 'Т.44: зона ходу на канві = зона з дзеркала' }).toBe([...reach].sort().join(' '));
     // Т.33: причина під неактивною плиткою — у загоні на старті немає гелю
-    await expect(page.locator('#btn-medkit .tb-cap')).toHaveText('немає гелю');
+    await expect(page.locator('#btn-medkit .tb-cap')).toHaveText('без гелю');
     // ADR-0081: демон у тумані не видає себе — тап по його клітинці дає те
     // саме прев'ю шляху, що й по порожній невидимій
     const probe = mirror.fogProbe(soldier);
@@ -610,7 +616,7 @@ test('сценарій приймання ADR-0030: партія → місія 
     await expect(info).toContainText(guard.name + ' у дозорі');
     await expect(unit).toHaveText(unitLine(guard));
 
-    const actions = await endTurnOnPage(page, mirror);
+    const actions = await endTurnOnPage(page, mirror, 'tap');
     expect(mirror.outcome(), 'бій скінчився в перший хід демонів').toBe('триває');
     await expectBattleFits(page, 'підсумок ходу демонів', 740);
     await expect(info).toContainText('Хід демонів Розриву відпрацьовано (' + actions + ' дій)');
@@ -622,7 +628,7 @@ test('сценарій приймання ADR-0030: партія → місія 
   await test.step('бій: постріл у видиму ціль (тап-тап)', async () => {
     let shot = mirror.shotOption('snap');
     for (let i = 0; i < MAX_TURNS_TO_TARGET && shot === null; i++) {
-      await endTurnOnPage(page, mirror);
+      await endTurnOnPage(page, mirror, 'space');
       expect(mirror.outcome(), 'бій скінчився до першого пострілу загону').toBe('триває');
       await expectSquad(page, mirror);
       shot = mirror.shotOption('snap');

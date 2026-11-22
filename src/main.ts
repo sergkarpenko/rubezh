@@ -739,8 +739,11 @@ if (typeof document !== 'undefined') {
   };
   const bc = el<HTMLCanvasElement>('battle');
   // Т.33: до обробника кліку; Т.116: під час авто-бою клік підсумок не прибирає
-  bc.addEventListener('click', () => {
-    if (!autoBattle.busy) battle.dismissTurnPlate();
+  bc.addEventListener('click', (ev) => {
+    if (autoBattle.busy) return;
+    // Т.117: клік під час плашки «діють» лише пропускає анімації ходу демонів — до обробника поля не доходить
+    if (battle.skipAlienTurn()) ev.stopImmediatePropagation();
+    else battle.dismissTurnPlate();
   });
   bc.addEventListener('click', input.battleCanvasClick);
   bc.addEventListener('mousemove', input.battleCanvasHover);
