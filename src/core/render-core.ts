@@ -198,10 +198,8 @@ export function zoneOutlineSegments(keys: ReadonlySet<string>): ZoneEdge[] {
   return out;
 }
 
-// Т.44: плашка ціни шляху «<число> AP» біля цілі. Ширина — ширина тексту + 10 px, висота 21 px;
-// над ціллю (верх плашки — центр клітинки − 34 px), а якщо зверху не вміщується (ближче 2 px до
-// краю канви) — під нею (центр + 12 px); по горизонталі — по центру клітинки, притиснута в межі
-// канви з відступом 2 px. Координати — px канви, цілі.
+// Т.44: плашка ціни шляху «<число> AP» біля цілі: ширина — ширина тексту + 10 px, висота 21 px
+// (× k, Т.119). Координати — px канви, цілі.
 export const PATH_LABEL_H = 21;
 export const PATH_LABEL_PAD = 10; // сумарний запас ширини навколо тексту, px
 export const PATH_LABEL_CHAR_W = 9; // ширина знака bold 15px monospace (0,6 em)
@@ -211,13 +209,27 @@ export interface LabelBox {
   w: number;
   h: number;
 }
-export function pathLabelBox(goal: { x: number; y: number }, cell: number, textW: number, cw: number): LabelBox {
-  const cx = goal.x * cell + cell / 2;
+// Т.119 (рішення власника, варіант А): текст плашки — не дрібніший за 12 CSS px. px — px buffer'а
+// на CSS px; множник розміру плашки ≥ 1 (1366 × 768 — ≈ 1,17, iPad 1024 × 768 — ≈ 1,38,
+// телефон 390 × 844 — ≈ 3,96).
+export const PATH_LABEL_MIN_CSS = 12;
+export function pathLabelScale(px: number): number {
+  return Math.max(1, (px * PATH_LABEL_MIN_CSS) / 15);
+}
+// Т.119 (рішення власника, варіант А; замість «над ціллю» Т.44, що закривало клітинку над ціллю):
+// плашка збоку від клітинки цілі з відступом 2 px × k — праворуч, а якщо шлях приходить у ціль справа
+// (fromRight; аудит PR #434: інакше плашка лягала на кінець шляху і клітинку оперативника) — ліворуч;
+// якщо обраний бік не вміщується (ближче 2 px до краю канви) — інший. По вертикалі — по центру
+// клітинки, притиснута в межі квадратної канви з відступом 2 px. Клітинку над ціллю не закриває.
+export function pathLabelBox(goal: { x: number; y: number }, cell: number, textW: number, cw: number, k = 1, fromRight = false): LabelBox {
   const cy = goal.y * cell + cell / 2;
-  const w = Math.ceil(textW) + PATH_LABEL_PAD;
-  const x = Math.round(Math.min(Math.max(cx - w / 2, 2), cw - w - 2));
-  const y = cy - 34 < 2 ? cy + 12 : cy - 34;
-  return { x, y, w, h: PATH_LABEL_H };
+  const w = Math.ceil(textW + PATH_LABEL_PAD * k);
+  const h = Math.round(PATH_LABEL_H * k);
+  const m = Math.round(2 * k);
+  const right = goal.x * cell + cell + m;
+  const left = goal.x * cell - m - w;
+  const x = fromRight ? (left >= 2 ? left : right) : right + w <= cw - 2 ? right : Math.max(2, left);
+  return { x, y: Math.round(Math.min(Math.max(cy - h / 2, 2), cw - h - 2)), w, h };
 }
 
 // --- П6.8 (ADR-0029): анімаційний рушій — черга + rAF лише під час активних анімацій ---

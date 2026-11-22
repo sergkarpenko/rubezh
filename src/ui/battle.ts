@@ -408,7 +408,8 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
         return { x, y, blocked: st.map.blocked.has(k2), visible: vis.has(k2) };
       })
     ).flat();
-    drawNightTerrain(ctx, cv.width, cv.height, cells, BCELL);
+    const px = cv.clientWidth > 0 ? cv.width / cv.clientWidth : 1;
+    drawNightTerrain(ctx, cv.width, cv.height, cells, BCELL, px);
 
     ctx.setLineDash([3, 3]);
     ctx.strokeStyle = 'rgba(110,168,255,0.5)';
@@ -418,14 +419,17 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
     // Т.44: зона ходу вибраного оперативника — у хід гравця, поки не зведено ні постріл,
     // ні витратник; рахується і в тумані (рельєф відомий, юніт у тумані зони не обрізає — ADR-0081)
     const sel = selectedUnit();
-    if (sel && playerTurnActive() && ui.fireMode === null && ui.itemMode === null) {
+    // Т.119: зона ходу і прев'ю шляху — лише коли гравець справді може ходити: не в авто-бої
+    // і не під час анімації (рух, постріл)
+    const calm = !deps.autoBusy() && activeAnim === null;
+    if (calm && sel && playerTurnActive() && ui.fireMode === null && ui.itemMode === null) {
       drawReachZone(ctx, reachableCells(st, sel.pos, sel.ap, vis), sel.pos, BCELL);
     }
 
     // Т.44: прев'ю шляху під курсором — лінія від оперативника і ціна «<число> AP» біля цілі:
     // зелені — вистачає AP, червоні — ні. Т.45: у зведеному режимі пострілу, гранати чи гелю
     // прев'ю не малюється (шлях міг лишитись від наведення до зведення) — як і зона ходу
-    if (ui.hoverPath && sel && playerTurnActive() && ui.fireMode === null && ui.itemMode === null) {
+    if (calm && ui.hoverPath && sel && playerTurnActive() && ui.fireMode === null && ui.itemMode === null) {
       drawPathPreview(ctx, {
         from: sel.pos,
         path: ui.hoverPath,
@@ -433,6 +437,7 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
         affordable: ui.hoverAp <= sel.ap,
         cell: BCELL,
         cw: cv.width,
+        px,
       });
     }
 

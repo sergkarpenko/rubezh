@@ -10,6 +10,8 @@ import { describe, expect, it } from 'vitest';
 import {
   fogBorderSegments,
   pathLabelBox,
+  pathLabelScale,
+  PATH_LABEL_MIN_CSS,
   zoneOutlineSegments,
   type TerrainCell,
   AnimEngine,
@@ -774,28 +776,48 @@ describe('Т.44: zoneOutlineSegments — контур зони ходу', () => 
   });
 });
 
-describe('Т.44: pathLabelBox — положення плашки ціни шляху', () => {
-  it('над ціллю: ширина — текст + 10, висота 21, верх — центр клітинки − 34, по центру клітинки', () => {
-    // ціль (5,4), клітинка 48: центр (264, 216); «9 AP» — 36 px
-    expect(pathLabelBox({ x: 5, y: 4 }, 48, 36, 960)).toEqual({ x: 241, y: 182, w: 46, h: 21 });
-    // ширший текст «10 AP» — 45 px: плашка 55, лівий край 236,5 → 237
-    expect(pathLabelBox({ x: 5, y: 4 }, 48, 45, 960)).toEqual({ x: 237, y: 182, w: 55, h: 21 });
+describe('Т.119: pathLabelBox — плашка ціни шляху збоку від цілі', () => {
+  it('праворуч від клітинки: відступ 2, ширина — текст + 10, висота 21, по центру клітинки по вертикалі', () => {
+    // ціль (5,4), клітинка 48: правий край 288, центр по вертикалі 216; «9 AP» — 36 px
+    expect(pathLabelBox({ x: 5, y: 4 }, 48, 36, 960)).toEqual({ x: 290, y: 206, w: 46, h: 21 });
     // дробова ширина тексту округлюється вгору
     expect(pathLabelBox({ x: 5, y: 4 }, 48, 36.2, 960).w).toBe(47);
+    // клітинку над ціллю (рядок 3: 144–192) і саму ціль плашка не перекриває
+    const b = pathLabelBox({ x: 5, y: 4 }, 48, 36, 960);
+    expect(b.y).toBeGreaterThanOrEqual(192);
+    expect(b.x).toBeGreaterThanOrEqual(288);
   });
 
-  it('у верхньому рядку зверху не вміщується — плашка під ціллю (центр + 12); у другому рядку — вже над нею', () => {
-    expect(pathLabelBox({ x: 5, y: 0 }, 48, 36, 960).y).toBe(36);
-    expect(pathLabelBox({ x: 5, y: 1 }, 48, 36, 960).y).toBe(38);
-    // межа «не вміщується»: верх ближче 2 px до краю канви (клітинка 70: центр 35, верх 1 → під ціллю; 72: верх 2 → над)
-    expect(pathLabelBox({ x: 0, y: 0 }, 70, 36, 960).y).toBe(47);
-    expect(pathLabelBox({ x: 0, y: 0 }, 72, 36, 960).y).toBe(2);
+  it('праворуч не вміщується — ліворуч від клітинки; межа — 2 px до краю канви', () => {
+    expect(pathLabelBox({ x: 19, y: 3 }, 48, 36, 960).x).toBe(864); // 912 − 2 − 46
+    // ціль (18,3): праворуч 914 + 46 = 960 > 958 — ліворуч; ціль (17,3): 866 + 46 = 912 — праворуч
+    expect(pathLabelBox({ x: 18, y: 3 }, 48, 36, 960).x).toBe(816);
+    expect(pathLabelBox({ x: 17, y: 3 }, 48, 36, 960).x).toBe(866);
   });
 
-  it('притискання до країв канви з відступом 2 px: лівий стовпчик і правий стовпчик', () => {
-    expect(pathLabelBox({ x: 0, y: 3 }, 48, 36, 960).x).toBe(2);
-    const right = pathLabelBox({ x: 19, y: 3 }, 48, 36, 960);
-    expect(right.x).toBe(912);
-    expect(right.x + right.w).toBe(958);
+  it('шлях приходить справа — плашка ліворуч від цілі; ліворуч не вміщується — праворуч', () => {
+    expect(pathLabelBox({ x: 5, y: 4 }, 48, 36, 960, 1, true)).toEqual({ x: 192, y: 206, w: 46, h: 21 }); // 240 − 2 − 46
+    expect(pathLabelBox({ x: 0, y: 4 }, 48, 36, 960, 1, true).x).toBe(50);
+    expect(pathLabelBox({ x: 1, y: 4 }, 48, 36, 960, 1, true).x).toBe(98); // 48 − 2 − 46 = 0 < 2 — праворуч
+  });
+
+  it('по вертикалі притиснута в межі канви з відступом 2 px (верхній і нижній рядок при великому k)', () => {
+    expect(pathLabelBox({ x: 5, y: 0 }, 48, 36, 960, 4).y).toBe(2); // висота 84 > клітинки
+    const low = pathLabelBox({ x: 5, y: 19 }, 48, 36, 960, 4);
+    expect(low.y + low.h).toBe(958);
+  });
+
+  it('k множить висоту, запас ширини і відступ від клітинки', () => {
+    expect(pathLabelBox({ x: 5, y: 4 }, 48, 72, 960, 2)).toEqual({ x: 292, y: 195, w: 92, h: 42 });
+  });
+});
+
+describe('Т.119: pathLabelScale — множник плашки за масштабом канви', () => {
+  it('текст не дрібніший за 12 CSS px; на канві без зменшення — 1', () => {
+    expect(PATH_LABEL_MIN_CSS).toBe(12);
+    expect(pathLabelScale(1)).toBe(1);
+    expect(pathLabelScale(1.25)).toBe(1); // 15 / 1,25 = 12 — рівно межа
+    expect(pathLabelScale(2.5)).toBe(2); // 15 × 2 / 2,5 = 12 CSS px
+    expect(pathLabelScale(0.5)).toBe(1); // збільшена канва — без зменшення
   });
 });
