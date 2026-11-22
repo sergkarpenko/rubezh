@@ -1089,6 +1089,26 @@ describe('позафазна лінія «Мегаполіс»: цілісна �
     expect(edge).toBeLessThan(border);
   });
 
+  it("Т.119: зменшена канва (px = 4, телефон) — штрих 2,8 і крок 22 px buffer'а, межа 5,6; px = 1,4 (1366 × 768) — як Т.44", () => {
+    readyMetro();
+    const fogged = cells.map((c) => ({ ...c, visible: c.x === 0 }));
+    const widths = (px?: number): { hatch: unknown; border: unknown; pts: number } => {
+      const s = seqCtx();
+      drawNightTerrain(s.ctx, 144, 96, fogged, 48, px);
+      const hatch = s.ops.findIndex((o) => 'set' in o && o.set === 'strokeStyle' && o.v === 'rgba(150,170,190,0.16)');
+      const border = s.ops.findIndex((o) => 'set' in o && o.set === 'strokeStyle' && o.v === 'rgba(125,215,255,0.6)');
+      const pts = s.ops.slice(hatch, border).filter((o) => 'm' in o && (o.m === 'moveTo' || o.m === 'lineTo')).length;
+      return { hatch: s.ops[hatch + 1], border: s.ops[border + 1], pts };
+    };
+    const phone = widths(4);
+    expect(phone.hatch).toEqual({ set: 'lineWidth', v: 2.8 });
+    expect(phone.pts).toBe(4 * 5 * 2); // d = 0, 22, 44, 66, 88
+    expect(phone.border).toEqual({ set: 'lineWidth', v: 5.6 });
+    // 0,7 CSS px штриха і 1,4 CSS px межі на 1366 × 768 (px ≈ 1,47) — ті самі числа, що без масштабу
+    expect(widths(1.4)).toEqual(widths());
+    expect(widths().hatch).toEqual({ set: 'lineWidth', v: 1 });
+  });
+
   it('Т.44: без туману — ні штриха, ні межі', () => {
     readyMetro();
     const clear = seqCtx();
@@ -1330,10 +1350,10 @@ describe('Т.44: drawPathPreview — шлях лінією і ціна біля 
   it('плашка: текст «<число> AP» шрифтом bold 15px monospace по центру, фон і рамка 1 px кольором лінії', () => {
     const s = seqCtx();
     drawPathPreview(s.ctx, { ...base, path: [{ x: 5, y: 4 }], ap: 9, affordable: true });
-    // «9 AP»: 4 знаки × 9 + 10 = 46 × 21, над ціллю (5,4): (241, 182)
-    expect(calls(s.ops, 'fillRect')).toEqual([[241, 182, 46, 21]]);
-    expect(calls(s.ops, 'strokeRect')).toEqual([[241.5, 182.5, 45, 20]]);
-    expect(calls(s.ops, 'fillText')).toEqual([['9 AP', 264, 193]]);
+    // «9 AP»: 4 знаки × 9 + 10 = 46 × 21, праворуч від цілі (5,4) — Т.119: (290, 206)
+    expect(calls(s.ops, 'fillRect')).toEqual([[290, 206, 46, 21]]);
+    expect(calls(s.ops, 'strokeRect')).toEqual([[290.5, 206.5, 45, 20]]);
+    expect(calls(s.ops, 'fillText')).toEqual([['9 AP', 313, 217]]);
     expect(sets(s.ops, 'font')).toEqual(['bold 15px monospace']);
     expect(sets(s.ops, 'textAlign')).toEqual(['center']);
     expect(sets(s.ops, 'textBaseline')).toEqual(['middle']);
@@ -1349,10 +1369,29 @@ describe('Т.44: drawPathPreview — шлях лінією і ціна біля 
     expect(calls(s.ops, 'fillText')[0]![0]).toBe('12 AP');
   });
 
-  it('ціль у верхньому рядку — плашка під нею; біля правого краю — притиснута в межі канви', () => {
+  it('ціль у правому верхньому куті — плашка ліворуч від неї, у межах канви', () => {
     const s = seqCtx();
     drawPathPreview(s.ctx, { from: { x: 19, y: 1 }, path: [{ x: 19, y: 0 }], ap: 1, affordable: true, cell: 48, cw: 960 });
-    expect(calls(s.ops, 'fillRect')).toEqual([[912, 36, 46, 21]]);
-    expect(calls(s.ops, 'fillText')).toEqual([['1 AP', 935, 47]]);
+    expect(calls(s.ops, 'fillRect')).toEqual([[864, 14, 46, 21]]);
+    expect(calls(s.ops, 'fillText')).toEqual([['1 AP', 887, 25]]);
+  });
+
+  it("Т.119: зменшена канва (px = 2,5 — iPad у меншому вікні) — текст 30 px buffer'а = 12 CSS px, лінія 5, коло 8,75", () => {
+    const s = seqCtx();
+    drawPathPreview(s.ctx, { ...base, path: [{ x: 5, y: 4 }], ap: 9, affordable: true, px: 2.5 });
+    expect(sets(s.ops, 'font')).toEqual(['bold 30px monospace']);
+    expect(sets(s.ops, 'lineWidth')).toEqual([5, 2]); // лінія 2 CSS px, рамка — 2 (k = 2)
+    expect(calls(s.ops, 'arc')).toEqual([[264, 216, 8.75, 0, Math.PI * 2]]);
+    // плашка ×2: 36 × 2 + 20 = 92 × 42, відступ 4
+    expect(calls(s.ops, 'fillRect')).toEqual([[292, 195, 92, 42]]);
+    expect(calls(s.ops, 'fillText')).toEqual([['9 AP', 338, 216.5]]);
+  });
+
+  it('Т.119: px ≤ 1,25 — розміри Т.44 без змін', () => {
+    const a = seqCtx();
+    const b = seqCtx();
+    drawPathPreview(a.ctx, { ...base, path: [{ x: 5, y: 4 }], ap: 9, affordable: true });
+    drawPathPreview(b.ctx, { ...base, path: [{ x: 5, y: 4 }], ap: 9, affordable: true, px: 1.25 });
+    expect(b.ops).toEqual(a.ops);
   });
 });

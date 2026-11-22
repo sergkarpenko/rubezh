@@ -8,7 +8,7 @@ import { advanceTime, missionTargets } from '../core/geo';
 import { createGame, makeUnit, moveUnit, type GameState, type Unit } from '../core/combat';
 import { createParty, type Party } from '../core/save';
 import { initPixelSprites } from '../render';
-import { makeDeathAnim, makeTracerAnim } from '../core/render-core';
+import { makeDeathAnim, makeMoveAnim, makeTracerAnim } from '../core/render-core';
 import { createBattleUI, validFireTargets, validHealTargets, type BattleDeps, type BattleUIState } from './battle';
 import { createToolbar } from './toolbar';
 
@@ -729,7 +729,7 @@ describe('Т.44: зона ходу вибраного оперативника �
       'lineTo(264,168)',
       'arc(264,168,7,0,' + String(Math.PI * 2) + ')',
     ]);
-    expect(ops).toContain('fillText(2 AP,264,145)');
+    expect(ops).toContain('fillText(2 AP,313,169)'); // Т.119: праворуч від цілі (5,3)
     expect(ops.some((o) => /^arc\(\d+,\d+,3,/.test(o))).toBe(false);
     expect(ops).not.toContain('set:strokeStyle=rgba(255,156,156,0.95)');
   });
@@ -795,8 +795,8 @@ describe('Т.44: зона ходу вибраного оперативника �
     for (const mode of ['snap', 'aimed', 'auto'] as const) expect(drawn(draw((f) => (f.ui.fireMode = mode)))).toBe(false);
     expect(drawn(draw((f) => (f.ui.itemMode = 'grenade')))).toBe(false);
     expect(drawn(draw((f) => (f.ui.itemMode = 'medkit')))).toBe(false);
-    // рішення власника: в авто-бої прев'ю лишається
-    expect(drawn(draw(() => undefined, { autoBusy: () => true }))).toBe(true);
+    // Т.119 (рішення власника, замість Т.45 «в авто-бої прев'ю лишається»): в авто-бої прев'ю немає
+    expect(drawn(draw(() => undefined, { autoBusy: () => true }))).toBe(false);
   });
 
   it('поки грає плашка ходу демонів (хід уже гравця, анімації ще йдуть), зони немає; після неї — є', () => {
@@ -812,6 +812,43 @@ describe('Т.44: зона ходу вибраного оперативника �
       expect(zone(render(f))).toHaveLength(10);
     } finally {
       vi.useRealTimers();
+    }
+  });
+
+  it('Т.119: в авто-бої і поки грає анімація (рух, постріл) — ні зони, ні прев\u2019ю шляху; після анімації — є', () => {
+    const draw = (over: Partial<BattleDeps>): string[] => {
+      const { f } = setup(2, { x: 15, y: 15 }, over);
+      f.ui.hoverPath = [{ x: 5, y: 4 }];
+      f.ui.hoverAp = 1;
+      return render(f);
+    };
+    const shown = (ops: string[]): { zone: number; path: boolean } => ({
+      zone: zone(ops).length,
+      path: ops.some((o) => o.includes(' AP,')) || ops.includes('set:strokeStyle=rgba(127,226,160,0.95)'),
+    });
+    expect(shown(draw({}))).toEqual({ zone: 10, path: true }); // контроль
+    expect(shown(draw({ autoBusy: () => true }))).toEqual({ zone: 0, path: false });
+    const move = makeMoveAnim(makeUnit({ id: 's1', side: 'player', pos: { x: 5, y: 5 } }), [{ x: 5, y: 4 }], true);
+    move.start = 0;
+    const tracer = makeTracerAnim('player', { x: 5, y: 5 }, { x: 15, y: 15 }, false);
+    tracer.start = 0;
+    for (const a of [move, tracer]) {
+      const base = makeFixture().deps.anim;
+      expect(shown(draw({ anim: { ...base, active: () => a, queued: () => [a] } }))).toEqual({ zone: 0, path: false });
+    }
+  });
+
+  it('Т.119: px канви — buffer / CSS-ширина: на зменшеній канві плашка і межа туману товщі', () => {
+    const { f } = setup();
+    f.ui.hoverPath = [{ x: 5, y: 4 }];
+    f.ui.hoverAp = 1;
+    const cv = document.getElementById('battle') as HTMLCanvasElement;
+    expect(render(f).some((o) => o === 'set:font=bold 15px monospace')).toBe(true); // jsdom: clientWidth 0 → px 1
+    Object.defineProperty(cv, 'clientWidth', { configurable: true, value: cv.width / 2.5 });
+    try {
+      expect(render(f).some((o) => o === 'set:font=bold 30px monospace')).toBe(true); // 12 CSS px
+    } finally {
+      delete (cv as unknown as { clientWidth?: number }).clientWidth;
     }
   });
 

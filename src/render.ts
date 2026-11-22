@@ -20,6 +20,7 @@ import {
   fogBorderSegments,
   PATH_LABEL_CHAR_W,
   pathLabelBox,
+  pathLabelScale,
   zoneOutlineSegments,
   GEO_CELL_A,
   GEO_CELL_B,
@@ -516,7 +517,14 @@ export function drawUfoSprite(ctx: CanvasRenderingContext2D, u: UfoSprite): void
 // не залежать). Чиста функція без RNG і DOM-стану; викликається кожен
 // кадр після clearRect (урок П6.6) — кадр еквівалентний малюванню з
 // нуля. w/h — розмір buffer'а канви в пікселях, cell — BCELL.
-export function drawNightTerrain(ctx: CanvasRenderingContext2D, w: number, h: number, cells: readonly TerrainCell[], cell: number): void {
+export function drawNightTerrain(
+  ctx: CanvasRenderingContext2D,
+  w: number,
+  h: number,
+  cells: readonly TerrainCell[],
+  cell: number,
+  px = 1 // Т.119: px buffer'а на CSS px — штрих і межа туману тримають товщину в CSS px
+): void {
   // фон на весь buffer (при трясці translate оголює край — колір збігається з CSS-тлом)
   ctx.fillStyle = NIGHT_BG;
   ctx.fillRect(0, 0, w, h);
@@ -562,13 +570,16 @@ export function drawNightTerrain(ctx: CanvasRenderingContext2D, w: number, h: nu
     // Т.44: штрих — діагоналі в межах кожної клітинки туману
     ctx.save();
     ctx.strokeStyle = FOG_HATCH;
-    ctx.lineWidth = 1;
+    // Т.119: на зменшеній канві (телефон) штрих 1 px buffer'а ставав 0,2 CSS px — товщина
+    // і крок тримаються в CSS px (як на 1366 × 768: ≈ 0,7 і 5,5 px); на більшій канві — як було
+    ctx.lineWidth = Math.max(1, 0.7 * px);
+    const step = Math.max(FOG_HATCH_STEP, 5.5 * px);
     ctx.beginPath();
     for (const c of cells) {
       if (c.visible) continue;
       const x0 = c.x * cell;
       const y0 = c.y * cell;
-      for (let d = 0; d < 2 * cell; d += FOG_HATCH_STEP) {
+      for (let d = 0; d < 2 * cell; d += step) {
         ctx.moveTo(x0 + Math.max(0, d - cell), y0 + Math.min(d, cell));
         ctx.lineTo(x0 + Math.min(d, cell), y0 + Math.max(0, d - cell));
       }
@@ -599,7 +610,7 @@ export function drawNightTerrain(ctx: CanvasRenderingContext2D, w: number, h: nu
   if (border.length > 0) {
     ctx.save();
     ctx.strokeStyle = FOG_BORDER;
-    ctx.lineWidth = FOG_BORDER_W;
+    ctx.lineWidth = Math.max(FOG_BORDER_W, 1.4 * px);
     ctx.beginPath();
     for (const e of border) {
       ctx.moveTo(e.x1 * cell, e.y1 * cell);
@@ -718,15 +729,20 @@ export interface PathPreview {
   affordable: boolean;
   cell: number;
   cw: number; // ширина buffer'а канви, px
+  px?: number; // px buffer'а на CSS px (> 1 — канву показано зменшеною); 1 — без масштабу
 }
 export function drawPathPreview(ctx: CanvasRenderingContext2D, p: PathPreview): void {
   const goal = p.path[p.path.length - 1];
   if (!goal) return;
   const mid = (c: { x: number; y: number }): [number, number] => [c.x * p.cell + p.cell / 2, c.y * p.cell + p.cell / 2];
   const color = p.affordable ? PATH_OK : PATH_SHORT;
+  // Т.119: канву показано зменшеною (iPad — ×0,58, телефон — ×0,2) — текст плашки не дрібніший
+  // за PATH_LABEL_MIN_CSS CSS px, лінія шляху — за 2 CSS px, коло цілі — за 3,5 CSS px
+  const px = p.px ?? 1;
+  const k = pathLabelScale(px);
   ctx.save();
   ctx.strokeStyle = color;
-  ctx.lineWidth = PATH_W;
+  ctx.lineWidth = Math.max(PATH_W, 2 * px);
   ctx.lineJoin = 'round';
   ctx.lineCap = 'round';
   ctx.beginPath();
@@ -736,19 +752,19 @@ export function drawPathPreview(ctx: CanvasRenderingContext2D, p: PathPreview): 
   const [gx, gy] = mid(goal);
   ctx.fillStyle = color;
   ctx.beginPath();
-  ctx.arc(gx, gy, PATH_END_R, 0, Math.PI * 2);
+  ctx.arc(gx, gy, Math.max(PATH_END_R, 3.5 * px), 0, Math.PI * 2);
   ctx.fill();
   const text = p.ap + ' AP';
-  const box = pathLabelBox(goal, p.cell, text.length * PATH_LABEL_CHAR_W, p.cw);
+  const box = pathLabelBox(goal, p.cell, text.length * PATH_LABEL_CHAR_W * k, p.cw, k);
   ctx.fillStyle = PATH_LABEL_BG;
   ctx.fillRect(box.x, box.y, box.w, box.h);
-  ctx.lineWidth = 1;
+  ctx.lineWidth = Math.max(1, Math.round(k));
   ctx.strokeRect(box.x + 0.5, box.y + 0.5, box.w - 1, box.h - 1);
   ctx.fillStyle = color;
-  ctx.font = 'bold 15px monospace';
+  ctx.font = 'bold ' + Math.ceil(15 * k - 1e-9) + 'px monospace'; // угору — не дрібніше за 12 CSS px
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText(text, box.x + box.w / 2, box.y + 11);
+  ctx.fillText(text, box.x + box.w / 2, box.y + box.h / 2 + 0.5);
   ctx.restore();
 }
 
