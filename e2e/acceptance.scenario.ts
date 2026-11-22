@@ -509,6 +509,17 @@ test('сценарій приймання ADR-0030: партія → місія 
     await expectBattleFits(page, '1366 × 768', 640);
     await page.setViewportSize({ width: 1024, height: 768 });
     await expectBattleFits(page, '1024 × 768', 540);
+    const toolbarWidth = () => page.evaluate(() => Math.round(document.getElementById('btoolbar')!.getBoundingClientRect().width));
+    expect(await toolbarWidth(), 'Т.118: на 1024 × 768 плитки — один стовпчик').toBe(64);
+    // Т.118 (кандидат 19): низькі вікна — плитки у два стовпчики, поле вписується у висоту без прокрутки
+    for (const [width, height, minField] of [
+      [1024, 600, 380],
+      [1366, 600, 480],
+    ] as const) {
+      await page.setViewportSize({ width, height });
+      await expectBattleFits(page, `${width} × ${height}`, minField);
+      expect(await toolbarWidth(), `Т.118: на ${width} × ${height} плитки — два стовпчики`).toBe(134);
+    }
     await page.setViewportSize({ width: 1440, height: 900 });
   });
 
