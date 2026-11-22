@@ -22,6 +22,12 @@ concurrency:
   group: pr-size-${{ github.ref }}
   cancel-in-progress: true
 
+# ADR-0113: кожен крок run: — під bash з pipefail (bash --noprofile --norc -eo pipefail);
+# без цього рядка крок іде під bash -e, і код першої команди конвеєра губиться.
+defaults:
+  run:
+    shell: bash
+
 jobs:
   pr-size:
     if: github.event.pull_request.user.login != 'dependabot[bot]'
