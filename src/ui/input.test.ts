@@ -697,6 +697,8 @@ describe('Т.121: порожня клітинка поля під час ані�
     hover();
     expect(f.ui.hoverPath).toBe(path); // шлях, наведений до анімації, лишається — з'явиться з її кінцем
     expect(f.binfo()).toBe('мітка');
+    f.input.battleCanvasHover({ clientX: s.pos.x * 48 + 24, clientY: s.pos.y * 48 + 24 } as MouseEvent);
+    expect(f.ui.hoverPath).toBe(path); // і наведення на свого оперативника (знахідка Vibe)
   });
 
   it('зведений постріл: тап у порожню клітинку під час анімації режим не знімає; після — знімає, як і раніше', () => {

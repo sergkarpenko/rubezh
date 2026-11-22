@@ -204,7 +204,8 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
     if (ui.itemMode === 'grenade') {
       // Т.121 (аудит): порожня клітинка під час анімації мовчить і для гранати — дальність і лінію
       // кидка рахувало б від клітинки, де оперативник зупиниться; клітинка з видимим юнітом — як і раніше
-      const visibleUnit = u !== undefined && (u.side === 'player' || battle.visibleCells().has(cell.x + ',' + cell.y));
+      // (свій оперативник сюди не доходить — тап по ньому вище вибирає його)
+      const visibleUnit = u !== undefined && battle.visibleCells().has(cell.x + ',' + cell.y);
       if (battle.animating() && !visibleUnit) return;
       if (distance(sel.pos, cell) > GRENADE_RANGE) {
         battle.binfo('Епіцентр поза дальністю кидка (' + GRENADE_RANGE + ' клітинок).');
@@ -396,6 +397,9 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
       }
       return;
     }
+    // Т.121: під час анімації наведення нічого не міняє — ні шляху, ні #binfo (як і тап); шлях,
+    // наведений до анімації, з'являється знову з її кінцем (аудит: обнулення лишало tapCell без лінії)
+    if (battle.animating()) return;
     if (cell.x === sel.pos.x && cell.y === sel.pos.y) {
       if (ui.hoverPath !== null) {
         ui.hoverPath = null;
@@ -403,9 +407,6 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
       }
       return;
     }
-    // Т.121: під час анімації наведення нічого не міняє — ні шляху, ні #binfo (як і тап); шлях,
-    // наведений до анімації, з'являється знову з її кінцем (аудит: обнулення лишало tapCell без лінії)
-    if (battle.animating()) return;
     const path = findPath(ui.mission.state, sel.pos, cell, undefined, battle.visibleCells()); // ADR-0081
     if (samePath(path, ui.hoverPath)) return; // без перемальовки на кожен піксель
     ui.hoverPath = path;
