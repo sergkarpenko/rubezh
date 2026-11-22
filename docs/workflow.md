@@ -925,6 +925,7 @@ See `docs/plans/refactoring.md` and `docs/workflow-archive/linia-pr.md` (арх�
 - [x] **Т.111 (рішення власника 22.11.2026, фініш Т.110 — «`e2e/` у format:check (Recommended)»): `e2e/` у `format:check` CI і в lint-staged (кандидат 109).** Мета: формат сценаріїв приймання перевіряє CI і виправляє pre-commit — як для `src` і `scripts/`.
     - Замір на `df643d9`: `e2e/` — 3 файли `.ts` (`acceptance.scenario.ts`, `mirror.ts`, `smoke.e2e.ts`), `prettier --check e2e` — усі у форматі; `npx eslint e2e` — код 0.
     - Зроблено (ADR-0110): `format:check` і `format` — `… "scripts/**/*.{ts,mjs}" e2e`; lint-staged — `e2e/**/*.ts`: `prettier --write`; уточнення в `docs/agents/common.md`, `README.md`, рядок ADR-0110 в `AGENTS.md`. Спосіб обрала сесія (клас `approve`); ESLint для `e2e/` — поза кроком.
+    - Аудит (PR #426): Opus — 2 низькі: «ті самі файли форматує lint-staged» у `common.md` неточне для `e2e/` (хук — `*.ts`, CI — уся тека) — виправлено; «`e2e/` — поза ним» у рядку ADR-0109 в `AGENTS.md` — відхилено (історичний опис ADR-0109, заміна — у рядку ADR-0110). Vibe — 0.
     - Перевірка: кривий `e2e/zz-probe.ts` — `npm run format:check` код 1, файл у переліку; той самий файл у стейджі — `npx lint-staged` виправив формат; без нього — код 0; `npm test` — 48 файлів, 1328 тестів; `npm run lint`, `npx tsc --noEmit` (і `-p tsconfig.e2e.json`) — чисто; `npm run docs` і e2e — у CI.
     - Модель сесії — Opus 5.5 medium.
     - Урок: немає
