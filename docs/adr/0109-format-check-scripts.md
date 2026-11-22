@@ -2,6 +2,7 @@
 
 - Статус: accepted (мерж PR власником = «схвалюю» — конвенція ADR-0052)
 - Дата: 2026-11-22
+- Частково Supersedes: ADR-0108 (п. 1, «`format:check` у CI скриптів не охоплює»), ADR-0076 (охоплення `format:check` — лише `src` та `index.html`)
 - Доповнює: ADR-0108 (lint-staged для `scripts/`), ADR-0076 (гейт формату в CI), ADR-0015 (ESLint + Prettier), ADR-0012 (зміна `package.json` — з ADR і авторизацією власника)
 - Автор: Claude Code (рішення власника 22.11.2026 на фініші Т.109 кнопкою — «107: scripts/ у format:check»; кандидат 107 — з Т.108)
 
