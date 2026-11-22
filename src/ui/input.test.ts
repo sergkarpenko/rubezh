@@ -315,6 +315,30 @@ describe('input: обробники вводу бою (тап-тап, зведе
     expect(prevented).toEqual([' ', 'Escape']);
   });
 
+  it('Т.117 (аудит): автоповтор пробілу після пропуску підсумок не прибирає; фокус з кнопки знято', () => {
+    const f = makeFixture();
+    launchMission(f);
+    let acting = true;
+    f.battle.skipAlienTurn = () => {
+      const was = acting;
+      acting = false;
+      return was;
+    };
+    const dismiss = vi.fn();
+    f.battle.dismissTurnPlate = dismiss;
+    const b = document.createElement('button');
+    document.body.append(b);
+    b.focus();
+    const key = (repeat: boolean): void =>
+      f.input.onKeyDown({ key: ' ', code: 'Space', repeat, preventDefault: () => {} } as unknown as KeyboardEvent);
+    key(false);
+    expect(document.activeElement).not.toBe(b);
+    key(true);
+    key(true);
+    expect(dismiss).not.toHaveBeenCalled();
+    b.remove();
+  });
+
   it('гарячі клавіші ігноруються у полях вводу (сід)', () => {
     const f = makeFixture();
     launchMission(f);

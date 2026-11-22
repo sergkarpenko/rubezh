@@ -746,6 +746,10 @@ if (typeof document !== 'undefined') {
     else battle.dismissTurnPlate();
   });
   bc.addEventListener('click', input.battleCanvasClick);
+  // Т.117 (аудит): підпис «Клік / пробіл / Esc — пропустити» стоїть на самій плашці — клік по ній теж пропускає
+  el('bturn').addEventListener('click', () => {
+    if (!autoBattle.busy) battle.skipAlienTurn();
+  });
   bc.addEventListener('mousemove', input.battleCanvasHover);
   bc.addEventListener('mouseleave', input.battleCanvasLeave);
   // ADR-0027 (П6.4): гарячі клавіші — на document (бій у фокусі канви не потрібен)
