@@ -51,28 +51,39 @@ async function tap(page: Page, cell: Vec2): Promise<void> {
 // Т.124 (ADR-0115): вигляд набору інтерфейсу — властивості обчисленого стилю, а не пікселі
 // (від шрифту не залежить): головна дія бурштинова з темним текстом, звичайна кнопка — об'ємна,
 // панель — скло з розмиттям, активна вкладка і плашка — з рискою (тінь усередині, не рамка),
-// рядок «Наступний крок» — без вигляду кнопки. Розміри перевіряє скрипт вимірів кроку, не гейт.
+// рядок «Наступний крок» — без вигляду кнопки, вимкнена головна дія — без світіння. Курсор — убік:
+// стан наведення інший (аудит PR #439). Розміри перевіряє скрипт вимірів кроку, не гейт.
 async function expectLook(page: Page): Promise<void> {
+  await page.mouse.move(0, 0);
   const look = await page.evaluate(() => {
     const cs = (sel: string): CSSStyleDeclaration => getComputedStyle(document.querySelector(sel)!);
+    const ev = document.querySelector<HTMLButtonElement>('#btn-event')!;
+    const was = ev.disabled;
+    ev.style.transition = 'none'; // без переходу тіні: інакше обчислений стиль — ще стара тінь
+    ev.disabled = true;
+    const off = getComputedStyle(ev).boxShadow;
+    ev.disabled = was;
+    ev.style.transition = '';
     const panel = [...document.querySelectorAll<HTMLElement>('section.panel')].find((e) => e.offsetParent !== null)!;
     return {
       event: [cs('#btn-event').backgroundImage.includes('linear-gradient'), cs('#btn-event').color],
       mission: [cs('#ufos button.mission').backgroundImage.includes('linear-gradient'), cs('#ufos button.mission').color],
-      plain: [cs('#btn-tick').backgroundImage.includes('linear-gradient'), cs('#btn-tick').boxShadow.includes('inset')],
+      plain: [cs('#btn-menu').backgroundImage.includes('linear-gradient'), cs('#btn-menu').boxShadow],
       glass: getComputedStyle(panel).backdropFilter,
       tab: cs('#status-tabs button.active').boxShadow.includes('inset'),
-      chip: cs('#topbar .chip').boxShadow.includes('inset'),
+      chip: cs('#topbar .chip').boxShadow.includes('rgb(0, 229, 255) 3px 0px 0px 0px inset'),
+      off,
       next: [cs('#next-step').boxShadow, cs('#next-step').backgroundImage],
     };
   });
   expect(look).toEqual({
     event: [true, 'rgb(26, 18, 4)'],
     mission: [true, 'rgb(26, 18, 4)'],
-    plain: [true, true],
+    plain: [true, 'rgba(255, 255, 255, 0.1) 0px 1px 0px 0px inset, rgba(0, 0, 0, 0.45) 0px 2px 4px 0px'],
     glass: 'blur(8px)',
     tab: true,
     chip: true,
+    off: 'none',
     next: ['none', 'none'],
   });
 }

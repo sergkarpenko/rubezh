@@ -14,15 +14,24 @@
          «main проти гілки» — різниця 0). Тло сторінки — світіння кольорів палітри */
       body {
         margin: 0;
-        background:
-          radial-gradient(900px 520px at 8% -10%, rgba(0, 229, 255, 0.14), transparent 70%),
-          radial-gradient(760px 560px at 100% 0%, rgba(255, 46, 136, 0.11), transparent 70%),
-          radial-gradient(1100px 700px at 50% 115%, rgba(80, 96, 255, 0.12), transparent 70%), #0a0d15;
-        background-attachment: fixed;
+        background: #0a0d15;
         color: #d7dde6;
         font:
           14px/1.45 system-ui,
           sans-serif;
+      }
+      /* Т.124 (аудит): світіння — окремим шаром position: fixed, а не background-attachment: fixed
+         (той перемальовує вікно на кожному кадрі прокрутки; iOS його ігнорує й розтягує тло на всю сторінку) */
+      body::before {
+        content: '';
+        position: fixed;
+        inset: 0;
+        z-index: -1;
+        pointer-events: none;
+        background:
+          radial-gradient(900px 520px at 8% -10%, rgba(0, 229, 255, 0.14), transparent 70%),
+          radial-gradient(760px 560px at 100% 0%, rgba(255, 46, 136, 0.11), transparent 70%),
+          radial-gradient(1100px 700px at 50% 115%, rgba(80, 96, 255, 0.12), transparent 70%);
       }
       /* ADR-0027: топбар — завжди видний; стан партії одним поглядом */
       header#topbar {
@@ -247,11 +256,14 @@
           border-color 0.15s,
           filter 0.15s;
       }
-      button:hover:not(:disabled) {
-        border-color: #00e5ff;
-        box-shadow:
-          inset 0 1px 0 rgba(255, 255, 255, 0.14),
-          0 0 14px rgba(0, 229, 255, 0.4);
+      /* Т.124 (аудит): наведення — лише там, де є справжній вказівник: на тачі :hover «липне» після тапу */
+      @media (hover: hover) {
+        button:hover:not(:disabled) {
+          border-color: #00e5ff;
+          box-shadow:
+            inset 0 1px 0 rgba(255, 255, 255, 0.14),
+            0 0 14px rgba(0, 229, 255, 0.4);
+        }
       }
       button:active:not(:disabled) {
         transform: translateY(1px);
@@ -281,14 +293,24 @@
           inset 0 1px 0 rgba(255, 255, 255, 0.45),
           0 0 14px rgba(255, 179, 71, 0.4);
       }
-      #btn-event:hover:not(:disabled),
-      button.mission:hover:not(:disabled),
-      button.research:hover:not(:disabled) {
-        border-color: #fff3d6;
-        filter: brightness(1.08);
-        box-shadow:
-          inset 0 1px 0 rgba(255, 255, 255, 0.55),
-          0 0 20px rgba(255, 179, 71, 0.65);
+      @media (hover: hover) {
+        #btn-event:hover:not(:disabled),
+        button.mission:hover:not(:disabled),
+        button.research:hover:not(:disabled) {
+          border-color: #fff3d6;
+          filter: brightness(1.08);
+          box-shadow:
+            inset 0 1px 0 rgba(255, 255, 255, 0.55),
+            0 0 20px rgba(255, 179, 71, 0.65);
+        }
+      }
+      /* Т.124 (аудит): вимкнена головна дія — без світіння (інакше виглядає приглушеною, але живою) */
+      #btn-event:disabled,
+      button.mission:disabled,
+      button.research:disabled,
+      button.armed:disabled {
+        box-shadow: none;
+        filter: none;
       }
       .mission-warn,
       .btn-why {
@@ -331,7 +353,8 @@
         width: 72px;
         font: inherit;
       }
-      input:focus {
+      input:focus,
+      .dialog-field input:focus {
         outline: none;
         border-color: #00e5ff;
         box-shadow: 0 0 10px rgba(0, 229, 255, 0.4);
@@ -389,12 +412,17 @@
           inset 0 -8px 12px rgba(0, 0, 0, 0.28),
           0 2px 5px rgba(0, 0, 0, 0.5);
       }
-      #btoolbar button:hover:not(:disabled) {
-        border-color: #00e5ff;
-        box-shadow:
-          inset 0 1px 0 rgba(255, 255, 255, 0.16),
-          inset 0 -8px 12px rgba(0, 0, 0, 0.28),
-          0 0 14px rgba(0, 229, 255, 0.45);
+      @media (hover: hover) {
+        #btoolbar button:not(.armed):hover:not(:disabled) {
+          border-color: #00e5ff;
+          box-shadow:
+            inset 0 1px 0 rgba(255, 255, 255, 0.16),
+            inset 0 -8px 12px rgba(0, 0, 0, 0.28),
+            0 0 14px rgba(0, 229, 255, 0.45);
+        }
+      }
+      #btoolbar button:disabled {
+        box-shadow: none;
       }
       #btoolbar button:disabled svg.tb-icon {
         filter: grayscale(1);
@@ -574,7 +602,9 @@
         min-width: auto;
         background: none;
         border: none;
-        box-shadow: none; /* Т.124: кнопка-назва без тіні кнопки */
+        box-shadow: none; /* Т.124: кнопка-назва без тіні, переходу і зсуву кнопки */
+        transition: none;
+        transform: none;
         padding: 0;
         text-align: left;
       }
@@ -1242,7 +1272,10 @@
           position: sticky;
           top: 0;
           z-index: 1;
-          background: #0d1017;
+          /* Т.124 (аудит): скло, як у панелей, а не старе суцільне тло сторінки */
+          background: linear-gradient(180deg, rgba(25, 34, 56, 0.92), rgba(12, 17, 29, 0.88));
+          -webkit-backdrop-filter: blur(8px);
+          backdrop-filter: blur(8px);
         }
         #journal {
           min-height: 0;
@@ -1471,7 +1504,9 @@
         text-overflow: ellipsis;
         /* Т.79: рядок — кнопка (клік показує, де діяти), без вигляду кнопки */
         background: none;
-        box-shadow: none; /* Т.124: без тіні кнопки */
+        box-shadow: none; /* Т.124: без тіні, переходу і зсуву кнопки */
+        transition: none;
+        transform: none;
         border: 0;
         border-radius: 0;
         padding: 0;
@@ -1494,10 +1529,34 @@
           box-shadow: 0 0 0 3px rgba(255, 209, 102, 0);
         }
       }
+      /* Т.124 (аудит): на бурштиновій головній дії жовте кільце зливається з кнопкою — бірюзове з відступом */
+      #btn-event.step-target,
+      button.mission.step-target,
+      button.research.step-target {
+        animation-name: step-flash-cyan;
+      }
+      @keyframes step-flash-cyan {
+        from {
+          box-shadow:
+            0 0 0 2px #0a0d15,
+            0 0 0 5px #00e5ff;
+        }
+        to {
+          box-shadow:
+            0 0 0 2px rgba(10, 13, 21, 0),
+            0 0 0 5px rgba(0, 229, 255, 0);
+        }
+      }
       @media (prefers-reduced-motion: reduce) {
         .step-target {
           animation: none;
           outline: 2px solid #ffd166;
+        }
+        #btn-event.step-target,
+        button.mission.step-target,
+        button.research.step-target {
+          outline-color: #00e5ff;
+          outline-offset: 2px;
         }
       }
       /* Т.97 (варіант В власника 21.11.2026): до 940 px префікс «Наступний крок:» заміняє стрілка —
