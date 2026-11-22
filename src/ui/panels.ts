@@ -36,6 +36,7 @@ import { gunModuleEffect, itemEffect } from './effects';
 import { drawAnimFrame, drawFighterSprite, drawGeoBaseSprite, drawGeoTerrain, drawUfoSprite } from '../render';
 import type { Anim } from '../core/render-core';
 import { el, setWhy } from './dom';
+import { setIconText } from './icons';
 import { GCELL } from './grid';
 import { geoEventText, type LogCat } from './journal';
 import { ticksText } from './text';
@@ -296,7 +297,7 @@ export function createPanels(deps: PanelsDeps): Panels {
       missionBonus('розвідник', preset) +
       '/' +
       missionBonus('збирач', preset);
-    hire.textContent = 'Вербувати оперативника (' + hireCost + ')';
+    setIconText(hire, 'roster', 'Вербувати оперативника (' + hireCost + ')'); // Т.128: іконка перед підписом
     hire.disabled = deps.isGameOver() || party.econ.money < hireCost;
     hire.title = hire.disabled
       ? 'Недостатньо кредитів (ціна вербування ' + hireCost + ')'

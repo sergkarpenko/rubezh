@@ -5,14 +5,13 @@
 // (id, класи, dataset, textContent) не змінюються. Малюється один раз при
 // створенні (idle → 0 перерисовок, ADR-0029), без RNG (ADR-0003).
 
-import { createIcon, type IconName } from './icons';
+import { ICONS, createIcon, setIconText, type IconName } from './icons';
 
 // Іконки за ключами вкладок: status-колонка (data-tab) + журнал (data-filter);
 // «Вузол» спільний для обох (база = вузол «Рубіж», термінологія ADR-0064).
 export const TAB_ICONS: Readonly<Record<string, IconName>> = {
   squad: 'squad',
   base: 'base',
-  system: 'system',
   all: 'all',
   geo: 'geo',
   econ: 'econ',
@@ -28,5 +27,16 @@ export function decorateTabButtons(): void {
     const icon = TAB_ICONS[key];
     if (icon === undefined || btn.querySelector('svg.tab-icon') !== null) continue;
     btn.insertBefore(createIcon(icon, 'tab-icon'), btn.firstChild); // текст лишається після іконки
+  }
+}
+
+// Т.128 (ADR-0117): іконки заголовків панелей і кнопок за атрибутом data-icon (index.html, вікно «Меню»):
+// svg перед текстом, раз (idempotent); кнопкам, чий підпис рендер міняє, іконку ставить сам рендер (setIconText).
+export function decorateIcons(root: ParentNode = document): void {
+  for (const node of Array.from(root.querySelectorAll<HTMLElement>('[data-icon]'))) {
+    const name = node.dataset.icon as IconName;
+    if (!(name in ICONS) || node.querySelector(':scope > svg') !== null) continue;
+    if (node.tagName === 'BUTTON') setIconText(node, name, node.textContent ?? '');
+    else node.insertBefore(createIcon(name, 'h-icon'), node.firstChild);
   }
 }

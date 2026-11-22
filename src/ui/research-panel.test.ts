@@ -44,11 +44,11 @@ const card = (name: string): HTMLElement =>
   [...document.querySelectorAll<HTMLElement>('#research .sci-card')].find((c) => c.textContent!.includes(name))!;
 
 describe('ResearchPanel: штат вчених', () => {
-  it('найм — вчений у панелі, гроші списані, renderAll викликано, кнопка «Вербувати техноманта — H кр.»', () => {
+  it('найм — вчений у панелі, гроші списані, renderAll викликано, кнопка «Вербувати техноманта (H)» (Т.128)', () => {
     const deps = makeDeps();
     const panel = createResearchPanel(deps);
     panel.render();
-    expect(el('btn-hire-scientist').textContent).toBe('Вербувати техноманта — ' + HIRE_SCIENTIST_PRICE + ' кр.'); // «норма» ×1
+    expect(el('btn-hire-scientist').textContent).toBe('Вербувати техноманта (' + HIRE_SCIENTIST_PRICE + ')'); // «норма» ×1; Т.128 — ціна в дужках
     const before = party.econ.money;
     (el('btn-hire-scientist') as HTMLButtonElement).click();
     expect(party.research.scientists).toHaveLength(1);
@@ -473,7 +473,7 @@ describe('ResearchPanel: ціни за пресетом (T.29) — картки 
     party = createParty(42, 'легкий');
     const panel = createResearchPanel(makeDeps());
     panel.render();
-    expect(el('btn-hire-scientist').textContent).toBe('Вербувати техноманта — ' + sciencePrice(HIRE_SCIENTIST_PRICE, 'легкий') + ' кр.');
+    expect(el('btn-hire-scientist').textContent).toBe('Вербувати техноманта (' + sciencePrice(HIRE_SCIENTIST_PRICE, 'легкий') + ')');
     expect(el('research').querySelector('.sci-head')!.textContent).toContain(
       'утримання ' + sciencePrice(SCIENTIST_SALARY, 'легкий') + ' кр. за добу'
     );

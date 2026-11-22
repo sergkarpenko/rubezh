@@ -1337,7 +1337,8 @@
       #game-menu,
       #exit-confirm,
       #evac-confirm,
-      #settings-dialog {
+      #settings-dialog,
+      #save-dialog {
         position: fixed;
         top: 0;
         left: 0;
@@ -1354,6 +1355,34 @@
       .screen-dialog {
         max-width: 380px;
         width: 100%;
+      }
+      /* Т.128 (ADR-0117): вікно «Збереження» ширше — рядок слота з трьома кнопками */
+      #save-dialog .screen-dialog {
+        max-width: 460px;
+      }
+      #save-busy {
+        margin: 0 0 8px;
+        color: #ffb454;
+      }
+      /* Т.128 (ADR-0117): іконки заголовків панелей і кнопок (src/ui/icons.ts) — перед текстом, у рядку;
+         заголовок «Сенсорна сітка» скорочено, щоб з іконкою лишався в один рядок (рішення власника Т.128) */
+      h2 svg.h-icon,
+      button svg.btn-icon {
+        width: 16px;
+        height: 16px;
+        margin-right: 6px;
+        vertical-align: -3px;
+        flex: none;
+      }
+      /* Т.128: кнопка з іконкою — щільніше, щоб «Вербувати …» лишались в один рядок (рішення власника) */
+      button svg.btn-icon {
+        margin-right: 5px;
+      }
+      button:has(> svg.btn-icon) {
+        padding-left: 8px;
+      }
+      h2 svg.h-icon {
+        filter: drop-shadow(0 0 3px rgba(0, 229, 255, 0.5));
       }
       .dialog-field {
         display: block;
@@ -1927,22 +1956,23 @@
         <ul id="log"></ul>
       </section>
       <aside id="status">
-        <!-- П12.4 (ADR-0065): вкладки колонки «Загін»/«База»/«Система» — контент
+        <!-- П12.4 (ADR-0065): вкладки колонки «Загін»/«База» — контент
              генерує src/ui/status-tabs.ts; панелі — атрибут data-tab: «Загін» —
              ростер/фінанси, «База» — сканери/винищувач/дослідження/цех (розподіл
-             «Сканери»/«Винищувач» — рішення власника, сесія П12.4), «Система» —
-             збереження; активна вкладка — localStorage поза сейвом (ADR-0026) -->
+             «Сканери»/«Винищувач» — рішення власника, сесія П12.4); Т.128 (ADR-0117):
+             «Збереження» — вікно #save-dialog з «Меню»; іконки заголовків — data-icon (src/ui/tab-icons.ts);
+             активна вкладка — localStorage поза сейвом (ADR-0026) -->
         <div id="status-tabs"></div>
         <section class="panel" data-tab="base">
-          <h2>Сенсорна сітка (виявлені зонди)</h2>
+          <h2 data-icon="probe">Сенсорна сітка</h2>
           <div id="ufos"></div>
         </section>
         <section class="panel" data-tab="base">
-          <h2>Перехоплювач</h2>
+          <h2 data-icon="fighter">Перехоплювач</h2>
           <div id="fighter"></div>
         </section>
         <section class="panel" data-tab="squad">
-          <h2>Фінанси</h2>
+          <h2 data-icon="finance">Фінанси</h2>
           <div style="margin-bottom: 8px">
             Баланс: <b id="money-card">—</b>
             <!-- Т.7: числа — з ядра за пресетом партії (panels.ts renderFinances; урок П9.1) -->
@@ -1952,21 +1982,17 @@
         </section>
         <!-- П11.6 (ADR-0058): панель «Дослідження» — штат вчених, слоти, каталог проєктів -->
         <section class="panel" data-tab="base">
-          <h2>Дослідження</h2>
+          <h2 data-icon="research">Дослідження</h2>
           <div id="research"></div>
         </section>
         <!-- П11.6 (ADR-0058): панель «Цех» — замовлення, черга, склад -->
         <section class="panel" data-tab="base">
-          <h2>Кузня</h2>
+          <h2 data-icon="forge">Кузня</h2>
           <div id="workshop"></div>
         </section>
         <section class="panel" data-tab="squad">
-          <h2>Ростер загону</h2>
+          <h2 data-icon="roster">Ростер загону</h2>
           <div id="roster"></div>
-        </section>
-        <section class="panel" data-tab="system">
-          <h2>Збереження</h2>
-          <div id="save-panel"></div>
         </section>
       </aside>
     </main>
@@ -1993,5 +2019,16 @@
     <!-- П12.3 (ADR-0065/0059): скелет вікна «Налаштування» — контент генерує
          src/ui/settings.ts; тумблер звуку мігрував сюди з топбара (П11.7) -->
     <section class="hidden" id="settings-dialog"></section>
+    <!-- Т.128 (ADR-0117, рішення власника Т.125): «Збереження» — вікно з пункту «Меню» замість вкладки «Система»;
+         вміст слотів — src/ui/save-panel.ts (#save-panel), правила вікон Т.73 (src/main.ts) -->
+    <section class="hidden" id="save-dialog">
+      <div class="panel screen-dialog">
+        <h2 data-icon="save">Збереження</h2>
+        <div id="save-panel"></div>
+        <div class="dialog-actions">
+          <button id="btn-save-close">Закрити</button>
+        </div>
+      </div>
+    </section>
   </body>
 </html>

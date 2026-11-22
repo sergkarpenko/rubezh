@@ -21,7 +21,12 @@ export interface SavePanelDeps {
   // П12.2 (ADR-0065): успішне збереження — шар застосунку фіксує точку
   // «без незбережених змін» (підтвердження виходу, ADR-0026).
   onSaved?(slot: number): void;
+  // Т.128 (ADR-0117, рішення власника): успішне «Завантажити» закриває вікно «Збереження».
+  onLoaded?(): void;
 }
+
+// Т.128 (ADR-0117, рішення власника — дослівно): рядок причини у вікні під час бою чи перехоплення
+export const SAVE_BUSY_TEXT = 'Під час бою збереження недоступне';
 
 export interface SavePanel {
   render(): void;
@@ -71,6 +76,14 @@ export function createSavePanel(deps: SavePanelDeps): SavePanel {
     }
     // П7.5 (ADR-0026): збереження вимкнене і в повітряному бою — погоня/бій не переривається
     const busy = deps.inBattle() || deps.interceptBusy();
+    if (busy) {
+      // Т.128: вікно з «Меню» відкривається і в бою — кнопки вимкнені, причина видна й на тачі (без title)
+      const why = document.createElement('div');
+      why.id = 'save-busy';
+      why.className = 'meta';
+      why.textContent = SAVE_BUSY_TEXT;
+      box.appendChild(why);
+    }
     for (let slot = 1; slot <= SAVE_SLOTS; slot++) {
       const row = document.createElement('div');
       row.className = 'save-row';
@@ -145,8 +158,11 @@ export function createSavePanel(deps: SavePanelDeps): SavePanel {
       deps.journal('Завантажено: слот ' + slot + ' — ' + geoClock(party.geo) + ', баланс ' + party.econ.money + '.');
     } catch (e) {
       deps.journal('✗ Завантаження не вдалось: ' + (e as Error).message, 'lose');
+      deps.renderAll();
+      return; // невдача — вікно лишається, рядок помилки — у журналі
     }
     deps.renderAll();
+    deps.onLoaded?.();
   }
 
   function deleteSlot(slot: number): void {

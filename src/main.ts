@@ -58,11 +58,11 @@ import { campaignTick, type DifficultyPreset } from './core/campaign';
 // тут — лише зв'язування з партією, панеллю збереження і «Як грати».
 import { createScreens, type Screens } from './ui/screens';
 import { createSettings } from './ui/settings';
-// П12.4 (ADR-0065): вкладки статус-колонки «Загін»/«База»/«Система» —
+// П12.4 (ADR-0065): вкладки статус-колонки «Загін»/«База» (Т.128: «Система» — у «Меню») —
 // модуль src/ui/status-tabs.ts (панелі в DOM, персист поза сейвом).
 import { createStatusTabs, type StatusTabs } from './ui/status-tabs';
 import { initPanelFrame } from './ui/panel-frame';
-import { decorateTabButtons } from './ui/tab-icons';
+import { decorateIcons, decorateTabButtons } from './ui/tab-icons';
 
 // пR.2 (ADR-0037): масштаб сітки (GCELL/BCELL) — спільний модуль src/ui/grid.ts.
 
@@ -200,7 +200,17 @@ const journalUI = createJournal({
 const journal = journalUI.add; // виклики journal(text, cls, cat) у шарі застосунку без змін
 
 // Т.43: вікна поверх гри — поки хоч одне відкрите, пробіл час не рухає.
-const OVERLAY_IDS = ['help-screen', 'game-menu', 'settings-dialog', 'new-game-dialog', 'exit-confirm', 'campaign-victory', 'evac-confirm'];
+// Т.128 (ADR-0117): «Збереження» — вікно save-dialog з пункту «Меню» (було вкладкою «Система»)
+const OVERLAY_IDS = [
+  'help-screen',
+  'game-menu',
+  'settings-dialog',
+  'save-dialog',
+  'new-game-dialog',
+  'exit-confirm',
+  'campaign-victory',
+  'evac-confirm',
+];
 // Т.73: одна перевірка «відкрите вікно» (той самий OVERLAY_IDS, що й в обробнику пробілу нижче)
 function overlayOpen(): boolean {
   return OVERLAY_IDS.some((id) => !el(id).classList.contains('hidden'));
@@ -211,6 +221,7 @@ const OVERLAY_ESC_CLOSE: Record<string, string> = {
   'evac-confirm': 'btn-evac-no',
   'exit-confirm': 'btn-exit-no',
   'settings-dialog': 'settings-close',
+  'save-dialog': 'btn-save-close',
   'help-screen': 'btn-help-close',
   'game-menu': 'btn-menu-close',
   'new-game-dialog': 'btn-new-game-cancel',
@@ -367,6 +378,11 @@ const savePanel = createSavePanel({
   isGameOver: () => gameOver,
   journal,
   renderAll,
+  // Т.128 (рішення власника): успішне «Завантажити» закриває вікно — видно завантажену гру
+  onLoaded: () => {
+    el('save-dialog').classList.add('hidden');
+    focusTopbarOpener();
+  },
 });
 
 // пR.2 (ADR-0037): панелі стану і топбара (геосцена, сканери НЛО, винищувач,
@@ -689,7 +705,7 @@ if (typeof document !== 'undefined') {
       journal('✗ ' + (e as Error).message, 'lose', 'econ');
     }
   };
-  // П12.4 (ADR-0065): вкладки статус-колонки «Загін»/«База»/«Система» —
+  // П12.4 (ADR-0065): вкладки статус-колонки «Загін»/«База» (Т.128: без «Системи») —
   // панелі лишаються в DOM (renderAll оновлює їх без змін), активна вкладка
   // запам'ятовується в localStorage поза сейвом (ADR-0026, формат
   // rubezh.settings.*), помилки сховища — тихо. Приглушення в бою — чинний
@@ -699,10 +715,11 @@ if (typeof document !== 'undefined') {
   el('next-step').onclick = () => {
     if (stepTarget !== null) showStepTarget(stepTarget, (id) => statusTabs?.set(id));
   };
-  // П14.6 (ADR-0072): іконки вкладок («Загін»/«Вузол»/«Система» статус-колонки
+  // П14.6 (ADR-0072): іконки вкладок («Загін»/«Вузол» статус-колонки
   // і фільтри журналу) — векторні, з src/ui/icons.ts (Т.123, ADR-0114), узгоджені
   // з тулбаром; svg перед текстом, контракти кнопок не змінюються.
   decorateTabButtons();
+  decorateIcons(); // Т.128 (ADR-0117): заголовки панелей і вікна «Збереження» (data-icon)
   // П13.2 (ADR-0066): бойові дії — з вертикального тулбара збоку (плитки і
   // іконки будує src/ui/toolbar.ts; стани/причини блокування — renderBattle).
   createToolbar(el('btoolbar'), {
@@ -848,6 +865,12 @@ if (typeof document !== 'undefined') {
     onContinue: continueGame,
     onHelp: help.open,
     onSettings: settings.open, // П12.3: зі стартового екрана і з меню гри
+    // Т.128 (ADR-0117): вікно «Збереження» з меню — слоти на момент відкриття, фокус на «Закрити» (правила Т.73)
+    onSave: () => {
+      savePanel.render();
+      el('save-dialog').classList.remove('hidden');
+      el<HTMLButtonElement>('btn-save-close').focus();
+    },
     hasUnsavedChanges,
     onExitToStart: exitToStart,
   });
@@ -859,7 +882,9 @@ if (typeof document !== 'undefined') {
   // Т.73: після закриття вікна кнопками «Закрити»/«Скасувати» (Esc натискає ті самі кнопки через .click()) —
   // фокус на кнопку топбара, що відкрила вікно. addEventListener — після створення модулів: їхні onclick
   // спершу закривають вікно, і лише потім цей слухач повертає фокус (коли відкритих вікон немає і показано екран гри)
-  for (const closeId of ['btn-menu-close', 'btn-exit-no', 'settings-close', 'btn-help-close']) {
+  el('btn-save-close').onclick = () => el('save-dialog').classList.add('hidden'); // Т.128
+  decorateIcons(el('game-menu')); // Т.128: іконка пункту «Збереження»
+  for (const closeId of ['btn-menu-close', 'btn-exit-no', 'settings-close', 'btn-help-close', 'btn-save-close']) {
     el(closeId).addEventListener('click', focusTopbarOpener);
   }
   // ADR-0065: сторінка → стартовий екран; партія не створюється до вибору
