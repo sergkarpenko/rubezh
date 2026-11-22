@@ -61,6 +61,7 @@ async function expectPhoneBattle(page: Page, label: string, minField: number, po
       winW: window.innerWidth,
       panelRight: box('battle-panel').right,
       page: document.documentElement.scrollWidth,
+      researchW: box('research').width,
       // Т.122: панель «Дослідження» (у бою — під полем) — нічого за її правим краєм
       research: Math.max(
         0,
@@ -87,6 +88,9 @@ async function expectPhoneBattle(page: Page, label: string, minField: number, po
   expect(m.topbar, label + ': шапка в бою липне').toBe('static');
   expect(m.panelRight, label + ': панель бою за правим краєм').toBeLessThanOrEqual(m.winW);
   // Т.122: прокрутку 10 px на 320 px у CI давала панель «Дослідження» (шрифт CI ширший) — гейт знову на всю сторінку
+  // панель має бути видимою (вкладка «Вузол»), інакше гейт порожній (аудит PR #437); межу @container (269 px)
+  // з усіх чотирьох розмірів перетинає лише 320 × 568 (панель 198 px), решта — рядок кроків
+  expect(m.researchW, label + ': панель «Дослідження» не видно').toBeGreaterThan(0);
   expect(m.research, label + ': вміст «Дослідження» за правим краєм панелі').toBeLessThanOrEqual(0.5);
   expect(m.page, label + ': сторінка ширша за вікно').toBeLessThanOrEqual(m.winW);
   expect(m.field, label + ': поле менше за межу').toBeGreaterThanOrEqual(minField);
