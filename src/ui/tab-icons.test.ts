@@ -1,12 +1,11 @@
-// П14.6 (ADR-0072): тести іконок вкладок — матриці кодом, контракти DOM.
-// Перевіряється: decorateTabButtons ставить canvas.tab-icon першою дитиною
-// кожної кнопки #status-tabs/#log-tabs, текст кнопок (контракт textContent
-// уроку П11.6) не змінюється, виклик idempotent, невідомі ключі пропускаються.
-// jsdom без 2d-контексту: drawTabIcon мовчки пропускає — канва все одно
-// prepend'иться (контракт структури від рендера не залежить).
+// П14.6 (ADR-0072), Т.123 (ADR-0114): тести іконок вкладок — векторні іконки,
+// контракти DOM. Перевіряється: decorateTabButtons ставить svg.tab-icon першою
+// дитиною кожної кнопки #status-tabs/#log-tabs, текст кнопок (контракт
+// textContent уроку П11.6) не змінюється, виклик idempotent, невідомі ключі
+// пропускаються.
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it } from 'vitest';
-import { TAB_ICON_SIZE, TAB_ICONS, decorateTabButtons } from './tab-icons';
+import { TAB_ICONS, decorateTabButtons } from './tab-icons';
 
 const STRIP = `
 <div id="status-tabs">
@@ -23,20 +22,17 @@ const STRIP = `
   <button data-filter="unknown" id="log-tab-x">Інше</button>
 </div>`;
 
-describe('П14.6 tab-icons: іконки вкладок піксель-матрицями', () => {
+describe('П14.6, Т.123 tab-icons: векторні іконки вкладок', () => {
   beforeEach(() => {
     document.body.innerHTML = STRIP;
   });
 
   it('усі ключі вкладок мають іконки (status + журнал, «Вузол» спільний)', () => {
     expect(Object.keys(TAB_ICONS).sort()).toEqual(['all', 'base', 'battle', 'econ', 'geo', 'squad', 'system']);
-    for (const icon of Object.values(TAB_ICONS)) {
-      expect(icon.rows.length).toBe(12);
-      for (const row of icon.rows) expect(row.length).toBe(12);
-    }
+    expect(new Set(Object.values(TAB_ICONS)).size).toBe(7); // кожній вкладці — своя іконка
   });
 
-  it('decorate: canvas.tab-icon першою дитиною кожної відомої кнопки, textContent не змінюється', () => {
+  it('decorate: svg.tab-icon першою дитиною кожної відомої кнопки, textContent не змінюється', () => {
     const before = Array.from(document.querySelectorAll('#status-tabs button, #log-tabs button')).map((b) => b.textContent);
     decorateTabButtons();
     const known = Array.from(document.querySelectorAll<HTMLButtonElement>('#status-tabs button, #log-tabs button')).filter(
@@ -44,10 +40,10 @@ describe('П14.6 tab-icons: іконки вкладок піксель-матр�
     );
     expect(known.length).toBe(8);
     for (const b of known) {
-      const cv = b.querySelector('canvas.tab-icon') as HTMLCanvasElement | null;
+      const cv = b.querySelector('svg.tab-icon');
       expect(cv).not.toBeNull();
       expect(b.firstChild).toBe(cv);
-      expect(cv?.width).toBe(TAB_ICON_SIZE);
+      expect(cv?.childElementCount).toBeGreaterThan(0);
       expect(cv?.getAttribute('aria-hidden')).toBe('true');
     }
     const after = Array.from(document.querySelectorAll('#status-tabs button, #log-tabs button')).map((b) => b.textContent);
@@ -58,8 +54,8 @@ describe('П14.6 tab-icons: іконки вкладок піксель-матр�
     decorateTabButtons();
     decorateTabButtons();
     const unknown = document.getElementById('log-tab-x') as HTMLButtonElement;
-    expect(unknown.querySelector('canvas')).toBeNull();
+    expect(unknown.querySelector('svg')).toBeNull();
     const squad = document.getElementById('status-tab-squad') as HTMLButtonElement;
-    expect(squad.querySelectorAll('canvas.tab-icon').length).toBe(1);
+    expect(squad.querySelectorAll('svg.tab-icon').length).toBe(1);
   });
 });

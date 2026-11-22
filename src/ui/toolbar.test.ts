@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 // П13.2 (ADR-0066): юніт-тести вертикального тулбара (src/ui/toolbar.ts).
 // Критерій П13.2 (1): перелік дій — усі чинні дії бою у плитках (id, підписи,
-// іконки-канви), клік → onAction з id дії. Причини блокування та
-// «renderBattle не чіпає іконки» (idle → 0 перерисовок) — у src/ui/battle.test.ts
-// (там готова фікстура бою); іконки малюються матрицями один раз при створенні.
+// векторні іконки — Т.123, ADR-0114), клік → onAction з id дії. Причини блокування
+// та «renderBattle не чіпає іконки» (idle → 0 перерисовок) — у src/ui/battle.test.ts
+// (там готова фікстура бою); іконки ставляться один раз при створенні.
 // П13.3 (ADR-0067): остання плитка — перемикач авто-бою «Авто»/«Стоп».
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -16,7 +16,7 @@ import {
   OVERWATCH_AP_COST,
   RIFLE,
 } from '../core/combat';
-import { ICON_SIZE, TOOLBAR_ACTIONS, createToolbar, drawToolbarIcon, type ToolbarActionId } from './toolbar';
+import { TOOLBAR_ACTIONS, createToolbar, type ToolbarActionId } from './toolbar';
 
 // No-op контекст малювання — той самий патерн, що й у battle.test.ts (jsdom
 // без пакета canvas); журнал операцій ловить малювання іконок.
@@ -84,10 +84,11 @@ describe('тулбар: перелік дій (П13.2, ADR-0066)', () => {
       'Авто',
     ]);
     for (const b of buttons) {
-      const icon = b.querySelector('canvas.tb-icon') as HTMLCanvasElement;
-      expect(icon).not.toBeNull(); // іконка на кожній плитці
-      expect(icon.width).toBe(ICON_SIZE); // 12×12 @2× = 24px (ADR-0031: ціле кратне)
-      expect(icon.height).toBe(ICON_SIZE);
+      const icon = b.querySelector('svg.tb-icon'); // Т.123 (ADR-0114): векторна іконка замість канви
+      expect(icon?.getAttribute('aria-hidden')).toBe('true'); // підпис читає диктор, іконка — прикраса
+      expect(icon?.childElementCount).toBeGreaterThan(0);
+      expect(b.firstElementChild).toBe(icon); // іконка над підписом
+      expect(b.querySelector('canvas')).toBeNull();
       expect((b.querySelector('.tb-cap') as HTMLElement).textContent).toBe(b.getAttribute('aria-label')); // підпис = aria-label
       expect(b.dataset.action).toBe(b.id.replace('btn-', '')); // семантичний ід дії
     }
@@ -95,14 +96,11 @@ describe('тулбар: перелік дій (П13.2, ADR-0066)', () => {
     expect(onAction.mock.calls.map((c) => c[0] as ToolbarActionId)).toEqual(TOOLBAR_ACTIONS.map((a) => a.id));
   });
 
-  it('іконки малюються матрицями при створенні (fillRect пікселів, без RNG)', () => {
+  it('Т.123: іконка кожної дії своя, канва при створенні тулбара не малюється', () => {
     createToolbar(document.getElementById('btoolbar')!, { onAction: vi.fn() });
-    expect(canvasOps.some((op) => op.startsWith('fillRect('))).toBe(true);
-  });
-
-  it('headless без 2d-контексту — без винятку (тести від канви не залежать)', () => {
-    const bare = { getContext: () => null } as unknown as HTMLCanvasElement;
-    expect(() => drawToolbarIcon(bare, TOOLBAR_ACTIONS[0]!.icon)).not.toThrow();
+    const drawn = [...document.querySelectorAll('#btoolbar svg.tb-icon')].map((i) => i.innerHTML);
+    expect(new Set(drawn).size).toBe(TOOLBAR_ACTIONS.length);
+    expect(canvasOps).toEqual([]);
   });
 });
 

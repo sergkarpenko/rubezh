@@ -494,20 +494,19 @@ describe('тулбар: причини блокування дій (П13.2, кр
     expect(snap.disabled).toBe(true);
   });
 
-  it('renderBattle не перемальовує іконки плиток (idle → 0 перерисовок, ADR-0029)', () => {
-    let iconCtxCalls = 0;
-    for (const icon of [...document.querySelectorAll<HTMLCanvasElement>('#btoolbar canvas')]) {
-      const orig = icon.getContext.bind(icon);
-      icon.getContext = ((type: string) => {
-        iconCtxCalls++;
-        return orig(type as '2d');
-      }) as HTMLCanvasElement['getContext'];
-    }
+  it('renderBattle не чіпає іконки плиток (idle → 0 перерисовок, ADR-0029; Т.123 — іконки svg)', () => {
     const f = makeFixture();
     f.battle.launch(firstTarget(f));
+    const icons = (): Element[] => [...document.querySelectorAll('#btoolbar svg.tb-icon')];
+    const before = icons();
+    const drawn = before.map((i) => i.outerHTML);
+    expect(before.length).toBe(9);
     f.battle.renderBattle(); // стан плиток — DOM, іконки не чіпаються
     f.battle.renderBattle();
-    expect(iconCtxCalls).toBe(0);
+    const after = icons();
+    expect(after.length).toBe(9);
+    after.forEach((icon, i) => expect(icon).toBe(before[i])); // ті самі вузли, не перестворені
+    expect(after.map((i) => i.outerHTML)).toEqual(drawn);
   });
 });
 
