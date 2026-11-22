@@ -38,13 +38,13 @@ fail_git() {
 }
 
 if ! git rev-parse --verify --quiet "$BASE^{commit}" >/dev/null; then
-    fail_git "Ревізії $BASE немає в клоні — розмір не пораховано. Мілкий клон: git fetch --depth=50 origin main."
+    fail_git "Ревізії $BASE немає в клоні — розмір не пораховано. Мілкий клон: git fetch --depth=50 origin main (мілка сама гілка — ще git fetch --deepen=50)."
 fi
 if ! git rev-parse --verify --quiet "$HEAD^{commit}" >/dev/null; then
     fail_git "Ревізії $HEAD немає в клоні — розмір не пораховано."
 fi
 if ! git merge-base "$BASE" "$HEAD" >/dev/null 2>&1; then
-    fail_git "У $BASE і $HEAD немає спільного предка — розмір не пораховано. Мілкий клон: git fetch --depth=50 origin main."
+    fail_git "У $BASE і $HEAD немає спільного предка — розмір не пораховано. Мілкий клон: git fetch --depth=50 origin main (мілка сама гілка — ще git fetch --deepen=50)."
 fi
 
 # Диф — окремим кроком: код виходу присвоєння = код git, set -e його не губить.
