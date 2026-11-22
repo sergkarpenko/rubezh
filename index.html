@@ -1370,19 +1370,15 @@
       button svg.btn-icon {
         width: 16px;
         height: 16px;
-        margin-right: 6px;
-        vertical-align: -3px;
-        flex: none;
-      }
-      /* Т.128: кнопка з іконкою — щільніше, щоб «Вербувати …» лишались в один рядок (рішення власника) */
-      button svg.btn-icon {
         margin-right: 5px;
-      }
-      button:has(> svg.btn-icon) {
-        padding-left: 8px;
+        vertical-align: -3px;
       }
       h2 svg.h-icon {
         filter: drop-shadow(0 0 3px rgba(0, 229, 255, 0.5));
+      }
+      /* Т.128: кнопка з іконкою — щільніше, щоб «Вербувати …» лишались в один рядок (рішення власника) */
+      button:has(> svg.btn-icon) {
+        padding-left: 8px;
       }
       .dialog-field {
         display: block;
