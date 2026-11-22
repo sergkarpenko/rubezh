@@ -69,6 +69,8 @@ export function createSavePanel(deps: SavePanelDeps): SavePanel {
 
   function renderSavePanel(): void {
     const box = el('save-panel');
+    // Т.128: у вікні фокус не губиться — після перемальовки та сама кнопка (якщо активна), інакше «Закрити»
+    const had = box.contains(document.activeElement) ? document.activeElement!.id : null;
     box.innerHTML = '';
     if (!storageOk) {
       box.innerHTML = '<div class="meta">Сховище недоступне (приватний режим?) — збереження вимкнено.</div>';
@@ -133,6 +135,10 @@ export function createSavePanel(deps: SavePanelDeps): SavePanel {
       bDel.onclick = () => deleteSlot(slot);
       row.append(meta, bSave, bLoad, bDel);
       box.appendChild(row);
+    }
+    if (had !== null) {
+      const b = document.getElementById(had) as HTMLButtonElement | null;
+      (b !== null && !b.disabled ? b : document.getElementById('btn-save-close'))?.focus();
     }
   }
 

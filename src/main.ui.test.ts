@@ -3024,9 +3024,15 @@ describePage('Т.128: «Збереження» — вікно з «Меню» (A
     localStorage.clear();
     startParty('42');
     openSave();
+    btn('btn-save-1').focus();
     btn('btn-save-1').click();
     expect(open('save-dialog')).toBe(true);
     expect($('slot-1').textContent).toContain('сід 42');
+    expect(document.activeElement?.id).toBe('btn-save-1'); // перемальовка слотів фокус не губить
+    btn('btn-save-close').focus();
+    const ev = new KeyboardEvent('keydown', { key: 'Tab', code: 'Tab', bubbles: true, cancelable: true });
+    document.dispatchEvent(ev); // Т.75: Tab з останньої кнопки вікна — на першу
+    expect([ev.defaultPrevented, document.activeElement?.id]).toEqual([true, 'btn-save-1']);
     const saved = $('clock').textContent;
     btn('btn-save-close').click();
     btn('btn-tick').click();

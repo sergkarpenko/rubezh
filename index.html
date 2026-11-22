@@ -118,7 +118,7 @@
         flex-direction: column;
         gap: 16px;
       }
-      /* П12.4 (ADR-0065): вкладки статус-колонки «Загін»/«База»/«Система» —
+      /* П12.4 (ADR-0065): вкладки статус-колонки «Загін»/«База» (Т.128: «Система» — у «Меню», ADR-0117) —
          патерн фільтрів журналу #log-tabs; панелі лишаються в DOM,
          перемикання видимості — класом .hidden (без анімацій, ADR-0029) */
       #status-tabs {
@@ -1370,15 +1370,16 @@
       button svg.btn-icon {
         width: 16px;
         height: 16px;
-        margin-right: 5px;
+        margin-right: 4px;
         vertical-align: -3px;
       }
       h2 svg.h-icon {
         filter: drop-shadow(0 0 3px rgba(0, 229, 255, 0.5));
       }
       /* Т.128: кнопка з іконкою — щільніше, щоб «Вербувати …» лишались в один рядок (рішення власника) */
-      button:has(> svg.btn-icon) {
-        padding-left: 8px;
+      #btn-hire,
+      #btn-hire-scientist {
+        padding: 6px 8px 6px 6px;
       }
       .dialog-field {
         display: block;

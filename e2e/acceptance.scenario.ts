@@ -95,6 +95,7 @@ async function expectLook(page: Page): Promise<void> {
 // Т.128 (ADR-0117): вікно «Збереження» — пункт «Меню» (раніше вкладка «Система»)
 async function openSave(page: Page): Promise<void> {
   await page.locator('#btn-menu').click();
+  await expectIcons(page, '#btn-menu-save svg.btn-icon', 16, 1, 'y');
   await page.locator('#btn-menu-save').click();
   await expect(page.locator('#save-dialog')).toBeVisible();
 }
@@ -128,7 +129,7 @@ async function expectIcons(page: Page, selector: string, size: number, count: nu
   expect(icons.length, selector).toBe(count);
   for (const i of icons) {
     expect([i.w, i.h, i.inside], selector).toEqual([size, size, true]);
-    expect(i.offCentre, selector).toBeLessThanOrEqual(1);
+    expect(i.offCentre, selector).toBeLessThanOrEqual(axis === 'x' ? 1 : 2); // Т.128: у рядку центр залежить від шрифту (CI — 1,2 px)
     const [x0, y0, x1, y1] = i.drawn as [number, number, number, number];
     expect(
       x0 >= 1 && y0 >= 1 && x1 <= 23 && y1 <= 23 && Math.max(x1 - x0, y1 - y0) >= 12 && Math.min(x1 - x0, y1 - y0) >= 6,
@@ -959,6 +960,7 @@ test('сценарій приймання ADR-0030: партія → місія 
     const saved = mirror.clock();
     await openSave(page); // Т.128: «Збереження» — вікно з «Меню»; фокус на «Закрити»
     await expect(page.locator('#btn-save-close')).toBeFocused();
+    await expectIcons(page, '#save-dialog h2 svg.h-icon', 16, 1, 'y'); // Т.128: іконка заголовка вікна
     await page.locator('#btn-save-1').click();
     await expect(page.locator('#log')).toContainText('Збережено: слот 1.');
     await expect(page.locator('#save-dialog')).toBeVisible(); // «Зберегти» вікно не закриває
