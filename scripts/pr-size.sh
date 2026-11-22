@@ -10,7 +10,9 @@
 # перевірку, лише друкується. У CI прапорець = мітка `size-deviation` на PR.
 #
 # Локально (прогноз дифа до пушу):  ./scripts/pr-size.sh origin/main HEAD
-# Код виходу: 0 — у межах ліміту або відхилення заплановане; 1 — перевищення.
+# Код виходу: 0 — у межах ліміту або відхилення заплановане; 1 — перевищення;
+# 2 — неправильні аргументи або помилка git (немає ревізії чи спільного предка,
+# ADR-0112): число не пораховано, «0 рядків» і [OK] не друкуються.
 
 set -eu
 
@@ -24,7 +26,34 @@ HEAD="$2"
 LIMIT="${PR_SIZE_LIMIT:-500}"
 DEVIATION="${PR_SIZE_DEVIATION:-false}"
 
-REPORT="$(git -c core.quotepath=off diff --numstat "$BASE...$HEAD" | awk -F'\t' '
+# Помилка git — код 2 з поясненням (ADR-0112). Без цього збій git у конвеєрі
+# «git diff | awk» губився: awk бачив порожній вхід, скрипт друкував «0 рядків» і [OK].
+fail_git() {
+    if [ "${GITHUB_ACTIONS:-}" = "true" ]; then
+        echo "::error::$1"
+    else
+        echo "[FAIL] $1"
+    fi
+    exit 2
+}
+
+if ! git rev-parse --verify --quiet "$BASE^{commit}" >/dev/null; then
+    fail_git "Ревізії $BASE немає в клоні — розмір не пораховано. Мілкий клон: git fetch --depth=50 origin main (мілка сама гілка — ще git fetch --deepen=50)."
+fi
+if ! git rev-parse --verify --quiet "$HEAD^{commit}" >/dev/null; then
+    fail_git "Ревізії $HEAD немає в клоні — розмір не пораховано."
+fi
+if ! git merge-base "$BASE" "$HEAD" >/dev/null 2>&1; then
+    fail_git "У $BASE і $HEAD немає спільного предка — розмір не пораховано. Мілкий клон: git fetch --depth=50 origin main (мілка сама гілка — ще git fetch --deepen=50)."
+fi
+
+# Диф — окремим кроком: код виходу присвоєння = код git, set -e його не губить.
+if ! NUMSTAT="$(git -c core.quotepath=off diff --numstat "$BASE...$HEAD")"; then
+    fail_git "git diff $BASE...$HEAD завершився з помилкою — розмір не пораховано."
+fi
+
+REPORT="$(printf '%s\n' "$NUMSTAT" | awk -F'\t' '
+        NF < 3 { next }                                         # порожній диф
     {
         path = $3
         if ($1 == "-") { skipped++; next }                      # бінарний файл
