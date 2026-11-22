@@ -48,26 +48,37 @@ async function tap(page: Page, cell: Vec2): Promise<void> {
   });
 }
 
-// Т.123 (ADR-0114): векторні іконки — svg заданого розміру в межах своєї кнопки, малюнок не порожній.
+// Т.123 (ADR-0114): векторні іконки — svg заданого розміру в межах своєї кнопки і по її центру (іконка
+// над підписом, як канва на main: у рядку з підписом кнопка вкладки ширшає на 16 px); малюнок у сітці
+// 24 × 24 з запасом на половину лінії (getBBox — справжні межі з дугами й відносними відрізками).
 // Розмір і місце задає CSS (без правила svg має 300 × 150 і розпирає кнопку) — від шрифту не залежить.
 async function expectIcons(page: Page, selector: string, size: number, count: number): Promise<void> {
   const icons = await page.evaluate(
     (sel) =>
-      [...document.querySelectorAll(sel)].map((i) => {
+      [...document.querySelectorAll<SVGSVGElement>(sel)].map((i) => {
         const r = i.getBoundingClientRect();
         const b = i.parentElement!.getBoundingClientRect();
+        const box = i.getBBox();
         return {
           w: r.width,
           h: r.height,
           inside: r.left >= b.left && r.right <= b.right && r.top >= b.top && r.bottom <= b.bottom,
-          parts: i.childElementCount,
+          offCentre: Math.abs((r.left + r.right) / 2 - (b.left + b.right) / 2),
+          drawn: [box.x, box.y, box.x + box.width, box.y + box.height],
         };
       }),
     selector
   );
   expect(icons.length, selector).toBe(count);
-  for (const i of icons) expect(i, selector).toEqual({ w: size, h: size, inside: true, parts: expect.any(Number) });
-  expect(Math.min(...icons.map((i) => i.parts)), selector).toBeGreaterThan(0);
+  for (const i of icons) {
+    expect([i.w, i.h, i.inside], selector).toEqual([size, size, true]);
+    expect(i.offCentre, selector).toBeLessThanOrEqual(1);
+    const [x0, y0, x1, y1] = i.drawn as [number, number, number, number];
+    expect(
+      x0 >= 1 && y0 >= 1 && x1 <= 23 && y1 <= 23 && Math.max(x1 - x0, y1 - y0) >= 12 && Math.min(x1 - x0, y1 - y0) >= 6,
+      selector + ': межі малюнка ' + i.drawn.join(' ')
+    ).toBe(true);
+  }
 }
 
 // Т.120 (кандидат 115): бій на телефоні. Вертикально — плитки під полем, поле з плитками вміщується
@@ -253,6 +264,7 @@ test('сценарій приймання ADR-0030: партія → місія 
     }
     await page.locator('#btn-log-expand').click();
     await expect(page.locator('#log-tab-econ')).toBeVisible();
+    await expectIcons(page, '#log-tabs button svg.tab-icon', 16, 5); // Т.123: іконки фільтрів журналу
     const open = await fits();
     expect(open.page).toBeLessThanOrEqual(open.win);
     expect(open.journal).toBeLessThanOrEqual(open.win);

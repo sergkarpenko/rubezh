@@ -1,18 +1,21 @@
 // Т.123 (ADR-0114): векторні іконки інтерфейсу — SVG кодом замість піксель-матриць
-// 12 × 12 (toolbar.ts П13.2, tab-icons.ts П14.6). Одна сітка 24 × 24, лінія 2,
-// заокруглені кінці; палітра ADR-0064: світлий силует, ціан «Рубіжу», пурпур
-// Розриву, бурштин, зелений лікування. Чіткі на будь-якій щільності екрана,
+// 12 × 12 (toolbar.ts П13.2, tab-icons.ts П14.6). Одна сітка 24 × 24, основна лінія 2,
+// заокруглені кінці; палітра тулбара П13.2 (білий силует, ціан «Рубіжу»,
+// пурпур Розриву), бурштин ADR-0064 і зелений лікування — як у смузі HP. Чіткі на будь-якій щільності екрана,
 // без канви і без ассета; розмір і місце на кнопці задає CSS (index.html).
 // Шар відображення: ядра не чіпає, малюється один раз при створенні кнопки.
 
-const W = '#f2f7ff';
+const W = '#ffffff';
 const C = '#00e5ff';
 const P = '#ff2e88';
 const A = '#ffb347';
 const G = '#7fe2a0';
 
+// Основна товщина лінії — на корені svg; тонша (1.5) і товща (2.5) — лише там, де задано явно.
+const LINE = 2;
+
 // Лінія кольором; заливка кольором (op — прозорість заливки, обвід тим самим кольором).
-const line = (d: string, color: string, width = 2): string => `<path d="${d}" stroke="${color}" stroke-width="${width}"/>`;
+const line = (d: string, color: string, width = LINE): string => `<path d="${d}" stroke="${color}" stroke-width="${width}"/>`;
 const shape = (d: string, color: string, op = 1): string => `<path d="${d}" fill="${color}" fill-opacity="${op}" stroke="${color}"/>`;
 const ring = (cx: number, cy: number, r: number, color: string, op = 0): string =>
   `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${color}" fill-opacity="${op}" stroke="${color}"/>`;
@@ -43,7 +46,9 @@ export const ICONS = {
   system: line('M3 7h8M18 7h3M3 17h3M13 17h8', W) + ring(14.5, 7, 2.5, C) + ring(9.5, 17, 2.5, C),
   all: line('M4 6h16', C) + line('M4 12h16M4 18h10', W),
   geo: ring(12, 12, 8, W) + line('M4 12h16M12 4c-3.5 3-3.5 13 0 16M12 4c3.5 3 3.5 13 0 16', C, 1.5),
-  econ: ring(12, 12, 8, W) + line('M12 7.5v9M9.5 10h3.5a1.75 1.75 0 0 1 0 3.5h-2a1.75 1.75 0 0 0 0 3.5', A, 1.5),
+  econ:
+    line('M5 8v8c0 1.7 3.1 3 7 3s7-1.3 7-3V8M5 12c0 1.7 3.1 3 7 3s7-1.3 7-3', W) +
+    shape('M5 8c0-1.7 3.1-3 7-3s7 1.3 7 3-3.1 3-7 3-7-1.3-7-3z', A, 0.3),
   battle: shape('M13 2L5 13h5.5L9 22l8-11.5h-5.5z', C, 0.3),
 } as const;
 
@@ -59,6 +64,7 @@ export function createIcon(name: IconName, cls: string): SVGSVGElement {
     ['class', cls],
     ['viewBox', '0 0 24 24'],
     ['fill', 'none'],
+    ['stroke-width', String(LINE)],
     ['stroke-linecap', 'round'],
     ['stroke-linejoin', 'round'],
     ['aria-hidden', 'true'],
