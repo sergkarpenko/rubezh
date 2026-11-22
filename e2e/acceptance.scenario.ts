@@ -74,6 +74,9 @@ async function expectLook(page: Page): Promise<void> {
       chip: cs('#topbar .chip').boxShadow.includes('rgb(0, 229, 255) 3px 0px 0px 0px inset'),
       off,
       next: [cs('#next-step').boxShadow, cs('#next-step').backgroundImage],
+      // Т.126: кнопка картки зонда — окремим рядком з відступом від тексту (ідея власника в Т.125);
+      // панель на вкладці «Вузол» тут прихована (активна «Загін») — обчислений стиль, не рамки
+      ufoGap: [cs('#ufos button.mission').display, parseFloat(cs('#ufos button.mission').marginTop) >= 6],
     };
   });
   expect(look).toEqual({
@@ -85,6 +88,7 @@ async function expectLook(page: Page): Promise<void> {
     chip: true,
     off: 'none',
     next: ['none', 'none'],
+    ufoGap: ['block', true],
   });
 }
 
@@ -983,8 +987,8 @@ const t61Visible = (b: Awaited<ReturnType<typeof t61Look>>, label: string): void
   expect(b.fits, label + ': текст обрізано').toBe(true);
 };
 
-// Т.94 (рішення власника 21.11.2026, варіант А): вікна до 760 px заввишки — стовпчик, альбомні до 480 px —
-// дві колонки; перетин рамок (і по висоті, і по ширині) — накриття
+// Т.94 (рішення власника 21.11.2026, варіант А): вікна до 760 px заввишки — стовпчик, альбомні до 480 px
+// (з Т.126 — до 560 px) — дві колонки; перетин рамок (і по висоті, і по ширині) — накриття
 const T94_VIEWPORTS = [
   { width: 1280, height: 740 },
   { width: 800, height: 600 },
@@ -996,6 +1000,16 @@ const T94_VIEWPORTS = [
   { width: 568, height: 320 },
   { width: 640, height: 360 },
   { width: 667, height: 375 },
+  // Т.126 (залишок кандидата 102): з банером тут була прокрутка 42 / 7 px і 12–31 px на альбомних 481–515 px
+  { width: 320, height: 420 },
+  { width: 320, height: 460 },
+  { width: 720, height: 481 },
+  { width: 800, height: 500 },
+  { width: 900, height: 515 },
+  // Т.126 (аудит PR #440): нова межа двох колонок — альбомні до 560 px і перші вікна над нею
+  { width: 1024, height: 540 },
+  { width: 700, height: 560 },
+  { width: 1000, height: 561 },
 ];
 const t94Layout = async (page: Page, label: string): Promise<void> => {
   const m = await page.evaluate(() => {
@@ -1008,9 +1022,17 @@ const t94Layout = async (page: Page, label: string): Promise<void> => {
         return { sel, t: r.top, b: r.bottom, l: r.left, r: r.right };
       });
     const sc = document.getElementById('start-screen')!;
-    return { boxes, w: innerWidth, h: innerHeight, scroll: sc.scrollHeight - sc.clientHeight };
+    return {
+      boxes,
+      w: innerWidth,
+      h: innerHeight,
+      scroll: sc.scrollHeight - sc.clientHeight,
+      hscroll: sc.scrollWidth - sc.clientWidth,
+    };
   });
   expect(m.scroll, label + ': стартовий екран прокручується').toBeLessThanOrEqual(1);
+  // Т.126: кільце героя (::before / ::after) і збільшений логотип не дають прокрутки вбік
+  expect(m.hscroll, label + ': стартовий екран прокручується вбік').toBeLessThanOrEqual(1);
   for (const x of m.boxes) {
     expect(x.t >= 0 && x.l >= 0 && x.b <= m.h && x.r <= m.w, label + ': ' + x.sel + ' за краєм вікна').toBe(true);
   }
@@ -1072,6 +1094,43 @@ test('Т.61: екран перемоги і рядок-пояснення ста
     await page.locator('#btn-victory-exit').click(); // одразу після завантаження незбережених дій немає
     await expect(page.locator('#start-screen')).toBeVisible();
     await expect(page.locator('#campaign-victory')).toBeHidden();
+  });
+
+  await test.step('Т.126 (ADR-0116): вигляд стартового екрана і анімація — тумблер «Анімація», «менше руху»', async () => {
+    await page.setViewportSize({ width: 1366, height: 768 });
+    await page.mouse.move(0, 0);
+    const look = (): Promise<Record<string, unknown>> =>
+      page.evaluate(() => {
+        const sc = document.getElementById('start-screen')!;
+        const hero = document.querySelector('.start-hero')!;
+        const logo = document.querySelector('#start-logo-img');
+        const nb = getComputedStyle(document.getElementById('btn-start-new')!);
+        const help = getComputedStyle(document.getElementById('btn-start-help')!);
+        return {
+          sparks: getComputedStyle(sc, '::before').animationName,
+          ring: getComputedStyle(hero, '::before').animationName,
+          sweep: [getComputedStyle(hero, '::after').display, getComputedStyle(hero, '::after').animationName],
+          mask: logo !== null && getComputedStyle(logo).maskImage.startsWith('radial-gradient'), // ассет є у збірці
+          main: [nb.backgroundImage.includes('linear-gradient'), nb.color],
+          menu: [help.clipPath.startsWith('polygon'), help.textTransform],
+        };
+      });
+    const on = { sparks: 'start-sparks', ring: 'start-ring', sweep: ['block', 'start-sweep'], mask: true };
+    const still = { sparks: 'none', ring: 'none', sweep: ['none', 'none'], mask: true };
+    const kit = { main: [true, 'rgb(26, 18, 4)'], menu: [true, 'uppercase'] };
+    expect(await look()).toEqual({ ...on, ...kit });
+    await page.locator('#btn-start-settings').click();
+    await page.locator('#settings-ambient').click();
+    await page.locator('#settings-close').click();
+    expect(await look(), 'тумблер «Анімація: вимк»').toEqual({ ...still, ...kit });
+    await page.locator('#btn-start-settings').click();
+    await page.locator('#settings-ambient').click();
+    await page.locator('#settings-close').click();
+    expect(await look()).toEqual({ ...on, ...kit });
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    expect(await look(), 'системне «менше руху»').toEqual({ ...still, ...kit });
+    await page.emulateMedia({ reducedMotion: null });
+    await page.setViewportSize({ width: 1440, height: 900 });
   });
 
   await test.step('Т.94: малі й низькі вікна без банера — нічого не накрито, усе у вікні, без прокрутки', async () => {
