@@ -648,7 +648,8 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
   function onKeyDown(ev: KeyboardEvent): void {
     if (isTypingTarget(ev.target)) return;
     if (deps.overlayOpen()) return; // Т.73: під відкритим вікном клавіші бою не діють
-    battle.dismissTurnPlate(); // Т.33: клавіша дії прибирає підсумок ходу демонів
+    // Т.33: клавіша дії прибирає підсумок ходу демонів; Т.116: під час авто-бою — ні (підсумок до наступного ходу демонів)
+    if (!deps.autoBusy()) battle.dismissTurnPlate();
     if (ev.code === 'Digit1' || ev.key === '1') armFire('snap');
     else if (ev.code === 'Digit2' || ev.key === '2') armFire('aimed');
     else if (ev.code === 'Digit3' || ev.key === '3') armFire('auto');

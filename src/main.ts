@@ -738,7 +738,10 @@ if (typeof document !== 'undefined') {
     logExpand.setAttribute('aria-expanded', String(open));
   };
   const bc = el<HTMLCanvasElement>('battle');
-  bc.addEventListener('click', () => battle.dismissTurnPlate()); // Т.33: до обробника кліку
+  // Т.33: до обробника кліку; Т.116: під час авто-бою клік підсумок не прибирає
+  bc.addEventListener('click', () => {
+    if (!autoBattle.busy) battle.dismissTurnPlate();
+  });
   bc.addEventListener('click', input.battleCanvasClick);
   bc.addEventListener('mousemove', input.battleCanvasHover);
   bc.addEventListener('mouseleave', input.battleCanvasLeave);

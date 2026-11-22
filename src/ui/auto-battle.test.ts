@@ -440,5 +440,25 @@ describe('Т.116: onAlienTurn — плашка і підсумок ходу де
     duel.start();
     await driveToEnd(duel);
     expect(onStop).toHaveBeenCalledTimes(2);
+    const limited = new AutoBattleDriver(makeDeps(ongoingMission(), { onStop, maxHalfTurns: 1 }));
+    limited.start();
+    await driveToEnd(limited);
+    expect(limited.busy).toBe(false);
+    expect(onStop).toHaveBeenCalledTimes(3);
+  });
+
+  it('«Стоп» і «Авто» посеред ходу демонів — підсумок від початку ходу, а не від точки повторного старту', async () => {
+    const mission = ongoingMission();
+    const calls: (number | null)[] = [];
+    const d = new AutoBattleDriver(makeDeps(mission, { onAlienTurn: (from) => calls.push(from) }));
+    d.start();
+    for (let i = 0; i < 600 && calls.length === 0; i++) await vi.advanceTimersByTimeAsync(160);
+    expect(calls).toEqual([null]); // хід демонів почався
+    const begin = mission.state.log.length - 1; // подія turn — передача ходу демонам
+    d.stop();
+    d.start();
+    for (let i = 0; i < 600 && calls.length < 3; i++) await vi.advanceTimersByTimeAsync(160);
+    expect(calls.slice(0, 3)).toEqual([null, null, begin]);
+    d.stop();
   });
 });

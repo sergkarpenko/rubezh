@@ -64,8 +64,7 @@ export class AutoBattleDriver {
   stop(): void {
     this.steps = null;
     this.waitIdle = false;
-    this.alienFrom = null;
-    this.deps.onStop?.();
+    this.deps.onStop?.(); // Т.116: alienFrom лишається — «Авто» посеред того самого ходу демонів рахує підсумок від його початку
     if (this.timer !== null) {
       clearTimeout(this.timer);
       this.timer = null;
@@ -89,11 +88,12 @@ export class AutoBattleDriver {
     this.steps = new DemoSteps(this.deps.maxHalfTurns ?? 240);
     this.deps.onStart?.(); // Т.46: до першого кроку — його renderBattle малює плитки вже без режиму
     this.deps.binfo('Авто-бій: загін веде політика ядра. «Стоп» — керування вручну.');
-    // Т.116: старт посеред ходу демонів (після «Стоп») — плашка одразу, підсумок — від цієї точки
+    // Т.116: старт посеред ходу демонів (після «Стоп») — плашка одразу; підсумок — від початку ходу,
+    // якщо його почав цей драйвер, інакше (хід демонів почався вручну) — від точки старту
     if (mission.state.activeSide === 'alien') {
-      this.alienFrom = mission.state.log.length;
+      this.alienFrom ??= mission.state.log.length;
       this.deps.onAlienTurn?.(null);
-    }
+    } else this.alienFrom = null;
     this.next();
   }
 

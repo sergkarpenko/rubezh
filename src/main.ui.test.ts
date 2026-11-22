@@ -573,11 +573,18 @@ describeScenario('UI-флоу прев’ю: геосцена → місія →
       await stepUntil(() => plate.className === '');
       expect(plate.textContent).toBe('ХІД ДЕМОНІВ РОЗРИВУ…Демони діють. Зачекайте.');
       expect($('bctx-turn').textContent).toBe('хід демонів Розриву');
+      btn('btn-auto-battle').click(); // «Стоп» посеред ходу демонів — плашка «діють» зникає
+      expect(plate.className).toBe('hidden');
+      btn('btn-auto-battle').click(); // «Авто» — хід демонів триває, плашка знову
+      expect(plate.className).toBe('');
       await stepUntil(() => plate.className === 'done');
       expect(plate.textContent).toMatch(
         /^ХІД ДЕМОНІВ РОЗРИВУ — ПІДСУМОК(Демони не атакували\.|Пострілів по загону: \d+, влучань: \d+).*Демонів у полі зору: \d+$/
       );
       expect(cap()).toBe('Стоп'); // авто-бій іде далі — підсумок його не зупиняє
+      cellClick(2, 2); // клік по полю і клавіша під час авто-бою підсумок не прибирають
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Shift', code: 'ShiftLeft' }));
+      expect(plate.className).toBe('done');
       btn('btn-auto-battle').click(); // «Стоп» — підсумок лишається до першої дії
       expect(cap()).toBe('Авто');
       expect(plate.className).toBe('done');
