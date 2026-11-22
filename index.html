@@ -421,8 +421,9 @@
             0 0 14px rgba(0, 229, 255, 0.45);
         }
       }
-      #btoolbar button:disabled {
-        box-shadow: none;
+      #btoolbar button:disabled,
+      #btoolbar button.armed:disabled {
+        box-shadow: none; /* .armed нижче в каскаді — без другого селектора вимкнена зведена світилась (аудит Vibe) */
       }
       #btoolbar button:disabled svg.tb-icon {
         filter: grayscale(1);
