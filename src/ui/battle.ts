@@ -115,6 +115,7 @@ export interface BattleDeps {
 
 export interface BattleUI {
   playerTurnActive(): boolean;
+  animating(): boolean; // Т.121: грає анімація бою (черга непорожня) — порожня клітинка поля мовчить
   selectedUnit(): Unit | undefined;
   visibleCells(): Set<string>;
   displayedAlienAt(cell: Vec2): Unit | undefined; // П14.4: демон у клітинці за відображуваною позицією
@@ -285,6 +286,10 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
 
   function playerTurnActive(): boolean {
     return ui.mission !== null && ui.battleResult === null && ui.mission.state.activeSide === 'player' && plate?.acting !== true;
+  }
+
+  function animating(): boolean {
+    return deps.anim.active() !== null;
   }
 
   function selectedUnit(): Unit | undefined {
@@ -762,6 +767,7 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
 
   return {
     playerTurnActive,
+    animating,
     selectedUnit,
     visibleCells,
     displayedAlienAt, // П14.4: клік по демону за відображуваною позицією

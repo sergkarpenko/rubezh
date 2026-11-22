@@ -202,6 +202,11 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
     // П11.6 (ADR-0058): граната — епіцентр у будь-якій клітинці (юніт не потрібен),
     // дальність ≤6 і лінія кидка; зона — епіцентр + хрест (прев'ю після першого тапу).
     if (ui.itemMode === 'grenade') {
+      // Т.121 (аудит): порожня клітинка під час анімації мовчить і для гранати — дальність і лінію
+      // кидка рахувало б від клітинки, де оперативник зупиниться; клітинка з видимим юнітом — як і раніше
+      // (свій оперативник сюди не доходить — тап по ньому вище вибирає його)
+      const visibleUnit = u !== undefined && battle.visibleCells().has(cell.x + ',' + cell.y);
+      if (battle.animating() && !visibleUnit) return;
       if (distance(sel.pos, cell) > GRENADE_RANGE) {
         battle.binfo('Епіцентр поза дальністю кидка (' + GRENADE_RANGE + ' клітинок).');
         return;
@@ -310,6 +315,10 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
     // порожня клітинка — тач-патерн (ADR-0027, П6.4): перший тап/клік — прев'ю
     // шляху (зелена лінія з ціною, AP вистачає; червона — ні), повторний тап/клік у ту
     // саму клітинку — хід. Один патерн для тачу і мишки.
+    // Т.121 (рішення власника 22.11.2026, варіант А): поки грає анімація (рух, постріл,
+    // граната), порожня клітинка мовчить — ні підказки «Шлях: N AP», ні ходу наосліп:
+    // лінії й зони ще не видно, а ціна рахувалась би від клітинки, де оперативник зупиниться
+    if (battle.animating()) return;
     ui.fireMode = null;
     ui.aimCell = null; // П6.14: зведений режим знято — підказки прицілювання теж
     try {
@@ -388,6 +397,9 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
       }
       return;
     }
+    // Т.121: під час анімації наведення нічого не міняє — ні шляху, ні #binfo (як і тап); шлях,
+    // наведений до анімації, з'являється знову з її кінцем (аудит: обнулення лишало tapCell без лінії)
+    if (battle.animating()) return;
     if (cell.x === sel.pos.x && cell.y === sel.pos.y) {
       if (ui.hoverPath !== null) {
         ui.hoverPath = null;

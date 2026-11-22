@@ -622,6 +622,143 @@ describe('Т.45: прев\u2019ю шляху під курсором у режи
   });
 });
 
+// Т.121 (рішення власника 22.11.2026, варіант А; кандидат 116, аудит PR #434): поки грає анімація,
+// порожня клітинка мовчить — тап і наведення не пишуть «Шлях: N AP» і не ходять наосліп;
+// вибір свого оперативника працює, як і раніше.
+describe('Т.121: порожня клітинка поля під час анімації', () => {
+  function animFixture(): { f: Fixture; s: Unit; queue: Anim[]; to: { x: number; y: number }; tap: () => void; hover: () => void } {
+    const queue: Anim[] = [];
+    const f = makeFixture(false, queue);
+    launchMission(f);
+    const st = f.ui.mission!.state;
+    const s = st.units.find((u) => u.side === 'player' && u.alive)!;
+    clickAt(f, s.pos.x, s.pos.y); // вибір
+    const to = [2, 3, 1]
+      .flatMap((d) => [
+        { x: s.pos.x + d, y: s.pos.y },
+        { x: s.pos.x, y: s.pos.y + d },
+      ])
+      .find((c) => !st.units.some((u) => u.alive && u.pos.x === c.x && u.pos.y === c.y) && findPath(st, s.pos, c) !== null)!;
+    const ev = { clientX: to.x * 48 + 24, clientY: to.y * 48 + 24 } as MouseEvent;
+    return { f, s, queue, to, tap: () => f.input.battleCanvasClick(ev), hover: () => f.input.battleCanvasHover(ev) };
+  }
+
+  it('тап-тап під час анімації: ні підказки, ні прев\u2019ю, ні ходу; після анімації — як завжди', () => {
+    const { f, s, queue, to, tap } = animFixture();
+    const before = f.binfo();
+    const pos = { ...s.pos };
+    queue.push(makeMoveAnim(s, [pos], true));
+    expect(f.battle.animating()).toBe(true);
+    tap();
+    tap();
+    expect(f.binfo()).toBe(before);
+    expect(f.ui.tapCell).toBeNull();
+    expect(f.ui.hoverPath).toBeNull();
+    expect(s.pos).toEqual(pos);
+    expect(s.ap).toBe(s.maxAp);
+    queue.length = 0; // анімація скінчилась
+    expect(f.battle.animating()).toBe(false);
+    tap();
+    expect(f.binfo()).toMatch(/^Шлях: \d+ AP — повторний тап/);
+    expect(s.pos).toEqual(pos);
+    tap();
+    expect(s.pos).toEqual(to);
+  });
+
+  it('перший тап до анімації, другий — під час неї: ходу немає, прев\u2019ю і перший тап лишаються', () => {
+    const { f, s, queue, tap } = animFixture();
+    tap();
+    const hint = f.binfo();
+    const pos = { ...s.pos };
+    queue.push(makeMoveAnim(s, [pos], true));
+    const path = f.ui.hoverPath;
+    const tapCell = f.ui.tapCell;
+    tap();
+    expect(s.pos).toEqual(pos);
+    expect(f.binfo()).toBe(hint);
+    expect(f.ui.hoverPath).toBe(path);
+    expect(f.ui.tapCell).toBe(tapCell);
+  });
+
+  it('наведення під час анімації нічого не міняє; після — шлях і ціна', () => {
+    const { f, s, queue, hover } = animFixture();
+    queue.push(makeMoveAnim(s, [{ ...s.pos }], true));
+    f.battle.binfo('мітка');
+    hover();
+    expect(f.ui.hoverPath).toBeNull();
+    expect(f.binfo()).toBe('мітка');
+    queue.length = 0;
+    hover();
+    const path = f.ui.hoverPath;
+    expect(path).not.toBeNull();
+    expect(f.binfo()).toMatch(/^Шлях: \d+ AP/);
+    queue.push(makeMoveAnim(s, [{ ...s.pos }], true));
+    f.battle.binfo('мітка');
+    hover();
+    expect(f.ui.hoverPath).toBe(path); // шлях, наведений до анімації, лишається — з'явиться з її кінцем
+    expect(f.binfo()).toBe('мітка');
+    f.input.battleCanvasHover({ clientX: s.pos.x * 48 + 24, clientY: s.pos.y * 48 + 24 } as MouseEvent);
+    expect(f.ui.hoverPath).toBe(path); // і наведення на свого оперативника (знахідка Vibe)
+  });
+
+  it('зведений постріл: тап у порожню клітинку під час анімації режим не знімає; після — знімає, як і раніше', () => {
+    const { f, s, queue, tap } = animFixture();
+    f.input.armFire('snap');
+    expect(f.ui.fireMode).toBe('snap');
+    const hint = f.binfo();
+    queue.push(makeMoveAnim(s, [{ ...s.pos }], true));
+    tap();
+    expect(f.ui.fireMode).toBe('snap');
+    expect(f.binfo()).toBe(hint);
+    queue.length = 0;
+    tap();
+    expect(f.ui.fireMode).toBeNull();
+    expect(f.binfo()).toMatch(/^Шлях: \d+ AP/);
+  });
+
+  it('зведений постріл по видимому демону під час анімації — як і раніше (постріл чи причина)', () => {
+    const { f, s, queue, to, tap } = animFixture();
+    const alien = f.ui.mission!.state.units.find((u) => u.side === 'alien' && u.alive)!;
+    alien.pos = { ...to }; // демон поруч із загоном — видимий
+    expect(f.battle.visibleCells().has(to.x + ',' + to.y)).toBe(true);
+    f.input.armFire('snap');
+    const hint = f.binfo();
+    queue.push(makeMoveAnim(s, [{ ...s.pos }], true));
+    tap();
+    expect(f.binfo()).not.toBe(hint);
+    expect(f.ui.aimCell).toEqual(to); // перший тап тап-тапу пострілу — ціль зведено
+    tap();
+    expect(s.ap).toBeLessThan(s.maxAp); // другий — постріл
+  });
+
+  it('граната: тап-тап у порожню клітинку під час анімації — ні прев\u2019ю зони, ні кидка; після — прев\u2019ю', () => {
+    const { f, s, queue, tap } = animFixture();
+    f.ui.mission!.state.items = { [s.id]: { medkit: false, grenade: true } };
+    f.input.armGrenade();
+    expect(f.ui.itemMode).toBe('grenade');
+    const hint = f.binfo();
+    queue.push(makeMoveAnim(s, [{ ...s.pos }], true));
+    tap();
+    tap();
+    expect(f.ui.tapCell).toBeNull();
+    expect(f.binfo()).toBe(hint);
+    expect(s.ap).toBe(s.maxAp);
+    queue.length = 0;
+    tap();
+    expect(f.ui.tapCell).not.toBeNull();
+    expect(f.binfo()).toMatch(/^Зона вибуху/);
+  });
+
+  it('вибір свого оперативника під час анімації — як і раніше', () => {
+    const { f, s, queue } = animFixture();
+    const other = f.ui.mission!.state.units.find((u) => u.side === 'player' && u.alive && u.id !== s.id)!;
+    queue.push(makeMoveAnim(s, [{ ...s.pos }], true));
+    clickAt(f, other.pos.x, other.pos.y);
+    expect(f.ui.selectedId).toBe(other.id);
+    expect(f.binfo()).toContain(other.name + ': HP');
+  });
+});
+
 describe('ADR-0081: демон у тумані для вводу не існує', () => {
   // Сід 42, початок першої місії: демони стоять у своїй зоні, поза оглядом загону.
   function fogFixture(): { f: Fixture; soldier: Unit; alien: Unit } {
