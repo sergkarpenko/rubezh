@@ -1,11 +1,11 @@
 # Rules for AI Agents
 
-**Версія:** 2.4  
+**Версія:** 2.5  
 **Дата:** 2026-11-22  
 **Мова:** Ukrainian (коментарі, помилки, коміти)  
 **Контекст:** проект "Рубіж" — AI-native SDLC
 
-**Оновлення:** Додано чіткий розподіл ролей Vibe Work та Vibe Code (ADR-0042, ADR-0043, ADR-0044, ADR-0045-0048); 2026-11-14 — тег кроку ставить workflow (ADR-0093), PR класу `auto` (ADR-0094), звірка застарілих рядків (Т.36); 2026-11-15 — довідники агентів у `docs/agents/` (ADR-0096), два аудитори PR постійно (ADR-0097), контекст аудитора Mistral (ADR-0098), самоперевірка аудитора окремим файлом (ADR-0099); 2026-11-19 — схему «Vibe Code — виконавець за планом Claude» згорнуто, задачі для Vibe — issue з міткою `vibe` (ADR-0100); 2026-11-20 — режим Issues закрито, Mistral — лише аудитор PR (ADR-0101); проба аудиту через Vibe CLI в CI — workflow `vibe-audit` (ADR-0102); `mistral-audit` — на ключі Vibe (ADR-0103); контрольна точка проби: `mistral-audit` вимкнено, другий аудитор PR — `vibe-audit`, розділи про ролі Vibe Work / Vibe Code переписано під фактичну схему (ADR-0104); відповідь `vibe-audit` без блоку JSON — повтор «лише блок JSON» у тій самій сесії (ADR-0105); 2026-11-21 — `scripts/` під `tsc` і ESLint (ADR-0106); типи Node не видно в `src` — `types: []` у `tsconfig.json` (ADR-0107); 2026-11-22 — lint-staged для `scripts/` і канарка типів Node `src/no-node-types.ts` (ADR-0108); `scripts/**/*.{ts,mjs}` у `format:check` CI (ADR-0109); `e2e/` у `format:check` і lint-staged (ADR-0110)
+**Оновлення:** Додано чіткий розподіл ролей Vibe Work та Vibe Code (ADR-0042, ADR-0043, ADR-0044, ADR-0045-0048); 2026-11-14 — тег кроку ставить workflow (ADR-0093), PR класу `auto` (ADR-0094), звірка застарілих рядків (Т.36); 2026-11-15 — довідники агентів у `docs/agents/` (ADR-0096), два аудитори PR постійно (ADR-0097), контекст аудитора Mistral (ADR-0098), самоперевірка аудитора окремим файлом (ADR-0099); 2026-11-19 — схему «Vibe Code — виконавець за планом Claude» згорнуто, задачі для Vibe — issue з міткою `vibe` (ADR-0100); 2026-11-20 — режим Issues закрито, Mistral — лише аудитор PR (ADR-0101); проба аудиту через Vibe CLI в CI — workflow `vibe-audit` (ADR-0102); `mistral-audit` — на ключі Vibe (ADR-0103); контрольна точка проби: `mistral-audit` вимкнено, другий аудитор PR — `vibe-audit`, розділи про ролі Vibe Work / Vibe Code переписано під фактичну схему (ADR-0104); відповідь `vibe-audit` без блоку JSON — повтор «лише блок JSON» у тій самій сесії (ADR-0105); 2026-11-21 — `scripts/` під `tsc` і ESLint (ADR-0106); типи Node не видно в `src` — `types: []` у `tsconfig.json` (ADR-0107); 2026-11-22 — lint-staged для `scripts/` і канарка типів Node `src/no-node-types.ts` (ADR-0108); `scripts/**/*.{ts,mjs}` у `format:check` CI (ADR-0109); `e2e/` у `format:check` і lint-staged (ADR-0110); `e2e/` під ESLint — `npm run lint` і lint-staged (ADR-0111)
 
 ---
 
@@ -180,7 +180,7 @@ npx tsc --noEmit
 npx tsc --noEmit -p tsconfig.core.json
 # Скрипти scripts/*.ts з типами Node (ADR-0106)
 npx tsc --noEmit -p tsconfig.scripts.json
-# Лінт (src і scripts, ADR-0106), зокрема правила ядра (ADR-0079): Math.random/годинник/імпорти поза src/core
+# Лінт (src, scripts і e2e, ADR-0106, ADR-0111), зокрема правила ядра (ADR-0079): Math.random/годинник/імпорти поза src/core
 npm run lint
 # typedoc = генерація довідки API (ADR-0016/0019)
 npm run docs
@@ -362,6 +362,7 @@ git ls-remote --tags https://github.com/sergkarpenko/rubezh.git iter-X.Y
 | ADR-0108 | Дрібні гейти: lint-staged для `scripts/**/*.{ts,mjs}` (`eslint --fix`, `prettier --write`); канарка `src/no-node-types.ts` — `process`, `Buffer`, `NodeJS.*` під `@ts-expect-error`: повернення типів Node у `src` будь-яким шляхом дає `TS2578` у `npx tsc --noEmit`; нового кроку в CI немає (частково Supersedes: ADR-0106 — наслідок про lint-staged; доповнює ADR-0107/0014/0015/0012; Т.108) | accepted | 2026-11-22 |
 | ADR-0109 | `format:check` охоплює `scripts/**/*.{ts,mjs}`: та сама маска, що в lint-staged (ADR-0108); скрипт `format` — так само; `.sh`, `.py`, `scripts/assets/` і `e2e/` — поза ним; workflow без змін (частково Supersedes: ADR-0108 п. 1, ADR-0076 — охоплення `format:check`; доповнює ADR-0015/0012; Т.110) | accepted | 2026-11-22 |
 | ADR-0110 | `format:check` і `format` охоплюють `e2e/`; lint-staged — `e2e/**/*.ts`: `prettier --write` (без ESLint — `e2e/` поза `npm run lint`); workflow без змін (частково Supersedes: ADR-0109 п. 3 — `e2e/` поза перевіркою; доповнює ADR-0108/0076/0080/0012; Т.111) | accepted | 2026-11-22 |
+| ADR-0111 | `e2e/` під ESLint: `npm run lint` і `lint:fix` — `eslint src scripts e2e`; lint-staged — `e2e/**/*.ts`: `eslint --fix`, `prettier --write`; конфіг ESLint і workflow без змін (частково Supersedes: ADR-0110 п. 2–3, ADR-0106 — охоплення `npm run lint`; доповнює ADR-0015/0076/0080/0108/0012; Т.112) | accepted | 2026-11-22 |
 
 **Нове рішення?** Створювати новий ADR з полем Supersedes.
 

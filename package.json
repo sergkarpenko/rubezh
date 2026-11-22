@@ -12,8 +12,8 @@
     "test:mutation": "stryker run",
     "build": "vite build",
     "prepare": "husky",
-    "lint": "eslint src scripts",
-    "lint:fix": "eslint src scripts --fix",
+    "lint": "eslint src scripts e2e",
+    "lint:fix": "eslint src scripts e2e --fix",
     "format": "prettier --write src index.html \"scripts/**/*.{ts,mjs}\" e2e",
     "format:check": "prettier --check src index.html \"scripts/**/*.{ts,mjs}\" e2e",
     "docs": "typedoc"
@@ -28,6 +28,7 @@
       "prettier --write"
     ],
     "e2e/**/*.ts": [
+      "eslint --fix",
       "prettier --write"
     ],
     "*.{html,css}": [
