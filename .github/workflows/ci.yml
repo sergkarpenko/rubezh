@@ -35,7 +35,11 @@ jobs:
       # без цього блоку червонить чек test
       - name: Workflow — bash з pipefail
         run: |
-          missing="$(grep -L -x -F -e '    shell: bash' .github/workflows/*.yml || true)"
+          shopt -s nullglob
+          # grep -L: код 0 або 1 — норма (залежить від версії grep), 2 — помилка читання
+          rc=0
+          missing="$(grep -L -x -F -e '    shell: bash' .github/workflows/*.yml .github/workflows/*.yaml)" || rc=$?
+          if [ "$rc" -gt 1 ]; then echo "::error::grep: код $rc (ADR-0113)"; exit 2; fi
           if [ -n "$missing" ]; then
             for f in $missing; do echo "::error file=$f::немає defaults.run.shell: bash (ADR-0113)"; done
             exit 1
