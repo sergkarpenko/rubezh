@@ -1074,3 +1074,55 @@ test('Т.71: евакуація — плитка, клавіша V і вікно
   await expect(page.locator('#bresult')).toContainText('ЗАГІН ЕВАКУЙОВАНО — врятовані на базі, зонд Розриву лишається активним');
   expect(errors, 'помилки сторінки: ' + errors.join(' | ')).toEqual([]);
 });
+
+// Т.121 (рішення власника 22.11.2026, варіант А; кандидат 116): поки грає анімація ходу, порожня
+// клітинка мовчить — тап не пише «Шлях: N AP» і другий тап не ходить наосліп. Тапи під час анімації —
+// подіями в одному page.evaluate з тапом ходу: rAF між ними не встигає, анімація гарантовано триває.
+test('Т.121: тап по порожній клітинці під час анімації ходу — ні підказки, ні ходу', async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.goto('./');
+  const helpClose = page.locator('#btn-help-close');
+  if (await helpClose.isVisible()) await helpClose.click();
+  await page.locator('#btn-start-new').click();
+  await page.locator('#new-game-seed').fill(String(SEED));
+  await page.locator('#new-game-preset').selectOption(PRESET);
+  await page.locator('#btn-new-game-start').click();
+  await page.locator('#status-tab-base').click();
+  const mission = page.locator('#ufos button.mission').first();
+  for (let i = 0; i < MAX_TICKS_TO_MISSION && !(await mission.isVisible()); i++) await page.locator('#btn-tick').click();
+  await mission.click();
+  await expect(page.locator('#battle-panel')).toBeVisible();
+  const info = page.locator('#binfo');
+  const taps = (cells: [number, number][]): Promise<string[]> =>
+    page.evaluate((cs) => {
+      const cv = document.getElementById('battle') as HTMLCanvasElement;
+      const r = cv.getBoundingClientRect();
+      const k = r.width / cv.width;
+      const out: string[] = [];
+      for (const [x, y] of cs) {
+        const o = { bubbles: true, clientX: r.left + (x * 48 + 24) * k, clientY: r.top + (y * 48 + 24) * k };
+        cv.dispatchEvent(new MouseEvent('mousemove', o));
+        cv.dispatchEvent(new MouseEvent('click', o));
+        out.push(document.getElementById('binfo')!.textContent ?? '');
+      }
+      return out;
+    }, cells);
+  await taps([[2, 2]]); // вибір
+  await taps([[6, 2]]); // прев'ю ходу на 4 клітинки (≈ 0,36 с анімації)
+  const t = await taps([
+    [6, 2], // хід
+    [6, 5], // тап під час анімації
+    [6, 5], // другий тап — був би хід наосліп
+  ]);
+  expect(t[0], 'хід').toMatch(/: рух\. AP \d+\/\d+\.$/);
+  expect(t[1], 'тап під час анімації підказки не пише').toBe(t[0]);
+  expect(t[2], 'другий тап під час анімації не ходить').toBe(t[0]);
+  // після анімації — тап-тап як завжди: перший тап — прев'ю, другий — хід
+  await expect.poll(async () => (await taps([[6, 5]]))[0], { timeout: 5000 }).toMatch(/^Шлях: \d+ AP — повторний тап/);
+  const ap = Number(/AP (\d+)\//.exec(t[0])![1]);
+  const moved = (await taps([[6, 5]]))[0];
+  expect(moved).toMatch(/: рух\. AP \d+\/\d+\.$/);
+  expect(Number(/AP (\d+)\//.exec(moved)![1]), 'хід після анімації витрачає AP').toBeLessThan(ap);
+  await expect(info).toHaveText(moved);
+  expect(errors, 'помилки сторінки: ' + errors.join(' | ')).toEqual([]);
+});

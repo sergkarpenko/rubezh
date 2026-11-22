@@ -310,6 +310,10 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
     // порожня клітинка — тач-патерн (ADR-0027, П6.4): перший тап/клік — прев'ю
     // шляху (зелена лінія з ціною, AP вистачає; червона — ні), повторний тап/клік у ту
     // саму клітинку — хід. Один патерн для тачу і мишки.
+    // Т.121 (рішення власника 22.11.2026, варіант А): поки грає анімація (рух, постріл,
+    // граната), порожня клітинка мовчить — ні підказки «Шлях: N AP», ні ходу наосліп:
+    // лінії й зони ще не видно, а ціна рахувалась би від клітинки, де оперативник зупиниться
+    if (battle.animating()) return;
     ui.fireMode = null;
     ui.aimCell = null; // П6.14: зведений режим знято — підказки прицілювання теж
     try {
@@ -393,6 +397,11 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
         ui.hoverPath = null;
         battle.renderBattle();
       }
+      return;
+    }
+    // Т.121: під час анімації наведення шляху не дає і #binfo не переписує (як і тап)
+    if (battle.animating()) {
+      ui.hoverPath = null;
       return;
     }
     const path = findPath(ui.mission.state, sel.pos, cell, undefined, battle.visibleCells()); // ADR-0081
