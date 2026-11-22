@@ -185,7 +185,11 @@ export function renderComment(r) {
 export function usageLine(exp, code) {
   if (!exp) return `код виходу vibe ${code}, export.json немає`;
   const u = exp.usage ?? {};
-  const cost = typeof exp.cost_usd === 'number' ? `$${exp.cost_usd.toFixed(4)}` : '?';
+  // Vibe 3.1.3 буває пише cost_usd 0 при ненульових токенах (PR #417, обидва прогони PR #422; Т.109): «$0.0000» вводить
+  // в оману. $0.0000 лишається лише тоді, коли токени відомі й обидва нульові.
+  const noTokens = u.input_tokens === 0 && u.output_tokens === 0;
+  const zero = exp.cost_usd === 0 && !noTokens;
+  const cost = zero ? 'не порахована (у export.json 0)' : typeof exp.cost_usd === 'number' ? `$${exp.cost_usd.toFixed(4)}` : '?';
   return `vibe ${exp.vibe_version ?? '?'}, код ${code}, результат ${exp.outcome ?? '?'}${exp.stop_reason ? ` (${exp.stop_reason})` : ''}, кроків ${exp.steps ?? '?'}; токени: ввід ${u.input_tokens ?? '?'} (з кешу ${u.cached_input_tokens ?? '?'}), вивід ${u.output_tokens ?? '?'}; ціна за Vibe ${cost}`;
 }
 
@@ -432,6 +436,16 @@ async function selfTest() {
   );
   check('HTML-коментар у тексті знешкоджено', !renderComment({ ok: false, reason: '<!-- x -->' }).slice(MARKER.length).includes('<!--'));
   check('рядок прогону без export.json', usageLine(null, 2).includes('export.json немає'));
+  check(
+    'ціна 0 при ненульових чи невідомих токенах — «не порахована», при нульових — $0.0000, не число — ?',
+    usageLine({ usage: { input_tokens: 10 }, cost_usd: 0 }, 3).includes('ціна за Vibe не порахована') &&
+      usageLine({ usage: { input_tokens: 0, output_tokens: 5 }, cost_usd: 0 }, 0).includes('ціна за Vibe не порахована') &&
+      usageLine({ cost_usd: 0 }, 0).includes('ціна за Vibe не порахована') &&
+      usageLine({ usage: {}, cost_usd: 0 }, 0).includes('ціна за Vibe не порахована') &&
+      usageLine({ usage: { input_tokens: 0, output_tokens: 0 }, cost_usd: 0 }, 0).includes('ціна за Vibe $0.0000') &&
+      usageLine({ usage: { input_tokens: 10 } }, 0).endsWith('ціна за Vibe ?') &&
+      usageLine({ usage: { input_tokens: 10 }, cost_usd: 0.1148 }, 0).includes('ціна за Vibe $0.1148')
+  );
   const p = buildPrompt({ number: 1, title: 't', body: 'b', base: 'B', head: 'H', names: ['x.ts'] });
   check(
     'промпт: диф base...head, роль аудитора, формат JSON',
