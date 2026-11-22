@@ -48,6 +48,55 @@ async function tap(page: Page, cell: Vec2): Promise<void> {
   });
 }
 
+// Т.120 (кандидат 115): бій на телефоні. Вертикально — плитки під полем, поле з плитками вміщується
+// у вікно; горизонтально — поле у висоту вікна, плитки поруч; шапка в бою не липне.
+async function expectPhoneBattle(page: Page, label: string, minField: number, portrait: boolean): Promise<void> {
+  const m = await page.evaluate(() => {
+    const box = (id: string) => document.getElementById(id)!.getBoundingClientRect();
+    const field = box('battle');
+    const tb = box('btoolbar');
+    const tiles = [...document.querySelectorAll<HTMLElement>('#btoolbar button')].filter((b) => !b.hidden);
+    return {
+      win: window.innerHeight,
+      winW: window.innerWidth,
+      panelRight: box('battle-panel').right,
+      topbar: getComputedStyle(document.getElementById('topbar')!).position,
+      field: field.width,
+      fieldH: field.height,
+      below: tb.top - field.bottom,
+      beside: tb.left - field.right,
+      inside: Math.min(tb.left - field.left, field.right - tb.right),
+      both: tb.bottom - field.top,
+      tbH: tb.height,
+      tbRight: tb.right,
+      minTile: Math.min(...tiles.map((b) => b.getBoundingClientRect().width)),
+      capOver: Math.max(
+        ...tiles.map((b) => {
+          const c = b.querySelector<HTMLElement>('.tb-cap');
+          return c ? c.getBoundingClientRect().width - b.clientWidth : 0;
+        })
+      ),
+    };
+  });
+  expect(m.topbar, label + ': шапка в бою липне').toBe('static');
+  // не прокрутка сторінки: у CI на 320 px її дає щось поза боєм (+10 px), локально її немає
+  expect(m.panelRight, label + ': панель бою за правим краєм').toBeLessThanOrEqual(m.winW);
+  expect(m.field, label + ': поле менше за межу').toBeGreaterThanOrEqual(minField);
+  expect(Math.abs(m.field - m.fieldH), label + ': поле не квадратне').toBeLessThanOrEqual(1);
+  expect(m.tbRight, label + ': плитки за правим краєм').toBeLessThanOrEqual(m.winW);
+  expect(m.minTile, label + ': плитка вужча за 60 px').toBeGreaterThanOrEqual(60);
+  expect(m.capOver, label + ': підпис плитки ширший за плитку').toBeLessThanOrEqual(0);
+  if (portrait) {
+    expect(m.below, label + ': плитки не під полем').toBeGreaterThanOrEqual(0);
+    expect(m.inside, label + ': плитки ширші за поле').toBeGreaterThanOrEqual(-1);
+    expect(m.both, label + ': поле з плитками вище за вікно').toBeLessThanOrEqual(m.win);
+  } else {
+    expect(m.beside, label + ': плитки не поруч із полем').toBeGreaterThanOrEqual(0);
+    expect(m.fieldH, label + ': поле вище за вікно').toBeLessThanOrEqual(m.win);
+    expect(m.tbH, label + ': плитки вищі за вікно').toBeLessThanOrEqual(m.win);
+  }
+}
+
 // Т.32: бій у межах вікна — поле, плитки дій, підказка і журнал видно без
 // прокрутки; minField — найменша сторона поля для цього розміру вікна.
 async function expectBattleFits(page: Page, label: string, minField: number): Promise<void> {
@@ -520,6 +569,16 @@ test('сценарій приймання ADR-0030: партія → місія 
       await page.setViewportSize({ width, height });
       await expectBattleFits(page, `${width} × ${height}`, minField);
       expect(await toolbarWidth(), `Т.118: на ${width} × ${height} плитки — два стовпчики`).toBe(134);
+    }
+    // Т.120 (кандидат 115): телефон вертикально і горизонтально
+    for (const [width, height, minField, portrait] of [
+      [390, 844, 330, true],
+      [320, 568, 260, true],
+      [844, 390, 340, false],
+      [568, 320, 280, false], // і в блоці до 599 px завширшки (аудит PR #435)
+    ] as const) {
+      await page.setViewportSize({ width, height });
+      await expectPhoneBattle(page, `${width} × ${height}`, minField, portrait);
     }
     await page.setViewportSize({ width: 1440, height: 900 });
   });

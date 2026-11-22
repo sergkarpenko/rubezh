@@ -1242,6 +1242,62 @@
           overflow-y: auto;
         }
       }
+      /* Т.120 (кандидат 115, рішення власника): бій на телефоні. Вертикально (до 599 px) — варіант Б:
+         плитки дій під полем сіткою (по 5 у ряд на 390 px, плитка ≥ 60 px — вміщує найдовшу причину «поза зоною»), вужчі рамки панелі бою — поле 194 → 342 px на 390 × 844;
+         горизонтально (до 480 px заввишки) — варіант Г: поле у висоту вікна, плитки у два стовпчики поруч
+         (поле 648 → 366 px на 844 × 390, видно цілим). Шапка в бою на телефоні не липне: час заморожено,
+         а липка шапка (255 px вертикально) накривала верх поля */
+      @media (max-width: 599px) {
+        main#layout.in-battle {
+          padding: 8px;
+          gap: 8px;
+        }
+        #layout.in-battle #battle-panel {
+          padding: 4px;
+        }
+        body.panel-frame #layout.in-battle #battle-panel {
+          border-width: 10px 12px;
+          border-image-width: 10px 12px;
+        }
+        #layout.in-battle #battle-stage {
+          flex-direction: column;
+          align-items: stretch;
+        }
+        #layout.in-battle #battle {
+          flex: none;
+          width: 100%;
+        }
+        #layout.in-battle #btoolbar {
+          display: grid;
+          grid-template-columns: repeat(auto-fill, minmax(60px, 1fr));
+        }
+        #layout.in-battle #btoolbar button {
+          width: auto;
+          padding: 4px 0 3px;
+        }
+        body:has(#layout.in-battle) header#topbar {
+          position: static;
+        }
+      }
+      @media (max-height: 480px) and (orientation: landscape) {
+        /* вузький альбом (568 × 320) потрапляє і в блок до 599 px — плитки повертаємо збоку (аудит PR #435) */
+        #layout.in-battle #battle-stage {
+          flex-direction: row;
+          align-items: flex-start;
+        }
+        #layout.in-battle #battle {
+          flex: none;
+          width: min(100% - 144px, 100svh - 24px);
+        }
+        #layout.in-battle #btoolbar {
+          display: grid;
+          grid-template-columns: repeat(2, 64px);
+          align-content: start;
+        }
+        body:has(#layout.in-battle) header#topbar {
+          position: static;
+        }
+      }
       /* Т.80: заголовок «Геосцени» і рядок «Наступний крок» — один ряд (висота заголовка не росте);
          якщо порада не вміщується поруч із назвою (телефон; до Т.97 — і вікна ≈ 900–940 px), вона цілим
          рядком переходить під назву, а не обрізається трикрапкою (аудит PR #394) */
