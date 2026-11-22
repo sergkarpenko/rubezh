@@ -394,6 +394,26 @@
         color: #7d8794;
         font-size: 12px;
       }
+      /* Т.122 (рішення власника 22.11.2026, варіант Б): вузька панель — кроки стовпчиком зі стрілками ↓.
+         Межа — найменша ширина смуги в рядок зі шрифтом CI (DejaVu Sans): 268 px; панель на ноутбуці — 272 */
+      #research {
+        container: sci / inline-size;
+      }
+      @container sci (max-width: 269px) {
+        .sci-steps {
+          flex-direction: column;
+        }
+        .sci-steps .arr {
+          align-self: flex-start;
+          padding-left: 10px;
+          line-height: 1;
+          transform: rotate(90deg);
+        }
+        .sci-steps button b {
+          display: inline;
+          margin-right: 4px;
+        }
+      }
       .sci-head {
         font-size: 12px;
         color: #aab3bf;
@@ -408,6 +428,7 @@
       }
       .sci-top {
         display: flex;
+        flex-wrap: wrap; /* Т.122: бейдж, що не вміщується поруч із назвою, — під назвою */
         justify-content: space-between;
         gap: 6px;
         align-items: baseline;
@@ -417,9 +438,16 @@
         color: #e6e9ee;
         font-weight: 600;
       }
+      /* Т.122: назва ділить рядок з бейджем (переноситься в кілька рядків), але не вужча за найдовше
+         слово — не налазить на бейдж; не вміщується й так — бейдж під назвою (аудит PR #437: з flex-basis
+         auto бейдж переїжджав під назву і на ноутбуці, де поруч вміщувався) */
+      .sci-top > .sci-name {
+        flex: 1 1 0;
+        min-width: auto;
+      }
       .sci-top button.sci-toggle {
         flex: 1 1 0;
-        min-width: 0;
+        min-width: auto;
         background: none;
         border: none;
         padding: 0;
