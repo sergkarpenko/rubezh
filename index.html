@@ -1173,13 +1173,28 @@
         #layout.in-battle #battle-stage {
           grid-column: 1;
           grid-row: 1 / -1;
-          min-height: 506px; /* висота плиток дій: нижче вікно прокручує фокусну зону */
-          container-type: size;
+          /* Т.118: мінімум — висота плиток дій у два стовпчики (5 × 58 + 4 × 6); нижче вікно прокручує фокусну зону */
+          min-height: 314px;
+          container: bstage / size;
           justify-content: center;
         }
         #layout.in-battle #battle {
           flex: none;
           width: min(100cqw - 74px, 100cqh, 960px);
+        }
+        /* Т.118 (кандидат 19, варіант А власника): поле нижче за висоту стовпчика плиток
+           (9 × 58 + 8 × 6 = 570 px; межа 554 px — 1024 × 768 з полем 558 px без змін) —
+           плитки у два стовпчики (64 + 6 + 64 = 134 px), поле вписується у висоту без прокрутки */
+        @container bstage (max-height: 553px) {
+          #btoolbar {
+            display: grid;
+            grid-template-columns: repeat(2, 64px);
+            align-content: start;
+          }
+          #layout.in-battle #battle {
+            /* специфічність як у правилі −74px вище, інакше воно виграє (аудит PR #433) */
+            width: min(100cqw - 144px, 100cqh, 960px);
+          }
         }
         #layout.in-battle #bctx {
           grid-column: 2;
