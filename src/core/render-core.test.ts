@@ -41,6 +41,7 @@ import {
   GEO_LAYOUT,
   geoTrailPoints,
   makeBoomAnim,
+  makeDNumAnim,
   makeDeathAnim,
   makeGeoScanAnim,
   makeGeoTrailAnim,
@@ -51,6 +52,9 @@ import {
   pendingAlienMoveStarts,
   pendingDeathStarts,
   shakeOffset,
+  calmAnim,
+  tracerShare,
+  CALM_DUR_K,
   type Anim,
   DISSOLVE_STRIP,
   RECOIL_PX,
@@ -968,5 +972,48 @@ describe('Т.132: бієць на полі і ефекти', () => {
     expect(kept(0.5)).toBeGreaterThan(0);
     expect(kept(0.5)).toBeLessThan(n);
     expect(kept(0.3)).toBeGreaterThanOrEqual(kept(0.6)); // монотонно
+  });
+});
+
+// Т.144 (ADR-0125, рішення власника «А. Спокійно»): «менше руху» — спокійні копії подієвих анімацій
+describe('спокійні анімації за «менше руху» (Т.144)', () => {
+  const u = makeUnit({ id: 's1', side: 'player', pos: { x: 2, y: 0 } });
+  it('calmAnim — копія з прапорцем calm і тривалістю ≈ ½; оригінал не змінюється', () => {
+    const a = makeTracerAnim('player', { x: 0, y: 0 }, { x: 3, y: 0 }, true);
+    const c = calmAnim(a);
+    expect(c).toEqual({ ...a, calm: true, dur: Math.round((TRACER_MS + IMPACT_MS) * CALM_DUR_K) });
+    expect(a.calm).toBeUndefined();
+    expect(a.dur).toBe(TRACER_MS + IMPACT_MS);
+    expect(calmAnim(makeDNumAnim({ x: 0, y: 0 }, 1, false)).dur).toBe(Math.round(DNUM_MS * CALM_DUR_K));
+    expect(calmAnim({ ...makeOwFlashAnim(u), dur: 1 }).dur).toBe(1); // не коротше за 1 мс
+  });
+  it('tracerShare — частка польоту від пропорції: та сама для повної і спокійної копії', () => {
+    const hit = makeTracerAnim('player', { x: 0, y: 0 }, { x: 3, y: 0 }, true);
+    expect(tracerShare(hit)).toBe(TRACER_MS / hit.dur);
+    expect(tracerShare(calmAnim(hit) as typeof hit)).toBe(TRACER_MS / hit.dur);
+    expect(tracerShare(makeTracerAnim('alien', { x: 0, y: 0 }, { x: 3, y: 0 }, false))).toBe(1);
+  });
+  it('спокійний хід — одразу в цілі на будь-якому кадрі', () => {
+    const path = [
+      { x: 0, y: 0 },
+      { x: 1, y: 0 },
+      { x: 2, y: 0 },
+    ];
+    const c = calmAnim(makeMoveAnim(u, path, false)) as ReturnType<typeof makeMoveAnim>;
+    for (const t of [0, 0.3, 1]) expect(moveAnimPos(c, t, 48)).toEqual({ cx: 2 * 48 + 24, cy: 24 });
+    expect(moveAnimPos(makeMoveAnim(u, path, false), 0, 48)).toEqual({ cx: 24, cy: 24 });
+  });
+  it('без тряски: спокійні влучання і вибух не зсувають кадр', () => {
+    const hit = calmAnim(makeTracerAnim('player', { x: 0, y: 0 }, { x: 3, y: 0 }, true));
+    hit.start = 0;
+    const boom = calmAnim(makeBoomAnim({ x: 1, y: 1 }));
+    boom.start = 0;
+    for (const now of [1, hit.dur * 0.8, boom.dur / 3]) {
+      expect(shakeOffset(hit, now)).toEqual({ dx: 0, dy: 0 });
+      expect(shakeOffset(boom, now)).toEqual({ dx: 0, dy: 0 });
+    }
+    const full = makeBoomAnim({ x: 1, y: 1 });
+    full.start = 0;
+    expect(shakeOffset(full, BOOM_MS / 8)).not.toEqual({ dx: 0, dy: 0 }); // повний вибух трясе
   });
 });

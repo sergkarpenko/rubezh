@@ -29,6 +29,7 @@ import {
   dissolveKept,
   recoilPx,
   sparkOffset,
+  tracerShare,
   unitFrameOrigin,
   BOOM_PARTICLES,
   fighterLook,
@@ -44,7 +45,6 @@ import {
   GEO_GRID_COLOR,
   GRID_COLOR,
   NIGHT_BG,
-  TRACER_MS,
   animT,
   boomParticleOffset,
   cellHash,
@@ -921,6 +921,9 @@ const BOOM_SPARK_ALT = '#ff7b2e';
 const DMG_NUM = '#ffb347';
 const HEAL_NUM = '#7fe2a0';
 const DNUM_RISE = 16; // підйом числа за тривалість анімації, px
+const BOOM_CALM_R = 14; // Т.144 (ADR-0125): нерухоме кільце вибуху за «менше руху», px
+const IMPACT_CALM_R = 6; // Т.144: нерухоме кільце влучання, px
+const OW_CALM_R = 8; // Т.144: нерухоме кільце дозору, px
 // Т.132 (ADR-0121): спалах дула, іскри влучання, пил розчинення
 const MUZZLE_FLASH_SHARE = 0.35; // частка польоту кулі зі спалахом дула
 const FLASH_CORE = '#f4fdff'; // світле ядро спалаху
@@ -964,7 +967,7 @@ export function drawAnimFrame(
     ctx.strokeStyle = RADAR_PULSE;
     ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.arc(a.cx, a.cy, 2 + (a.maxR - 2) * t, 0, Math.PI * 2);
+    ctx.arc(a.cx, a.cy, a.calm === true ? a.maxR : 2 + (a.maxR - 2) * t, 0, Math.PI * 2); // Т.144: спокійно — кільце на місці
     ctx.stroke();
     ctx.lineWidth = 1;
     ctx.globalAlpha = 1;
@@ -983,6 +986,16 @@ export function drawAnimFrame(
     );
     for (const o of offsets) {
       const cx = a.cx + o;
+      // Т.144 (ADR-0125): «менше руху» — нерухоме кільце-спалах на краю зони, без розгортки
+      if (a.calm === true) {
+        ctx.globalAlpha = 0.6 * fade;
+        ctx.strokeStyle = RADAR_PULSE;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(cx, a.cy, a.maxR, 0, Math.PI * 2);
+        ctx.stroke();
+        continue;
+      }
       // кільце, що розходиться (спадкоємець пульсу П6.9)
       ctx.globalAlpha = 0.6 * fade;
       ctx.strokeStyle = RADAR_PULSE;
@@ -1056,11 +1069,11 @@ export function drawAnimFrame(
     ctx.shadowColor = IMPACT; // П6.13: свічення спалаху вибуху
     ctx.shadowBlur = IMPACT_GLOW;
     ctx.beginPath();
-    ctx.arc(cx, cy, 4 + 20 * t, 0, Math.PI * 2);
+    ctx.arc(cx, cy, a.calm === true ? BOOM_CALM_R : 4 + 20 * t, 0, Math.PI * 2); // Т.144: спокійно — кільце на місці
     ctx.stroke();
     ctx.shadowBlur = 0;
     ctx.lineWidth = 1;
-    for (let i = 0; i < BOOM_PARTICLES; i++) {
+    for (let i = 0; a.calm !== true && i < BOOM_PARTICLES; i++) {
       const o = boomParticleOffset(a.at, i, t);
       const px = Math.min(Math.max(cx + o.dx * cell, 0), cw - 2);
       const py = Math.min(Math.max(cy + o.dy * cell, 0), ch - 2);
@@ -1081,7 +1094,7 @@ export function drawAnimFrame(
     let x = a.at.x * cell + (cell - w) / 2;
     if (x + w > cw) x = cw - w - 1;
     const base = a.at.y * cell >= h + 1 ? a.at.y * cell - (h + 1) : (a.at.y + 1) * cell + 1;
-    const y = Math.round(base - DNUM_RISE * t); // підйом над ціллю
+    const y = Math.round(base - (a.calm === true ? 0 : DNUM_RISE * t)); // підйом над ціллю; Т.144: спокійно — на місці
     ctx.globalAlpha = 1 - t; // згасання до кінця кадру
     ctx.fillStyle = CHANCE_LABEL_BG;
     ctx.fillRect(x, y, w, h);
@@ -1094,6 +1107,27 @@ export function drawAnimFrame(
   }
   if (a.kind === 'move') {
     const p = moveAnimPos(a, t, cell);
+    // Т.144 (ADR-0125): «менше руху» — без ходьби по клітинках: боєць проявляється в цілі
+    if (a.calm === true) {
+      const first = a.path[0] ?? { x: 0, y: 0 };
+      const last = a.path[a.path.length - 1] ?? first;
+      const dir = Math.sign(last.x - first.x);
+      ctx.globalAlpha = t;
+      drawUnitSprite(ctx, {
+        side: a.side,
+        cx: p.cx,
+        cy: p.cy,
+        r,
+        hp: a.hp,
+        maxHp: a.hpMax,
+        selected: a.selected,
+        overwatch: a.overwatch,
+        ring: unitRing(a.side, a.unitId),
+        flip: dir !== 0 && dir !== (a.side === 'player' ? 1 : -1),
+      });
+      ctx.globalAlpha = 1;
+      return;
+    }
     // П6.12 (ADR-0031): кадри ходьби — з прогресу шляху, детерміновано
     // (2 кадри на клітинку, без RNG); у статиці малюється кадр «стій».
     const frame = Math.floor(t * Math.max(1, a.path.length - 1) * 2) % 2;
@@ -1128,9 +1162,10 @@ export function drawAnimFrame(
     // Фідбек власника 2026-10-22: куля стартує з дулового спалаху кадру fire
     // (якір — MUZZLE_ANCHOR, геометрія та ж, що drawAtlasUnit, з віддачею кадру)
     // — лише з підказкою бойовища; без неї (геосцена) — від центру клітинки.
-    const share = TRACER_MS / a.dur;
+    const share = tracerShare(a);
+    const calm = a.calm === true; // Т.144 (ADR-0125): «менше руху» — лінія пострілу на місці, без віддачі, спалаху дула й іскор
     if (muzzle !== undefined) {
-      const m = muzzlePoint(muzzle.side, muzzle.flip, x0, y0, recoilPx(t, share));
+      const m = muzzlePoint(muzzle.side, muzzle.flip, x0, y0, calm ? 0 : recoilPx(t, share));
       x0 = m.x;
       y0 = m.y;
     }
@@ -1138,6 +1173,18 @@ export function drawAnimFrame(
     if (t < share) {
       // фаза 1: куля летить — відрізок від стрільця до поточного «заголовка»
       const f = t / share;
+      if (calm) {
+        ctx.globalAlpha = 1 - 0.5 * f;
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(x0, y0);
+        ctx.lineTo(x1, y1);
+        ctx.stroke();
+        ctx.lineWidth = 1;
+        ctx.globalAlpha = 1;
+        return;
+      }
       ctx.strokeStyle = color;
       ctx.lineWidth = 2;
       ctx.shadowColor = color; // П6.13: неонове свічення трасера
@@ -1175,17 +1222,34 @@ export function drawAnimFrame(
       ctx.shadowColor = IMPACT; // П6.13: свічення спалаху
       ctx.shadowBlur = IMPACT_GLOW;
       ctx.beginPath();
-      ctx.arc(x1, y1, 3 + 5 * f, 0, Math.PI * 2);
+      ctx.arc(x1, y1, calm ? IMPACT_CALM_R : 3 + 5 * f, 0, Math.PI * 2);
       ctx.stroke();
       ctx.shadowBlur = 0;
       ctx.lineWidth = 1;
-      for (let i = 0; i < SPARKS; i++) {
+      for (let i = 0; !calm && i < SPARKS; i++) {
         const o = sparkOffset(a.to, i, f);
         ctx.fillStyle = i % 2 === 0 ? SPARK_HOT : IMPACT;
         ctx.fillRect(Math.min(Math.max(x1 + o.dx - 1, 0), cw - 3), Math.min(Math.max(y1 + o.dy - 1, 0), ch - 3), 3, 3);
       }
       ctx.globalAlpha = 1;
     }
+    return;
+  }
+  if (a.kind === 'death' && a.calm === true) {
+    // Т.144 (ADR-0125): «менше руху» — загиблий просто згасає, без смуг і частинок
+    ctx.globalAlpha = 1 - t;
+    drawUnitSprite(ctx, {
+      side: a.side,
+      cx: a.at.x * cell + cell / 2,
+      cy: a.at.y * cell + cell / 2,
+      r,
+      hp: 0,
+      maxHp: a.hpMax,
+      selected: false,
+      overwatch: false,
+      pose: 'death',
+    });
+    ctx.globalAlpha = 1;
     return;
   }
   if (a.kind === 'death') {
@@ -1230,7 +1294,7 @@ export function drawAnimFrame(
   ctx.strokeStyle = OW_FLASH;
   ctx.lineWidth = 2;
   ctx.beginPath();
-  ctx.arc(a.at.x * cell + cell / 2, a.at.y * cell + cell / 2, 4 + 6 * t, 0, Math.PI * 2);
+  ctx.arc(a.at.x * cell + cell / 2, a.at.y * cell + cell / 2, a.calm === true ? OW_CALM_R : 4 + 6 * t, 0, Math.PI * 2);
   ctx.stroke();
   ctx.lineWidth = 1;
   ctx.globalAlpha = 1;

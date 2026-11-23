@@ -48,7 +48,7 @@ import { createInput } from './ui/input';
 // пR.3 (ADR-0038): рушій і фабрики анімацій — чиста логіка src/core/render-core.ts;
 // фабрика offscreen-канвасів — реєструється в шарі відображення (src/render.ts).
 import { initPixelSprites, initGeoMap, initGeoTower, initMetroMap, initMetroTiles, initUnitAtlas } from './render';
-import { AnimEngine, geoTrailPoints, makeGeoScanAnim, makeGeoTrailAnim, makeTracerAnim, type Anim } from './core/render-core';
+import { AnimEngine, calmAnim, geoTrailPoints, makeGeoScanAnim, makeGeoTrailAnim, makeTracerAnim, type Anim } from './core/render-core';
 // П5.3 (ADR-0026): партія і слоти збереження — із чистого ядра save.ts.
 // П12.2 (ADR-0065): serializeParty — ще й контрольна точка «незбережених
 // змін» для підтвердження виходу (той самий детермінований стан, без дублів).
@@ -167,6 +167,11 @@ const ambient = createAmbient({
   active: () => partyOnScreen,
   repaint: () => repaintScene(),
 });
+// Т.144 (ADR-0125, рішення власника «А. Спокійно»): за «менше руху» подієві анімації бою і геосцени
+// стають спокійними копіями (без руху, тривалість ≈ ½); медіазапит читається на кожній постановці в чергу
+function motion(anims: readonly Anim[]): Anim[] {
+  return reducedMotionQuery?.matches === true ? anims.map(calmAnim) : [...anims];
+}
 // Перемальовка активної сцени — кадр ambient-циклу і зміна «менше руху» (Т.143, ADR-0124)
 function repaintScene(): void {
   if (party === null) return; // партії немає — 0 перерисовок (стартовий екран П12.2)
@@ -190,7 +195,7 @@ const journalUI = createJournal({
   workshopLog: () => activeParty().workshop.log, // П11.6: події цеху → журнал («База»)
   unitName,
   onGeoEvent: (e) => {
-    if (hasRaf) geoAnim.push(...interceptAnims(e as InterceptEvent));
+    if (hasRaf) geoAnim.push(...motion(interceptAnims(e as InterceptEvent)));
   },
   // П11.7 (ADR-0059): звуки подій бою і геосцени — через drain-контур журналу.
   onBattleSound: (e) => sound.battleEvent(e),
@@ -299,7 +304,7 @@ const battle = createBattleUI(ui, {
     get now() {
       return anim.now;
     },
-    push: (a) => anim.push(...a),
+    push: (a) => anim.push(...motion(a)),
     cancel: () => anim.cancel(),
     queued: () => anim.queued(), // П14.4: хід ШІ відтворюється поверх фінального стану
   },
@@ -358,7 +363,7 @@ const autoBattle = new AutoBattleDriver({
   renderAll,
   binfo: battle.binfo,
   finishBattle: battle.finish,
-  pushAnims: (anims) => anim.push(...anims),
+  pushAnims: (anims) => anim.push(...motion(anims)),
   onStart: () => input.disarm(), // Т.46: зведений постріл чи витратник авто-бій знімає
   hasRaf,
   visibleCells: battle.visibleCells, // П14.4: туман для чисел пошкоджень авто-бою
@@ -542,7 +547,7 @@ function partyTick(): void {
   // ефект (П14.5: сектор + кільця замість кільця П6.9; туман не розкривається).
   if (hasRaf && !geoAnim.busy) {
     const b = p.geo.base;
-    geoAnim.push(makeGeoScanAnim(b.x * GCELL + GCELL / 2, b.y * GCELL + GCELL / 2, (RADAR_RANGE + 0.5) * GCELL));
+    geoAnim.push(...motion([makeGeoScanAnim(b.x * GCELL + GCELL / 2, b.y * GCELL + GCELL / 2, (RADAR_RANGE + 0.5) * GCELL)]));
   }
   if (!gameOver && isBankrupt(p.econ, p.roster, p.campaign.preset)) {
     gameOver = true;
