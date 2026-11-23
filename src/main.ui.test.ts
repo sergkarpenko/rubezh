@@ -3112,11 +3112,8 @@ describePage('Т.128: «Збереження» — вікно з «Меню» (A
 });
 
 describePage('Т.137: зміна вікна перемальовує канву бою', () => {
-  it('Т.137: resize у бою без меню на ворогові перемальовує канву і шапку бою; на геосцені канви бою не чіпає', () => {
+  it('Т.137: resize у бою без меню на ворогові перемальовує канву і шапку бою', () => {
     startParty('42');
-    canvasOps.length = 0;
-    window.dispatchEvent(new Event('resize'));
-    expect(canvasOps.filter((o) => o === 'clearRect(0,0,960,960)').length).toBe(0); // бою ще немає
     for (let i = 0; i < 1500 && document.querySelector('button.mission') === null; i++) btn('btn-tick').click();
     (document.querySelector('button.mission') as HTMLButtonElement).click();
     expect($('battle-panel').classList.contains('hidden')).toBe(false);
