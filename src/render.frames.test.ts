@@ -349,25 +349,25 @@ describe('фідбек власника 2026-10-22: якір дула — тра
   };
 
   it('демон (натив, вліво): старт — дуло фазового різака, лівий край кадру', () => {
-    expect(tracerStart('alien', 5, 3, false)).toEqual([264 - 27, 264 - 9]); // (10,54) → +7, +38
+    expect(tracerStart('alien', 5, 3, false)).toEqual([264 - 31, 264 - 16]); // (4,44) → +3, +31
   });
 
   it('демон (дзеркало, вправо): дуло віддзеркалене до правого краю (x → 96 − x)', () => {
-    expect(tracerStart('alien', 5, 7, true)).toEqual([264 + 27, 264 - 9]); // 86 → +61
+    expect(tracerStart('alien', 5, 7, true)).toEqual([264 + 31, 264 - 16]); // 92 → +65
   });
 
   it('солдат: дуло — правий край кадру fire, на рівні зброї', () => {
-    expect(tracerStart('player', 5, 7, false)).toEqual([264 + 23, 264 - 12]); // (81,50) → +57, +35
+    expect(tracerStart('player', 5, 7, false)).toEqual([264 + 24, 264 - 14]); // (82,47) → +58, +33
   });
 
   it('солдат (дзеркало, вліво): дзеркальне дуло ліворуч', () => {
-    expect(tracerStart('player', 5, 3, true)).toEqual([264 - 23, 264 - 12]); // 15 → +11
+    expect(tracerStart('player', 5, 3, true)).toEqual([264 - 24, 264 - 14]); // 14 → +10
   });
 
   it('muzzlePoint: віддача зсуває дуло назад від погляду', () => {
-    expect(muzzlePoint('player', false, 264, 264, 3)).toEqual({ x: 264 + 23 - 3, y: 264 - 12 });
-    expect(muzzlePoint('alien', false, 264, 264, 3)).toEqual({ x: 264 - 27 + 3, y: 264 - 9 });
-    expect(muzzlePoint('player', true, 264, 264, 3)).toEqual({ x: 264 - 23 + 3, y: 264 - 12 });
+    expect(muzzlePoint('player', false, 264, 264, 3)).toEqual({ x: 264 + 24 - 3, y: 264 - 14 });
+    expect(muzzlePoint('alien', false, 264, 264, 3)).toEqual({ x: 264 - 31 + 3, y: 264 - 16 });
+    expect(muzzlePoint('player', true, 264, 264, 3)).toEqual({ x: 264 - 24 + 3, y: 264 - 14 });
   });
 });
 
@@ -381,7 +381,7 @@ describe('Т.132: спалах дула, віддача, іскри', () => {
     const arcs = early.calls.filter((c) => c.m === 'arc');
     expect(arcs).toHaveLength(2); // ореол і ядро
     // на початку — віддача 3 px: центр спалаху = дуло з віддачею
-    expect((arcs[0]!.args as number[]).slice(0, 2)).toEqual([264 + 23 - 3, 264 - 12]);
+    expect((arcs[0]!.args as number[]).slice(0, 2)).toEqual([264 + 24 - 3, 264 - 14]);
     const late = animCtx();
     drawAnimFrame(late.ctx, a, TRACER_MS * 0.8, 48, 8, 960, 960, { side: 'player', flip: false });
     expect(late.calls.some((c) => c.m === 'arc')).toBe(false);

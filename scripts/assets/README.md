@@ -18,7 +18,8 @@ python3 scripts/assets/metro-step2-convert.py  # з кореня репозит�
 
 | Скрипт | Сирці | Результат |
 | --- | --- | --- |
-| `convert_units.py` | `assets-src/солдат атлас.jpg`, `assets-src/демон атлас.jpg` | `assets/units-atlas.png` 480×192 + звіт `assets-src/units-gemini-report.json` |
+| `convert_units.py` (П14.3; чинний атлас із Т.133 дає `convert_units_t133.py`) | `assets-src/солдат атлас.jpg`, `assets-src/демон атлас.jpg` | `assets/units-atlas.png` 480×192 + звіт `assets-src/units-gemini-report.json` |
+| `convert_units_t133.py` (Т.133, ADR-0122) | `assets-src/t133-soldier-sheet.jpg`, `assets-src/t133-demon-sheet.jpg` (аркуші Gemini на хромакеї; теку сирців можна дати аргументом) | `assets/units-atlas.png` 480×192 з плавною альфою + звіт `units-t133-report.json`; потрібен ще `scipy` |
 | `metro-step2-convert.py` | `assets-src/metro-bg.jpg`, `metro-wall.jpg`, `metro-decor-*.jpg` | `assets/metro-tiles.png` 192×48; контроль якості фону проти JPG-оригіналу |
 
 **Відтворюваність (перевірено 2026-11-10 на `639fd14`):** обидва конвертери з локальних сирців дають атласи, піксель у піксель тотожні закоміченим `assets/units-atlas.png` і `assets/metro-tiles.png`. Байти PNG можуть відрізнятися залежно від версії Pillow — порівнювати пікселі, не файли. `units-gemini-report.json` у цьому каталозі — еталонний звіт конвертації юнітів (PR #241); повторний прогін дає той самий звіт байт у байт.
