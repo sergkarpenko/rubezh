@@ -16,7 +16,17 @@ import { expect, test, type Page } from '@playwright/test';
 import { TICK_MINUTES } from '../src/core/geo';
 import { MISSION_MAP_H, MISSION_MAP_W } from '../src/core/mission';
 import type { Vec2 } from '../src/core/combat';
-import { FIGHTER_COLORS, HP_BAR_Y, RING_DY, RING_RX, cellHash, fighterLook } from '../src/core/render-core';
+import {
+  FIGHTER_COLORS,
+  HP_BAR_Y,
+  PATH_LABEL_CHAR_W,
+  RING_DY,
+  RING_RX,
+  cellHash,
+  fighterLook,
+  pathLabelBox,
+  pathLabelScale,
+} from '../src/core/render-core';
 import { CoreMirror, enemyLine, unitLine } from './mirror';
 
 const SEED = 42;
@@ -46,6 +56,68 @@ async function tap(page: Page, cell: Vec2): Promise<void> {
   await canvas.click({
     position: { x: ((cell.x + 0.5) * box.width) / MISSION_MAP_W, y: ((cell.y + 0.5) * box.height) / MISSION_MAP_H },
   });
+}
+
+// Т.137: прев'ю шляху на пікселях канви — колір лінії і плашка ціни «<число> AP» там, де її ставить
+// pathLabelBox (Т.119: збоку від цілі, розмір × pathLabelScale за масштабом показу канви). Перевірки:
+// центр цілі (коло) — колір шляху; лівий і правий край рамки плашки на її середній висоті — колір
+// шляху (піксель x рамки strokeRect при будь-якій товщині покрито повністю), так само верхній і нижній рядок
+// рамки; два протилежні кути всередині плашки — темне тло; під плашкою немає юнітів. Від шрифту не залежить (текст по центру, кут і краї — поза ним). Масштаб — з clientWidth.
+type PathColor = 'ok' | 'short';
+async function expectPathPreview(
+  page: Page,
+  from: Vec2,
+  path: Vec2[],
+  cost: number,
+  color: PathColor,
+  label: string,
+  units: Vec2[]
+): Promise<void> {
+  const goal = path[path.length - 1]!;
+  const prev = path.length > 1 ? path[path.length - 2]! : from;
+  const text = cost + ' AP';
+  const probe = async (): Promise<string> => {
+    const px = await page.evaluate(() => {
+      const cv = document.getElementById('battle') as HTMLCanvasElement;
+      return cv.clientWidth > 0 ? cv.width / cv.clientWidth : 1;
+    });
+    const k = pathLabelScale(px);
+    const box = pathLabelBox(goal, 48, text.length * PATH_LABEL_CHAR_W * k, 960, k, prev.x > goal.x);
+    const lw = Math.max(1, Math.round(k));
+    const mid = box.y + Math.floor(box.h / 2);
+    // юніти малюються поверх прев'ю — під плашкою їх бути не має (інакше гейт хибно червоний; аудит PR #450)
+    const under = units.filter(
+      (u) =>
+        u.x >= Math.floor(box.x / 48) &&
+        u.x <= Math.floor((box.x + box.w - 1) / 48) &&
+        u.y >= Math.floor(box.y / 48) &&
+        u.y <= Math.floor((box.y + box.h - 1) / 48)
+    );
+    if (under.length > 0) return 'під плашкою юніт: ' + JSON.stringify(under);
+    // чотири сторони рамки — стовпці і рядки strokeRect покрито повністю за будь-якої товщини: місце і розмір
+    // плашки по обох осях (аудит PR #450: лише лівий і правий край не бачили зсуву по вертикалі)
+    const pts = {
+      goal: { x: goal.x * 48 + 24, y: goal.y * 48 + 24 },
+      left: { x: box.x, y: mid },
+      right: { x: box.x + box.w - 1, y: mid },
+      top: { x: box.x + lw + 2, y: box.y },
+      bottom: { x: box.x + lw + 2, y: box.y + box.h - 1 },
+      inner: { x: box.x + lw + 1, y: box.y + lw + 1 },
+      inner2: { x: box.x + box.w - lw - 2, y: box.y + box.h - lw - 2 },
+    };
+    const rgb = await page.evaluate((ps) => {
+      const cx = (document.getElementById('battle') as HTMLCanvasElement).getContext('2d')!;
+      return Object.fromEntries(Object.entries(ps).map(([n, p]) => [n, [...cx.getImageData(p.x, p.y, 1, 1).data.slice(0, 3)]]));
+    }, pts);
+    const isColor = (c: number[]): boolean =>
+      color === 'ok' ? c[1]! - c[0]! > 40 && c[1]! - c[2]! > 25 : c[0]! - c[1]! > 40 && c[0]! - c[2]! > 40;
+    const ok =
+      ['goal', 'left', 'right', 'top', 'bottom'].every((n) => isColor(rgb[n]!)) &&
+      Math.max(...rgb.inner!) < 70 &&
+      Math.max(...rgb.inner2!) < 70;
+    return ok ? 'ok' : JSON.stringify({ k, box, rgb });
+  };
+  await expect.poll(probe, { message: label }).toBe('ok');
 }
 
 // Т.124 (ADR-0115): вигляд набору інтерфейсу — властивості обчисленого стилю, а не пікселі
@@ -888,18 +960,53 @@ test('сценарій приймання ADR-0030: партія → місія 
     const probe = mirror.fogProbe(soldier);
     await tap(page, probe.cell);
     await expect(info).toContainText(probe.hint);
+    // Т.137: шлях, дорожчий за AP, — червоний (лінія, коло цілі і плашка ціни); ходу немає
+    const far = mirror.farOption(soldier);
+    await tap(page, far.cell);
+    await expect(info).toContainText('Не вистачає AP: шлях ' + far.cost + ' проти ' + soldier.ap);
+    await expectPathPreview(
+      page,
+      soldier.pos,
+      far.path,
+      far.cost,
+      'short',
+      'Т.137: червоний шлях і плашка ціни',
+      mirror.state.units.filter((u) => u.alive).map((u) => u.pos)
+    );
     const option = mirror.moveOption(soldier);
     await tap(page, option.cell); // перший тап — прев'ю шляху
     await expect(info).toContainText('Шлях: ' + option.cost + ' AP');
+    await expectPathPreview(
+      page,
+      soldier.pos,
+      option.path,
+      option.cost,
+      'ok',
+      'Т.137: зелений шлях і плашка ціни',
+      mirror.state.units.filter((u) => u.alive).map((u) => u.pos)
+    );
     // Т.44: шлях — лінією на пікселях канви. Зелені (G помітно більший за R і B; колір лінії rgba(127,226,160,0.95)):
     // центр цілі (коло) і середина кожного відрізка від оперативника через клітинки шляху — крім точок під плашкою ціни
-    // (над ціллю, а у верхньому рядку — під нею). Від шрифту не залежить.
+    // (Т.137, аудит PR #450: з Т.119 плашка збоку від цілі — місце з pathLabelBox, з запасом 2 px). Від шрифту не залежить.
     const centers = [soldier.pos, ...option.path].map((c) => ({ x: c.x * 48 + 24, y: c.y * 48 + 24 }));
     const goal = centers[centers.length - 1]!;
-    const underLabel = (p: { x: number; y: number }): boolean => {
-      const top = goal.y - 34 < 2 ? goal.y + 12 : goal.y - 34;
-      return Math.abs(p.x - goal.x) <= 40 && p.y >= top - 2 && p.y <= top + 23;
-    };
+    const shownPx = await page.evaluate(() => {
+      const cv = document.getElementById('battle') as HTMLCanvasElement;
+      return cv.clientWidth > 0 ? cv.width / cv.clientWidth : 1;
+    });
+    const kLabel = pathLabelScale(shownPx);
+    const labelCell = option.path[option.path.length - 1]!;
+    const prevCell = option.path.length > 1 ? option.path[option.path.length - 2]! : soldier.pos;
+    const label = pathLabelBox(
+      labelCell,
+      48,
+      (option.cost + ' AP').length * PATH_LABEL_CHAR_W * kLabel,
+      960,
+      kLabel,
+      prevCell.x > labelCell.x
+    );
+    const underLabel = (p: { x: number; y: number }): boolean =>
+      p.x >= label.x - 2 && p.x <= label.x + label.w + 2 && p.y >= label.y - 2 && p.y <= label.y + label.h + 2;
     const points = [goal];
     for (let i = 1; i < centers.length; i++) {
       const m = { x: (centers[i - 1]!.x + centers[i]!.x) / 2, y: (centers[i - 1]!.y + centers[i]!.y) / 2 };
@@ -915,6 +1022,66 @@ test('сценарій приймання ADR-0030: партія → місія 
         });
       }, points);
     await expect.poll(greenAt, { message: 'Т.44: шлях лінією — точки ' + JSON.stringify(points) }).toEqual(points.map(() => true));
+    // Т.137: зміна вікна одразу перемальовує канву за новим масштабом показу: межа зору (Т.119:
+    // max(2, 1,4 px buffer'а на CSS px)) на телефоні товща. Без кадрів ambient — rAF підмінено, чинний
+    // кадр дограв за 300 мс; курсор — поза канвою до зміни (Esc знімає прев'ю, тож mouseleave не перемальовує),
+    // інакше перемальовку дав би обробник миші, а не resize. Товщина — медіана числа блакитних пікселів
+    // поперек вертикальних відрізків межі (клітинки без юнітів, рядки 2–17)
+    const seenNow = mirror.seen();
+    const occupied = (x: number, y: number): boolean => mirror.state.units.some((u) => u.alive && u.pos.x === x && u.pos.y === y);
+    const edges: Vec2[] = [];
+    for (let y = 2; y < MISSION_MAP_H - 2; y++)
+      for (let x = 1; x < MISSION_MAP_W - 1; x++) {
+        const a = seenNow.has(x - 1 + ',' + y);
+        const b = seenNow.has(x + ',' + y);
+        const rowSame = (dy: number): boolean => seenNow.has(x - 1 + ',' + (y + dy)) === a && seenNow.has(x + ',' + (y + dy)) === b;
+        if (a !== b && rowSame(-1) && rowSame(1) && !occupied(x - 1, y) && !occupied(x, y)) edges.push({ x: x * 48, y: y * 48 + 24 });
+      }
+    expect(edges.length, 'Т.137: вертикальні відрізки межі зору на старті').toBeGreaterThan(2);
+    const borderPx = (): Promise<number> =>
+      page.evaluate((es) => {
+        const cx = (document.getElementById('battle') as HTMLCanvasElement).getContext('2d')!;
+        const counts = es.map((e) => {
+          const d = cx.getImageData(e.x - 10, e.y, 21, 1).data;
+          let n = 0;
+          for (let i = 0; i < 21; i++) if (d[i * 4 + 2]! - d[i * 4]! > 55 && d[i * 4 + 2]! > 120) n++;
+          return n;
+        });
+        counts.sort((p, q) => p - q);
+        return counts[Math.floor(counts.length / 2)]!;
+      }, edges);
+    await page.keyboard.press('Escape');
+    await page.mouse.move(0, 0);
+    const vp = page.viewportSize()!;
+    // заглушка не губить колбеки: ambient тримає хендл кадру і сам цикл не відновить (аудит PR #450) —
+    // після вимірів кожен відкладений колбек іде в справжній rAF
+    await page.evaluate(() => {
+      const w = window as unknown as { t137Raf?: typeof requestAnimationFrame; t137Q?: FrameRequestCallback[] };
+      w.t137Raf = window.requestAnimationFrame;
+      w.t137Q = [];
+      window.requestAnimationFrame = (cb) => {
+        w.t137Q!.push(cb);
+        return 0;
+      };
+    });
+    await page.waitForTimeout(300);
+    const wide = await borderPx();
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect.poll(borderPx, { message: 'Т.137: resize до 390 × 844 — межа зору товща (було ' + wide + ' px)' }).toBeGreaterThan(wide);
+    await page.setViewportSize(vp);
+    await expect.poll(borderPx, { message: 'Т.137: resize назад — межа зору як була' }).toBe(wide);
+    const waiting = await page.evaluate(() => {
+      const w = window as unknown as { t137Raf?: typeof requestAnimationFrame; t137Q?: FrameRequestCallback[] };
+      if (w.t137Raf !== undefined) window.requestAnimationFrame = w.t137Raf;
+      const q = w.t137Q ?? [];
+      for (const cb of q) window.requestAnimationFrame(cb);
+      return q.length;
+    });
+    expect(waiting, 'Т.137: цикл ambient чекав кадру під заглушкою — і знову планується').toBeGreaterThan(0);
+    await tap(page, soldier.pos); // Esc зняв вибір і прев'ю — вибрати знову
+    await expect(unit).toHaveAttribute('aria-label', unitLine(soldier));
+    await tap(page, option.cell);
+    await expect(info).toContainText('Шлях: ' + option.cost + ' AP');
     // Т.45: зведений постріл ховає прев'ю шляху — ті самі точки більше не зелені, наведення на ціль
     // його не повертає і підказку режиму не переписує; Esc знімає режим, тап знову дає прев'ю
     await page.keyboard.press('Digit1');

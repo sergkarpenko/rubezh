@@ -3110,3 +3110,18 @@ describePage('Т.128: «Збереження» — вікно з «Меню» (A
     expect(btn('btn-hire-scientist').querySelectorAll('svg').length).toBe(1);
   });
 });
+
+describePage('Т.137: зміна вікна перемальовує канву бою', () => {
+  it('Т.137: resize у бою без меню на ворогові перемальовує канву і шапку бою', () => {
+    startParty('42');
+    for (let i = 0; i < 1500 && document.querySelector('button.mission') === null; i++) btn('btn-tick').click();
+    (document.querySelector('button.mission') as HTMLButtonElement).click();
+    expect($('battle-panel').classList.contains('hidden')).toBe(false);
+    const turn = $('bctx-turn').textContent;
+    $('bctx-turn').textContent = '—'; // мітка: стрічку бою пише лише renderBattle
+    canvasOps.length = 0;
+    window.dispatchEvent(new Event('resize'));
+    expect($('bctx-turn').textContent).toBe(turn);
+    expect(canvasOps.filter((o) => o === 'clearRect(0,0,960,960)').length).toBe(1); // рівно одна перемальовка кадру
+  });
+});
