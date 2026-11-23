@@ -3165,4 +3165,13 @@ describe('Т.143: «менше руху» змінилось — перемал�
     changes[0]!();
     expect(canvasOps.filter((o) => o === 'clearRect(0,0,960,960)').length).toBe(1);
   });
+  it('Т.145: та сама подія change оновлює рядок-пояснення під тумблером «Анімація» у вікні «Налаштування»', () => {
+    const note = $('settings-motion-note');
+    matches = true;
+    changes[0]!();
+    expect(note.classList.contains('hidden')).toBe(false);
+    matches = false;
+    changes[0]!();
+    expect(note.classList.contains('hidden')).toBe(true);
+  });
 });

@@ -31,7 +31,13 @@ export interface SettingsAmbient {
 export interface SettingsDeps {
   sound: SettingsSound;
   ambient: SettingsAmbient; // П14.8: секція «Анімація»
+  // Т.145 (рішення власника «А»): системне «менше руху» (ADR-0124/0125) — рядок-пояснення під тумблером;
+  // без залежності рядка немає. Тумблер і підпис кнопки — вибір гравця, без змін
+  reducedMotion?: () => boolean;
 }
+
+/** Т.145: рядок під тумблером «Анімація» за системного «менше руху» (текст — рішення власника). */
+export const MOTION_NOTE = 'Увімкнено системне «менше руху»: живі ефекти вимкнено, анімації бою — спокійні.';
 
 export interface Settings {
   open(): void; // показати (синхронізує секції з актуальним станом)
@@ -53,6 +59,9 @@ function settingsHtml(): string {
     '<h3>Анімація</h3>' +
     '<p>Живі ефекти: стартовий екран, свічення стін, радар. Зміни зберігаються у браузері одразу, поза сейвом.</p>' +
     '<button id="settings-ambient">Анімація: увімк</button>' +
+    '<p id="settings-motion-note" class="hidden">' +
+    MOTION_NOTE +
+    '</p>' +
     '<div class="dialog-actions">' +
     '<button id="settings-close">Закрити</button>' +
     '</div>' +
@@ -65,10 +74,12 @@ export function createSettings(deps: SettingsDeps): Settings {
   dialog.innerHTML = settingsHtml();
   const soundBtn = el<HTMLButtonElement>('settings-sound');
   const ambientBtn = el<HTMLButtonElement>('settings-ambient');
+  const motionNote = el('settings-motion-note');
 
   function render(): void {
     soundBtn.textContent = deps.sound.enabled() ? 'Звук: увімк' : 'Звук: вимк';
     ambientBtn.textContent = deps.ambient.enabled() ? 'Анімація: увімк' : 'Анімація: вимк';
+    motionNote.classList.toggle('hidden', deps.reducedMotion?.() !== true); // Т.145
   }
 
   function open(): void {

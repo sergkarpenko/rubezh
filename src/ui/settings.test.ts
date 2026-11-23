@@ -10,7 +10,7 @@ import { createSound, SOUND_KEY, type SoundStore } from './audio';
 // П14.8 (ADR-0073): тумблер «Анімація» — справжній ambient-модуль (єдине
 // джерело стану, патерн звуку); jsdom без rAF — typeof-гейт no-op.
 import { AMBIENT_KEY, createAmbient, type AmbientStore } from './ambient';
-import { createSettings, type SettingsAmbient, type SettingsSound } from './settings';
+import { createSettings, MOTION_NOTE, type SettingsAmbient, type SettingsSound } from './settings';
 
 // Скелет — той самий id, що й в index.html (контент генерує модуль).
 const SKELETON = '<section id="settings-dialog" class="hidden"></section>';
@@ -248,5 +248,39 @@ describe('П14.8 (ADR-0073): секція «Анімація» — тумбле�
     settings.close();
     expect(rafCalls).toBe(0); // тумблер ambient не чіпали — цикл не заплановано
     ambient.enabled(); // стан читається без кадрів
+  });
+});
+
+describe('Т.145: рядок-пояснення під тумблером «Анімація» за системного «менше руху»', () => {
+  const note = (): HTMLElement => document.getElementById('settings-motion-note')!;
+
+  it('«менше руху» — рядок видно, текст власника; підпис кнопки — вибір гравця', () => {
+    const settings = createSettings({ sound: mockSound(true), ambient: mockAmbient(true), reducedMotion: () => true });
+    settings.open();
+    expect(note().classList.contains('hidden')).toBe(false);
+    expect(note().textContent).toBe(MOTION_NOTE);
+    expect(MOTION_NOTE).toBe('Увімкнено системне «менше руху»: живі ефекти вимкнено, анімації бою — спокійні.');
+    expect(btn('settings-ambient').textContent).toBe('Анімація: увімк');
+  });
+
+  it('без «менше руху» і без залежності — рядка не видно', () => {
+    createSettings({ sound: mockSound(true), ambient: mockAmbient(true), reducedMotion: () => false }).open();
+    expect(note().classList.contains('hidden')).toBe(true);
+    createSettings({ sound: mockSound(true), ambient: mockAmbient(true) }).open();
+    expect(note().classList.contains('hidden')).toBe(true);
+  });
+
+  it("render() при відкритому вікні — рядок з'являється і зникає за станом системи", () => {
+    let reduce = false;
+    const settings = createSettings({ sound: mockSound(true), ambient: mockAmbient(false), reducedMotion: () => reduce });
+    settings.open();
+    expect(note().classList.contains('hidden')).toBe(true);
+    reduce = true;
+    settings.render();
+    expect(note().classList.contains('hidden')).toBe(false);
+    expect(btn('settings-ambient').textContent).toBe('Анімація: вимк');
+    reduce = false;
+    settings.render();
+    expect(note().classList.contains('hidden')).toBe(true);
   });
 });

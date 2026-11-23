@@ -1621,6 +1621,17 @@ test('Т.61: екран перемоги і рядок-пояснення ста
     expect(await look()).toEqual({ ...on, ...kit });
     await page.emulateMedia({ reducedMotion: 'reduce' });
     expect(await look(), 'системне «менше руху»').toEqual({ ...still, ...kit });
+    // Т.145 (рішення власника «А»): рядок-пояснення під тумблером лише за «менше руху»; підпис кнопки — вибір гравця
+    const note = page.locator('#settings-motion-note');
+    await page.locator('#btn-start-settings').click();
+    await expect(page.locator('#settings-ambient')).toHaveText('Анімація: увімк');
+    await expect(note).toBeVisible();
+    await expect(note).toHaveText('Увімкнено системне «менше руху»: живі ефекти вимкнено, анімації бою — спокійні.');
+    await page.emulateMedia({ reducedMotion: null });
+    await expect(note, 'знято «менше руху» при відкритому вікні').toBeHidden();
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await expect(note, 'увімкнено «менше руху» при відкритому вікні').toBeVisible();
+    await page.locator('#settings-close').click();
     await page.emulateMedia({ reducedMotion: null });
     await page.setViewportSize({ width: 1440, height: 900 });
   });
