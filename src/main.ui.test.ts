@@ -30,6 +30,8 @@ import type { AnimEngine } from './core/render-core';
 
 const $ = (id: string): HTMLElement => document.getElementById(id) as HTMLElement;
 const btn = (id: string): HTMLButtonElement => $(id) as HTMLButtonElement;
+// Т.130: вибраний боєць — підпис вибраної картки смуги загону (замість плашки «Юніт»)
+const unitLabel = (): string => document.querySelector('#bsquad .sq-card.sel')?.getAttribute('aria-label') ?? 'не вибраний';
 
 // П13.3 (ADR-0067): авто-бій — покрокове відтворення; фейк-таймери прокручують
 // паузи між діями політика-ядра-за-гравця, поки бій не дійде до результату
@@ -995,7 +997,7 @@ describeScenario('бойова фокусна зона (П6.3, ADR-0027)', (step
     expect($('bctx-kind').textContent).toBe('розвідник');
     expect($('bctx-time').textContent).toBe($('clock').textContent + ' · заморожено');
     expect($('bctx-turn').textContent).toBe('хід 1 · загін');
-    expect($('bctx-unit').textContent).toBe('не вибраний');
+    expect(unitLabel()).toBe('не вибраний');
     // ADR-0027: у бою колонка стану приглушена й неактивна
     expect($('status').classList.contains('dimmed')).toBe(true);
     // ADR-0026: збереження лише на геосцені — кнопки disabled у бою
@@ -1007,8 +1009,8 @@ describeScenario('бойова фокусна зона (П6.3, ADR-0027)', (step
   step('вибір юніта: стрічка показує активний юніт HP/AP', () => {
     const cv = $('battle') as HTMLCanvasElement;
     cv.dispatchEvent(new MouseEvent('click', { clientX: 2 * 48 + 24, clientY: 2 * 48 + 24 }));
-    expect($('bctx-unit').textContent).toContain('HP 10/10');
-    expect($('bctx-unit').textContent).toContain('AP 10/10');
+    expect(unitLabel()).toContain('HP 10/10');
+    expect(unitLabel()).toContain('AP 10/10');
     expect($('binfo').textContent).toContain('HP 10/10');
   });
 
@@ -1045,26 +1047,26 @@ describeScenario('керування: гарячі клавіші і тач-па
     expect(found).toBe(true);
     (document.querySelector('button.mission') as HTMLButtonElement).click();
     tap(2, 2); // зона висадки — свій солдат
-    expect($('bctx-unit').textContent).toContain('AP 10/10');
+    expect(unitLabel()).toContain('AP 10/10');
   });
 
   step('тап-тап: перший тап — лише прев’ю (AP лишається), повторний у ту саму клітинку — рух', () => {
     tap(3, 3); // перший тап — прев'ю шляху (обхід сусідів по висадці: 6 клітинок)
     expect($('binfo').textContent).toContain('Шлях: 6 AP');
     expect($('binfo').textContent).toContain('повторний тап');
-    expect($('bctx-unit').textContent).toContain('AP 10/10'); // ходу ще не було
+    expect(unitLabel()).toContain('AP 10/10'); // ходу ще не було
     tap(3, 3); // повторний тап у ту саму клітинку — хід
     expect($('binfo').textContent).toContain('рух');
-    expect($('bctx-unit').textContent).toContain('AP 4/10');
+    expect(unitLabel()).toContain('AP 4/10');
   });
 
   step('тап у ІНШУ клітинку — нове прев’ю; шлях без AP: повторний тап ходу не робить', () => {
     tap(2, 2); // шлях 6 AP проти 4 — прев'ю «червоними крапками» (AP не вистачає)
     expect($('binfo').textContent).toContain('Не вистачає AP: шлях 6 проти 4');
-    expect($('bctx-unit').textContent).toContain('AP 4/10'); // ходу не було
+    expect(unitLabel()).toContain('AP 4/10'); // ходу не було
     tap(2, 2); // повторний тап у ту саму клітинку — ходу все одно немає
     expect($('binfo').textContent).toContain('Не вистачає AP: шлях 6 проти 4');
-    expect($('bctx-unit').textContent).toContain('AP 4/10');
+    expect(unitLabel()).toContain('AP 4/10');
   });
 
   step('гарячі клавіші 1/2/3: зводять режим пострілу, кнопка підсвічена (armed)', () => {
@@ -1132,7 +1134,7 @@ describeScenario('П6.14: UX прицілювання — обведення ц�
     tap(3, 2); // вибір солдата у зоні висадки
     tap(4, 2); // перший тап — прев'ю шляху (1 AP)
     tap(4, 2); // повторний тап — хід
-    expect($('bctx-unit').textContent).toContain('AP 9/10');
+    expect(unitLabel()).toContain('AP 9/10');
     // Т.44 (рішення власника): синій пунктир зони висадки лишився, червоного пунктиру старту демонів немає
     expect(canvasOps.includes('set:strokeStyle=rgba(110,168,255,0.5)')).toBe(true);
     expect(canvasOps.some((o) => /^strokeRect\(\d+,\d+,43,43\)$/.test(o))).toBe(true);
@@ -1164,24 +1166,24 @@ describeScenario('П6.14: UX прицілювання — обведення ц�
     tap(16, 2); // перший тап по цілі — прев'ю шансу
     expect($('binfo').textContent).toContain('повторний тап у цю саму ціль');
     expect($('binfo').textContent).toContain('~');
-    expect($('bctx-unit').textContent).toContain('AP 9/10'); // пострілу ще не було
+    expect(unitLabel()).toContain('AP 9/10'); // пострілу ще не було
     // фідбек не ламає тап-тап: тап в ІНШУ клітинку — прев'ю руху, режим знято
     tap(5, 2);
     expect($('binfo').textContent).toContain('Шлях: 1 AP');
     expect(btn('btn-snap').classList.contains('armed')).toBe(false);
     btn('btn-snap').click();
     tap(16, 2); // знову перший тап — прев'ю (ходу/пострілу ще немає)
-    expect($('bctx-unit').textContent).toContain('AP 9/10');
+    expect(unitLabel()).toContain('AP 9/10');
     tap(16, 2); // повторний тап у ту саму ціль — постріл
     expect($('binfo').textContent).toContain('Олена вистрілила'); // Т.7: рід дієслова — за іменем
-    expect($('bctx-unit').textContent).toContain('AP 6/10');
+    expect(unitLabel()).toContain('AP 6/10');
   });
 
   step('кнопки без достатку AP — приглушені з причиною «не вистачає AP» (постріл → AP 3)', () => {
     btn('btn-snap').click();
     tap(16, 2);
     tap(16, 2); // другий постріл: AP 6 − 3 = 3
-    expect($('bctx-unit').textContent).toContain('AP 3/10');
+    expect(unitLabel()).toContain('AP 3/10');
     expect(btn('btn-aimed').disabled).toBe(true); // 5 AP > 3
     expect(btn('btn-aimed').title).toContain('не вистачає AP (потрібно 5)');
     expect(btn('btn-auto').disabled).toBe(true); // 4 AP > 3
@@ -1206,7 +1208,7 @@ describeScenario('П6.14: UX прицілювання — обведення ц�
       btn('btn-auto-battle').click(); // «Стоп»
       expect(armed('btn-auto-battle')).toBe(false);
       expect(armed('btn-snap')).toBe(false);
-      expect($('bctx-unit').textContent).toContain('AP '); // оперативник досі вибраний
+      expect(unitLabel()).toContain('AP '); // оперативник досі вибраний
     } finally {
       vi.useRealTimers();
     }

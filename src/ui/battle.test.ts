@@ -33,8 +33,8 @@ function setupDom(): void {
         <span><b id="bctx-kind">—</b></span>
         <span><b id="bctx-time">—</b></span>
         <span><b id="bctx-turn">—</b></span>
-        <span><b id="bctx-unit">—</b></span>
       </div>
+      <div id="bsquad"></div>
       <div id="bresult"></div>
       <canvas id="battle" width="960" height="960"></canvas>
       <div id="binfo">—</div>
@@ -187,13 +187,30 @@ describe('battle: флоу місії (запуск/закриття/завер�
     expect(f.deps.journal).toHaveBeenCalledWith(expect.stringContaining('✗'), 'lose');
   });
 
+  it('Т.130: смуга загону не перемальовується без змін (клік між натисканням і відпусканням не губиться)', () => {
+    const f = makeFixture();
+    f.battle.launch(firstTarget(f));
+    f.battle.renderBattle();
+    const first = document.querySelector('#bsquad .sq-card');
+    f.battle.renderBattle();
+    expect(document.querySelector('#bsquad .sq-card')).toBe(first);
+    const s = f.ui.mission!.state.units.find((u) => u.side === 'player')!;
+    f.ui.selectedId = s.id;
+    f.battle.renderBattle();
+    const sel = document.querySelector<HTMLElement>('#bsquad .sq-card.sel')!;
+    expect(sel.dataset.unit).toBe(s.id);
+    expect(sel).not.toBe(first);
+  });
+
   it('renderBattle: контекст-стрічка бою і кнопки керування (хід гравця)', () => {
     const f = makeFixture();
     f.battle.launch(firstTarget(f));
     f.battle.renderBattle();
     expect(document.getElementById('bctx-kind')!.textContent).toBe(f.ui.mission!.briefing.kind);
     expect(document.getElementById('bctx-turn')!.textContent).toContain('хід 1');
-    expect(document.getElementById('bctx-unit')!.textContent).toBe('не вибраний');
+    // Т.130: смуга загону — картка на кожного бійця, без вибору — жодна не вибрана
+    expect(document.querySelectorAll('#bsquad .sq-card')).toHaveLength(f.ui.mission!.state.units.filter((u) => u.side === 'player').length);
+    expect(document.querySelectorAll('#bsquad .sq-card.sel')).toHaveLength(0);
     expect((document.getElementById('btn-end') as HTMLButtonElement).disabled).toBe(false);
     expect((document.getElementById('btn-auto-battle') as HTMLButtonElement).disabled).toBe(false);
     expect(f.deps.drainBattle).toHaveBeenCalled();

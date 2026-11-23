@@ -197,6 +197,7 @@ async function expectPhoneBattle(page: Page, label: string, minField: number, po
     expect(m.fieldH, label + ': поле вище за вікно').toBeLessThanOrEqual(m.win);
     expect(m.tbH, label + ': плитки вищі за вікно').toBeLessThanOrEqual(m.win);
   }
+  await expectSquadStrip(page, label, false); // Т.130: ряд над полем
 }
 
 // Т.32: бій у межах вікна — поле, плитки дій, підказка і журнал видно без
@@ -228,6 +229,7 @@ async function expectBattleFits(page: Page, label: string, minField: number): Pr
   expect(m.overlap, label + ': плитки дій накладаються на поле').toBeGreaterThanOrEqual(0);
   expect(m.side, label + ': плитки дій накладаються на підказку').toBeGreaterThanOrEqual(0);
   expect(m.log, label + ': у журналі менше двох рядків').toBeGreaterThanOrEqual(40);
+  await expectSquadStrip(page, label, true); // Т.130
 }
 
 // Стан загону на сторінці = стан у дзеркалі: вибираємо кожного живого
@@ -244,28 +246,63 @@ async function endTurnOnPage(page: Page, mirror: CoreMirror, skip: 'tap' | 'spac
   await expect(page.locator('#btn-end')).toBeDisabled();
   await expect(page.locator('#bctx-turn')).toHaveText('хід демонів Розриву');
   await expect(page.locator('#binfo')).toHaveText('');
-  const unitBefore = await page.locator('#bctx-unit').textContent();
+  const selCard = page.locator('#bsquad .sq-card.sel');
+  const unitBefore = await page.evaluate(() => document.querySelector('#bsquad .sq-card.sel')?.getAttribute('aria-label') ?? null);
   if (skip === 'tap') await tap(page, mirror.squad()[0].pos);
   if (skip === 'space') await page.keyboard.press('Space');
   // без пропуску плашка тримається ≥ 1 с; пропуск дає підсумок одразу
   await expect(plate).toHaveClass('done', skip === null ? {} : { timeout: 500 });
-  await expect(page.locator('#bctx-unit')).toHaveText(unitBefore ?? '');
+  if (unitBefore === null) await expect(selCard).toHaveCount(0);
+  else await expect(selCard).toHaveAttribute('aria-label', unitBefore);
   await expect(plate).toHaveText(mirror.turnSummary);
   return actions;
 }
 
+// Т.130: вибір бійця — тапом на полі, карткою смуги загону і клавішею Q (наступний по колу);
+// вибрана картка несе рядок юніта (колишня плашка «Юніт»)
 async function expectSquad(page: Page, mirror: CoreMirror): Promise<void> {
-  for (const soldier of mirror.squad()) {
+  const squad = mirror.squad();
+  const sel = page.locator('#bsquad .sq-card.sel');
+  for (const soldier of squad) {
     await tap(page, soldier.pos);
-    await expect(page.locator('#bctx-unit')).toHaveText(unitLine(soldier));
+    await expect(sel).toHaveAttribute('aria-label', unitLine(soldier));
+    await page.locator(`#bsquad .sq-card[data-unit="${soldier.id}"]`).click();
+    await expect(sel).toHaveAttribute('aria-label', unitLine(soldier));
   }
+  await page.keyboard.press('KeyQ'); // з останнього — по колу на першого
+  await expect(sel).toHaveAttribute('aria-label', unitLine(squad[0]));
+  await expect(sel).toHaveCount(1);
+}
+
+// Т.130: смуга загону — стовпчик праворуч від поля (сітка бою) або ряд над полем (телефон, вужче за 900 px);
+// картки у вікні, ім'я не обрізане
+async function expectSquadStrip(page: Page, label: string, column: boolean): Promise<void> {
+  const m = await page.evaluate(() => {
+    const field = document.getElementById('battle')!.getBoundingClientRect();
+    const cards = [...document.querySelectorAll<HTMLElement>('#bsquad .sq-card')].map((c) => {
+      const r = c.getBoundingClientRect();
+      const n = c.querySelector<HTMLElement>('.sq-name')!;
+      return { left: r.left, right: r.right, top: r.top, bottom: r.bottom, cut: n.scrollWidth - n.clientWidth };
+    });
+    return { field: { left: field.left, right: field.right, top: field.top }, cards, winW: window.innerWidth };
+  });
+  expect(m.cards.length, label + ': смуги загону немає').toBeGreaterThan(0);
+  for (const c of m.cards) {
+    expect(c.right, label + ': картка за правим краєм').toBeLessThanOrEqual(m.winW);
+    expect(c.cut, label + ': ім’я на картці обрізане').toBeLessThanOrEqual(0);
+    if (column) expect(c.left, label + ': картка не праворуч від поля').toBeGreaterThan(m.field.right);
+    else expect(c.bottom, label + ': картка не над полем').toBeLessThanOrEqual(m.field.top);
+  }
+  const tops = new Set(m.cards.map((c) => Math.round(c.top)));
+  // стовпчик — кожна картка своїм рядком; ряд — один рядок (загін до трьох)
+  expect(tops.size, label + ': розкладка карток').toBe(column ? m.cards.length : 1);
 }
 
 test('сценарій приймання ADR-0030: партія → місія → бій до результату → геосцена → сейв/лоад', async ({ page }) => {
   const errors = watchErrors(page);
   const mirror = new CoreMirror(SEED, PRESET);
   const clock = page.locator('#clock');
-  const unit = page.locator('#bctx-unit');
+  const unit = page.locator('#bsquad .sq-card.sel'); // Т.130: вибрана картка смуги загону
   const info = page.locator('#binfo');
 
   await test.step('старт: стартовий екран → нова партія', async () => {
@@ -636,7 +673,7 @@ test('сценарій приймання ADR-0030: партія → місія 
     await expect(page.locator('#bctx-kind')).toHaveText(mission.briefing.kind);
     await expect(page.locator('#next-step')).toBeHidden(); // Т.43: у бою рядка «Наступний крок» немає
     await expect(page.locator('#bctx-turn')).toHaveText('хід 1 · загін');
-    await expect(unit).toHaveText('не вибраний');
+    await expect(unit).toHaveCount(0);
     // Т.32: розкладка бою на трьох розмірах вікна (журнал збоку / смугою)
     // Т.33: ціна в AP і клавіша — у кутках плиток дій
     // Т.71: плитка «Евакуація» — 2 AP, клавіша V
@@ -749,7 +786,7 @@ test('сценарій приймання ADR-0030: партія → місія 
       });
     const before = await greens();
     await tap(page, soldier.pos);
-    await expect(unit).toHaveText(unitLine(soldier));
+    await expect(unit).toHaveAttribute('aria-label', unitLine(soldier));
     const reach = mirror.reach(soldier);
     expect(reach.size, 'Т.44: зона першого оперативника на старті (сід сценарію, 10 AP)').toBeGreaterThan(40);
     const drawn = async (): Promise<string> => {
@@ -820,17 +857,17 @@ test('сценарій приймання ADR-0030: партія → місія 
     await tap(page, option.cell); // повторний тап — хід
     mirror.move(soldier, option);
     await expect(info).toContainText(soldier.name + ': рух.');
-    await expect(unit).toHaveText(unitLine(soldier));
+    await expect(unit).toHaveAttribute('aria-label', unitLine(soldier));
   });
 
   await test.step('бій: дозор → кінець ходу (хід демонів)', async () => {
     const guard = mirror.squad()[1];
     await tap(page, guard.pos);
-    await expect(unit).toHaveText(unitLine(guard));
+    await expect(unit).toHaveAttribute('aria-label', unitLine(guard));
     await page.locator('#btn-ow').click();
     mirror.overwatch(guard);
     await expect(info).toContainText(guard.name + ' у дозорі');
-    await expect(unit).toHaveText(unitLine(guard));
+    await expect(unit).toHaveAttribute('aria-label', unitLine(guard));
 
     const actions = await endTurnOnPage(page, mirror, 'tap');
     expect(mirror.outcome(), 'бій скінчився в перший хід демонів').toBe('триває');
@@ -851,7 +888,7 @@ test('сценарій приймання ADR-0030: партія → місія 
     }
     if (shot === null) throw new Error('За ' + MAX_TURNS_TO_TARGET + ' ходів жоден демон не вийшов на лінію вогню');
     await tap(page, shot.shooter.pos);
-    await expect(unit).toHaveText(unitLine(shot.shooter));
+    await expect(unit).toHaveAttribute('aria-label', unitLine(shot.shooter));
     await page.locator('#btn-snap').click();
     await expect(info).toContainText('~' + shot.chancePct + '%');
     await tap(page, shot.target.pos); // перший тап — шанс влучання
@@ -859,7 +896,7 @@ test('сценарій приймання ADR-0030: партія → місія 
     await tap(page, shot.target.pos); // повторний тап — постріл
     mirror.shoot(shot, 'snap');
     if (mirror.outcome() !== 'триває') return;
-    await expect(unit).toHaveText(unitLine(shot.shooter));
+    await expect(unit).toHaveAttribute('aria-label', unitLine(shot.shooter));
     if (shot.target.alive && mirror.sees(shot.target)) {
       await tap(page, shot.target.pos); // без зведеного режиму — характеристики демона: HP після пострілу
       await expect(info).toContainText(enemyLine(shot.target));

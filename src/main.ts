@@ -763,6 +763,11 @@ if (typeof document !== 'undefined') {
     else battle.dismissTurnPlate();
   });
   bc.addEventListener('click', input.battleCanvasClick);
+  // Т.130: смуга загону — клік по картці бійця (делегування: картки перемальовує renderBattle)
+  el('bsquad').addEventListener('click', (ev) => {
+    const card = (ev.target as Element).closest<HTMLElement>('.sq-card');
+    if (card?.dataset.unit !== undefined) input.squadCardClick(card.dataset.unit);
+  });
   // Т.117 (аудит): підпис «Клік / пробіл / Esc — пропустити» стоїть на самій плашці — клік по ній теж пропускає
   el('bturn').addEventListener('click', () => {
     if (!autoBattle.busy) battle.skipAlienTurn();

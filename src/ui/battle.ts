@@ -54,6 +54,7 @@ import { el } from './dom';
 import { BCELL } from './grid';
 import { type LogCat } from './journal';
 import { byGender, ticksText } from './text';
+import { squadCards, squadOrder, squadStripHtml } from './squad-strip';
 import {
   resultCardHtml,
   summarizeAlienTurn,
@@ -335,6 +336,24 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
     deps.anim.push(animsFromEvents(mission.state.log.slice(prevLen), mission.state.units, visibleCells()));
   }
 
+  // Т.130 (кандидат 127): смуга загону — картки замість плашки «Юніт». Порядок — висадки
+  // (запам'ятовується на місію); HTML міняється лише за зміни стану: перемальовка кадру
+  // (ambient, анімації) не замінює кнопку між натисканням і відпусканням — клік не губиться.
+  const squadOrders = new WeakMap<Mission, string[]>();
+  let squadHtml = '';
+  function renderSquadStrip(mission: Mission): void {
+    let order = squadOrders.get(mission);
+    if (order === undefined) {
+      order = squadOrder(mission.state);
+      squadOrders.set(mission, order);
+    }
+    const html = squadStripHtml(squadCards(mission.state, order, ui.selectedId));
+    const box = el('bsquad');
+    if (html === squadHtml && box.childElementCount > 0) return;
+    squadHtml = html;
+    box.innerHTML = html;
+  }
+
   function renderBattle(): void {
     const mission = ui.mission;
     if (!mission) return;
@@ -350,10 +369,7 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
       plate?.acting === true
         ? 'хід демонів Розриву'
         : 'хід ' + mission.state.turn + ' · ' + (mission.state.activeSide === 'player' ? 'загін' : 'демони Розриву');
-    const selCtx = selectedUnit();
-    el('bctx-unit').textContent = selCtx
-      ? selCtx.name + ': HP ' + selCtx.hp + '/' + selCtx.maxHp + ' · AP ' + selCtx.ap + '/' + selCtx.maxAp
-      : 'не вибраний';
+    renderSquadStrip(mission);
     const cv = el<HTMLCanvasElement>('battle');
     const ctx = cv.getContext('2d');
     if (!ctx) return;
@@ -692,7 +708,7 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
     ui.aimCell = null; // П6.14
     deps.resetBattleLog();
     deps.journal('▶ Місія: загін висаджено біля зонду Розриву ' + ufoId, '', 'battle');
-    binfo('Ваш хід: клікніть свого оперативника (синє коло), потім клітинку — прев’ю шляху; повторний клік у ту саму клітинку — хід.');
+    binfo('Ваш хід: виберіть бійця — на полі або карткою загону, потім клітинку — прев’ю шляху; повторний клік у ту саму клітинку — хід.');
     deps.renderAll();
   }
 
