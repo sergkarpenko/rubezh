@@ -698,10 +698,11 @@ export const FIGHTER_COLORS = ['#8ee35b', '#5b9bff', '#f5e050', '#ff8a5c', '#b58
 export const ALIEN_RING = '#ff2e88'; // кільце ворогів — пурпур Розриву (ADR-0064)
 export const HELMET_SHAPES = 3;
 // Геометрія кільця під ногами (src/render.ts і гейт e2e — одне місце правди):
-// еліпс 28 × 10 px, центр нижче центру клітинки — між нижніми дужками вибору.
-export const RING_RX = 14;
-export const RING_RY = 5;
-export const RING_DY = 15;
+// еліпс 34 × 12 px, як на аркуші, який схвалив власник (Т.129); центр нижче
+// центру клітинки, нижні дужки рамки вибору малюються поверх кільця.
+export const RING_RX = 17;
+export const RING_RY = 6;
+export const RING_DY = 16;
 
 export interface FighterLook {
   index: number; // порядковий номер у ростері від 0

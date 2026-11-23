@@ -1462,8 +1462,14 @@ describe('Т.129: кільце кольору бійця під ногами', (
     expect(unitRing('alien', 's1')).toBe(ALIEN_RING);
   });
 
-  it('кільце в межах клітинки і між нижніми дужками вибору (не перетинає їх)', () => {
+  it('кільце в межах клітинки; рамка вибору — поверх кільця', () => {
     expect(RING_DY + RING_RY).toBeLessThanOrEqual(CELL / 2 - 1);
-    expect(RING_RX).toBeLessThan(16 - 1); // дужки — по кутах ±16 px від центру
+    expect(RING_RX).toBeLessThanOrEqual(CELL / 2 - 1);
+    const { ctx, calls } = mockCtx();
+    drawSoldierSprite(ctx, soldier({ ring: FIGHTER_COLORS[0], selected: true }));
+    const iE = calls.findIndex((c) => c.m === 'ellipse');
+    const iBracket = calls.map((c) => c.m).lastIndexOf('stroke');
+    expect(iE).toBeGreaterThanOrEqual(0);
+    expect(iBracket).toBeGreaterThan(iE + 1); // друга лінія після кільця — дужки
   });
 });

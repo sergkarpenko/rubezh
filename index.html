@@ -523,13 +523,15 @@
       }
       .soldier {
         display: flex;
-        align-items: center;
         gap: 10px;
         padding: 3px 0;
         font-variant-numeric: tabular-nums;
       }
       /* Т.129 (ADR-0118): аватар «шолом» у рядку ростера */
-      .soldier .avatar {
+      #roster .soldier {
+        align-items: center;
+      }
+      #roster .soldier .avatar {
         flex: none;
         margin-right: -4px;
       }
