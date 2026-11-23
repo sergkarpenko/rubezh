@@ -275,6 +275,7 @@ const ui: BattleUIState = {
   hoverAp: 0,
   tapCell: null, // ADR-0027 (П6.4): клітинка першого тапу — повторний тап у неї робить хід
   aimCell: null, // П6.14: клітинка цілі під наведенням/першим тапом у зведеному режимі
+  menuId: null, // Т.131
 };
 
 // пR.2 (ADR-0037): бойовище і флоу бою (П6.3–П6.16) — модуль src/ui/battle.ts;
@@ -772,6 +773,16 @@ if (typeof document !== 'undefined') {
     if (battle.skipAlienTurn()) return;
     battle.dismissTurnPlate();
     input.squadCardClick(card.dataset.unit);
+  });
+  // Т.131: меню на ворогові — кнопка дії (делегування: HTML картки міняє renderBattle)
+  el('benemy').addEventListener('click', (ev) => {
+    const b = (ev.target as Element).closest<HTMLButtonElement>('button[data-act]');
+    if (b === null || b.disabled || b.dataset.act === undefined || autoBattle.busy) return;
+    input.enemyMenuAction(b.dataset.act);
+  });
+  // Т.131: зміна вікна (поворот планшета) — меню на ворогові стає біля демона на новому полі
+  window.addEventListener('resize', () => {
+    if (ui.menuId !== null && ui.mission !== null) battle.renderBattle();
   });
   // Т.117 (аудит): підпис «Клік / пробіл / Esc — пропустити» стоїть на самій плашці — клік по ній теж пропускає
   el('bturn').addEventListener('click', () => {

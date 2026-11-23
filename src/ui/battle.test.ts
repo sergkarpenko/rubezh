@@ -35,6 +35,7 @@ function setupDom(): void {
         <span><b id="bctx-turn">—</b></span>
       </div>
       <div id="bsquad"></div>
+      <div id="benemy" class="hidden"></div>
       <div id="bresult"></div>
       <canvas id="battle" width="960" height="960"></canvas>
       <div id="binfo">—</div>
@@ -65,6 +66,7 @@ function makeFixture(over: Partial<BattleDeps> = {}): Fixture {
     hoverAp: 0,
     tapCell: null,
     aimCell: null,
+    menuId: null, // Т.131
   };
   const deps: BattleDeps = {
     getParty: () => party,

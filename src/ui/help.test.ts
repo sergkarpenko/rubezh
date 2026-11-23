@@ -63,7 +63,8 @@ describe('П9.1: екран «Як грати» — контент з конст
     expect(text).toContain('110 (розвідник) / 170 (збирач)');
     // Керування: тулбар дій (П13.2) + тап-тап + гарячі клавіші 1/2/3/O/M/G/V/E/Esc (урок П11.9)
     expect(text).toContain('плитки тулбара збоку');
-    expect(text).toContain('повторний тап у ту саму клітинку — хід');
+    expect(text).toContain('повторний тап — хід');
+    expect(text).toContain('тап по демону — меню пострілів'); // Т.131
     expect(text).toContain('1');
     expect(text).toContain('O');
     expect(text).toContain('гель');

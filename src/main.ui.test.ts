@@ -181,12 +181,14 @@ async function mountPage(): Promise<void> {
   // Обробники main.ts на document і window живуть довше за розмітку — записуємо їх, щоб зняти
   // перед наступним блоком (інакше старий модуль відповідав би на клавіші поруч із новим).
   const targets: EventTarget[] = [document, window];
-  const spies = targets.map((t) =>
-    vi.spyOn(t, 'addEventListener').mockImplementation(function (this: EventTarget, type, fn, opts) {
+  const spies = targets.map((t) => {
+    // Т.131: власний метод цілі — EventTarget.prototype не приймає window jsdom (слухач resize у main.ts)
+    const own = t.addEventListener.bind(t);
+    return vi.spyOn(t, 'addEventListener').mockImplementation(function (this: EventTarget, type, fn, opts) {
       if (fn) pageListeners.push([t, type, fn, opts]);
-      EventTarget.prototype.addEventListener.call(t, type, fn, opts);
-    })
-  );
+      own(type, fn, opts);
+    });
+  });
   try {
     vi.resetModules();
     // Імпортуємо main.ts ПІСЛЯ розмітки: на рівні модуля він прив'язує обробники
@@ -1161,9 +1163,14 @@ describeScenario('П6.14: UX прицілювання — обведення ц�
 
   step('тап без режиму — підказка; тап-тап пострілу: перший тап — шанс (AP не змінюється), другий — постріл', () => {
     keydown('Escape', 'Escape'); // зняти режим
-    tap(16, 2); // прибулець без зведеного режиму
-    expect($('binfo').textContent).toContain('Виберіть режим пострілу');
-    btn('btn-snap').click(); // зведено
+    tap(16, 2); // прибулець без зведеного режиму — Т.131: меню на ворогові
+    expect($('benemy').classList.contains('hidden')).toBe(false);
+    expect($('benemy').textContent).toContain('Швидкий3 AP · ~');
+    tap(16, 2); // повторний тап по тому самому демону — меню закрито
+    expect($('benemy').classList.contains('hidden')).toBe(true);
+    tap(16, 2);
+    btn('btn-snap').click(); // зведено; Т.131: плитка закриває меню
+    expect($('benemy').classList.contains('hidden')).toBe(true);
     tap(16, 2); // перший тап по цілі — прев'ю шансу
     expect($('binfo').textContent).toContain('повторний тап у цю саму ціль');
     expect($('binfo').textContent).toContain('~');
@@ -1181,10 +1188,12 @@ describeScenario('П6.14: UX прицілювання — обведення ц�
   });
 
   step('кнопки без достатку AP — приглушені з причиною «не вистачає AP» (постріл → AP 3)', () => {
-    btn('btn-snap').click();
+    // Т.131: другий постріл — кнопкою меню на ворогові (стріляє одразу): AP 6 − 3 = 3
     tap(16, 2);
-    tap(16, 2); // другий постріл: AP 6 − 3 = 3
+    document.querySelector<HTMLButtonElement>('#benemy [data-act="snap"]')!.click();
     expect(unitLabel()).toContain('AP 3/10');
+    expect($('binfo').textContent).toContain('Олена вистрілила (швидкий)');
+    expect($('benemy').classList.contains('hidden')).toBe(true);
     expect(btn('btn-aimed').disabled).toBe(true); // 5 AP > 3
     expect(btn('btn-aimed').title).toContain('не вистачає AP (потрібно 5)');
     expect(btn('btn-auto').disabled).toBe(true); // 4 AP > 3

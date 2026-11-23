@@ -377,6 +377,92 @@
         display: flex;
         gap: 10px;
         align-items: flex-start;
+        position: relative; /* Т.131: якір меню на ворогові */
+      }
+      /* Т.131 (кандидат 128, прототип дизайн-сесії Т.125): меню на ворогові — пурпурова рамка,
+         скляне тло, кнопки набору Т.124 рядками; тач — кнопка ≥ 40 px заввишки */
+      #benemy {
+        position: absolute;
+        z-index: 3;
+        width: 224px;
+        box-sizing: border-box;
+        padding: 8px;
+        border: 1px solid #ff2e88;
+        border-radius: 10px;
+        background: rgba(14, 20, 36, 0.94);
+        box-shadow: 0 0 14px rgba(255, 46, 136, 0.45);
+        color: #e6f0ff;
+        font-size: 12px;
+        line-height: 15px;
+      }
+      #benemy.hidden {
+        display: none;
+      }
+      /* аудит PR #444: мале поле, демон у центрі — без рядків характеристик (вони в #binfo) */
+      #benemy.compact .em-hp,
+      #benemy.compact .em-line {
+        display: none;
+      }
+      #benemy.compact .em-acts {
+        margin-top: 4px;
+      }
+      #benemy .em-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 6px;
+        font-size: 13px;
+      }
+      #benemy .em-name {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        color: #ff8cc0;
+      }
+      #benemy .em-hpn {
+        flex: none;
+      }
+      #benemy .em-hp {
+        height: 5px;
+        margin: 4px 0 5px;
+        border-radius: 3px;
+        background: #2a3147;
+        overflow: hidden;
+      }
+      #benemy .em-hp i {
+        display: block;
+        height: 100%;
+      }
+      #benemy .em-line {
+        color: #b8c6e0;
+      }
+      #benemy .em-hint {
+        margin-top: 4px;
+        color: #e6f0ff;
+      }
+      #benemy .em-acts {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 4px;
+        margin-top: 6px;
+      }
+      #benemy .em-acts button {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        justify-content: center;
+        min-width: 0;
+        min-height: 40px;
+        padding: 3px 7px;
+        text-align: left;
+        line-height: 15px;
+      }
+      #benemy .em-meta {
+        font-size: 11px;
+        color: #9fe8ff;
+        white-space: nowrap;
+      }
+      #benemy button:disabled .em-meta {
+        color: #ffb3b3;
       }
       #battle {
         width: 100%;
@@ -2074,6 +2160,8 @@
           <!-- П13.2 (ADR-0066): тулбар дій збоку (генерує src/ui/toolbar.ts); нижня смуга #bcontrols вилучена -->
           <div id="battle-stage">
             <canvas id="battle" width="960" height="960"></canvas>
+            <!-- Т.131 (кандидат 128): меню на ворогові — картка поверх поля біля демона (src/ui/enemy-menu.ts) -->
+            <div id="benemy" class="hidden" role="dialog" aria-label="Демон Розриву"></div>
             <div id="btoolbar"></div>
           </div>
           <div id="binfo">—</div>
