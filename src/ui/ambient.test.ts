@@ -370,12 +370,40 @@ describe('П14.8: бюджет — константи шару відображ�
 });
 
 describe('П14.8: малювальник бою — wall-pulse + hp-glow (перелік П14.8)', () => {
-  it('стіни: пульс ціанового канту — strokeRect на кожній стіні у межах клітинки', () => {
+  it('стіни: пульс ціанового канту — обвідка маси стін одним контуром, на стику сусідніх лінії немає (Т.146)', () => {
     const { ctx, ops } = mockCtx();
     paintBattleAmbient(ctx, battleScene([cell(0, 0, true), cell(1, 0, true), cell(2, 0, false)], []), 0);
-    const frames = ops.filter((o) => o.startsWith('strokeRect'));
-    expect(frames).toEqual(['strokeRect(1.5,1.5,45,45)', 'strokeRect(49.5,1.5,45,45)']);
+    const path = ops.filter((o) => /^(beginPath|moveTo|lineTo|stroke)\(/.test(o));
+    // лінія 1 px усередині краю маси 96 × 48 (зсув 0,5); вертикалі x = 48 (стик) немає
+    expect(path).toEqual([
+      'beginPath()',
+      'moveTo(0.5,0)',
+      'lineTo(0.5,48)',
+      'moveTo(0,47.5)',
+      'lineTo(48,47.5)',
+      'moveTo(0,0.5)',
+      'lineTo(48,0.5)',
+      'moveTo(95.5,0)',
+      'lineTo(95.5,48)',
+      'moveTo(48,47.5)',
+      'lineTo(96,47.5)',
+      'moveTo(48,0.5)',
+      'lineTo(96,0.5)',
+      'stroke()',
+    ]);
+    expect(ops.some((o) => o.startsWith('strokeRect'))).toBe(false);
     expect(ops.some((o) => o === 'set:strokeStyle=rgba(0,229,255,' + wallPulseAlpha(0).toFixed(3) + ')')).toBe(true);
+  });
+
+  it('стіни «Г»: увігнутий кут — вертикаль подовжено на 1 px до горизонталі сусідки (Т.146)', () => {
+    const { ctx, ops } = mockCtx();
+    // (0,0), (1,0), (1,1): увігнутий кут у вузлі (1,1) — ліва сторона (1,1) іде вгору до низу (0,0)
+    paintBattleAmbient(ctx, battleScene([cell(0, 0, true), cell(1, 0, true), cell(1, 1, true)], []), 0);
+    const i = ops.indexOf('moveTo(48.5,47)');
+    expect(i).toBeGreaterThan(0);
+    expect(ops[i + 1]).toBe('lineTo(48.5,96)');
+    expect(ops).toContain('moveTo(0,47.5)'); // низ (0,0) — горизонталь, з якою сходиться
+    expect(ops).toContain('lineTo(48,47.5)');
   });
 
   it('без стін і без поранених — 0 Canvas-викликів (здоровий бій не підсвічений)', () => {
@@ -409,7 +437,7 @@ describe('П14.8: малювальник бою — wall-pulse + hp-glow (пер
     const { ctx, ops } = mockCtx();
     const many = Array.from({ length: 10 }, (_, i) => unit(i, 2, 1, 10));
     paintBattleAmbient(ctx, battleScene([cell(0, 0, true)], many), 0);
-    const wall = ops.filter((o) => o.startsWith('strokeRect')).length; // 1 ефект wall-pulse
+    const wall = ops.filter((o) => o === 'stroke()').length; // 1 ефект wall-pulse
     const glows = ops.filter((o) => o.startsWith('fillRect')).length; // решта бюджету — hp-glow
     expect(wall).toBe(1);
     expect(wall + glows).toBe(AMBIENT_MAX_EFFECTS); // бюджет кадра вичерпано

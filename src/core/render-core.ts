@@ -214,7 +214,7 @@ export function zoneOutlineSegments(keys: ReadonlySet<string>): ZoneEdge[] {
 // не враховується. Координати джерела — px тайла (кол. 0 атласа), dx/dy — зсув чверті
 // в частках клітинки.
 export const WALL_FACE_Y0 = 8 / 48; // перший рядок верхньої грані під кантом
-export const WALL_FACE_Y1 = 24 / 48; // половина тайла: середина верхньої грані
+export const WALL_FACE_Y1 = 24 / 48; // половина тайла (межа верхніх і нижніх чвертей)
 export interface WallQuad {
   sx: number;
   sy: number;
