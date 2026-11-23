@@ -8,6 +8,7 @@
 
 import { describe, expect, it } from 'vitest';
 import {
+  ALIEN_RING,
   FIGHTER_COLORS,
   HELMET_SHAPES,
   fighterLook,
@@ -1094,5 +1095,48 @@ describe('Т.146: wallQuads — стик сусідніх стін (ADR-0127)', 
   it('масштаб тайла: межі — частки сторони (тайл 96 px — удвічі)', () => {
     const qs = wallQuads(of(['5,5', '6,5', '5,6']), 5, 5, 96)!;
     expect(at(qs, 0.5, 0.5)).toEqual({ sx: 24, sy: 16, sw: 48, sh: 32, dx: 0.5, dy: 0.5 });
+  });
+});
+
+// Т.147: живі мутанти прицільного прогону Stryker по render-core.ts у коді Т.119–Т.146 —
+// межі умов, які тримали лише сусідні гілки. Еквівалентні мутанти — у записі Т.147 (docs/workflow.md).
+describe('Т.147: межі гілок render-core (живі мутанти Т.119–Т.146)', () => {
+  it('pathLabelBox: рівно 2 px до краю канви — бік ще вміщується', () => {
+    // клітинка 40, k = 1: відступ 2, ширина плашки ceil(26 + 10) = 36
+    expect(pathLabelBox({ x: 1, y: 0 }, 40, 26, 400, 1, true).x).toBe(2); // ліворуч: 40 − 2 − 36 = 2
+    expect(pathLabelBox({ x: 0, y: 0 }, 40, 26, 80, 1).x).toBe(42); // праворуч: 42 + 36 = 80 − 2
+  });
+  it('moveAnimPos: старт не з (0, 0), шлях з однієї клітинки, t поза 0..1', () => {
+    const path = [
+      { x: 2, y: 3 },
+      { x: 3, y: 3 },
+    ];
+    const a = makeMoveAnim(unit('s1', 'player', 2, 3), path, false);
+    const start = { cx: 2 * 26 + 13, cy: 3 * 26 + 13 };
+    expect(moveAnimPos(a, 0, 26)).toEqual(start);
+    expect(moveAnimPos(a, -0.5, 26)).toEqual(start);
+    expect(moveAnimPos(a, 1.5, 26)).toEqual({ cx: 3 * 26 + 13, cy: 3 * 26 + 13 }); // не далі за ціль
+    const one = makeMoveAnim(unit('s1', 'player', 2, 3), [{ x: 2, y: 3 }], false);
+    for (const t of [0, 0.5, 1]) expect(moveAnimPos(one, t, 26)).toEqual(start);
+  });
+  it('fighterLook: id лише цілком «s<число>» — інакше перший колір', () => {
+    expect(fighterLook('xs3').index).toBe(0);
+    expect(fighterLook('s3x').index).toBe(0);
+    expect(fighterLook('s3').index).toBe(2);
+  });
+  it('ALIEN_RING — колір #rrggbb, відмінний від кольорів бійців', () => {
+    expect(ALIEN_RING).toMatch(/^#[0-9a-f]{6}$/);
+    expect(FIGHTER_COLORS as readonly string[]).not.toContain(ALIEN_RING);
+  });
+  it('recoilPx: рівно чверть польоту — уже 1 px; частка ≤ 0 — без віддачі', () => {
+    expect(recoilPx(0.25, 1)).toBe(1);
+    expect(recoilPx(0.24, 1)).toBe(RECOIL_PX);
+    expect(recoilPx(0.1, -0.5)).toBe(0);
+    expect(recoilPx(0.1, 0)).toBe(0);
+  });
+  it('dissolveKept: смуга лишається, поки t не перейшов її поріг (поріг = t — ще видно)', () => {
+    // смуга 1: поріг (37 % 11) / 11 = 4/11
+    expect(dissolveKept(1, 4 / 11)).toBe(true);
+    expect(dissolveKept(1, 4 / 11 + 1e-9)).toBe(false);
   });
 });
