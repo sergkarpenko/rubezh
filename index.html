@@ -1803,6 +1803,11 @@
           grid-row: 5;
           margin: 0;
           font-size: 13px;
+          /* Т.130 (аудит PR #443): картки загону в колонці — у низьких вікнах довга підказка не розтягує
+             панель (поле росло, фокусна зона прокручувалась), а прокручується сама */
+          min-height: 0;
+          contain: size; /* висота — лише від рядка сітки (1fr), не від тексту */
+          overflow-y: auto;
         }
       }
       /* Т.32: широке вікно — журнал у бою на всю висоту на місці колонки вузла */
@@ -1886,6 +1891,10 @@
           display: grid;
           grid-template-columns: repeat(2, 64px);
           align-content: start;
+        }
+        /* Т.130 (аудит PR #443): альбомний телефон — теж лише значок вибулого, як до 599 px */
+        #bsquad .sq-st-txt {
+          display: none;
         }
         body:has(#layout.in-battle) header#topbar {
           position: static;
@@ -2060,7 +2069,7 @@
             <span class="chip">Хід: <b id="bctx-turn">—</b></span>
           </div>
           <!-- Т.130 (кандидат 127): смуга загону — картки бійців (src/ui/squad-strip.ts); клік вибирає бійця -->
-          <div id="bsquad" aria-label="Загін"></div>
+          <div id="bsquad" role="group" aria-label="Загін"></div>
           <div id="bresult"></div>
           <!-- П13.2 (ADR-0066): тулбар дій збоку (генерує src/ui/toolbar.ts); нижня смуга #bcontrols вилучена -->
           <div id="battle-stage">

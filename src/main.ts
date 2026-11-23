@@ -766,7 +766,12 @@ if (typeof document !== 'undefined') {
   // Т.130: смуга загону — клік по картці бійця (делегування: картки перемальовує renderBattle)
   el('bsquad').addEventListener('click', (ev) => {
     const card = (ev.target as Element).closest<HTMLElement>('.sq-card');
-    if (card?.dataset.unit !== undefined) input.squadCardClick(card.dataset.unit);
+    if (card?.dataset.unit === undefined) return;
+    // як клік по полю (аудит PR #443): під час плашки «діють» — лише пропуск, інакше підсумок ходу демонів прибирається
+    if (autoBattle.busy) return;
+    if (battle.skipAlienTurn()) return;
+    battle.dismissTurnPlate();
+    input.squadCardClick(card.dataset.unit);
   });
   // Т.117 (аудит): підпис «Клік / пробіл / Esc — пропустити» стоїть на самій плашці — клік по ній теж пропускає
   el('bturn').addEventListener('click', () => {

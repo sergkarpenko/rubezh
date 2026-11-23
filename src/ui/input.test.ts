@@ -1053,6 +1053,16 @@ describe('Т.130: смуга загону — клік по картці і кл
     expect(f.binfo()).toContain(s0!.name);
   });
 
+  it('утримана Q і Q з Ctrl / Alt / Meta бійця не перемикають (аудит PR #443)', () => {
+    const f = makeFixture();
+    launchMission(f);
+    for (const mod of [{ repeat: true }, { ctrlKey: true }, { altKey: true }, { metaKey: true }])
+      f.input.onKeyDown({ code: 'KeyQ', key: 'q', ...mod } as unknown as KeyboardEvent);
+    expect(f.ui.selectedId).toBeNull();
+    q(f);
+    expect(f.ui.selectedId).toBe(own(f)[0]!.id);
+  });
+
   it('Q під час авто-бою — нічого', () => {
     const f = makeFixture(true);
     launchMission(f);

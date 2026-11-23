@@ -709,9 +709,10 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
     else if (ev.code === 'KeyG') armGrenade();
     else if (ev.code === 'KeyV')
       evacuateSelected(); // Т.71 (ADR-0075)
-    else if (ev.code === 'KeyQ')
-      nextFighter(); // Т.130
-    else if (ev.code === 'KeyE') endPlayerTurn();
+    else if (ev.code === 'KeyQ') {
+      // Т.130 (аудит PR #443): утримана Q і Ctrl/Alt/Meta+Q бійця не перемикають (урок Т.117)
+      if (!ev.repeat && !ev.ctrlKey && !ev.altKey && !ev.metaKey) nextFighter();
+    } else if (ev.code === 'KeyE') endPlayerTurn();
     else if (ev.key === 'Escape') cancelSelection();
   }
 

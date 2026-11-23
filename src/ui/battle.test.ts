@@ -200,6 +200,13 @@ describe('battle: флоу місії (запуск/закриття/завер�
     const sel = document.querySelector<HTMLElement>('#bsquad .sq-card.sel')!;
     expect(sel.dataset.unit).toBe(s.id);
     expect(sel).not.toBe(first);
+    // аудит PR #443: фокус клавіатури на картці після перемальовки — на ту саму картку
+    sel.focus();
+    f.ui.selectedId = null;
+    f.battle.renderBattle();
+    const again = document.querySelector<HTMLElement>('#bsquad .sq-card[data-unit="' + s.id + '"]')!;
+    expect(again).not.toBe(sel);
+    expect(document.activeElement).toBe(again);
   });
 
   it('renderBattle: контекст-стрічка бою і кнопки керування (хід гравця)', () => {

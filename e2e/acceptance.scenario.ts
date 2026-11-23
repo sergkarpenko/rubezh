@@ -263,13 +263,20 @@ async function endTurnOnPage(page: Page, mirror: CoreMirror, skip: 'tap' | 'spac
 async function expectSquad(page: Page, mirror: CoreMirror): Promise<void> {
   const squad = mirror.squad();
   const sel = page.locator('#bsquad .sq-card.sel');
-  for (const soldier of squad) {
+  // аудит PR #443: картка — іншого бійця, ніж щойно вибраний тапом (інакше поломка кліку не видна)
+  for (const [i, soldier] of squad.entries()) {
     await tap(page, soldier.pos);
     await expect(sel).toHaveAttribute('aria-label', unitLine(soldier));
-    await page.locator(`#bsquad .sq-card[data-unit="${soldier.id}"]`).click();
-    await expect(sel).toHaveAttribute('aria-label', unitLine(soldier));
+    const other = squad[(i + 1) % squad.length];
+    await page.locator(`#bsquad .sq-card[data-unit="${other.id}"]`).click();
+    await expect(sel).toHaveAttribute('aria-label', unitLine(other));
   }
-  await page.keyboard.press('KeyQ'); // з останнього — по колу на першого
+  // Q — з першого на наступного і з останнього по колу на першого
+  await tap(page, squad[0].pos);
+  await page.keyboard.press('KeyQ');
+  await expect(sel).toHaveAttribute('aria-label', unitLine(squad[1 % squad.length]));
+  await tap(page, squad[squad.length - 1].pos);
+  await page.keyboard.press('KeyQ');
   await expect(sel).toHaveAttribute('aria-label', unitLine(squad[0]));
   await expect(sel).toHaveCount(1);
 }
@@ -747,6 +754,7 @@ test('сценарій приймання ADR-0030: партія → місія 
       [1024, 600, 380],
       [1366, 600, 480],
       [900, 700, 390], // ширина контейнера < висота + 144: поле обмежене шириною (аудит PR #433)
+      [1100, 540, 320], // Т.130 (аудит PR #443): картки загону в колонці не розтягують низьку панель
     ] as const) {
       await page.setViewportSize({ width, height });
       await expectBattleFits(page, `${width} × ${height}`, minField);

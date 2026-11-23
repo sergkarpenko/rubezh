@@ -351,7 +351,10 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
     const box = el('bsquad');
     if (html === squadHtml && box.childElementCount > 0) return;
     squadHtml = html;
+    // аудит PR #443: фокус на картці (клавіатура) після заміни кнопки — на ту саму картку
+    const focused = box.contains(document.activeElement) ? (document.activeElement as HTMLElement).dataset.unit : undefined;
     box.innerHTML = html;
+    if (focused !== undefined) box.querySelector<HTMLElement>('[data-unit="' + focused + '"]')?.focus();
   }
 
   function renderBattle(): void {
@@ -360,7 +363,7 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
     deps.drainBattle();
     renderTurnPlate();
     // ADR-0027 (П6.3): контекст-стрічка бою — тип місії, заморожений час,
-    // чий хід, активний юніт HP/AP. Час геосцени стоїть (ADR-0026: місія
+    // чий хід (активний юніт HP/AP — з Т.130 у картках смуги загону). Час геосцени стоїть (ADR-0026: місія
     // не переривається) — показуємо його як «заморожено».
     el('bctx-kind').textContent = mission.briefing.kind;
     el('bctx-time').textContent = geoClock(deps.getParty().geo) + ' · заморожено';
