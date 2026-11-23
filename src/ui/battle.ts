@@ -48,7 +48,7 @@ import {
   pendingDeathStarts,
   recoilPx,
   shakeOffset,
-  TRACER_MS,
+  tracerShare,
   type Anim,
   type TerrainCell,
 } from '../core/render-core';
@@ -454,9 +454,11 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
       );
       if (shooter !== undefined) firingId = shooter.id;
     }
-    // Т.132 (ADR-0121): віддача стрільця — перші кадри польоту кулі
+    // Т.132 (ADR-0121): віддача стрільця — перші кадри польоту кулі; Т.144 (ADR-0125): «менше руху» — без віддачі
     const recoil =
-      activeAnim !== null && activeAnim.kind === 'tracer' ? recoilPx(animT(activeAnim, deps.anim.now), TRACER_MS / activeAnim.dur) : 0;
+      activeAnim !== null && activeAnim.kind === 'tracer' && activeAnim.calm !== true
+        ? recoilPx(animT(activeAnim, deps.anim.now), tracerShare(activeAnim))
+        : 0;
 
     // П14.4 (фідбек прев'ю): ходи демонів у черзі ще не відтворені —
     // статичний прохід не малює їх у фінальних клітинках до початку їхньої

@@ -261,9 +261,16 @@ export const BOOM_SHAKE_PX = 4; // тряска вибуху — ×2 від по
 export const GEO_TRAIL_MS = 600; // хвіст перехоплення: згасання лінії останніх позицій
 export const GEO_TRAIL_POINTS = 8; // останніх позицій польоту винищувача (≈4 тіки)
 
+// Т.144 (ADR-0125, рішення власника «А. Спокійно»): системне «менше руху» —
+// подієва анімація без руху: прапорець calm ставить calmAnim; тривалість ≈ ½.
+export interface CalmFlag {
+  calm?: boolean;
+}
+export const CALM_DUR_K = 0.5;
+
 // Один елемент черги анімацій. start — мітка часу початку відтворення
 // (призначає рушій на першому кадрі; null — ще не починалось).
-export interface MoveAnim {
+export interface MoveAnim extends CalmFlag {
   kind: 'move';
   unitId: string;
   side: Side;
@@ -275,7 +282,7 @@ export interface MoveAnim {
   dur: number;
   start: number | null;
 }
-export interface TracerAnim {
+export interface TracerAnim extends CalmFlag {
   kind: 'tracer';
   side: Side; // сторона стрільця — колір трасера
   from: Vec2;
@@ -284,7 +291,7 @@ export interface TracerAnim {
   dur: number; // TRACER_MS (+ IMPACT_MS при влучанні)
   start: number | null;
 }
-export interface DeathAnim {
+export interface DeathAnim extends CalmFlag {
   kind: 'death';
   unitId: string; // фікс фідбеку валідації: юніт очікує відтворення — статичний прохід тримає його на полі
   side: Side;
@@ -293,7 +300,7 @@ export interface DeathAnim {
   dur: number;
   start: number | null;
 }
-export interface OwFlashAnim {
+export interface OwFlashAnim extends CalmFlag {
   kind: 'owflash';
   side: Side;
   at: Vec2;
@@ -303,7 +310,7 @@ export interface OwFlashAnim {
 // П6.9 (ADR-0029): пульс радара геосцени — кільце, що розходиться від бази
 // до краю зони виявлення і гасне. Суто візуальний: не читає ні НЛО, ні geo.rng;
 // невиявлені НЛО не показуються і не анімуються (туман — ADR-0006/0029).
-export interface GeoPulseAnim {
+export interface GeoPulseAnim extends CalmFlag {
   kind: 'gpulse';
   cx: number; // центр бази в пікселях buffer'а
   cy: number;
@@ -320,13 +327,13 @@ export type Anim = MoveAnim | TracerAnim | DeathAnim | OwFlashAnim | GeoPulseAni
 // малює шар відображення — дзеркало прев'ю гранати у battle.ts); DNum —
 // число над ціллю: підйом і згасання за прогресом кадру (пошкодження —
 // бурштин, зцілення — зелений, ADR-0064).
-export interface BoomAnim {
+export interface BoomAnim extends CalmFlag {
   kind: 'boom';
   at: Vec2; // епіцентр вибуху
   dur: number;
   start: number | null;
 }
-export interface DNumAnim {
+export interface DNumAnim extends CalmFlag {
   kind: 'dnum';
   at: Vec2; // клітинка цілі
   amount: number; // N пошкодження або зцілення
@@ -339,7 +346,7 @@ export interface DNumAnim {
 // обертається сектор-розгортка і розходяться кільця, що гаснуть. Подієво
 // (пульс у черзі на тік часу, coalesce за busy — патерн П6.9), без вічного
 // циклу (ADR-0029); невиявлені НЛО не підсвічуються (туман — ADR-0006/0032).
-export interface GeoScanAnim {
+export interface GeoScanAnim extends CalmFlag {
   kind: 'gscan';
   cx: number; // центр бази в пікселях buffer'а
   cy: number;
@@ -351,7 +358,7 @@ export interface GeoScanAnim {
 // винищувача (джерело — події intercept_move у журналі, лог лише читається),
 // що згасає за прогресом; малюється лише в кадрах анімаційного шару
 // (idle → 0, ADR-0029). points — клітинкові координати, старша → новіша.
-export interface GeoTrailAnim {
+export interface GeoTrailAnim extends CalmFlag {
   kind: 'gtrail';
   points: Vec2[];
   dur: number;
@@ -430,15 +437,26 @@ export function animT(a: Anim, now: number): number {
   return Math.min(1, Math.max(0, (now - a.start) / a.dur));
 }
 
+// Т.144 (ADR-0125): спокійна копія анімації — той самий кадр без руху (хід — поява в цілі,
+// без тряски, віддачі, іскор, розльоту, підйому числа, розгортки), тривалість ≈ ½.
+export function calmAnim(a: Anim): Anim {
+  return { ...a, calm: true, dur: Math.max(1, Math.round(a.dur * CALM_DUR_K)) };
+}
+// Частка польоту кулі в тривалості трасера — від пропорції, а не від dur (спокійна копія коротша)
+export function tracerShare(a: TracerAnim): number {
+  return a.hit ? TRACER_MS / (TRACER_MS + IMPACT_MS) : 1;
+}
+
 // Позиція рухомого юніта на кадрі: інтерполяція вздовж ламаної шляху (клітинки → px).
 export function moveAnimPos(a: MoveAnim, t: number, cell: number): { cx: number; cy: number } {
   const pts = a.path;
-  if (t <= 0 || pts.length < 2) return { cx: pts[0].x * cell + cell / 2, cy: pts[0].y * cell + cell / 2 };
-  if (t >= 1) {
+  const k = a.calm === true ? 1 : t; // Т.144: спокійний хід — одразу в цілі (поява згасанням малює render.ts)
+  if (k <= 0 || pts.length < 2) return { cx: pts[0].x * cell + cell / 2, cy: pts[0].y * cell + cell / 2 };
+  if (k >= 1) {
     const last = pts[pts.length - 1];
     return { cx: last.x * cell + cell / 2, cy: last.y * cell + cell / 2 };
   }
-  const prog = t * (pts.length - 1);
+  const prog = k * (pts.length - 1);
   const i = Math.min(Math.floor(prog), pts.length - 2);
   const f = prog - i;
   const x = pts[i].x + (pts[i + 1].x - pts[i].x) * f;
@@ -456,7 +474,7 @@ export function moveAnimPos(a: MoveAnim, t: number, cell: number): { cx: number;
 // CSS-тлом — оголений край непомітний. Промах не трясе.
 export const SHAKE_PX = 2; // максимальна амплітуда (легка тряска)
 export function shakeOffset(a: Anim | null, now: number): { dx: number; dy: number } {
-  if (a === null || a.start === null) return { dx: 0, dy: 0 };
+  if (a === null || a.start === null || a.calm === true) return { dx: 0, dy: 0 }; // Т.144: спокійно — без тряски
   if (a.kind === 'boom') {
     const t = animT(a, now);
     if (t <= 0 || t >= 1) return { dx: 0, dy: 0 }; // лише кадри вибуху
@@ -465,7 +483,7 @@ export function shakeOffset(a: Anim | null, now: number): { dx: number; dy: numb
   }
   if (a.kind !== 'tracer' || !a.hit) return { dx: 0, dy: 0 };
   const t = animT(a, now);
-  const share = TRACER_MS / a.dur;
+  const share = tracerShare(a);
   if (t <= share || t >= 1) return { dx: 0, dy: 0 }; // лише фаза спалаху влучання
   const f = (t - share) / (1 - share);
   const amp = SHAKE_PX * (1 - f); // спадає до нуля до кінця спалаху

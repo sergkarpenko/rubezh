@@ -1298,6 +1298,34 @@ test('сценарій приймання ADR-0030: партія → місія 
   });
 
   await test.step('геосцена: +1 тік, +1 доба', async () => {
+    // Т.144 (ADR-0125, рішення власника «А. Спокійно»): за «менше руху» скан-радар тіку — спокійна копія
+    // ≈ ½ тривалості (ambient за «менше руху» кадрів не планує, Т.143): останній кадр rAF — раніше 900 мс,
+    // повна розгортка — 1200 мс; кадри є (анімація не вимкнена зовсім)
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    const scan = await page.evaluate(
+      () =>
+        new Promise<{ n: number; last: number }>((done) => {
+          const raf = window.requestAnimationFrame;
+          const t0 = performance.now();
+          let n = 0;
+          let last = 0;
+          window.requestAnimationFrame = (cb) => {
+            n++;
+            last = performance.now() - t0;
+            return raf(cb);
+          };
+          document.getElementById('btn-tick')!.click();
+          setTimeout(() => {
+            window.requestAnimationFrame = raf;
+            done({ n, last: Math.round(last) });
+          }, 1600);
+        })
+    );
+    await page.emulateMedia({ reducedMotion: null });
+    mirror.tick();
+    await expect(clock).toHaveText(mirror.clock());
+    expect(scan.n, 'Т.144: спокійний скан-радар грає ' + JSON.stringify(scan)).toBeGreaterThan(3);
+    expect(scan.last, 'Т.144: спокійний скан-радар коротший за повний ' + JSON.stringify(scan)).toBeLessThan(900);
     await page.locator('#btn-tick').click();
     mirror.tick();
     await expect(clock).toHaveText(mirror.clock());

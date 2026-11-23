@@ -36,6 +36,7 @@ import {
   makeOwFlashAnim,
   makeTracerAnim,
   makeBoomAnim,
+  calmAnim,
 } from './core/render-core';
 import { makeUnit, type Unit } from './core/combat';
 
@@ -736,5 +737,110 @@ describe('Т.129: кільце в анімації руху', () => {
     expect(e).toBeDefined();
     expect((e!.args as number[]).slice(0, 4)).toEqual([72, 24 + RING_DY, RING_RX, RING_RY]);
     expect(sets.filter((x) => x.p === 'strokeStyle').map((x) => x.v)).toContain(fighterLook('s8').color);
+  });
+});
+
+// Т.144 (ADR-0125, рішення власника «А. Спокійно»): кадри спокійних копій — без руху
+describe('спокійні кадри за «менше руху» (Т.144)', () => {
+  const arcR = (calls: Call[]): number[] => calls.filter((c) => c.m === 'arc').map((c) => (c.args as number[])[2]);
+  it('хід: боєць проявляється в цілі (згасання навпаки), без кадрів ходьби по шляху', () => {
+    const path = [
+      { x: 0, y: 0 },
+      { x: 1, y: 0 },
+      { x: 2, y: 0 },
+    ];
+    const a = calmAnim(makeMoveAnim(unit('s1', 'player', 2, 0), path, false));
+    a.start = 0;
+    const { ctx, calls, sets } = animCtx();
+    drawAnimFrame(ctx, a, a.dur / 2, 48, 8);
+    const img = calls.filter((c) => c.m === 'drawImage');
+    expect(img.length).toBeGreaterThan(0);
+    for (const c of img) expect((c.args as number[])[1]).toBeGreaterThanOrEqual(2 * 48 - 20); // лише біля клітинки цілі
+    expect(sets.filter((x) => x.p === 'globalAlpha').map((x) => x.v)).toContain(0.5);
+  });
+  it('постріл з влучанням: уся лінія одразу, без спалаху дула; кільце влучання — на місці, без іскор', () => {
+    const a = calmAnim(makeTracerAnim('player', { x: 0, y: 0 }, { x: 3, y: 0 }, true));
+    a.start = 0;
+    const fly = animCtx();
+    drawAnimFrame(fly.ctx, a, 1, 48, 8, 480, 480, { side: 'player', flip: false });
+    const line = fly.calls.find((c) => c.m === 'lineTo');
+    expect(line?.args).toEqual([3 * 48 + 24, 24]);
+    // аудит PR #457: дуло без віддачі (повний трасер на тому кадрі віддає RECOIL_PX)
+    const m0 = muzzlePoint('player', false, 24, 24, 0);
+    expect(fly.calls.find((c) => c.m === 'moveTo')?.args).toEqual([m0.x, m0.y]);
+    const full = makeTracerAnim('player', { x: 0, y: 0 }, { x: 3, y: 0 }, true);
+    full.start = 0;
+    const ff = animCtx();
+    drawAnimFrame(ff.ctx, full, 1, 48, 8, 480, 480, { side: 'player', flip: false });
+    expect(ff.calls.find((c) => c.m === 'moveTo')?.args).not.toEqual([m0.x, m0.y]);
+    expect(fly.calls.filter((c) => c.m === 'arc')).toHaveLength(0);
+    const rings = [a.dur * 0.6, a.dur * 0.95].map((now) => {
+      const f = animCtx();
+      drawAnimFrame(f.ctx, a, now, 48, 8, 480, 480);
+      expect(f.calls.filter((c) => c.m === 'fillRect')).toHaveLength(0); // іскор немає
+      return arcR(f.calls);
+    });
+    expect(rings[0]).toEqual(rings[1]);
+    expect(rings[0]).toHaveLength(1);
+  });
+  it('промах: лише нерухома лінія до цілі на всю тривалість, без кілець і квадратиків', () => {
+    const a = calmAnim(makeTracerAnim('alien', { x: 3, y: 0 }, { x: 0, y: 0 }, false));
+    a.start = 0;
+    for (const k of [0.1, 0.9]) {
+      const f = animCtx();
+      drawAnimFrame(f.ctx, a, a.dur * k, 48, 8, 480, 480);
+      expect(f.calls.find((c) => c.m === 'lineTo')?.args).toEqual([24, 24]);
+      expect(f.calls.filter((c) => c.m === 'arc' || c.m === 'fillRect')).toHaveLength(0);
+    }
+  });
+  it('вибух: кільце на місці, без розльоту частинок', () => {
+    const a = calmAnim(makeBoomAnim({ x: 2, y: 2 }));
+    a.start = 0;
+    const r = [0.2, 0.8].map((k) => {
+      const f = animCtx();
+      drawAnimFrame(f.ctx, a, a.dur * k, 48, 8, 480, 480);
+      expect(f.calls.filter((c) => c.m === 'fillRect')).toHaveLength(0);
+      return arcR(f.calls);
+    });
+    expect(r[0]).toEqual(r[1]);
+  });
+  it('число без підйому; загиблий згасає без смуг і частинок; дозор — кільце на місці', () => {
+    const n = calmAnim(makeDNumAnim({ x: 1, y: 2 }, 3, false));
+    n.start = 0;
+    const y = [0.1, 0.9].map((k) => {
+      const f = animCtx();
+      drawAnimFrame(f.ctx, n, n.dur * k, 48, 8, 480, 480);
+      return (f.calls.find((c) => c.m === 'fillRect')?.args as number[])[1];
+    });
+    expect(y[0]).toBe(y[1]);
+    const d = calmAnim(makeDeathAnim(unit('a1', 'alien', 1, 1)));
+    d.start = 0;
+    const dd = animCtx();
+    drawAnimFrame(dd.ctx, d, d.dur / 2, 48, 8, 480, 480);
+    expect(dd.calls.filter((c) => c.m === 'rect' || c.m === 'clip')).toHaveLength(0);
+    expect(dd.calls.filter((c) => c.m === 'fillRect' && (c.args as number[])[2] === 2)).toHaveLength(0);
+    const o = calmAnim(makeOwFlashAnim(unit('s1', 'player', 1, 1)));
+    o.start = 0;
+    const r = [0.1, 0.9].map((k) => {
+      const f = animCtx();
+      drawAnimFrame(f.ctx, o, o.dur * k, 48, 8);
+      return arcR(f.calls);
+    });
+    expect(r[0]).toEqual(r[1]);
+  });
+  it('скан-радар: нерухоме кільце на краю зони, без сектора-розгортки; пульс — так само', () => {
+    const a = calmAnim(makeGeoScanAnim(500, 100, 60));
+    a.start = 0;
+    for (const k of [0.1, 0.7]) {
+      const f = animCtx();
+      drawAnimFrame(f.ctx, a, a.dur * k, 24, 0); // без ширини канви — без копій замикання по X
+      expect(arcR(f.calls)).toEqual([60]);
+      expect(f.calls.filter((c) => c.m === 'fill' || c.m === 'lineTo')).toHaveLength(0);
+    }
+    const p = calmAnim(makeGeoPulseAnim(100, 100, 60));
+    p.start = 0;
+    const f = animCtx();
+    drawAnimFrame(f.ctx, p, p.dur * 0.2, 24, 0);
+    expect(arcR(f.calls)).toEqual([60]);
   });
 });
