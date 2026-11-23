@@ -620,16 +620,16 @@ describe('Фікс П14.8 (фідбек валідації): смерть у ч�
     f.deps.anim.active = () => left;
     f.deps.anim.queued = () => [left];
     const ops = withRecCtx(() => f.battle.renderBattle());
-    // Т.133: дуло кадру 68 px — (264 − 34) + 3 = 233, (264 − 47) + 31 = 248 (центр був би 264,264)
-    expect(ops).toContain('moveTo(233,248)');
+    // Т.134: дуло кадру 68 px — (264 − 34) + 6 = 236, (264 − 47) + 34 = 251 (центр був би 264,264)
+    expect(ops).toContain('moveTo(236,251)');
     // дзеркало: той самий демон стріляє вправо (5,5)→(7,5) — facing +1, дзеркало
     const right = makeTracerAnim('alien', { x: 5, y: 5 }, { x: 7, y: 5 }, false);
     right.start = 0;
     f.deps.anim.active = () => right;
     f.deps.anim.queued = () => [right];
     const ops2 = withRecCtx(() => f.battle.renderBattle());
-    // віддзеркалене дуло: (264 − 34) + round((96 − 4) · 68 / 96) = 295
-    expect(ops2).toContain('moveTo(295,248)');
+    // віддзеркалене дуло: (264 − 34) + round((96 − 8) · 68 / 96) = 292
+    expect(ops2).toContain('moveTo(292,251)');
   });
 
   // Т.132 (ADR-0121): дихання питає ambient-шар для кожного намальованого бійця, крім стрільця

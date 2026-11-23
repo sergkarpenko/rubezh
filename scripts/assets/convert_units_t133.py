@@ -6,6 +6,8 @@
 # Відмінності від convert_units.py (П14.3): фігури не піксель-арт, тому альфа плавна
 # (матування за «зеленістю» g - max(r, b)), зменшення — LANCZOS по премножених каналах,
 # зелений відблиск на краях прибирається (g <= max(r, b)) до і після зменшення.
+# Т.134: звіт несе walkIoU (idle-walk1, walk1-walk2, idle-walk2) і weaponPx (пікселі зброї кадрів);
+# збіг > WALK_IOU_MAX або зброя кадру кроку чи вогню < WEAPON_MIN від idle — помилка.
 # Геометрія атласа не змінюється (ADR-0121): фігура стоячих кадрів — рядки 34..92,
 # ноги — рядок 92 (ATLAS_FEET_ROW = 93 — перший рядок під ногами), якір x спільний для ряду.
 from pathlib import Path
@@ -26,6 +28,8 @@ TOP, BOTTOM = 34, 93  # фігура стоячого кадру: рядки TOP
 BODY_H = BOTTOM - TOP
 MAX_W = 94  # найширший кадр — з полем 1 px з боків
 K0, K1 = 20.0, 90.0  # «зеленість»: <= K0 — фігура, >= K1 — тло
+WALK_IOU_MAX = 0.75  # Т.134: кадри кроку мають різнитись (на атласі Т.133 walk1/walk2 — 0,89)
+WEAPON_MIN = 0.5  # Т.134: зброя кадрів кроку і вогню — не менше половини пікселів зброї idle
 
 
 def matte(path):
@@ -78,6 +82,22 @@ def feet_x(fig):
     return float((band.sum(axis=0) * xs).sum() / band.sum())
 
 
+def walk_iou(frames):
+    # збіг масок (перетин / об'єднання) пар idle-walk1, walk1-walk2, idle-walk2; поріг — WALK_IOU_MAX
+    m = [fr[..., 3] > 128 for fr in frames[:3]]
+    pairs = ((0, 1), (1, 2), (0, 2))
+    return [round(float((m[i] & m[j]).sum() / (m[i] | m[j]).sum()), 3) for i, j in pairs]
+
+
+def weapon_px(fr, name):
+    # пікселі зброї: оперативник — білий бластер, демон — коричнева гармата (r > g > b, середня яскравість)
+    r, g, b, a = (fr[..., i].astype(int) for i in range(4))
+    op = a > 128
+    if name == 'soldier':
+        return int((op & (r > 170) & (g > 170) & (b > 170)).sum())
+    return int((op & (r > g + 8) & (g > b) & (r > 40) & (r < 170)).sum())
+
+
 def build_row(path, facing, mirror):
     img = matte(path)
     figs = split_figures(img)
@@ -118,7 +138,22 @@ def build_row(path, facing, mirror):
     cols = slice(edge - 3, edge + 1) if facing > 0 else slice(edge, edge + 4)
     ys = np.where(fire[:, cols].any(axis=1))[0]
     muzzle = {'x': int(edge - 2 * facing), 'y': int(round(ys.mean()))}
-    return frames, {'scale': round(scale, 4), 'deathScale': round(dscale, 4), 'anchorX': anchor, 'bbox': info, 'muzzle': muzzle}
+    iou = walk_iou(frames)
+    if max(iou) > WALK_IOU_MAX:
+        raise SystemExit(f'{path.name}: кадри кроку надто схожі (збіг масок {iou} > {WALK_IOU_MAX}) — перегенерувати аркуш')
+    name = 'soldier' if facing > 0 else 'demon'
+    weapon = [weapon_px(fr, name) for fr in frames]
+    if min(weapon[1:4]) < WEAPON_MIN * weapon[0]:
+        raise SystemExit(f'{path.name}: у кадрі кроку чи вогню немає зброї (пікселі зброї {weapon}) — перегенерувати аркуш')
+    return frames, {
+        'scale': round(scale, 4),
+        'deathScale': round(dscale, 4),
+        'anchorX': anchor,
+        'bbox': info,
+        'muzzle': muzzle,
+        'walkIoU': iou,
+        'weaponPx': weapon,
+    }
 
 
 def main():
