@@ -205,6 +205,45 @@ export function zoneOutlineSegments(keys: ReadonlySet<string>): ZoneEdge[] {
   return out;
 }
 
+// Т.146 (рішення власника «А. Стик кодом», ADR-0127): сусідні стіни — одна маса з чинного
+// тайла стіни (¾ згори: ціановий кант угорі, верхня грань, темна передня грань унизу, рамка
+// по краях). Стіна без сусідки-стіни за 4 напрямками — тайл цілком, як раніше (null); інакше —
+// чотири чверті: чверть біля сусідки-стіни бере середину тайла замість краю. По горизонталі —
+// стовпці tile/4..¾ tile (без бічної рамки); по вертикалі — рядки верхньої грані без канта
+// і без передньої грані (WALL_FACE_Y0..Y1 тайла 48 px), розтягнуті на чверть. Діагональ
+// не враховується. Координати джерела — px тайла (кол. 0 атласа), dx/dy — зсув чверті
+// в частках клітинки.
+export const WALL_FACE_Y0 = 8 / 48; // перший рядок, що береться з верхньої грані (6–33): 6–7 — відблиск канта
+export const WALL_FACE_Y1 = 24 / 48; // половина тайла (межа верхніх і нижніх чвертей)
+export interface WallQuad {
+  sx: number;
+  sy: number;
+  sw: number;
+  sh: number;
+  dx: number;
+  dy: number;
+}
+export function wallQuads(blocked: (x: number, y: number) => boolean, x: number, y: number, tile: number): WallQuad[] | null {
+  const l = blocked(x - 1, y);
+  const r = blocked(x + 1, y);
+  const u = blocked(x, y - 1);
+  const d = blocked(x, y + 1);
+  if (!l && !r && !u && !d) return null;
+  const half = tile / 2;
+  const out: WallQuad[] = [];
+  for (const qy of [0, 1]) {
+    for (const qx of [0, 1]) {
+      const h = qx === 0 ? l : r;
+      const v = qy === 0 ? u : d;
+      const sx = h ? tile / 4 : qx * half;
+      const sy = v ? tile * WALL_FACE_Y0 : qy * half;
+      const sh = v ? tile * (WALL_FACE_Y1 - WALL_FACE_Y0) : half;
+      out.push({ sx, sy, sw: half, sh, dx: qx / 2, dy: qy / 2 });
+    }
+  }
+  return out;
+}
+
 // Т.44: плашка ціни шляху «<число> AP» біля цілі: ширина — ширина тексту + 10 px, висота 21 px
 // (× k, Т.119). Координати — px канви, цілі.
 export const PATH_LABEL_H = 21;

@@ -72,6 +72,7 @@ import {
   type TerrainCell,
   fogBorderSegments,
   zoneOutlineSegments,
+  wallQuads,
 } from './core/render-core';
 import {
   ALIEN_STAND,
@@ -1077,6 +1078,38 @@ describe('позафазна лінія «Мегаполіс»: цілісна �
     expect(dec / (60 * 60)).toBeGreaterThan(0.05);
     expect(dec / (60 * 60)).toBeLessThan(0.11);
     expect(kinds.size).toBe(3);
+  });
+
+  it('Т.146 (ADR-0127): сусідні стіни — чверті тайла стіни за wallQuads, одиночна — тайл цілком', () => {
+    readyMetro();
+    // 3×2: (0,0)+(1,0) — пара стін, (2,1) — одиночна (сусідка (1,0) лише по діагоналі)
+    const joined: TerrainCell[] = [
+      { x: 0, y: 0, blocked: true, visible: true },
+      { x: 1, y: 0, blocked: true, visible: true },
+      { x: 2, y: 0, blocked: false, visible: true },
+      { x: 0, y: 1, blocked: false, visible: true },
+      { x: 1, y: 1, blocked: false, visible: true },
+      { x: 2, y: 1, blocked: true, visible: true },
+    ];
+    const s = seqCtx();
+    drawNightTerrain(s.ctx, 144, 96, joined, 48);
+    const walls = s.ops
+      .filter((o): o is { m: string; args: unknown[] } => 'm' in o && o.m === 'drawImage' && o.args[0] === tilesImg)
+      .map((o) => o.args.slice(1) as number[])
+      .filter((a) => a[0]! < METRO_TILE); // кол. 0 атласа — стіна (декори — кол. 1–3)
+    // пара: 4 + 4 чверті 24 × 24 на канві; одиночна — один тайл 48 × 48
+    expect(walls).toHaveLength(9);
+    const isWall = (x: number, y: number): boolean => (x === 0 || x === 1) && y === 0;
+    const expectQuads = (cx: number, start: number): void => {
+      const qs = wallQuads(isWall, cx, 0, METRO_TILE)!;
+      qs.forEach((q, i) => expect(walls[start + i]).toEqual([q.sx, q.sy, q.sw, q.sh, (cx + q.dx) * 48, q.dy * 48, 24, 24]));
+    };
+    expectQuads(0, 0);
+    expectQuads(1, 4);
+    expect(walls[8]).toEqual([0, 0, 48, 48, 96, 48, 48, 48]);
+    // шов пари: права чверть лівої стіни і ліва чверть правої — середина тайла (без бічної рамки)
+    expect(walls[1]![0]).toBe(12);
+    expect(walls[4]![0]).toBe(12);
   });
 
   it('туман: клітинки поза видимістю перекриваються чинним напівпрозорим шаром поверх фону (вміст не розкривається)', () => {

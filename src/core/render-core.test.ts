@@ -18,6 +18,9 @@ import {
   pathLabelScale,
   PATH_LABEL_MIN_CSS,
   zoneOutlineSegments,
+  wallQuads,
+  WALL_FACE_Y0,
+  WALL_FACE_Y1,
   type TerrainCell,
   AnimEngine,
   BOOM_MS,
@@ -1015,5 +1018,81 @@ describe('спокійні анімації за «менше руху» (Т.144
     const full = makeBoomAnim({ x: 1, y: 1 });
     full.start = 0;
     expect(shakeOffset(full, BOOM_MS / 8)).not.toEqual({ dx: 0, dy: 0 }); // повний вибух трясе
+  });
+});
+
+describe('Т.146: wallQuads — стик сусідніх стін (ADR-0127)', () => {
+  const T = 48;
+  const of =
+    (keys: string[]) =>
+    (x: number, y: number): boolean =>
+      keys.includes(x + ',' + y);
+  // чверть за зсувом у клітинці: (0,0) ліва верхня … (½,½) права нижня
+  const at = (qs: ReturnType<typeof wallQuads>, dx: number, dy: number) => qs!.find((q) => q.dx === dx && q.dy === dy)!;
+
+  it('одиночна стіна (сусідки лише по діагоналі) — null: тайл цілком, як до Т.146', () => {
+    expect(wallQuads(of(['5,5']), 5, 5, T)).toBeNull();
+    expect(wallQuads(of(['5,5', '4,4', '6,6', '4,6', '6,4']), 5, 5, T)).toBeNull();
+  });
+
+  it('межі грані: рядки 8..24 тайла 48 px — під кантом і над передньою гранню', () => {
+    expect(T * WALL_FACE_Y0).toBe(8);
+    expect(T * WALL_FACE_Y1).toBe(24);
+  });
+
+  it('сусідка праворуч: праві чверті — середина тайла по X (без бічної рамки), рядки — як у тайла; ліві — кути тайла', () => {
+    const qs = wallQuads(of(['5,5', '6,5']), 5, 5, T)!;
+    expect(qs).toHaveLength(4);
+    expect(at(qs, 0, 0)).toEqual({ sx: 0, sy: 0, sw: 24, sh: 24, dx: 0, dy: 0 });
+    expect(at(qs, 0, 0.5)).toEqual({ sx: 0, sy: 24, sw: 24, sh: 24, dx: 0, dy: 0.5 });
+    expect(at(qs, 0.5, 0)).toEqual({ sx: 12, sy: 0, sw: 24, sh: 24, dx: 0.5, dy: 0 }); // кант лишається
+    expect(at(qs, 0.5, 0.5)).toEqual({ sx: 12, sy: 24, sw: 24, sh: 24, dx: 0.5, dy: 0.5 }); // передня грань лишається
+  });
+
+  it('сусідка ліворуч — дзеркально: ліві чверті з середини, праві — кути', () => {
+    const qs = wallQuads(of(['5,5', '4,5']), 5, 5, T)!;
+    expect(at(qs, 0, 0).sx).toBe(12);
+    expect(at(qs, 0, 0.5).sx).toBe(12);
+    expect(at(qs, 0.5, 0).sx).toBe(24);
+    expect(at(qs, 0.5, 0.5).sx).toBe(24);
+  });
+
+  it('сусідка знизу: нижні чверті — верхня грань (8..24) замість передньої грані; верхні — з кантом', () => {
+    const qs = wallQuads(of(['5,5', '5,6']), 5, 5, T)!;
+    expect(at(qs, 0, 0)).toEqual({ sx: 0, sy: 0, sw: 24, sh: 24, dx: 0, dy: 0 });
+    expect(at(qs, 0.5, 0)).toEqual({ sx: 24, sy: 0, sw: 24, sh: 24, dx: 0.5, dy: 0 });
+    expect(at(qs, 0, 0.5)).toEqual({ sx: 0, sy: 8, sw: 24, sh: 16, dx: 0, dy: 0.5 });
+    expect(at(qs, 0.5, 0.5)).toEqual({ sx: 24, sy: 8, sw: 24, sh: 16, dx: 0.5, dy: 0.5 });
+  });
+
+  it('сусідка згори: верхні чверті без канта (8..24), нижні — з передньою гранню', () => {
+    const qs = wallQuads(of(['5,5', '5,4']), 5, 5, T)!;
+    expect(at(qs, 0, 0)).toEqual({ sx: 0, sy: 8, sw: 24, sh: 16, dx: 0, dy: 0 });
+    expect(at(qs, 0.5, 0)).toEqual({ sx: 24, sy: 8, sw: 24, sh: 16, dx: 0.5, dy: 0 });
+    expect(at(qs, 0, 0.5)).toEqual({ sx: 0, sy: 24, sw: 24, sh: 24, dx: 0, dy: 0.5 });
+  });
+
+  it('усі чотири сусідки — усі чверті з середини тайла (12..36 × 8..24)', () => {
+    const qs = wallQuads(of(['5,5', '4,5', '6,5', '5,4', '5,6']), 5, 5, T)!;
+    for (const q of qs) expect({ sx: q.sx, sy: q.sy, sw: q.sw, sh: q.sh }).toEqual({ sx: 12, sy: 8, sw: 24, sh: 16 });
+    expect(qs.map((q) => [q.dx, q.dy])).toEqual([
+      [0, 0],
+      [0.5, 0],
+      [0, 0.5],
+      [0.5, 0.5],
+    ]);
+  });
+
+  it('кут «Г»: сусідки праворуч і знизу — права нижня з середини, ліва верхня — кут тайла', () => {
+    const qs = wallQuads(of(['5,5', '6,5', '5,6']), 5, 5, T)!;
+    expect(at(qs, 0, 0)).toEqual({ sx: 0, sy: 0, sw: 24, sh: 24, dx: 0, dy: 0 });
+    expect(at(qs, 0.5, 0)).toEqual({ sx: 12, sy: 0, sw: 24, sh: 24, dx: 0.5, dy: 0 });
+    expect(at(qs, 0, 0.5)).toEqual({ sx: 0, sy: 8, sw: 24, sh: 16, dx: 0, dy: 0.5 });
+    expect(at(qs, 0.5, 0.5)).toEqual({ sx: 12, sy: 8, sw: 24, sh: 16, dx: 0.5, dy: 0.5 });
+  });
+
+  it('масштаб тайла: межі — частки сторони (тайл 96 px — удвічі)', () => {
+    const qs = wallQuads(of(['5,5', '6,5', '5,6']), 5, 5, 96)!;
+    expect(at(qs, 0.5, 0.5)).toEqual({ sx: 24, sy: 16, sw: 48, sh: 32, dx: 0.5, dy: 0.5 });
   });
 });

@@ -54,6 +54,7 @@ import {
   moveAnimPos,
   terrainShade,
   visibleKeys,
+  wallQuads,
   type Anim,
   type TerrainCell,
 } from './core/render-core';
@@ -255,7 +256,8 @@ export function isUnitAtlasReady(): boolean {
 // спрайт з assets/metro-tiles.png (192×48, тайли 48×48: кол. 0 стіна з
 // ціановим кантом, 1 пляма світла, 2 решітка в підлозі — пласкі деталі
 // Т.44 замість лампи й голограми, схожих на юнітів; 3 уламки) на blocked-клітинках
-// (з Т.135, ADR-0123 — «мальовані» з аркуша Gemini: стіна ¾ згори, лампа, решітка, авто);
+// (з Т.135, ADR-0123 — «мальовані» з аркуша Gemini: стіна ¾ згори, лампа, решітка, авто;
+// з Т.146, ADR-0127 — сусідні стіни стикуються чвертями того самого тайла);
 // декори — за хешем координат (~8% відкритих, чинний контракт П14.3
 // cellHash % 37); туман — чинне приглушення rgba(5,8,15,0.55) поверх
 // фону (рельєф видно, вміст не розкривається — ADR-0006), м'який край —
@@ -625,10 +627,21 @@ export function drawNightTerrain(
     ctx.drawImage(metroBgImg, Math.round((w - dw) / 2), Math.round((h - dh) / 2), Math.round(dw), Math.round(dh));
     // об'єкти поверх підлоги: піксель-арт атлас — nearest-neighbor, 1:1
     ctx.imageSmoothingEnabled = false;
-    // стіни — на blocked-клітинках (за мапою рельєфу)
+    // стіни — на blocked-клітинках (за мапою рельєфу); Т.146 (ADR-0127): сусідні стіни — одна
+    // маса з чвертей того самого тайла (wallQuads), одиночна — тайл цілком, як раніше
+    const walls = new Set(cells.filter((c) => c.blocked).map((c) => c.x + ',' + c.y));
+    const isWall = (x: number, y: number): boolean => walls.has(x + ',' + y);
+    const wx = METRO_WALL_COL * METRO_TILE;
     for (const c of cells) {
       if (!c.blocked) continue;
-      ctx.drawImage(metroTilesImg, METRO_WALL_COL * METRO_TILE, 0, METRO_TILE, METRO_TILE, c.x * cell, c.y * cell, cell, cell);
+      const quads = wallQuads(isWall, c.x, c.y, METRO_TILE);
+      if (quads === null) {
+        ctx.drawImage(metroTilesImg, wx, 0, METRO_TILE, METRO_TILE, c.x * cell, c.y * cell, cell, cell);
+        continue;
+      }
+      for (const q of quads) {
+        ctx.drawImage(metroTilesImg, wx + q.sx, q.sy, q.sw, q.sh, (c.x + q.dx) * cell, (c.y + q.dy) * cell, cell / 2, cell / 2);
+      }
     }
     // декори — рідкий детермінований розклад на відкритих (без RNG)
     for (const c of cells) {

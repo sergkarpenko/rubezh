@@ -26,7 +26,7 @@
 // зміна тумблера — без перезапуску застосунку. Т.143 (ADR-0124): системне «менше руху» —
 // гейт поверх тумблера (0 кадрів і 0 ефектів), тумблер при цьому не змінюється.
 
-import { type TerrainCell } from '../core/render-core';
+import { type TerrainCell, zoneOutlineSegments } from '../core/render-core';
 import { RADAR_RANGE } from '../core/geo';
 import { HP_BAR_H, HP_BAR_W, HP_BAR_Y } from '../core/render-core';
 import type { Vec2 } from '../core/combat';
@@ -139,9 +139,15 @@ export function paintBattleAmbient(ctx: CanvasRenderingContext2D, s: AmbientBatt
     fx++; // wall-pulse — один ефект на всі стіни (пульс ціанового канту)
     ctx.strokeStyle = 'rgba(0,229,255,' + wallPulseAlpha(t).toFixed(3) + ')';
     ctx.lineWidth = 1;
-    for (const c of s.cells) {
-      if (c.blocked) ctx.strokeRect(c.x * s.cell + 1.5, c.y * s.cell + 1.5, s.cell - 3, s.cell - 3);
+    // Т.146 (ADR-0127): обвідка маси стін, а не кожної клітинки — на стику сусідніх стін
+    // лінії немає; лінія 1 px усередині краю (зсув 0,5), увігнутий кут — подовження 1 px
+    const walls = new Set(s.cells.filter((c) => c.blocked).map((c) => c.x + ',' + c.y));
+    ctx.beginPath();
+    for (const e of zoneOutlineSegments(walls)) {
+      ctx.moveTo(e.x1 * s.cell + e.nx / 2, e.y1 * s.cell + e.ny / 2 - e.e1 / 2);
+      ctx.lineTo(e.x2 * s.cell + e.nx / 2, e.y2 * s.cell + e.ny / 2 + e.e2 / 2);
     }
+    ctx.stroke();
   }
   if (fx >= AMBIENT_MAX_EFFECTS) return;
   const glow = 'rgba(255,92,122,' + hpGlowAlpha(t).toFixed(3) + ')';
