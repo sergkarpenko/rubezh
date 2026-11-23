@@ -50,6 +50,18 @@ import {
   pendingDeathStarts,
   shakeOffset,
   type Anim,
+  DISSOLVE_STRIP,
+  RECOIL_PX,
+  SPARKS,
+  UNIT_DRAW,
+  UNIT_FEET_DY,
+  ATLAS_FEET_ROW,
+  HP_BAR_H,
+  HP_BAR_Y,
+  dissolveKept,
+  recoilPx,
+  sparkOffset,
+  unitFrameOrigin,
 } from './render-core';
 import { makeUnit, type GameEvent, type Unit } from './combat';
 import { createGeoGame, type GeoEvent } from './geo';
@@ -849,5 +861,49 @@ describe('fighterLook: колір і форма шолома за id', () => {
   it('id не з ростера — перший колір (без винятку)', () => {
     expect(fighterLook('a1').color).toBe(FIGHTER_COLORS[0]);
     expect(fighterLook('s0').index).toBe(0);
+  });
+});
+
+// Т.132 (ADR-0121): геометрія бійця 68 px і чисті функції ефектів
+describe('Т.132: бієць на полі і ефекти', () => {
+  it('кадр 68 px: ноги на UNIT_FEET_DY нижче центру, фігура (рядки 34..93) — у межах клітинки 48', () => {
+    for (const c of [24, 264, 936]) {
+      const o = unitFrameOrigin(c, c);
+      expect(o.x).toBe(c - UNIT_DRAW / 2);
+      const feet = o.y + (UNIT_DRAW * ATLAS_FEET_ROW) / 96;
+      expect(Math.abs(feet - (c + UNIT_FEET_DY))).toBeLessThanOrEqual(0.5);
+      expect(o.y + (UNIT_DRAW * 34) / 96).toBeGreaterThanOrEqual(c - 24);
+      expect(feet).toBeLessThanOrEqual(c + 24);
+    }
+    // смуга HP з підкладкою (±1 px) — під ногами і в межах клітинки
+    expect(HP_BAR_Y - 1).toBeGreaterThanOrEqual(UNIT_FEET_DY);
+    expect(HP_BAR_Y + HP_BAR_H + 1).toBeLessThanOrEqual(24);
+  });
+
+  it('recoilPx: лише на початку кулі; без частки трасера — 0', () => {
+    expect(recoilPx(0.01, 0.2)).toBe(RECOIL_PX);
+    expect(recoilPx(0.07, 0.2)).toBe(1);
+    expect(recoilPx(0.1, 0.2)).toBe(0);
+    expect(recoilPx(0.5, 0)).toBe(0);
+  });
+
+  it('sparkOffset: детерміновано, у межах 22 px по горизонталі, на f = 0 — у точці', () => {
+    expect(sparkOffset({ x: 3, y: 4 }, 2, 0)).toEqual({ dx: 0, dy: 0 });
+    const a = Array.from({ length: SPARKS }, (_, i) => sparkOffset({ x: 3, y: 4 }, i, 0.6));
+    expect(a).toEqual(Array.from({ length: SPARKS }, (_, i) => sparkOffset({ x: 3, y: 4 }, i, 0.6)));
+    for (const o of a) expect(Math.abs(o.dx)).toBeLessThanOrEqual(22);
+    expect(new Set(a.map((o) => o.dx + ',' + o.dy)).size).toBeGreaterThan(SPARKS / 2); // розліт, не купа
+    const end = Array.from({ length: SPARKS }, (_, i) => sparkOffset({ x: 3, y: 4 }, i, 1));
+    for (const o of end) expect(o.dy).toBeLessThanOrEqual(22 * 0.8 + 10 + 1);
+  });
+
+  it('dissolveKept: на початку — усі смуги, наприкінці — жодної, між — частина', () => {
+    const n = 48 / DISSOLVE_STRIP;
+    const kept = (t: number): number => Array.from({ length: n }, (_, k) => dissolveKept(k, t)).filter(Boolean).length;
+    expect(kept(0)).toBe(n);
+    expect(kept(1)).toBe(0);
+    expect(kept(0.5)).toBeGreaterThan(0);
+    expect(kept(0.5)).toBeLessThan(n);
+    expect(kept(0.3)).toBeGreaterThanOrEqual(kept(0.6)); // монотонно
   });
 });

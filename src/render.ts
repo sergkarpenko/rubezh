@@ -19,6 +19,17 @@ import {
   RING_DY,
   RING_RX,
   RING_RY,
+  BREATH_SCALE,
+  DISSOLVE_STRIP,
+  HP_BAR_H,
+  HP_BAR_W,
+  HP_BAR_Y,
+  SPARKS,
+  UNIT_DRAW,
+  dissolveKept,
+  recoilPx,
+  sparkOffset,
+  unitFrameOrigin,
   BOOM_PARTICLES,
   fighterLook,
   FOG_EDGE,
@@ -144,11 +155,12 @@ function drawPixelSprite(ctx: CanvasRenderingContext2D, def: PixelSprite, cx: nu
 // колонок idle → walk1 → walk2 → fire → death; ряд 0 — оперативник, ряд 1 —
 // демон Розриву. П14.3: walk2 — окремий кадр (фідбек П14.2, константи кадрів
 // 0/1/2/3/4); план — джерело правди чисел (style-references.md, Фаза 14).
-// Відображення 44×44 у BCELL 48, nearest-neighbor (ADR-0068): 92% заповнення
-// клітинки, тач-цілі 48 ≥ 44px.
+// Т.132 (ADR-0121): кадр 96 × 96 малюється 68 × 68 зі згладжуванням (масштаб не цілий),
+// ноги — на UNIT_FEET_DY нижче центру клітинки, фігура росте вгору в межах клітинки
+// (було 44 × 44 nearest-neighbor, ADR-0068); геометрія — UNIT_DRAW і unitFrameOrigin у ядрі.
 export const ATLAS_FRAME = 96; // кадр атласу, px
 export const ATLAS_COLS = 5; // idle, walk1, walk2, fire, death
-export const ATLAS_UNIT = 44; // сторона відображення у клітинці BCELL 48
+export const ATLAS_UNIT = UNIT_DRAW; // сторона кадру на полі (Т.132: 68)
 
 export type UnitPose = 'idle' | 'walk' | 'fire' | 'death';
 
@@ -162,19 +174,31 @@ export const ATLAS_POSE_COL: Readonly<Record<UnitPose, number>> = {
 };
 export const ATLAS_WALK2_COL = 2;
 
-// Фідбек власника 2026-10-22 (юніт-атласи Gemini, PR #241): трасер бою має
-// стартувати з ДУЛА стрільця, а не з центру клітинки — у демона Розриву
-// фазовий різак зі спалахом лежить поза центром кадру fire (дуло ліворуч,
-// нижче осі), і «куля з середини тіла» виглядала відірваною. Якір —
-// координати дулового спалаху в 44-просторі кадру fire у НАТИВНІЙ
-// орієнтації (солдат вправо, демон вліво); дзеркалення (flip) мапить
-// колонку col → ATLAS_UNIT-1-col. Солдат — центр кадру (спалах прикриває
-// центр, нульовий офсет — вигляд без змін). Підказку передає ЛИШЕ бойовище
-// (battle.ts); трасер перехоплення на геосцені — від центру, як раніше.
+// Фідбек власника 2026-10-22 (юніт-атласи Gemini, PR #241): трасер бою стартує з ДУЛА
+// стрільця, а не з центру клітинки. Т.132 (ADR-0121): якір — координати дулового спалаху
+// в просторі кадру 96 × 96 fire у НАТИВНІЙ орієнтації (солдат вправо, демон вліво),
+// виміряні по атласу (солдат — край ціанового спалаху, демон — край яскравого ядра);
+// дзеркалення — x → 96 − x. Підказку
+// передає ЛИШЕ бойовище (battle.ts); трасер перехоплення на геосцені — від центру.
 export const MUZZLE_ANCHOR: Readonly<Record<'player' | 'alien', { x: number; y: number }>> = {
-  player: { x: 22, y: 22 }, // дуловий спалах АР-14 «Гарт» — по центру кадру
-  alien: { x: 5, y: 24 }, // дуловий спалах фазового різака: лівий край, +2 від осі
+  player: { x: 81, y: 50 }, // дуловий спалах АР-14 «Гарт» — правий край кадру fire
+  alien: { x: 10, y: 54 }, // дуловий спалах фазового різака — лівий край яскравого ядра
 };
+
+// Точка дула на полі для центру клітинки стрільця (cx, cy); recoil — віддача, px (назад).
+export function muzzlePoint(side: 'player' | 'alien', flip: boolean, cx: number, cy: number, recoil = 0): { x: number; y: number } {
+  const m = MUZZLE_ANCHOR[side];
+  const o = unitFrameOrigin(cx, cy);
+  const back = recoil * facingSign(side, flip);
+  const mx = flip ? ATLAS_FRAME - m.x : m.x;
+  return { x: o.x + Math.round((mx * UNIT_DRAW) / ATLAS_FRAME) - back, y: o.y + Math.round((m.y * UNIT_DRAW) / ATLAS_FRAME) };
+}
+
+// Напрям погляду: +1 — праворуч; нативи — солдат праворуч, демон ліворуч.
+function facingSign(side: 'player' | 'alien', flip: boolean): 1 | -1 {
+  const native = side === 'player' ? 1 : -1;
+  return (flip ? -native : native) as 1 | -1;
+}
 
 // Юніт бою з погляду шару відображення: поза вогонь/смерть — надбудова над
 // UnitSprite ядра (ядровий frame 0/1 лишається семантикою стій/крок, ADR-0031);
@@ -185,6 +209,8 @@ export interface UnitSpriteView extends UnitSprite {
   step?: 1 | 2;
   flip?: boolean;
   maxHp: number; // П14.4: показник життя — частка hp/maxHp у смузі HP
+  recoil?: number; // Т.132: віддача пострілу, px — фігура відходить назад від погляду
+  breath?: number; // Т.132: «дихання» у спокої, 0..1 (ambient-шар; стискання по висоті від ніг)
 }
 
 // Поза за станом юніта — чиста функція, детермінована (без RNG, ADR-0003):
@@ -344,41 +370,53 @@ export function isGeoTowerReady(): boolean {
   return geoTowerImg !== null;
 }
 
-// Кадр з атласа: 96×96 → 44×44 у клітинці, цілі пікселі (Math.round),
-// згладжування вимкнене — крайові пікселі без розмиття (ADR-0068).
+// Кадр з атласа: 96 × 96 → UNIT_DRAW × UNIT_DRAW (Т.132, ADR-0121), ноги на UNIT_FEET_DY
+// нижче центру; згладжування увімкнене — масштаб 68/96 не цілий, без нього пікселі рвуться.
 // П14.3: двокадрова ходьба — step 2 обирає колонку walk2; фліп за напрямком
 // (flip) — дзеркало scale(-1,1) навколо центру кадру, детерміновано (без RNG;
 // напрямок рахує викликач — battle.ts, ядро і розкладка кадрів без змін).
+// Т.132: віддача (recoil) — зсув назад від погляду; дихання (breath) — лише в позі «стій».
 function drawAtlasUnit(ctx: CanvasRenderingContext2D, u: UnitSpriteView, row: 0 | 1, img: CanvasImageSource): void {
   const pose = unitPose(u);
   const col = pose === 'walk' && u.step === 2 ? ATLAS_WALK2_COL : ATLAS_POSE_COL[pose];
-  const x = Math.round(u.cx - ATLAS_UNIT / 2);
-  const y = Math.round(u.cy - ATLAS_UNIT / 2);
-  ctx.imageSmoothingEnabled = false;
+  const o = unitFrameOrigin(u.cx, u.cy);
+  // віддача — назад від РІДНОГО напрямку кадру: зсув рахується до дзеркала, і scale(-1,1)
+  // сам перевертає його на екрані (аудит PR #445: зі знаком погляду дзеркальний боєць сіпався вперед)
+  const x = o.x - (u.recoil ?? 0) * facingSign(u.side, false);
+  const breath = pose === 'idle' ? (u.breath ?? 0) : 0;
+  ctx.save();
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
   if (u.flip === true) {
-    ctx.save();
     ctx.translate(u.cx, u.cy);
     ctx.scale(-1, 1);
     ctx.translate(-u.cx, -u.cy);
-    ctx.drawImage(img, col * ATLAS_FRAME, row * ATLAS_FRAME, ATLAS_FRAME, ATLAS_FRAME, x, y, ATLAS_UNIT, ATLAS_UNIT);
-    ctx.restore();
-    return;
   }
-  ctx.drawImage(img, col * ATLAS_FRAME, row * ATLAS_FRAME, ATLAS_FRAME, ATLAS_FRAME, x, y, ATLAS_UNIT, ATLAS_UNIT);
+  if (breath > 0) {
+    const feet = o.y + UNIT_DRAW; // низ кадру — точка опори
+    ctx.translate(0, feet);
+    ctx.scale(1, 1 - BREATH_SCALE * breath);
+    ctx.translate(0, -feet);
+  }
+  ctx.drawImage(img, col * ATLAS_FRAME, row * ATLAS_FRAME, ATLAS_FRAME, ATLAS_FRAME, x, o.y, UNIT_DRAW, UNIT_DRAW);
+  ctx.restore();
 }
 
 function drawOverwatchMarker(ctx: CanvasRenderingContext2D, u: UnitSprite): void {
-  const off = u.side === 'player' ? -12 : 12; // кути клітинки: згори-ліворуч / знизу-праворуч (П13.5: BCELL 36)
-  drawPixelSprite(ctx, OW_BOLT, u.cx + off, u.cy + off, SPRITE_SCALE);
+  // Т.132: верхній лівий кут клітинки для обох сторін — правий верхній зайняло число HP,
+  // нижній край — смуга HP; більша фігура (68 px) стоїть по центру між ними
+  drawPixelSprite(ctx, OW_BOLT, u.cx - OW_OFF, u.cy - OW_OFF, SPRITE_SCALE);
 }
 
 // Рамка вибору (доробка П6.12 за валідацією власника): кутові дужки по кутах
 // спрайта — не перекривають силует (кільце навколо центру лягало на пікселі);
 // кути матриць спрайтів прозорі — дужки лягають на чисте місце; нижні дужки
 // перетинають кільце кольору бійця (Т.129) і малюються поверх нього.
+// Т.132: фігура 68 px займає клітинку — дужки по кутах клітинки (±23), плече 7 px.
+const OW_OFF = 16; // зсув знака дозору від центру — у кут клітинки
 function drawSelectionBrackets(ctx: CanvasRenderingContext2D, cx: number, cy: number): void {
-  const s = 16; // половина спрайта (32px у клітинці 36 — П13.5)
-  const arm = 6; // довжина плеча дужки
+  const s = 23; // кут клітинки BCELL 48 (лінія 2 px — у межах клітинки)
+  const arm = 7; // довжина плеча дужки
   ctx.strokeStyle = SELECT_RING;
   ctx.lineWidth = 2;
   ctx.beginPath();
@@ -398,19 +436,13 @@ function drawSelectionBrackets(ctx: CanvasRenderingContext2D, cx: number, cy: nu
   ctx.lineWidth = 1;
 }
 
-// П14.4 (фідбек прев'ю): показники життя юнітів — смуга HP у верхній частині
-// клітинки (заповнення за часткою hp/maxHp; фідбек власника: перенесено
-// з низу на верх) і число HP у кутковій зоні клітини (тло клітинки, не
-// спрайта — урок П6.12: темний текст у центрі силуета був невидимий на
-// атласних спрайтах П14.3). Колір смуги за часткою: зелений → бурштин →
-// червоний; число — кольори сторін (ціан «Рубіжу» / світлий пурпур Розриву,
-// ADR-0064). Ширина числа — оцінка 6px на символ (без measureText —
-// мок-контексти jsdom, урок П6.14).
-// П14.8 (ADR-0073): геометрія бейджа експортована — підсвічування ambient-шару
-// (src/ui/ambient.ts) малює по тих самих константах (одне місце правди).
-export const HP_BAR_W = 48; // ширина смуги — вся клітинка (BCELL 48)
-export const HP_BAR_H = 4; // висота смуги, px
-export const HP_BAR_Y = -23; // зміщення смуги від центру клітинки (верх клітинки)
+// П14.4 (фідбек прев'ю): показники життя юнітів — смуга HP і число HP у кутковій зоні
+// клітини. Т.132 (ADR-0121, рішення власника): смуга — під ногами, ширина кільця
+// (HP_BAR_* у ядрі: ambient-шар підсвічує по тих самих константах), число — плашка
+// у верхньому правому куті клітинки. Колір смуги за часткою: зелений → бурштин →
+// червоний; число — кольори сторін (ціан «Рубіжу» / світлий пурпур Розриву, ADR-0064).
+// Ширина числа — оцінка 6px на символ (без measureText — мок-контексти jsdom, урок П6.14).
+export { HP_BAR_H, HP_BAR_W, HP_BAR_Y };
 const HP_BACKING = 'rgba(5,8,15,0.75)'; // підкладка смуги
 const HP_PLATE_BG = 'rgba(5,8,15,0.8)'; // плашка числа HP
 const HP_NUM_PLAYER = '#9adfff'; // ціан «Рубіжу» (ADR-0064)
@@ -423,26 +455,26 @@ function hpBarColor(hp: number, maxHp: number): string {
 }
 
 function drawHpBadge(ctx: CanvasRenderingContext2D, u: UnitSpriteView): void {
-  // смуга HP: темна підкладка на всю клітинку + заповнення за часткою (верх)
+  // смуга HP під ногами: темна підкладка з 1 px облямівкою + заповнення за часткою
   const x = u.cx - HP_BAR_W / 2;
   const y = u.cy + HP_BAR_Y;
   ctx.fillStyle = HP_BACKING;
-  ctx.fillRect(x, y, HP_BAR_W, HP_BAR_H);
+  ctx.fillRect(x - 1, y - 1, HP_BAR_W + 2, HP_BAR_H + 2);
   const f = Math.max(0, Math.min(1, u.maxHp > 0 ? u.hp / u.maxHp : 0));
   ctx.fillStyle = hpBarColor(u.hp, u.maxHp);
   ctx.fillRect(x, y, u.hp > 0 ? Math.max(2, HP_BAR_W * f) : 0, HP_BAR_H);
-  // число HP: плашка у верхньому правому куті клітинки, одразу ПІД смугою
-  // (фідбек прев'ю: на одній лінії зі смугою плашка перекривала її заповнення);
-  // у межах клітинки (BCELL 48)
+  // число HP: плашка у верхньому правому куті клітинки (у межах BCELL 48); у позі «вогонь»
+  // не малюється — вона накрила б ствол і спалах дула солдата (аудит PR #445)
+  if (u.pose === 'fire') return;
   const text = String(u.hp);
   const w = text.length * 6 + 3;
   const px = u.cx + 24 - w - 1;
   ctx.fillStyle = HP_PLATE_BG;
-  ctx.fillRect(px, u.cy + HP_BAR_Y + HP_BAR_H + 1, w, 11);
+  ctx.fillRect(px, u.cy - 23, w, 11);
   ctx.fillStyle = u.side === 'player' ? HP_NUM_PLAYER : HP_NUM_ALIEN;
   ctx.font = '10px monospace';
   ctx.textBaseline = 'top';
-  ctx.fillText(text, px + 1, u.cy + HP_BAR_Y + HP_BAR_H + 3);
+  ctx.fillText(text, px + 1, u.cy - 21);
 }
 
 // Т.129 (ADR-0118): колір кільця за стороною — свій боєць за id, ворог — пурпур.
@@ -456,7 +488,24 @@ export function unitRing(side: 'player' | 'alien', id: string): string {
 // Загиблому (hp 0) кільця немає.
 const RING_GLOW = 6;
 
+// Т.132 (ADR-0121): м'яка тінь під ногами — два напівпрозорі еліпси (без градієнта:
+// мок-контексти тестів його не мають); малюється до кільця. Загиблому тіні немає.
+const SHADOW = 'rgba(0,0,0,0.32)';
+function drawFootShadow(ctx: CanvasRenderingContext2D, u: UnitSpriteView): void {
+  if (u.hp <= 0) return;
+  ctx.fillStyle = SHADOW;
+  for (const [rx, ry] of [
+    [RING_RX + 3, RING_RY + 1],
+    [RING_RX - 5, RING_RY - 2],
+  ] as const) {
+    ctx.beginPath();
+    ctx.ellipse(u.cx, u.cy + RING_DY, rx, ry, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
 function drawFootRing(ctx: CanvasRenderingContext2D, u: UnitSpriteView): void {
+  drawFootShadow(ctx, u);
   if (u.ring === undefined || u.hp <= 0) return;
   ctx.strokeStyle = u.ring;
   ctx.lineWidth = 2;
@@ -869,6 +918,11 @@ const BOOM_SPARK_ALT = '#ff7b2e';
 const DMG_NUM = '#ffb347';
 const HEAL_NUM = '#7fe2a0';
 const DNUM_RISE = 16; // підйом числа за тривалість анімації, px
+// Т.132 (ADR-0121): спалах дула, іскри влучання, пил розчинення
+const MUZZLE_FLASH_SHARE = 0.35; // частка польоту кулі зі спалахом дула
+const FLASH_CORE = '#f4fdff'; // світле ядро спалаху
+const SPARK_HOT = '#fff3b0'; // гарячі іскри (через одну — бурштин IMPACT)
+const DUST = 8; // частинок розчинення
 
 // Підказка якоря дула для трасера бою (фідбек власника 2026-10-22): сторона
 // стрільця і ЧИ ФЛІПНУТИЙ кадр (фактичний напрямок погляду цього кадру —
@@ -1069,19 +1123,18 @@ export function drawAnimFrame(
     const x1 = a.to.x * cell + cell / 2;
     const y1 = a.to.y * cell + cell / 2;
     // Фідбек власника 2026-10-22: куля стартує з дулового спалаху кадру fire
-    // (якір — MUZZLE_ANCHOR, геометрия та ж, що drawAtlasUnit: round(центр-22))
+    // (якір — MUZZLE_ANCHOR, геометрія та ж, що drawAtlasUnit, з віддачею кадру)
     // — лише з підказкою бойовища; без неї (геосцена) — від центру клітинки.
-    if (muzzle !== undefined) {
-      const m = MUZZLE_ANCHOR[muzzle.side];
-      const mx = muzzle.flip ? ATLAS_UNIT - 1 - m.x : m.x;
-      x0 = Math.round(x0 - ATLAS_UNIT / 2) + mx;
-      y0 = Math.round(y0 - ATLAS_UNIT / 2) + m.y;
-    }
     const share = TRACER_MS / a.dur;
+    if (muzzle !== undefined) {
+      const m = muzzlePoint(muzzle.side, muzzle.flip, x0, y0, recoilPx(t, share));
+      x0 = m.x;
+      y0 = m.y;
+    }
+    const color = a.side === 'player' ? TRACER_PLAYER : TRACER_RIFT;
     if (t < share) {
       // фаза 1: куля летить — відрізок від стрільця до поточного «заголовка»
       const f = t / share;
-      const color = a.side === 'player' ? TRACER_PLAYER : TRACER_RIFT;
       ctx.strokeStyle = color;
       ctx.lineWidth = 2;
       ctx.shadowColor = color; // П6.13: неонове свічення трасера
@@ -1090,10 +1143,28 @@ export function drawAnimFrame(
       ctx.moveTo(x0, y0);
       ctx.lineTo(x0 + (x1 - x0) * f, y0 + (y1 - y0) * f);
       ctx.stroke();
+      // Т.132 (ADR-0121): спалах дула — перша третина польоту кулі, гасне;
+      // два кола: світле ядро і ореол кольору сторони
+      if (muzzle !== undefined && f < MUZZLE_FLASH_SHARE) {
+        const k = 1 - f / MUZZLE_FLASH_SHARE;
+        ctx.shadowBlur = IMPACT_GLOW;
+        ctx.globalAlpha = 0.55 * k;
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.arc(x0, y0, 5 + 5 * k, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = k;
+        ctx.fillStyle = FLASH_CORE;
+        ctx.beginPath();
+        ctx.arc(x0, y0, 2 + 2 * k, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+      }
       ctx.shadowBlur = 0;
       ctx.lineWidth = 1;
     } else if (a.hit) {
-      // фаза 2: спалах у цілі — кільце, що росте і гасне
+      // фаза 2: спалах у цілі — кільце, що росте і гасне, і іскри (Т.132, ADR-0121):
+      // SPARKS квадратиків 3 px розлітаються й падають, у межах канви
       const f = (t - share) / (1 - share);
       ctx.globalAlpha = 1 - f;
       ctx.strokeStyle = IMPACT;
@@ -1105,16 +1176,32 @@ export function drawAnimFrame(
       ctx.stroke();
       ctx.shadowBlur = 0;
       ctx.lineWidth = 1;
+      for (let i = 0; i < SPARKS; i++) {
+        const o = sparkOffset(a.to, i, f);
+        ctx.fillStyle = i % 2 === 0 ? SPARK_HOT : IMPACT;
+        ctx.fillRect(Math.min(Math.max(x1 + o.dx - 1, 0), cw - 3), Math.min(Math.max(y1 + o.dy - 1, 0), ch - 3), 3, 3);
+      }
       ctx.globalAlpha = 1;
     }
     return;
   }
   if (a.kind === 'death') {
-    ctx.globalAlpha = 1 - t;
+    // Т.132 (ADR-0121): розчинення — кадр смерті розсипається смугами DISSOLVE_STRIP px
+    // (поріг смуги — dissolveKept, без RNG) і блідне; угору летять частинки кольору сторони.
+    const cx = a.at.x * cell + cell / 2;
+    const cy = a.at.y * cell + cell / 2;
+    const top = a.at.y * cell;
+    ctx.save();
+    ctx.beginPath();
+    for (let k = 0; k * DISSOLVE_STRIP < cell; k++) {
+      if (dissolveKept(k, t)) ctx.rect(cx - UNIT_DRAW / 2, top + k * DISSOLVE_STRIP, UNIT_DRAW, DISSOLVE_STRIP);
+    }
+    ctx.clip();
+    ctx.globalAlpha = 1 - 0.6 * t;
     drawUnitSprite(ctx, {
       side: a.side,
-      cx: a.at.x * cell + cell / 2,
-      cy: a.at.y * cell + cell / 2,
+      cx,
+      cy,
       r,
       hp: 0,
       maxHp: a.hpMax, // П14.4: порожня смуга HP загиблого
@@ -1122,7 +1209,17 @@ export function drawAnimFrame(
       overwatch: false,
       pose: 'death', // П14.2 (ADR-0072): кадр смерті з атласа; фолбек — матриця
     });
-    ctx.globalAlpha = 1;
+    ctx.restore();
+    if (t > 0) {
+      ctx.globalAlpha = 1 - t;
+      ctx.fillStyle = a.side === 'player' ? TRACER_PLAYER : TRACER_RIFT;
+      for (let i = 0; i < DUST; i++) {
+        const dx = -20 + i * 5;
+        const dy = 10 - Math.round((30 * t * ((i % 3) + 1)) / 3);
+        ctx.fillRect(Math.min(Math.max(cx + dx, 0), cw - 2), Math.max(cy + dy, 0), 2, 2);
+      }
+      ctx.globalAlpha = 1;
+    }
     return;
   }
   // owflash: кільце дозору, що росте і гасне (колір — як маркер дозору)

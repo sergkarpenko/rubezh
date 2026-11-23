@@ -12,7 +12,7 @@
 // сітка в проміжках, м'який край туману (сенс туману незмінний).
 // П6.14: обведення валідних цілей і шанс попадання (drawTargetFrame/drawChanceLabel).
 // П14.2 (ADR-0072): атлас спрайтів юнітів бою — вибір кадру за станом юніта
-// (idle/walk/fire/death, чиста функція без RNG), nearest-neighbor 44×44 у
+// (idle/walk/fire/death, чиста функція без RNG), Т.132: 68 × 68 зі згладжуванням у
 // BCELL 48 (П14.3: walk2 — окремий кадр, фліп за напрямком), обов'язковий
 // фолбек на матриці ADR-0031 при !loaded (тести від
 // ассета не залежать — завантажувач інжектиться моком).
@@ -51,6 +51,7 @@ import {
   initMetroTiles,
   initPixelSprites,
   initUnitAtlas,
+  muzzlePoint,
   isGeoMapReady,
   isGeoTowerReady,
   isMetroTerrainReady,
@@ -83,7 +84,17 @@ import {
   UFO_SCOUT_SPRITE,
 } from './core/sprites';
 import { BCELL, GCELL } from './ui/grid';
-import { ALIEN_RING, FIGHTER_COLORS, RING_DY, RING_RX, RING_RY } from './core/render-core';
+import {
+  ALIEN_RING,
+  ATLAS_FEET_ROW,
+  BREATH_SCALE,
+  FIGHTER_COLORS,
+  HP_BAR_H,
+  RING_DY,
+  RING_RX,
+  RING_RY,
+  UNIT_FEET_DY,
+} from './core/render-core';
 
 // Клітиночка прев'ю: BCELL = 48 (П14.3, ADR-0068), центр (24, 24), радіус силуету 8 (як у renderBattle).
 const CX = 24;
@@ -358,14 +369,15 @@ describe('солдат і прибульчик: різні матриці, зб�
 });
 
 describe('читабельність стану (ADR-0007)', () => {
-  it('HP: смуга у верхній частині клітинки (підкладка + заповнення за часткою) і число на плашці', () => {
+  it('HP: смуга під ногами (Т.132: підкладка з облямівкою + заповнення за часткою) і число на плашці', () => {
     const s = animCtx(); // Proxy: записує і виклики, і присвоєння властивостей
     drawSoldierSprite(s.ctx, soldier({ hp: 7 }));
     expect(s.calls.some((c) => c.m === 'fillText' && c.args[0] === '7')).toBe(true);
-    // смуга: підкладка на всю клітинку ВГОРУ і заповнення 7/10
+    // смуга: підкладка 36 × 5 під ногами (CY+19..CY+24 — у межах клітинки) і заповнення 7/10 від 34
     const rects = s.calls.filter((c) => c.m === 'fillRect') as Array<{ args: number[] }>;
-    expect(rects.some((c) => c.args[0] === CX - 24 && c.args[1] === CY - 23 && c.args[2] === 48 && c.args[3] === 4)).toBe(true);
-    expect(rects.some((c) => c.args[1] === CY - 23 && c.args[2] >= 33 && c.args[2] <= 34 && c.args[3] === 4)).toBe(true); // 48×0.7
+    expect(rects.some((c) => c.args[0] === CX - 18 && c.args[1] === CY + 19 && c.args[2] === 36 && c.args[3] === 5)).toBe(true);
+    expect(rects.some((c) => c.args[1] === CY + 20 && c.args[2] >= 23 && c.args[2] <= 24 && c.args[3] === 3)).toBe(true); // 34×0.7
+    expect(CY + 19 + 5).toBeLessThanOrEqual(CY + 24); // низ підкладки — низ клітинки
     expect(s.sets.some((x) => x.p === 'fillStyle' && x.v === '#7fe2a0')).toBe(true); // >50% — зелений
 
     const a = animCtx();
@@ -379,14 +391,14 @@ describe('читабельність стану (ADR-0007)', () => {
     expect(low.calls.some((c) => c.m === 'fillText' && c.args[0] === '1')).toBe(true);
   });
 
-  it('HP-число: кольори сторін на темній плашці (ціан/пурпур, ADR-0064), під смугою — без перекриття', () => {
+  it('HP-число: кольори сторін на темній плашці (ціан/пурпур, ADR-0064), у верхньому правому куті клітинки', () => {
     const s = animCtx();
     drawSoldierSprite(s.ctx, soldier({ hp: 7 }));
     expect(s.sets.some((x) => x.p === 'fillStyle' && x.v === '#9adfff')).toBe(true);
     const plate = s.calls.find((c) => c.m === 'fillRect' && (c.args as number[])[3] === 11)!;
     const p = plate.args as number[];
     expect(p[0] + p[2]).toBeLessThanOrEqual(CX + 24); // край клітинки
-    expect(p[1]).toBe(CY - 23 + 4 + 1); // одразу під смугою (верх смуги CY-23, висота 4)
+    expect(p[1]).toBe(CY - 23); // Т.132: верхній правий кут клітинки (смуга — під ногами)
     const a = animCtx();
     drawAlienSprite(a.ctx, alien({ hp: 4 }));
     expect(a.sets.some((x) => x.p === 'fillStyle' && x.v === '#ff9ecb')).toBe(true);
@@ -400,24 +412,24 @@ describe('читабельність стану (ADR-0007)', () => {
     expect(moves.length).toBe(4); // по одній дужці на кут
     expect(lines.length).toBe(8); // два плечі на кут
 
-    expect(moves.some((c) => (c.args as number[])[0] === CX - 16 && (c.args as number[])[1] === CY - 16 + 6)).toBe(
+    expect(moves.some((c) => (c.args as number[])[0] === CX - 23 && (c.args as number[])[1] === CY - 23 + 7)).toBe(
       true
-    ); /* дужки на межах спрайта 32px (П13.5) */
+    ); /* Т.132: дужки по кутах клітинки 48 (фігура 68 px займає клітинку) */
 
     const notSel = mockCtx();
     drawSoldierSprite(notSel.ctx, soldier());
     expect(notSel.calls.some((c) => c.m === 'moveTo' || c.m === 'lineTo')).toBe(false);
   });
 
-  it('маркер дозору — «блискавка» з кантом у кутку клітинки 10×10: солдат згори ліворуч, прибульчик знизу праворуч (П6.12b)', () => {
+  it('маркер дозору — «блискавка» з кантом у кутку клітинки 10×10: верхній лівий кут для обох сторін (Т.132)', () => {
     const rf = rasterFactory();
     initPixelSprites(rf.make);
     const s = mockCtx();
     drawSoldierSprite(s.ctx, soldier({ overwatch: true }));
     const owS = s.calls.find((c) => c.m === 'drawImage' && (c.args as number[])[3] === 10);
     expect(owS).toBeDefined();
-    expect((owS!.args as number[])[1]).toBe(CX - 17); // верхній лівий кут клітинки (центр CX-12, розмір 10 — П13.5)
-    expect((owS!.args as number[])[2]).toBe(CY - 17);
+    expect((owS!.args as number[])[1]).toBe(CX - 21); // верхній лівий кут клітинки (центр CX-16, розмір 10)
+    expect((owS!.args as number[])[2]).toBe(CY - 21);
     const bolt = rf.canvases[1]; // перша матриця після силуета — блискавка
     expect(bolt.pixels.some((p) => p.color === '#ffb347')).toBe(true); // бурштин знака (П12.7, ADR-0064)
     expect(bolt.pixels.some((p) => p.color === '#0b0e15')).toBe(true); // темний кант
@@ -426,8 +438,8 @@ describe('читабельність стану (ADR-0007)', () => {
     drawAlienSprite(a.ctx, alien({ overwatch: true }));
     const owA = a.calls.find((c) => c.m === 'drawImage' && (c.args as number[])[3] === 10);
     expect(owA).toBeDefined();
-    expect((owA!.args as number[])[1]).toBe(CX + 7); // нижній правий кут (центр CX+12), в межах клітинки
-    expect((owA!.args as number[])[2]).toBe(CY + 7);
+    expect((owA!.args as number[])[1]).toBe(CX - 21); // Т.132: правий верхній — число HP, низ — смуга HP
+    expect((owA!.args as number[])[2]).toBe(CY - 21);
   });
 });
 
@@ -813,7 +825,7 @@ describe('П14.2/П14.3 (ADR-0072): атлас спрайтів юнітів —
     expect(unitPose({ frame: 1, pose: 'death' })).toBe('death');
   });
 
-  it('атлас готовий: кадр 96×96 → 44×44 у клітинці 48, nearest-neighbor, за позою і стороною', () => {
+  it('атлас готовий: кадр 96×96 → 68×68 (Т.132), фігура в межах клітинки 48 по висоті, згладжування, за позою і стороною', () => {
     readyAtlas();
     const cases = [
       { side: 'player' as const, pose: undefined, col: ATLAS_POSE_COL.idle, row: 0 },
@@ -834,13 +846,14 @@ describe('П14.2/П14.3 (ADR-0072): атлас спрайтів юнітів —
       expect(a[2]).toBe(c.row * ATLAS_FRAME); // рядок: 0 — оперативник, 1 — демон Розриву
       expect(a[3]).toBe(ATLAS_FRAME);
       expect(a[4]).toBe(ATLAS_FRAME);
-      expect(a[5]).toBe(CX - ATLAS_UNIT / 2); // Math.round(24 − 22) = 2
-      expect(a[6]).toBe(CY - ATLAS_UNIT / 2);
-      expect(a[7]).toBe(ATLAS_UNIT); // 44×44 у клітинці BCELL 48 (П14.3)
+      expect(a[5]).toBe(CX - ATLAS_UNIT / 2); // Math.round(24 − 34) = −10
+      expect(a[6]).toBe(Math.round(CY + UNIT_FEET_DY - (ATLAS_UNIT * ATLAS_FEET_ROW) / ATLAS_FRAME)); // −23
+      expect(a[7]).toBe(ATLAS_UNIT); // 68 × 68 (Т.132, ADR-0121)
       expect(a[8]).toBe(ATLAS_UNIT);
-      expect(a[5] + a[7]).toBeLessThanOrEqual(CELL); // межі клітинки (урок П6.6)
-      expect(a[6] + a[8]).toBeLessThanOrEqual(CELL);
-      expect(s.sets.some((x) => x.p === 'imageSmoothingEnabled' && x.v === false)).toBe(true);
+      // фігура кадру — рядки 34..93 атласа (прозорі поля зверху): у межах клітинки по висоті
+      expect(a[6] + (34 * ATLAS_UNIT) / ATLAS_FRAME).toBeGreaterThanOrEqual(0);
+      expect(a[6] + (ATLAS_FEET_ROW * ATLAS_UNIT) / ATLAS_FRAME).toBeLessThanOrEqual(CELL);
+      expect(s.sets.some((x) => x.p === 'imageSmoothingEnabled' && x.v === true)).toBe(true); // масштаб 68/96 не цілий
     }
   });
 
@@ -872,7 +885,68 @@ describe('П14.2/П14.3 (ADR-0072): атлас спрайтів юнітів —
     const plain = animCtx();
     drawUnitSprite(plain.ctx, soldier());
     expect(plain.calls.some((c) => c.m === 'scale')).toBe(false);
-    expect(plain.calls.some((c) => c.m === 'save')).toBe(false);
+  });
+
+  it('Т.132: віддача зсуває кадр назад від погляду (солдат — ліворуч, демон — праворуч, дзеркало — навпаки)', () => {
+    readyAtlas();
+    // лівий край кадру НА ЕКРАНІ: у дзеркалі (scale(-1,1) навколо CX) — 2·CX − (x + 68)
+    const left = (u: Parameters<typeof soldier>[0]): number => {
+      const s = animCtx();
+      drawUnitSprite(s.ctx, soldier(u));
+      const x = (s.calls.find((c) => c.m === 'drawImage')!.args as number[])[5]!;
+      return u?.flip === true ? 2 * CX - (x + ATLAS_UNIT) : x;
+    };
+    const base = CX - ATLAS_UNIT / 2;
+    // назад від погляду: солдат праворуч → ліворуч; демон ліворуч → праворуч; дзеркало — навпаки
+    for (const [u, back] of [
+      [{ side: 'player' as const }, -3],
+      [{ side: 'alien' as const }, 3],
+      [{ side: 'player' as const, flip: true }, 3],
+      [{ side: 'alien' as const, flip: true }, -3],
+    ] as const) {
+      expect(left({ ...u, pose: 'fire', recoil: 3 }) - left({ ...u, pose: 'fire' }), JSON.stringify(u)).toBe(back);
+      // кадр і дуло (muzzlePoint) зсуваються однаково
+      const flip = 'flip' in u && u.flip === true;
+      expect(muzzlePoint(u.side, flip, CX, CY, 3).x - muzzlePoint(u.side, flip, CX, CY, 0).x).toBe(back);
+    }
+    expect(left({ pose: 'fire' })).toBe(base);
+  });
+
+  it('Т.132: у позі «вогонь» плашки числа HP немає (не накриває ствол), смуга HP лишається', () => {
+    readyAtlas();
+    const s = animCtx();
+    drawUnitSprite(s.ctx, soldier({ pose: 'fire', hp: 7 }));
+    expect(s.calls.some((c) => c.m === 'fillText')).toBe(false);
+    expect(s.calls.some((c) => c.m === 'fillRect' && (c.args as number[])[3] === HP_BAR_H)).toBe(true);
+  });
+
+  it('Т.132: дихання — стискання по висоті від низу кадру лише в позі «стій»', () => {
+    readyAtlas();
+    const idle = animCtx();
+    drawUnitSprite(idle.ctx, soldier({ breath: 1 }));
+    const sc = idle.calls.find((c) => c.m === 'scale')!.args as number[];
+    expect(sc[0]).toBe(1);
+    expect(sc[1]).toBeCloseTo(1 - BREATH_SCALE, 6);
+    const img = idle.calls.find((c) => c.m === 'drawImage')!.args as number[];
+    expect(idle.calls.find((c) => c.m === 'translate')!.args).toEqual([0, img[6]! + ATLAS_UNIT]); // опора — низ кадру
+    for (const u of [{ breath: 1, pose: 'fire' as const }, { breath: 1, step: 1 as const }, { breath: 0 }]) {
+      const s = animCtx();
+      drawUnitSprite(s.ctx, soldier(u));
+      expect(s.calls.some((c) => c.m === 'scale')).toBe(false);
+    }
+  });
+
+  it('Т.132: тінь — два еліпси під ногами до кільця; загиблому тіні немає', () => {
+    const { ctx, calls } = mockCtx();
+    drawSoldierSprite(ctx, soldier({ ring: FIGHTER_COLORS[0] }));
+    const el = calls.filter((c) => c.m === 'ellipse').map((c) => c.args as number[]);
+    expect(el).toHaveLength(3);
+    expect(el[0]!.slice(0, 4)).toEqual([CX, CY + RING_DY, RING_RX + 3, RING_RY + 1]);
+    expect(el[2]![2]).toBe(RING_RX); // кільце — після тіні
+    expect(RING_DY + RING_RY + 1).toBeLessThanOrEqual(CELL / 2); // тінь у межах клітинки
+    const dead = mockCtx();
+    drawSoldierSprite(dead.ctx, soldier({ hp: 0 }));
+    expect(dead.calls.some((c) => c.m === 'ellipse')).toBe(false);
   });
 
   it('фолбек при !loaded: матриці ADR-0031 (drawImage з offscreen-канваса, 5 аргументів), маркери на місці', () => {
@@ -1431,7 +1505,7 @@ describe('Т.129: кільце кольору бійця під ногами', (
     const c = ctx as unknown as { ellipse: (...a: unknown[]) => void; strokeStyle: unknown };
     const base = c.ellipse;
     c.ellipse = (...a: unknown[]) => {
-      rec.push({ style: c.strokeStyle, args: a });
+      if (a[2] === RING_RX) rec.push({ style: c.strokeStyle, args: a }); // Т.132: тінь — інші радіуси
       base(...a);
     };
     draw(ctx);
@@ -1442,7 +1516,7 @@ describe('Т.129: кільце кольору бійця під ногами', (
   it('свій боєць: еліпс кольору бійця під центром клітинки, до силуету', () => {
     const { ctx, calls } = mockCtx();
     drawSoldierSprite(ctx, soldier({ ring: FIGHTER_COLORS[1] }));
-    const iE = calls.findIndex((c) => c.m === 'ellipse');
+    const iE = calls.findIndex((c) => c.m === 'ellipse' && c.args[2] === RING_RX);
     const iImg = calls.findIndex((c) => c.m === 'drawImage');
     expect(iE).toBeGreaterThanOrEqual(0);
     expect(iE).toBeLessThan(iImg);
@@ -1467,7 +1541,7 @@ describe('Т.129: кільце кольору бійця під ногами', (
     expect(RING_RX).toBeLessThanOrEqual(CELL / 2 - 1);
     const { ctx, calls } = mockCtx();
     drawSoldierSprite(ctx, soldier({ ring: FIGHTER_COLORS[0], selected: true }));
-    const iE = calls.findIndex((c) => c.m === 'ellipse');
+    const iE = calls.findIndex((c) => c.m === 'ellipse' && c.args[2] === RING_RX);
     const iBracket = calls.map((c) => c.m).lastIndexOf('stroke');
     expect(iE).toBeGreaterThanOrEqual(0);
     expect(iBracket).toBeGreaterThan(iE + 1); // друга лінія після кільця — дужки

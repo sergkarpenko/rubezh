@@ -14,6 +14,8 @@ import {
   AMBIENT_HP_FRACTION,
   AMBIENT_KEY,
   AMBIENT_MAX_EFFECTS,
+  BREATH_MS,
+  breathAmount,
   createAmbient,
   hpGlowAlpha,
   paintBattleAmbient,
@@ -382,11 +384,11 @@ describe('П14.8: малювальник бою — wall-pulse + hp-glow (пер
     expect(ops).toEqual([]);
   });
 
-  it('hp-glow: лише hp/maxHp < 0.35; геометрія бейджа — смуга HP зверху клітинки', () => {
+  it('hp-glow: лише hp/maxHp < 0.35; геометрія бейджа — смуга HP під ногами (Т.132)', () => {
     const { ctx, ops } = mockCtx();
     paintBattleAmbient(ctx, battleScene([cell(0, 0)], wounded()), 700);
     const glows = ops.filter((o) => o.startsWith('fillRect'));
-    expect(glows).toEqual(['fillRect(96,97,48,4)', 'fillRect(144,97,48,4)']); // x*48, y*48+1 (HP_BAR_*)
+    expect(glows).toEqual(['fillRect(103,140,34,3)', 'fillRect(151,140,34,3)']); // x*48+7, y*48+44 (HP_BAR_*)
     expect(ops.some((o) => o.startsWith('set:fillStyle=rgba(255,92,122,'))).toBe(true);
     expect(AMBIENT_HP_FRACTION).toBe(0.35); // поріг підсвічування — стала шару
   });
@@ -599,5 +601,28 @@ describe('Т.58: ambient і стартовий екран', () => {
     amb.resume();
     expect(h.scheduled()).toBe(1);
     expect(h.pending()).toBe(true);
+  });
+});
+
+// Т.132 (ADR-0121): «дихання» бійців у спокої
+describe('Т.132: breath', () => {
+  it('breathAmount: 0..1, період BREATH_MS, сусідні клітинки — різна фаза', () => {
+    for (let t = 0; t < BREATH_MS; t += 150) {
+      const v = breathAmount(t, { x: 2, y: 3 });
+      expect(v).toBeGreaterThanOrEqual(0);
+      expect(v).toBeLessThanOrEqual(1);
+      expect(breathAmount(t + BREATH_MS, { x: 2, y: 3 })).toBeCloseTo(v, 9);
+    }
+    expect(breathAmount(0, { x: 2, y: 3 })).not.toBeCloseTo(breathAmount(0, { x: 3, y: 3 }), 3);
+  });
+
+  it('Ambient.breath: увімкнено — значення від годинника; вимкнено чи без rAF — 0', () => {
+    const h = makeHarness();
+    const amb = createAmbient({ ...h, now: () => 600, store: memStore() });
+    expect(amb.breath({ x: 1, y: 1 })).toBeCloseTo(breathAmount(600, { x: 1, y: 1 }), 9);
+    amb.toggle();
+    expect(amb.breath({ x: 1, y: 1 })).toBe(0);
+    const noRaf = createAmbient({ ...makeHarness(), hasRaf: () => false, store: memStore() });
+    expect(noRaf.breath({ x: 1, y: 1 })).toBe(0);
   });
 });

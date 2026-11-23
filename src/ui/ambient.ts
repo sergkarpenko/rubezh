@@ -13,7 +13,10 @@
 //   radar-sweep  — безперервне повільне обертання радар-сектора геосцени
 //                  у стані спокою (розвиток gscan П14.5);
 //   hp-glow      — легке підсвічування HP-бейджів (П14.4) при частці
-//                  hp/maxHp < AMBIENT_HP_FRACTION.
+//                  hp/maxHp < AMBIENT_HP_FRACTION;
+//   breath       — Т.132 (ADR-0121): «дихання» бійців у спокої — стискання фігури
+//                  по висоті від ніг (BREATH_SCALE); не окремий малюнок, а параметр
+//                  кадру юніта (battle.ts) — лічильник ефектів не займає.
 // city-flicker (мерехтіння вогнів міст) вимкнено у позафазній лінії
 // «візуальні порівняння» (кандидат А «нічний супутник», 2026-10-22):
 // вогні міст намальовані на карті світу — рендер-хеш дублював би їх.
@@ -24,7 +27,7 @@
 
 import { type TerrainCell } from '../core/render-core';
 import { RADAR_RANGE } from '../core/geo';
-import { HP_BAR_H, HP_BAR_W, HP_BAR_Y } from '../render';
+import { HP_BAR_H, HP_BAR_W, HP_BAR_Y } from '../core/render-core';
 import type { Vec2 } from '../core/combat';
 
 // --- Тумблер: localStorage ПОЗА сейвом (ADR-0073 п.3; патерн audio.ts) ---
@@ -55,6 +58,7 @@ export const AMBIENT_HP_FRACTION = 0.35; // hp-glow: підсвічування 
 const WALL_PULSE_MS = 4000; // wall-pulse: повільна пульсація кантів стін
 const HP_GLOW_MS = 1000; // hp-glow: подих підсвічування бейджів
 const SWEEP_MS = 6000; // radar-sweep: повний оберт сектора
+export const BREATH_MS = 2400; // breath: вдих-видих (Т.132)
 
 // Фаза у межах періоду (негативний wall-clock не ламає прогрес).
 function phase(t: number, period: number): number {
@@ -71,6 +75,13 @@ export function wallPulseAlpha(t: number): number {
 // стіни: стан юніта — інформація, не декор).
 export function hpGlowAlpha(t: number): number {
   return 0.25 + 0.3 * (0.5 + 0.5 * Math.sin((2 * Math.PI * phase(t, HP_GLOW_MS)) / HP_GLOW_MS));
+}
+
+// breath (Т.132): 0..1 — синусоїда BREATH_MS; фаза зсунута за клітинкою, щоб загін
+// не «дихав» в унісон (детерміновано від позиції, без RNG).
+export function breathAmount(t: number, at: Vec2): number {
+  const shift = (at.x * 700 + at.y * 300) % BREATH_MS;
+  return 0.5 + 0.5 * Math.sin((2 * Math.PI * phase(t + shift, BREATH_MS)) / BREATH_MS);
 }
 
 // radar-sweep: кут сектора розгортки — безперервний повний оберт (розвиток
@@ -137,7 +148,7 @@ export function paintBattleAmbient(ctx: CanvasRenderingContext2D, s: AmbientBatt
     if (fx >= AMBIENT_MAX_EFFECTS) break;
     if (u.maxHp <= 0 || u.hp / u.maxHp >= AMBIENT_HP_FRACTION) continue; // лише низький HP
     fx++; // hp-glow — по одному на пораненого юніта
-    // геометрія бейджа — константи render.ts (HP_BAR_*): підсвічування смуги HP
+    // геометрія бейджа — константи ядра render-core (HP_BAR_*): підсвічування смуги HP
     ctx.fillStyle = glow;
     ctx.fillRect(u.at.x * s.cell + (s.cell - HP_BAR_W) / 2, u.at.y * s.cell + s.cell / 2 + HP_BAR_Y, HP_BAR_W, HP_BAR_H);
   }
@@ -202,6 +213,7 @@ export interface Ambient {
   // гейти тумблера і typeof-rAF усередині — jsdom (стаб П6.16) — 0 викликів.
   paintBattle(ctx: CanvasRenderingContext2D, scene: AmbientBattleScene): void;
   paintGeo(ctx: CanvasRenderingContext2D, scene: AmbientGeoScene): void;
+  breath(at: Vec2): number; // Т.132: дихання бійця 0..1; вимкнено чи jsdom — 0
 }
 
 export function createAmbient(deps: AmbientDeps): Ambient {
@@ -274,5 +286,6 @@ export function createAmbient(deps: AmbientDeps): Ambient {
       if (!on || !deps.hasRaf()) return;
       paintGeoAmbient(ctx, scene, deps.now());
     },
+    breath: (at) => (on && deps.hasRaf() ? breathAmount(deps.now(), at) : 0),
   };
 }

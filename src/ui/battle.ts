@@ -46,7 +46,9 @@ import {
   moveAnimPos,
   pendingAlienMoveStarts,
   pendingDeathStarts,
+  recoilPx,
   shakeOffset,
+  TRACER_MS,
   type Anim,
   type TerrainCell,
 } from '../core/render-core';
@@ -100,6 +102,8 @@ export interface BattleAnimAdapter {
 // (тумблер, typeof-rAF): вимкнено/jsdom — 0 Canvas-викликів.
 export interface BattleAmbient {
   paintBattle(ctx: CanvasRenderingContext2D, scene: AmbientBattleScene): void;
+  // Т.132 (ADR-0121): «дихання» бійця в спокої, 0..1 за клітинкою; вимкнено — 0
+  breath?(at: Vec2): number;
 }
 
 // Залежності від шару застосунку (main.ts).
@@ -450,6 +454,9 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
       );
       if (shooter !== undefined) firingId = shooter.id;
     }
+    // Т.132 (ADR-0121): віддача стрільця — перші кадри польоту кулі
+    const recoil =
+      activeAnim !== null && activeAnim.kind === 'tracer' ? recoilPx(animT(activeAnim, deps.anim.now), TRACER_MS / activeAnim.dur) : 0;
 
     // П14.4 (фідбек прев'ю): ходи демонів у черзі ще не відтворені —
     // статичний прохід не малює їх у фінальних клітинках до початку їхньої
@@ -592,6 +599,8 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
         selected: u.id === ui.selectedId,
         overwatch: u.overwatch,
         pose: u.id === firingId ? 'fire' : undefined, // П14.2 (ADR-0072)
+        recoil: u.id === firingId ? recoil : 0, // Т.132: віддача пострілу
+        breath: u.id === firingId ? 0 : (deps.ambient.breath?.(at) ?? 0), // Т.132: дихання у спокої
         ring: unitRing(u.side, u.id), // Т.129: кільце кольору бійця (вороги — пурпур)
         flip: (facing.get(u.id) ?? native) !== native, // П14.3: дзеркало за напрямком
       });
