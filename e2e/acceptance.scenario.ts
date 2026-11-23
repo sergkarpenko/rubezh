@@ -16,7 +16,7 @@ import { expect, test, type Page } from '@playwright/test';
 import { TICK_MINUTES } from '../src/core/geo';
 import { MISSION_MAP_H, MISSION_MAP_W } from '../src/core/mission';
 import type { Vec2 } from '../src/core/combat';
-import { cellHash } from '../src/core/render-core';
+import { FIGHTER_COLORS, RING_DY, RING_RX, cellHash, fighterLook } from '../src/core/render-core';
 import { CoreMirror, enemyLine, unitLine } from './mirror';
 
 const SEED = 42;
@@ -309,6 +309,10 @@ test('сценарій приймання ADR-0030: партія → місія 
     ).toBeLessThan(24);
     await page.locator('#status-tab-squad').click();
     await expectLook(page); // Т.124: вигляд набору інтерфейсу
+    // Т.129 (ADR-0118): аватар «шолом» у кожному рядку ростера — колір бійця за id
+    const avatars = page.locator('#roster .soldier svg.avatar');
+    await expect(avatars).toHaveCount(FIGHTER_COLORS.length);
+    expect(await avatars.evaluateAll((a) => a.map((s) => s.getAttribute('data-color')))).toEqual([...FIGHTER_COLORS]);
   });
 
   // Т.31: геосцена, журнал і колонка стану — в одному екрані; сторінка не
@@ -674,6 +678,26 @@ test('сценарій приймання ADR-0030: партія → місія 
     await expect.poll(async () => Math.max(...(await spread(fogCells))), { message: 'Т.44: туман знебарвлено' }).toBeLessThanOrEqual(9);
     const seenSpread = await spread(seenCells);
     expect(seenSpread.reduce((a, v) => a + v, 0) / seenSpread.length, 'Т.44: видимі клітинки кольорові').toBeGreaterThan(12);
+    // Т.129 (ADR-0118): кільце кольору бійця під ногами — пікселі на лівому і правому краї еліпса
+    // мають колір бійця за id (відстань у RGB < 90); пікселі канви від шрифту не залежать
+    const rings = st.units
+      .filter((u) => u.side === 'player' && u.alive)
+      .map((u) => ({ x: u.pos.x * 48 + 24, y: u.pos.y * 48 + 24 + RING_DY, rx: RING_RX, hex: fighterLook(u.id).color }));
+    expect(rings.length).toBeGreaterThan(0);
+    const ringDist = (): Promise<number[]> =>
+      page.evaluate((rs) => {
+        const cx = (document.getElementById('battle') as HTMLCanvasElement).getContext('2d')!;
+        return rs.flatMap((r) =>
+          [-r.rx, r.rx].map((dx) => {
+            const d = cx.getImageData(r.x + dx, r.y, 1, 1).data;
+            const c = [1, 3, 5].map((i) => parseInt(r.hex.slice(i, i + 2), 16));
+            return Math.round(Math.hypot(d[0]! - c[0]!, d[1]! - c[1]!, d[2]! - c[2]!));
+          })
+        );
+      }, rings);
+    await expect
+      .poll(async () => Math.max(...(await ringDist())), { message: 'Т.129: кільця кольору бійців ' + JSON.stringify(rings) })
+      .toBeLessThan(90);
     await expectBattleFits(page, '1440 × 900', 740);
     await page.setViewportSize({ width: 1366, height: 768 });
     await expectBattleFits(page, '1366 × 768', 640);

@@ -15,7 +15,12 @@
 // байт-у-байт незмінний, RNG не викликається, туман (видимість) вирішує викликаюч.
 
 import {
+  ALIEN_RING,
+  RING_DY,
+  RING_RX,
+  RING_RY,
   BOOM_PARTICLES,
+  fighterLook,
   FOG_EDGE,
   fogBorderSegments,
   PATH_LABEL_CHAR_W,
@@ -439,7 +444,31 @@ function drawHpBadge(ctx: CanvasRenderingContext2D, u: UnitSpriteView): void {
   ctx.fillText(text, px + 1, u.cy + HP_BAR_Y + HP_BAR_H + 3);
 }
 
+// Т.129 (ADR-0118): колір кільця за стороною — свій боєць за id, ворог — пурпур.
+export function unitRing(side: 'player' | 'alien', id: string): string {
+  return side === 'player' ? fighterLook(id).color : ALIEN_RING;
+}
+
+// Т.129 (ADR-0118): кільце кольору бійця під ногами — еліпс 28 × 10 px біля
+// низу клітинки, лінія 2 px зі світінням; малюється до силуету (ноги поверх).
+// Загиблому (hp 0) кільця немає.
+const RING_GLOW = 6;
+
+function drawFootRing(ctx: CanvasRenderingContext2D, u: UnitSpriteView): void {
+  if (u.ring === undefined || u.hp <= 0) return;
+  ctx.strokeStyle = u.ring;
+  ctx.lineWidth = 2;
+  ctx.shadowColor = u.ring;
+  ctx.shadowBlur = RING_GLOW;
+  ctx.beginPath();
+  ctx.ellipse(u.cx, u.cy + RING_DY, RING_RX, RING_RY, 0, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+  ctx.lineWidth = 1;
+}
+
 export function drawSoldierSprite(ctx: CanvasRenderingContext2D, u: UnitSpriteView): void {
+  drawFootRing(ctx, u);
   // П14.2 (ADR-0072): атлас готовий — кадр з нього; інакше матриці ADR-0031.
   if (unitAtlasImg !== null) drawAtlasUnit(ctx, u, 0, unitAtlasImg);
   else drawPixelSprite(ctx, (u.frame ?? 0) === 1 ? SOLDIER_STEP : SOLDIER_STAND, u.cx, u.cy, SPRITE_SCALE);
@@ -449,6 +478,7 @@ export function drawSoldierSprite(ctx: CanvasRenderingContext2D, u: UnitSpriteVi
 }
 
 export function drawAlienSprite(ctx: CanvasRenderingContext2D, u: UnitSpriteView): void {
+  drawFootRing(ctx, u);
   if (unitAtlasImg !== null) drawAtlasUnit(ctx, u, 1, unitAtlasImg);
   else drawPixelSprite(ctx, (u.frame ?? 0) === 1 ? ALIEN_STEP : ALIEN_STAND, u.cx, u.cy, SPRITE_SCALE);
   if (u.overwatch) drawOverwatchMarker(ctx, u);
@@ -1024,6 +1054,7 @@ export function drawAnimFrame(
       maxHp: a.hpMax, // П14.4: смуга HP під час руху
       selected: a.selected,
       overwatch: a.overwatch,
+      ring: unitRing(a.side, a.unitId), // Т.129: кільце їде разом із бійцем
       frame,
       step: frame === 1 ? 2 : 1, // П14.3: двокадрова ходьба — walk1/walk2 (фолбек — frame)
       flip: dir !== 0 && dir !== native,

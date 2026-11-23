@@ -38,6 +38,7 @@ import {
   drawReachZone,
   drawTargetFrame,
   drawUnitSprite,
+  unitRing,
 } from '../render';
 import {
   animT,
@@ -528,6 +529,7 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
         selected: u.id === ui.selectedId,
         overwatch: u.overwatch,
         pose: u.id === firingId ? 'fire' : undefined, // П14.2 (ADR-0072)
+        ring: unitRing(u.side, u.id), // Т.129: кільце кольору бійця (вороги — пурпур)
         flip: (facing.get(u.id) ?? native) !== native, // П14.3: дзеркало за напрямком
       });
     }
