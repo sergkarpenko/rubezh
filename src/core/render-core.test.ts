@@ -58,6 +58,7 @@ import {
   ATLAS_FEET_ROW,
   HP_BAR_H,
   HP_BAR_Y,
+  cellHash,
   dissolveKept,
   recoilPx,
   sparkOffset,
@@ -895,6 +896,54 @@ describe('Т.132: бієць на полі і ефекти', () => {
     expect(new Set(a.map((o) => o.dx + ',' + o.dy)).size).toBeGreaterThan(SPARKS / 2); // розліт, не купа
     const end = Array.from({ length: SPARKS }, (_, i) => sparkOffset({ x: 3, y: 4 }, i, 1));
     for (const o of end) expect(o.dy).toBeLessThanOrEqual(22 * 0.8 + 10 + 1);
+  });
+
+  // Траєкторія іскри (Т.139; 20 живих мутантів `sparkOffset`, звіт Т.136): кут, дальність,
+  // ease-out і падіння. Числа клітинки (0, 0) — з формули ADR-0121, решта — геометрія з допуском
+  // округлення 0,5 px.
+  it('sparkOffset: опорні точки на клітинці без зсуву кута (0, 0)', () => {
+    const o = (i: number, f: number): { dx: number; dy: number } => sparkOffset({ x: 0, y: 0 }, i, f);
+    expect(cellHash(0, 0) % 60).toBe(0);
+    expect(o(0, 1)).toEqual({ dx: 14, dy: 10 }); // кут 0, коротка іскра, падіння 10
+    expect(o(2, 1)).toEqual({ dx: 7, dy: 27 }); // 72°, довга
+    expect(o(5, 1)).toEqual({ dx: -22, dy: 10 }); // 180°, довга
+    expect(o(7, 1)).toEqual({ dx: -7, dy: -7 }); // 252°, довга, вгору
+    expect(o(0, 0.5)).toEqual({ dx: 11, dy: 3 }); // ease-out 0,75 і падіння 2,5
+    expect(o(5, 0.5)).toEqual({ dx: -16, dy: 3 });
+  });
+
+  it('sparkOffset: кут — i / SPARKS кола зі зсувом за клітинкою, дальність 14 / 22, ease-out, падіння 10 · f²', () => {
+    for (const at of [
+      { x: 3, y: 4 },
+      { x: 5, y: 2 },
+    ]) {
+      const shift = (cellHash(at.x, at.y) % 60) / 100;
+      for (let i = 0; i < SPARKS; i++) {
+        const reach = i % 3 === 0 ? 14 : 22;
+        const ang = (i / SPARKS) * Math.PI * 2 + shift;
+        for (const f of [0.25, 0.5, 1]) {
+          const r = reach * (1 - (1 - f) * (1 - f));
+          const { dx, dy } = sparkOffset(at, i, f);
+          expect(Math.abs(dx - Math.cos(ang) * r)).toBeLessThanOrEqual(0.5);
+          expect(Math.abs(dy - (Math.sin(ang) * r * 0.8 + 10 * f * f))).toBeLessThanOrEqual(0.5);
+        }
+      }
+    }
+    // зсув кута за клітинкою справді різний — інакше «за клітинкою» нічого не тримає
+    expect(cellHash(3, 4) % 60).not.toBe(cellHash(5, 2) % 60);
+  });
+
+  it('sparkOffset: ease-out — уже на половині шляху ¾ відльоту; f ≤ 0 — у точці; без −0', () => {
+    for (let i = 0; i < SPARKS; i++) {
+      const half = sparkOffset({ x: 0, y: 0 }, i, 0.5);
+      const end = sparkOffset({ x: 0, y: 0 }, i, 1);
+      // горизонталь без падіння: |dx(½)| ≈ ¾ · |dx(1)|
+      expect(Math.abs(Math.abs(half.dx) - 0.75 * Math.abs(end.dx))).toBeLessThanOrEqual(1);
+      expect(sparkOffset({ x: 3, y: 4 }, i, -0.5)).toEqual({ dx: 0, dy: 0 });
+      // малий f: зсув < 0,5 px округлюється до +0, а не −0 (координата канви)
+      const tiny = sparkOffset({ x: 3, y: 4 }, i, 0.01);
+      expect(Object.is(tiny.dx, 0) && Object.is(tiny.dy, 0)).toBe(true);
+    }
   });
 
   it('dissolveKept: на початку — усі смуги, наприкінці — жодної, між — частина', () => {
