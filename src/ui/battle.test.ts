@@ -8,7 +8,7 @@ import { advanceTime, missionTargets } from '../core/geo';
 import { createGame, makeUnit, moveUnit, type GameState, type Unit } from '../core/combat';
 import { createParty, type Party } from '../core/save';
 import { initPixelSprites } from '../render';
-import { ALIEN_RING, RING_DY, fighterLook, makeDeathAnim, makeMoveAnim, makeTracerAnim } from '../core/render-core';
+import { ALIEN_RING, RING_DY, RING_RX, fighterLook, makeDeathAnim, makeMoveAnim, makeTracerAnim } from '../core/render-core';
 import { createBattleUI, validFireTargets, validHealTargets, type BattleDeps, type BattleUIState } from './battle';
 import { createToolbar } from './toolbar';
 
@@ -619,16 +619,45 @@ describe('Фікс П14.8 (фідбек валідації): смерть у ч�
     f.deps.anim.active = () => left;
     f.deps.anim.queued = () => [left];
     const ops = withRecCtx(() => f.battle.renderBattle());
-    // дуло: round(264−22)+5 = 247, round(264−22)+24 = 266 (центр був би 264,264)
-    expect(ops).toContain('moveTo(247,266)');
+    // Т.132: дуло кадру 68 px — (264 − 34) + 7 = 237, (264 − 47) + 38 = 255 (центр був би 264,264)
+    expect(ops).toContain('moveTo(237,255)');
     // дзеркало: той самий демон стріляє вправо (5,5)→(7,5) — facing +1, дзеркало
     const right = makeTracerAnim('alien', { x: 5, y: 5 }, { x: 7, y: 5 }, false);
     right.start = 0;
     f.deps.anim.active = () => right;
     f.deps.anim.queued = () => [right];
     const ops2 = withRecCtx(() => f.battle.renderBattle());
-    // віддзеркалене дуло: round(264−22)+(44−1−5) = 280
-    expect(ops2).toContain('moveTo(280,266)');
+    // віддзеркалене дуло: (264 − 34) + round((96 − 10) · 68 / 96) = 291
+    expect(ops2).toContain('moveTo(291,255)');
+  });
+
+  // Т.132 (ADR-0121): дихання питає ambient-шар для кожного намальованого бійця, крім стрільця
+  it('breath — для видимих живих юнітів за клітинкою; стрілець активного трасера — без дихання', () => {
+    const f = makeFixture();
+    f.battle.launch(firstTarget(f));
+    f.ui.mission!.state = createGame({
+      map: { width: 20, height: 20, blocked: new Set<string>() },
+      units: [
+        makeUnit({ id: 's1', side: 'player', name: 'Гарт', pos: { x: 3, y: 5 }, hp: 10, maxHp: 10 }),
+        makeUnit({ id: 's2', side: 'player', name: 'Ліра', pos: { x: 3, y: 7 }, hp: 10, maxHp: 10 }),
+        makeUnit({ id: 'a1', side: 'alien', name: 'Морок', pos: { x: 5, y: 5 }, hp: 10, maxHp: 10 }),
+      ],
+    });
+    const breath = vi.fn(() => 0.5);
+    f.deps.ambient.breath = breath;
+    withRecCtx(() => f.battle.renderBattle());
+    const asked = breath.mock.calls.map((c) => (c as unknown as [{ x: number; y: number }])[0]);
+    expect(asked).toContainEqual({ x: 3, y: 5 });
+    expect(asked).toContainEqual({ x: 3, y: 7 });
+    breath.mockClear();
+    const shot = makeTracerAnim('player', { x: 3, y: 5 }, { x: 5, y: 5 }, true);
+    shot.start = 0;
+    f.deps.anim.active = () => shot;
+    f.deps.anim.queued = () => [shot];
+    withRecCtx(() => f.battle.renderBattle());
+    const asked2 = breath.mock.calls.map((c) => (c as unknown as [{ x: number; y: number }])[0]);
+    expect(asked2).not.toContainEqual({ x: 3, y: 5 }); // стрілець у позі «вогонь» не дихає
+    expect(asked2).toContainEqual({ x: 3, y: 7 });
   });
 });
 
@@ -772,7 +801,7 @@ describe('Т.44: зона ходу вибраного оперативника �
     });
     const ops = render(f);
     const ringColor = (x: number, y: number): string | undefined => {
-      const at = ops.findIndex((o) => o.startsWith('ellipse(' + (x * 48 + 24) + ',' + (y * 48 + 24 + RING_DY) + ','));
+      const at = ops.findIndex((o) => o.startsWith('ellipse(' + (x * 48 + 24) + ',' + (y * 48 + 24 + RING_DY) + ',' + RING_RX + ','));
       if (at < 0) return undefined;
       const set = ops
         .slice(0, at)

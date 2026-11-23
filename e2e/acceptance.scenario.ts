@@ -16,7 +16,7 @@ import { expect, test, type Page } from '@playwright/test';
 import { TICK_MINUTES } from '../src/core/geo';
 import { MISSION_MAP_H, MISSION_MAP_W } from '../src/core/mission';
 import type { Vec2 } from '../src/core/combat';
-import { FIGHTER_COLORS, RING_DY, RING_RX, cellHash, fighterLook } from '../src/core/render-core';
+import { FIGHTER_COLORS, HP_BAR_Y, RING_DY, RING_RX, cellHash, fighterLook } from '../src/core/render-core';
 import { CoreMirror, enemyLine, unitLine } from './mirror';
 
 const SEED = 42;
@@ -798,6 +798,22 @@ test('сценарій приймання ADR-0030: партія → місія 
     await expect
       .poll(async () => Math.max(...(await ringDist())), { message: 'Т.129: кільця кольору бійців ' + JSON.stringify(rings) })
       .toBeLessThan(90);
+    // Т.132 (ADR-0121): смуга HP — під ногами (у живого бійця на старті HP повне — зелений #7fe2a0
+    // на середині смуги), а у верхньому краї клітинки, де смуга була до Т.132, зеленого немає
+    const bars = rings.map((r) => ({ x: r.x, y: r.y - RING_DY + HP_BAR_Y + 1 }));
+    const greenAt = (pts: { x: number; y: number }[]): Promise<number[]> =>
+      page.evaluate((ps) => {
+        const cx = (document.getElementById('battle') as HTMLCanvasElement).getContext('2d')!;
+        return ps.map((p) => {
+          const d = cx.getImageData(p.x, p.y, 1, 1).data;
+          return Math.round(Math.hypot(d[0]! - 0x7f, d[1]! - 0xe2, d[2]! - 0xa0));
+        });
+      }, pts);
+    await expect
+      .poll(async () => Math.max(...(await greenAt(bars))), { message: 'Т.132: смуга HP під ногами ' + JSON.stringify(bars) })
+      .toBeLessThan(40);
+    const oldBars = rings.map((r) => ({ x: r.x - 12, y: r.y - RING_DY - 22 }));
+    expect(Math.min(...(await greenAt(oldBars))), 'Т.132: у верхньому краї клітинки смуги HP немає').toBeGreaterThan(40);
     await expectBattleFits(page, '1440 × 900', 740);
     await page.setViewportSize({ width: 1366, height: 768 });
     await expectBattleFits(page, '1366 × 768', 640);

@@ -7,8 +7,12 @@
 // Canvas-виклики. Тести піксель-спрайтів — у src/render.sprites.test.ts.
 
 import { beforeEach, describe, expect, it } from 'vitest';
-import { drawAnimFrame, initPixelSprites, type MakeOffscreen } from './render';
+import { drawAnimFrame, initPixelSprites, muzzlePoint, type MakeOffscreen } from './render';
 import {
+  DISSOLVE_STRIP,
+  RECOIL_PX,
+  SPARKS,
+  recoilPx,
   RING_DY,
   RING_RX,
   RING_RY,
@@ -177,7 +181,7 @@ describe('кадри анімаційного шару (П6.8)', () => {
     expect(calls.some((c) => c.m === 'arc')).toBe(false);
   });
 
-  it('смерть: силует згасає (alpha спадає і відновлюється), позиція — клітинка загиблого', () => {
+  it('смерть: силует розчиняється смугами і блідне (Т.132), позиція — клітинка загиблого', () => {
     const a = makeDeathAnim(unit('a1', 'alien', 4, 7));
     a.start = 0;
     expect(a.dur).toBe(DEATH_MS);
@@ -189,8 +193,26 @@ describe('кадри анімаційного шару (П6.8)', () => {
     expect((d!.args as number[])[1]).toBe(4 * 48 + 24 - 16);
     expect((d!.args as number[])[2]).toBe(7 * 48 + 24 - 16);
     const alphas = sets.filter((s) => s.p === 'globalAlpha').map((s) => s.v);
-    expect(alphas[0]).toBeCloseTo(0.5, 5);
+    expect(alphas[0]).toBeCloseTo(0.7, 5); // 1 − 0,6 · t
     expect(alphas[alphas.length - 1]).toBe(1);
+    // маска смуг: clip між save/restore; на t = 0,5 частину смуг уже прибрано
+    const strips = calls.filter((c) => c.m === 'rect');
+    expect(calls.some((c) => c.m === 'clip')).toBe(true);
+    expect(strips.length).toBeGreaterThan(0);
+    expect(strips.length).toBeLessThan(48 / DISSOLVE_STRIP);
+    expect(calls.findIndex((c) => c.m === 'restore')).toBeGreaterThan(calls.findIndex((c) => c.m === 'clip'));
+    // пил: DUST частинок 2 × 2 кольору сторони після маски
+    expect(calls.filter((c) => c.m === 'fillRect' && (c.args as number[])[2] === 2)).toHaveLength(8);
+    expect(sets.some((x) => x.p === 'fillStyle' && x.v === '#ff2e88')).toBe(true);
+  });
+
+  it('смерть на t = 0: кадр цілий (усі смуги), пилу ще немає', () => {
+    const a = makeDeathAnim(unit('a1', 'alien', 4, 7));
+    a.start = 0;
+    const { ctx, calls } = animCtx();
+    drawAnimFrame(ctx, a, 0, 48, 8);
+    expect(calls.filter((c) => c.m === 'rect')).toHaveLength(48 / DISSOLVE_STRIP);
+    expect(calls.some((c) => c.m === 'fillRect' && (c.args as number[])[2] === 2)).toBe(false);
   });
 
   it('дозор: пульс-кільце кольору маркера дозору, що росте і гасне', () => {
@@ -314,62 +336,91 @@ describe('фідбек власника 2026-10-22: якір дула — тра
     expect((mv!.args as number[])[1]).toBe(5 * 48 + 24);
   });
 
-  it('демон (натив, вліво): старт — дуло фазового різака (лівий край, +2 від осі)', () => {
-    const a = makeTracerAnim('alien', { x: 5, y: 5 }, { x: 3, y: 5 }, false);
+  // Т.132 (ADR-0121): кадр 68 px, якір у просторі кадру 96 (виміряно по атласу):
+  // початок кадру — (c − 34, c − 47) для центру клітинки c; дуло — + round(якір · 68 / 96).
+  const tracerStart = (side: 'player' | 'alien', from: number, to: number, flip: boolean): number[] => {
+    const a = makeTracerAnim(side, { x: from, y: 5 }, { x: to, y: 5 }, false);
     a.start = 0;
     const { ctx, calls } = animCtx();
-    drawAnimFrame(ctx, a, TRACER_MS / 2, 48, 8, Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY, {
-      side: 'alien',
-      flip: false,
-    });
+    drawAnimFrame(ctx, a, TRACER_MS / 2, 48, 8, Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY, { side, flip });
     const mv = calls.find((c) => c.m === 'moveTo');
     expect(mv).toBeDefined();
-    expect((mv!.args as number[])[0]).toBe(Math.round(5 * 48 + 24 - 22) + 5); // 264-22+5
-    expect((mv!.args as number[])[1]).toBe(Math.round(5 * 48 + 24 - 22) + 24); // +2 від осі
+    return (mv!.args as number[]).slice(0, 2);
+  };
+
+  it('демон (натив, вліво): старт — дуло фазового різака, лівий край кадру', () => {
+    expect(tracerStart('alien', 5, 3, false)).toEqual([264 - 27, 264 - 9]); // (10,54) → +7, +38
   });
 
-  it('демон (дзеркало, вправо): дуло віддзеркалене до правого краю', () => {
-    const a = makeTracerAnim('alien', { x: 3, y: 5 }, { x: 5, y: 5 }, false);
-    a.start = 0;
-    const { ctx, calls } = animCtx();
-    drawAnimFrame(ctx, a, TRACER_MS / 2, 48, 8, Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY, {
-      side: 'alien',
-      flip: true,
-    });
-    const mv = calls.find((c) => c.m === 'moveTo');
-    expect(mv).toBeDefined();
-    expect((mv!.args as number[])[0]).toBe(Math.round(3 * 48 + 24 - 22) + (44 - 1 - 5)); // дзеркало: col → 43-col
-    expect((mv!.args as number[])[1]).toBe(Math.round(5 * 48 + 24 - 22) + 24);
+  it('демон (дзеркало, вправо): дуло віддзеркалене до правого краю (x → 96 − x)', () => {
+    expect(tracerStart('alien', 5, 7, true)).toEqual([264 + 27, 264 - 9]); // 86 → +61
   });
 
-  it('солдат: якір — центр кадру (нульовий офсет, вигляд без змін)', () => {
-    const a = makeTracerAnim('player', { x: 1, y: 1 }, { x: 3, y: 1 }, true);
-    a.start = 0;
-    const { ctx, calls } = animCtx();
-    drawAnimFrame(ctx, a, TRACER_MS / 2, 48, 8, Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY, {
-      side: 'player',
-      flip: false,
-    });
-    const mv = calls.find((c) => c.m === 'moveTo');
-    expect(mv).toBeDefined();
-    expect((mv!.args as number[])[0]).toBe(1 * 48 + 24); // центр клітинки (1,1)
-    expect((mv!.args as number[])[1]).toBe(1 * 48 + 24);
+  it('солдат: дуло — правий край кадру fire, на рівні зброї', () => {
+    expect(tracerStart('player', 5, 7, false)).toEqual([264 + 23, 264 - 12]); // (81,50) → +57, +35
   });
 
-  it('солдат (дзеркало, вліво): центр кадру — дзеркальний якір на 1px від центру клітинки (обертання кадру навколо 21.5)', () => {
-    const a = makeTracerAnim('player', { x: 3, y: 1 }, { x: 1, y: 1 }, true);
+  it('солдат (дзеркало, вліво): дзеркальне дуло ліворуч', () => {
+    expect(tracerStart('player', 5, 3, true)).toEqual([264 - 23, 264 - 12]); // 15 → +11
+  });
+
+  it('muzzlePoint: віддача зсуває дуло назад від погляду', () => {
+    expect(muzzlePoint('player', false, 264, 264, 3)).toEqual({ x: 264 + 23 - 3, y: 264 - 12 });
+    expect(muzzlePoint('alien', false, 264, 264, 3)).toEqual({ x: 264 - 27 + 3, y: 264 - 9 });
+    expect(muzzlePoint('player', true, 264, 264, 3)).toEqual({ x: 264 - 23 + 3, y: 264 - 12 });
+  });
+});
+
+// Т.132 (ADR-0121): спалах дула і іскри влучання
+describe('Т.132: спалах дула, віддача, іскри', () => {
+  it('спалах дула — у першій третині польоту кулі і лише з підказкою бойовища', () => {
+    const a = makeTracerAnim('player', { x: 5, y: 5 }, { x: 9, y: 5 }, true);
     a.start = 0;
-    const { ctx, calls } = animCtx();
-    drawAnimFrame(ctx, a, TRACER_MS / 2, 48, 8, Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY, {
-      side: 'player',
-      flip: true,
-    });
-    const mv = calls.find((c) => c.m === 'moveTo');
-    expect(mv).toBeDefined();
-    // дзеркало мапить кол 22 → 43−22 = 21: старт на 1px лівіше центру (непомітно,
-    // спалах солдата прикриває центр кадру в обох напрямках)
-    expect((mv!.args as number[])[0]).toBe(Math.round(3 * 48 + 24 - 22) + 21);
-    expect((mv!.args as number[])[1]).toBe(Math.round(1 * 48 + 24 - 22) + 22);
+    const early = animCtx();
+    drawAnimFrame(early.ctx, a, TRACER_MS * 0.1, 48, 8, 960, 960, { side: 'player', flip: false });
+    const arcs = early.calls.filter((c) => c.m === 'arc');
+    expect(arcs).toHaveLength(2); // ореол і ядро
+    // на початку — віддача 3 px: центр спалаху = дуло з віддачею
+    expect((arcs[0]!.args as number[]).slice(0, 2)).toEqual([264 + 23 - 3, 264 - 12]);
+    const late = animCtx();
+    drawAnimFrame(late.ctx, a, TRACER_MS * 0.8, 48, 8, 960, 960, { side: 'player', flip: false });
+    expect(late.calls.some((c) => c.m === 'arc')).toBe(false);
+    const geo = animCtx();
+    drawAnimFrame(geo.ctx, a, TRACER_MS * 0.1, 48, 8);
+    expect(geo.calls.some((c) => c.m === 'arc')).toBe(false); // геосцена — без спалаху
+  });
+
+  it('recoilPx: 3 px у першій чверті кулі, 1 px у другій, далі 0', () => {
+    expect(recoilPx(0, 0.4)).toBe(0);
+    expect(recoilPx(0.05, 0.4)).toBe(RECOIL_PX);
+    expect(recoilPx(0.15, 0.4)).toBe(1);
+    expect(recoilPx(0.25, 0.4)).toBe(0);
+    expect(recoilPx(0.9, 0.4)).toBe(0);
+  });
+
+  it('влучання: кільце і SPARKS іскор 3 × 3 у межах канви; промах — без іскор', () => {
+    const hit = makeTracerAnim('player', { x: 15, y: 5 }, { x: 19, y: 0 }, true);
+    hit.start = 0;
+    for (const now of [TRACER_MS + 1, hit.dur * 0.7, hit.dur]) {
+      const s = animCtx();
+      drawAnimFrame(s.ctx, hit, now, 48, 8, 960, 960);
+      const sparks = s.calls.filter((c) => c.m === 'fillRect');
+      expect(sparks).toHaveLength(SPARKS);
+      for (const c of sparks) {
+        const [x, y, w, h] = c.args as number[];
+        expect(w).toBe(3);
+        expect(h).toBe(3);
+        expect(x).toBeGreaterThanOrEqual(0);
+        expect(y).toBeGreaterThanOrEqual(0);
+        expect(x + w).toBeLessThanOrEqual(960);
+        expect(y + h).toBeLessThanOrEqual(960);
+      }
+    }
+    const miss = makeTracerAnim('player', { x: 5, y: 5 }, { x: 9, y: 5 }, false);
+    miss.start = 0;
+    const m = animCtx();
+    drawAnimFrame(m.ctx, miss, miss.dur * 0.7, 48, 8, 960, 960);
+    expect(m.calls.some((c) => c.m === 'fillRect')).toBe(false);
   });
 });
 
@@ -681,7 +732,7 @@ describe('Т.129: кільце в анімації руху', () => {
     a.start = 0;
     const { ctx, calls, sets } = animCtx();
     drawAnimFrame(ctx, a, a.dur, 48, 8); // t = 1 → клітинка (1,0)
-    const e = calls.find((c) => c.m === 'ellipse');
+    const e = calls.find((c) => c.m === 'ellipse' && c.args[2] === RING_RX); // Т.132: перші еліпси — тінь
     expect(e).toBeDefined();
     expect((e!.args as number[]).slice(0, 4)).toEqual([72, 24 + RING_DY, RING_RX, RING_RY]);
     expect(sets.filter((x) => x.p === 'strokeStyle').map((x) => x.v)).toContain(fighterLook('s8').color);

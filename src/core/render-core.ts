@@ -716,3 +716,51 @@ export function fighterLook(id: string): FighterLook {
   const n = FIGHTER_COLORS.length;
   return { index, color: FIGHTER_COLORS[index % n], shape: Math.floor(index / n) % HELMET_SHAPES };
 }
+
+// --- Т.132 (ADR-0121): поле бою й анімація «Сміливіше» ---
+// Геометрія бійця на полі (src/render.ts, ambient-шар і тести — одне місце правди):
+// кадр атласа 96 × 96 малюється 68 × 68 (рішення власника, варіант «В/Г»), низ фігури
+// (рядок 93 кадру) стоїть на UNIT_FEET_DY нижче центру клітинки — ноги на місці, фігура
+// росте вгору в межах своєї клітинки; смуга HP — під ногами, у нижньому краї клітинки.
+export const UNIT_DRAW = 68; // сторона кадру на полі, px (було 44)
+export const ATLAS_FEET_ROW = 93; // рядок кадру 96 px, де стоять ноги
+export const UNIT_FEET_DY = 19; // низ фігури — на 19 px нижче центру клітинки
+export const HP_BAR_W = 34; // смуга HP під ногами — ширина кільця
+export const HP_BAR_H = 3;
+export const HP_BAR_Y = 20; // верх смуги — 20 px нижче центру; з підкладкою 19..24 — у межах клітинки
+export const RECOIL_PX = 3; // віддача стрільця на початку пострілу, px
+export const SPARKS = 10; // іскор влучання (≤ 12, як частинок вибуху — П14.4)
+export const DISSOLVE_STRIP = 3; // висота смуги розчинення, px
+export const BREATH_SCALE = 0.03; // «дихання» — стискання фігури по висоті від ніг, частка
+
+// Верхній лівий кут кадру на полі для центру клітинки (cx, cy).
+export function unitFrameOrigin(cx: number, cy: number): { x: number; y: number } {
+  return {
+    x: Math.round(cx - UNIT_DRAW / 2),
+    y: Math.round(cy + UNIT_FEET_DY - (UNIT_DRAW * ATLAS_FEET_ROW) / 96),
+  };
+}
+
+// Віддача на кадрі трасера: перша чверть польоту кулі — RECOIL_PX, друга — 1 px, далі 0.
+// share — частка трасера в тривалості анімації (TRACER_MS / dur).
+export function recoilPx(t: number, share: number): number {
+  if (t <= 0 || share <= 0) return 0;
+  const f = t / share;
+  return f < 0.25 ? RECOIL_PX : f < 0.5 ? 1 : 0;
+}
+
+// Іскра влучання i з SPARKS: кут — рівномірно по колу зі зсувом за клітинкою цілі
+// (без RNG, ADR-0003), відліт ease-out до 22 px і падіння (+10 px · f²).
+export function sparkOffset(at: Vec2, i: number, f: number): { dx: number; dy: number } {
+  if (f <= 0) return { dx: 0, dy: 0 };
+  const ang = (i / SPARKS) * Math.PI * 2 + (cellHash(at.x, at.y) % 60) / 100;
+  const reach = (i % 3 === 0 ? 14 : 22) * (1 - (1 - f) * (1 - f));
+  return { dx: Math.round(Math.cos(ang) * reach) + 0, dy: Math.round(Math.sin(ang) * reach * 0.8 + 10 * f * f) + 0 };
+}
+
+// Розчинення загиблого: смуга k (зверху вниз) зникає, щойно прогрес t перейшов її поріг
+// 0..1 — поріг за хешем номера смуги, тож кадр розсипається нерівно, але детерміновано.
+export function dissolveKept(k: number, t: number): boolean {
+  if (t <= 0) return true;
+  return ((k * 37) % 11) / 11 >= t * 1.25;
+}
