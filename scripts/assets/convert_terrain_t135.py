@@ -7,7 +7,7 @@
 # Матування і зменшення — ті самі, що в атласі бійців (convert_units_t133.py, ADR-0122):
 # плавна альфа за «зеленістю», LANCZOS по премножених каналах, без зеленого відблиску.
 # Стіна (¾ згори: верх і передня грань) заповнює клітинку повністю; декори — пласкі деталі
-# підлоги, по центру клітинки, розмір — DECOR_PX; пляма світла — лампа + м'який бурштиновий
+# підлоги, по центру клітинки (стіна — непрозора, край на темній основі WALL_BASE), розмір — DECOR_PX; пляма світла — лампа + м'який бурштиновий
 # ореол кодом (генератор ореол на хромакеї не дає — просили без нього).
 from pathlib import Path
 import json
@@ -27,7 +27,8 @@ T = 48
 DECOR_PX = {'світло': 18, 'решітка': 30, 'уламки': 44}  # більша сторона декору, px
 HALO = (255, 179, 71)  # бурштин #FFB347
 HALO_R, HALO_A = 20.0, 0.32  # радіус і найбільша непрозорість ореолу плями світла
-GREEN_MAX = 8  # g - max(r, b) непрозорих пікселів тайла — понад це вважаємо зеленим відблиском
+GREEN_MAX = 8  # g - max(r, b) пікселів об'єкта з альфою > 0 (до накладання на ореол) — понад це зелений відблиск
+WALL_BASE = (20, 26, 34)  # аудит Т.135: напівпрозорий край стіни давав шви — край кладемо на темну основу, стіна непрозора
 
 
 def fit(fig, side):
@@ -68,29 +69,37 @@ def main():
     sa = small[..., 3:4] / 255.0
     rgb = np.where(sa > 0, small[..., :3] / np.maximum(sa, 1e-6), 0)
     rgb[..., 1] = np.minimum(rgb[..., 1], np.maximum(rgb[..., 0], rgb[..., 2]))
-    tiles.append(np.dstack([rgb, small[..., 3:4]]).clip(0, 255).astype(np.uint8))
+    wall_t = np.dstack([rgb, small[..., 3:4]]).clip(0, 255).astype(np.uint8)
+    sprites = [wall_t] + [fit(f, DECOR_PX[k]) for f, k in ((lamp, 'світло'), (grate, 'решітка'), (wreck, 'уламки'))]
+    green = []
+    for i, sp in enumerate(sprites):
+        g = sp[..., 1].astype(int) - np.maximum(sp[..., 0], sp[..., 2]).astype(int)
+        green.append(int(g[sp[..., 3] > 0].max()))
+        if green[-1] > GREEN_MAX:
+            raise SystemExit(f'тайл {i}: зелений відблиск {green[-1]} > {GREEN_MAX} — перевірити матування')
+    base = np.zeros((T, T, 4), np.uint8)
+    base[..., :3], base[..., 3] = WALL_BASE, 255
+    place(base, wall_t)
+    tiles.append(base)
     light = halo()
-    place(light, fit(lamp, DECOR_PX['світло']))
+    place(light, sprites[1])
     tiles.append(light)
-    for fig, key in ((grate, 'решітка'), (wreck, 'уламки')):
+    for sp in sprites[2:]:
         t = np.zeros((T, T, 4), np.uint8)
-        place(t, fit(fig, DECOR_PX[key]))
+        place(t, sp)
         tiles.append(t)
     atlas = np.concatenate(tiles, axis=1)
     atlas[atlas[..., 3] == 0] = 0
-    report = {'srcSize': [int(f.shape[1]) for f in figs], 'tiles': []}
+    report = {'srcFigureWH': [[int(f.shape[1]), int(f.shape[0])] for f in figs], 'tiles': []}
     for i, t in enumerate(tiles):
         op = t[..., 3] > 128
-        g = t[..., 1].astype(int) - np.maximum(t[..., 0], t[..., 2]).astype(int)
         ys, xs = np.where(op)
         info = {
             'col': i,
             'bbox': [int(xs.min()), int(ys.min()), int(xs.max()) + 1, int(ys.max()) + 1],
             'opaque': round(float(op.mean()), 3),
-            'greenMax': int(g[op].max()),
+            'greenMax': green[i],
         }
-        if info['greenMax'] > GREEN_MAX:
-            raise SystemExit(f'тайл {i}: зелений відблиск {info["greenMax"]} > {GREEN_MAX} — перевірити матування')
         report['tiles'].append(info)
     if report['tiles'][0]['opaque'] < 0.9:
         raise SystemExit(f'стіна займає {report["tiles"][0]["opaque"]} клітинки (< 0,9) — блок має заповнювати клітинку')
