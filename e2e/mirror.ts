@@ -219,6 +219,24 @@ export class CoreMirror {
     throw new Error('Дзеркало: біля ' + u.name + ' немає вільної клітинки для ходу');
   }
 
+  // Т.137: найближча (за ціною) клітинка, до якої шлях за видимим є, але дорожчий за AP юніта —
+  // перший тап дає червоне прев'ю «Не вистачає AP». Обхід мапи рядками — детерміновано; клітинки
+  // з видимими юнітами пропущено (тап по них — вибір чи ціль, не прев'ю шляху)
+  farOption(u: Unit): MoveOption {
+    const seen = this.seen();
+    let best: MoveOption | null = null;
+    for (let y = 0; y < this.state.map.height; y++)
+      for (let x = 0; x < this.state.map.width; x++) {
+        if (this.state.units.some((o) => o.alive && o.pos.x === x && o.pos.y === y && seen.has(x + ',' + y))) continue;
+        const path = findPath(this.state, u.pos, { x, y }, undefined, seen);
+        if (path === null || path.length === 0) continue;
+        const cost = pathApCost(path);
+        if (cost > u.ap && (best === null || cost < best.cost)) best = { cell: { x, y }, path, cost };
+      }
+    if (best === null) throw new Error('Дзеркало: немає клітинки, дорожчої за AP ' + u.name);
+    return best;
+  }
+
   // Т.44: зона ходу юніта — клітинки, до яких findPath за видимим дає шлях не
   // дорожчий за його AP. Порахована окремо від reachableCells ядра (пошук шляху
   // до кожної клітинки) — дзеркало лишається незалежним оракулом для сторінки.

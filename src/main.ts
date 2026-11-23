@@ -780,9 +780,12 @@ if (typeof document !== 'undefined') {
     if (b === null || b.disabled || b.dataset.act === undefined || autoBattle.busy) return;
     input.enemyMenuAction(b.dataset.act);
   });
-  // Т.131: зміна вікна (поворот планшета) — меню на ворогові стає біля демона на новому полі
+  // Т.131: зміна вікна (поворот планшета) — меню на ворогові стає біля демона на новому полі.
+  // Т.137: канва бою — теж одразу: товщина штриха й межі туману, лінія шляху і плашка ціни тримають
+  // CSS px за масштабом показу канви (Т.119), а з вимкненою «Анімацією» чи «менше руху» ambient
+  // кадру не дає — без слухача старий масштаб лишався до першої дії гравця
   window.addEventListener('resize', () => {
-    if (ui.menuId !== null && ui.mission !== null) battle.renderBattle();
+    if (ui.mission !== null) battle.renderBattle();
   });
   // Т.117 (аудит): підпис «Клік / пробіл / Esc — пропустити» стоїть на самій плашці — клік по ній теж пропускає
   el('bturn').addEventListener('click', () => {
