@@ -674,7 +674,6 @@ describe('П14.5: хвіст перехоплення — точки з поді
   });
 });
 
-// Т.44: межа зору — відрізки між видимою клітинкою і туманом
 describe('Т.143: fogHatchStep — крок штриха туману', () => {
   it("8 px buffer'а, поки 5,5 CSS px не більші; на зменшеній канві — 5,5 CSS px", () => {
     expect(FOG_HATCH_STEP).toBe(8);
@@ -685,6 +684,7 @@ describe('Т.143: fogHatchStep — крок штриха туману', () => {
   });
 });
 
+// Т.44: межа зору — відрізки між видимою клітинкою і туманом
 describe('Т.44: fogBorderSegments — межа зору', () => {
   const field = (w: number, h: number, visible: (x: number, y: number) => boolean): TerrainCell[] =>
     Array.from({ length: w * h }, (_v, i) => ({

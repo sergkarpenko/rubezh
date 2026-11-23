@@ -3148,9 +3148,15 @@ describe('Т.143: «менше руху» змінилось — перемал�
       vi.unstubAllGlobals();
     }
   });
-  it('Т.143: подія change медіазапиту перемальовує канву бою один раз', () => {
+  it('Т.143: подія change медіазапиту перемальовує геосцену і канву бою один раз, стартовий екран — ні', () => {
     expect(changes.length).toBe(1);
+    canvasOps.length = 0;
+    changes[0]!(); // стартовий екран — сцени немає, 0 перерисовок
+    expect(canvasOps.length).toBe(0);
     startParty('42');
+    canvasOps.length = 0;
+    changes[0]!(); // геосцена — перемальовка канви геосцени
+    expect(canvasOps.length).toBeGreaterThan(0);
     for (let i = 0; i < 1500 && document.querySelector('button.mission') === null; i++) btn('btn-tick').click();
     (document.querySelector('button.mission') as HTMLButtonElement).click();
     expect($('battle-panel').classList.contains('hidden')).toBe(false);

@@ -1011,7 +1011,7 @@ test('сценарій приймання ADR-0030: партія → місія 
             for (let i = 4; i < 44; i++) {
               const k = (j * 48 + i) * 4;
               const lum = 0.299 * d[k]! + 0.587 * d[k + 1]! + 0.114 * d[k + 2]!;
-              const r = (i + j + 1) % step; // відстань центру пікселя від діагоналі x + y = n·step
+              const r = (i + j + 1) % step; // зсув u + v центру пікселя від діагоналі u + v = n·step
               if (Math.min(r, step - r) < 0.5) {
                 on += lum;
                 nOn++;
