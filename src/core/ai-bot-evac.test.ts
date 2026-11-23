@@ -238,3 +238,104 @@ describe('Т.76: бот партії з політикою евакуації', 
     expect(r.soldiersEvacuated).toBe(3);
   });
 });
+
+// Т.140: тести на живих мутантів Т.76 у ai-bot.ts (прицільний прогін Stryker
+// 23.11.2026). Поле — як у field(), але зону висадки задає тест: порядок клітинок
+// зони вирішує нічию за довжиною шляху.
+function fieldZone(units: Unit[], evacZone: { x: number; y: number }[]): GameState {
+  return createGame({
+    map: { width: 20, height: 20, blocked: new Set() },
+    rng: mulberry32(42),
+    startingSide: 'player',
+    units,
+    evacZone,
+  });
+}
+
+describe('Т.140: межі умов відступу і вибору клітинки зони', () => {
+  it('lastStanding: живих на полі більше N — не відступає ніхто', () => {
+    const g = field([
+      makeUnit({ id: 's1', side: 'player', pos: { x: 2, y: 2 } }),
+      makeUnit({ id: 's2', side: 'player', pos: { x: 3, y: 2 } }),
+      makeUnit({ id: 'a1', side: 'alien', pos: { x: 15, y: 15 } }),
+    ]);
+    botTurn(g, { lastStanding: 1 });
+    expect(evacs(g)).toEqual([]);
+    expect(g.units.filter((u) => u.side === 'player')).toHaveLength(2);
+  });
+
+  it('евакуація — дія: botTurn рахує її, як рух чи постріл', () => {
+    const g = field([
+      makeUnit({ id: 's1', side: 'player', pos: { x: 2, y: 2 } }),
+      makeUnit({ id: 's2', side: 'player', pos: { x: 3, y: 2 } }),
+      makeUnit({ id: 'a1', side: 'alien', pos: { x: 15, y: 15 } }),
+    ]);
+    expect(botTurn(g, { lastStanding: 2 })).toBe(2);
+    expect(evacs(g)).toEqual(['s1', 's2']);
+  });
+
+  it('у зоні рівно 2 AP — евакуюється (поріг нестрогий)', () => {
+    const g = field([
+      makeUnit({ id: 's1', side: 'player', pos: { x: 2, y: 2 }, hp: 3 }),
+      makeUnit({ id: 'a1', side: 'alien', pos: { x: 15, y: 15 } }),
+    ]);
+    g.units[0].ap = 2;
+    expect(botTurn(g, { woundedAtOrBelow: 0.5 })).toBe(1);
+    expect(evacs(g)).toEqual(['s1']);
+  });
+
+  it('«у зоні» — збіг обох координат: той самий x, інший y — спершу рух до зони', () => {
+    const g = field([
+      makeUnit({ id: 's1', side: 'player', pos: { x: 3, y: 6 }, hp: 3 }),
+      makeUnit({ id: 'a1', side: 'alien', pos: { x: 15, y: 15 } }),
+    ]);
+    botTurn(g, { woundedAtOrBelow: 0.5 });
+    expect(evacs(g)).toEqual(['s1']);
+    expect(g.evacuated![0].pos).toEqual({ x: 3, y: 2 });
+  });
+
+  it('найближча клітинка зони, хоч вона й перша за порядком', () => {
+    const g = fieldZone(
+      [makeUnit({ id: 's1', side: 'player', pos: { x: 6, y: 2 }, hp: 3 }), makeUnit({ id: 'a1', side: 'alien', pos: { x: 15, y: 15 } })],
+      [
+        { x: 3, y: 2 },
+        { x: 2, y: 2 },
+      ]
+    );
+    botTurn(g, { woundedAtOrBelow: 0.5 });
+    expect(g.evacuated![0].pos).toEqual({ x: 3, y: 2 }); // 3 кроки, а не 4
+  });
+
+  it('рівна довжина шляху — перша за порядком зони клітинка', () => {
+    const mk = (zone: { x: number; y: number }[]) =>
+      fieldZone(
+        [makeUnit({ id: 's1', side: 'player', pos: { x: 2, y: 6 }, hp: 3 }), makeUnit({ id: 'a1', side: 'alien', pos: { x: 15, y: 15 } })],
+        zone
+      );
+    const left = mk([
+      { x: 1, y: 2 },
+      { x: 3, y: 2 },
+    ]);
+    botTurn(left, { woundedAtOrBelow: 0.5 });
+    expect(left.evacuated![0].pos).toEqual({ x: 1, y: 2 });
+    const right = mk([
+      { x: 3, y: 2 },
+      { x: 1, y: 2 },
+    ]);
+    botTurn(right, { woundedAtOrBelow: 0.5 });
+    expect(right.evacuated![0].pos).toEqual({ x: 3, y: 2 });
+  });
+});
+
+describe('Т.140: запобіжник циклу botTurn', () => {
+  it('не більше 60 дій на солдата за хід, навіть коли AP вистачає на більше', () => {
+    const g = field([
+      makeUnit({ id: 's1', side: 'player', pos: { x: 6, y: 6 } }),
+      makeUnit({ id: 'a1', side: 'alien', pos: { x: 9, y: 6 }, hp: 1_000_000, maxHp: 1_000_000 }),
+    ]);
+    g.units[0].ap = 1000; // штучний запас: кожна дія витрачає AP, у грі 60 дій недосяжні
+    expect(botTurn(g)).toBe(60);
+    expect(g.log.filter((e) => e.type === 'shot').length).toBeGreaterThanOrEqual(60);
+    expect(g.activeSide).toBe('alien');
+  });
+});
