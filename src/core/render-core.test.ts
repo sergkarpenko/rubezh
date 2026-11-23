@@ -908,8 +908,9 @@ describe('Т.132: бієць на полі і ефекти', () => {
     expect(o(2, 1)).toEqual({ dx: 7, dy: 27 }); // 72°, довга
     expect(o(5, 1)).toEqual({ dx: -22, dy: 10 }); // 180°, довга
     expect(o(7, 1)).toEqual({ dx: -7, dy: -7 }); // 252°, довга, вгору
-    expect(o(0, 0.5)).toEqual({ dx: 11, dy: 3 }); // ease-out 0,75 і падіння 2,5
-    expect(o(5, 0.5)).toEqual({ dx: -16, dy: 3 });
+    // f = ¾ (не ½: там значення рівно на x,5 — межа округлення): ease-out 0,9375, падіння 5,625
+    expect(o(0, 0.75)).toEqual({ dx: 13, dy: 6 });
+    expect(o(5, 0.75)).toEqual({ dx: -21, dy: 6 });
   });
 
   it('sparkOffset: кут — i / SPARKS кола зі зсувом за клітинкою, дальність 14 / 22, ease-out, падіння 10 · f²', () => {
@@ -939,6 +940,7 @@ describe('Т.132: бієць на полі і ефекти', () => {
       const end = sparkOffset({ x: 0, y: 0 }, i, 1);
       // горизонталь без падіння: |dx(½)| ≈ ¾ · |dx(1)|
       expect(Math.abs(Math.abs(half.dx) - 0.75 * Math.abs(end.dx))).toBeLessThanOrEqual(1);
+      expect(sparkOffset({ x: 3, y: 4 }, i, 0)).toEqual({ dx: 0, dy: 0 });
       expect(sparkOffset({ x: 3, y: 4 }, i, -0.5)).toEqual({ dx: 0, dy: 0 });
       // малий f: зсув < 0,5 px округлюється до +0, а не −0 (координата канви)
       const tiny = sparkOffset({ x: 3, y: 4 }, i, 0.01);
