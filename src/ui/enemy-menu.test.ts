@@ -110,16 +110,18 @@ describe('enemyMenuPlace', () => {
     expect(p.top).toBe(85);
   });
 
-  it('аудит PR #444: компактна картка на полі 330 px (вікно 1100 × 540) не накриває демона в жодній клітинці', () => {
-    const f = { left: 0, top: 0, width: 330, height: 330 };
-    const k = 330 / 20;
+  it('аудит PR #444: компактна картка на полях 330–400 px (вікно 1100 × 540, телефон) не накриває демона в жодній клітинці', () => {
     let covers = 0;
-    for (let y = 0; y < 20; y++)
-      for (let x = 0; x < 20; x++) {
-        const cell = { left: x * k, top: y * k, width: k, height: k };
-        // 224 × 167 — повна картка, 224 × 121 — компактна (виміри Т.131 у Chrome, Inter і DejaVu Sans)
-        if (enemyMenuPlace(cell, f, 224, 167).covers && enemyMenuPlace(cell, f, 224, 121).covers) covers++;
-      }
+    for (let size = 330; size <= 400; size++) {
+      const f = { left: 0, top: 0, width: size, height: size };
+      const k = size / 20;
+      for (let y = 0; y < 20; y++)
+        for (let x = 0; x < 20; x++) {
+          const cell = { left: x * k, top: y * k, width: k, height: k };
+          // 224 × 167 — повна картка, 224 × 121 — компактна (виміри Т.131 у Chrome, Inter і DejaVu Sans)
+          if (enemyMenuPlace(cell, f, 224, 167).covers && enemyMenuPlace(cell, f, 224, 121).covers) covers++;
+        }
+    }
     expect(covers).toBe(0);
   });
 });
