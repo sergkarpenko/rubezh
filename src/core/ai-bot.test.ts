@@ -4,7 +4,19 @@
 // Покроковий драйвер: лог DemoSteps байт-у-байт ідентичний миттєвому autoBattle.
 
 import { describe, expect, it } from 'vitest';
-import { createGame, evacuate, makeUnit, mulberry32, type GameEvent, type GameState, type UnitItems } from './combat';
+import {
+  createGame,
+  evacuate,
+  makeUnit,
+  mulberry32,
+  GRENADE_AP_COST,
+  GRENADE_RANGE,
+  HEAL_AP_COST,
+  type GameEvent,
+  type GameState,
+  type Unit,
+  type UnitItems,
+} from './combat';
 import { advanceTime, createGeoGame, type GeoState } from './geo';
 import { aliensTurn, autoBattle, botTurn, DemoSteps } from './ai-bot';
 import { createMission, missionOutcome, type Mission } from './mission';
@@ -280,5 +292,242 @@ describe('П15.3: бот не діє щодо евакуйованого (ADR-00
     expect(grenade.hits.map((h) => h.unitId).sort()).toEqual(['a1', 'a2']); // уражені лише вороги
     expect(g.evacuated![0].hp).toBe(10); // EARS 5: евакуйований у зоні вибуху не уражений
     expect(g.evacuated![0].alive).toBe(true);
+  });
+});
+
+// --- Т.142 (кандидат 2): живі мутанти ai-bot.ts поза кодом Т.76 ---
+// Межі умов soldierStep і grenadeTarget, запобіжники циклів aliensTurn і
+// DemoSteps, ліміт півходів autoBattle/DemoSteps і точна форма результатів
+// DemoSteps. Еквівалентні мутанти (повторна перевірка перед soldierStep,
+// масиви, що перезаписуються до читання) — у записі Т.142 docs/workflow.md.
+
+// Чи діяв юніт id у події (постріл, рух, кидок тощо).
+const actedBy = (e: GameEvent, id: string) =>
+  ('shooterId' in e && e.shooterId === id) || ('unitId' in e && e.unitId === id) || ('throwerId' in e && e.throwerId === id);
+// Дії-черги юніта id: у запобіжниках циклів ціль за 3 клітинки, і кожна дія —
+// автоматична черга з трьох подій shot (тому дій = пострілів / 3).
+const burstsBy = (g: GameState, id: string) => g.log.filter((e) => e.type === 'shot' && e.shooterId === id && e.mode === 'auto').length / 3;
+
+function open(units: Unit[], opts: { side?: 'player' | 'alien'; items?: Record<string, UnitItems>; blocked?: string[] } = {}) {
+  return createGame({
+    map: { width: 20, height: 20, blocked: new Set(opts.blocked ?? []) },
+    rng: mulberry32(42),
+    startingSide: opts.side ?? 'player',
+    items: opts.items,
+    units,
+  });
+}
+
+describe('Т.142: межі витратників у soldierStep', () => {
+  it(`аптечка: рівно ${HEAL_AP_COST} AP — лікує; на 1 AP менше — ні, без помилки`, () => {
+    const g = itemsBotGame({ s1: { medkit: true, grenade: false } });
+    g.units[0].hp = 5;
+    g.units[0].ap = HEAL_AP_COST;
+    botTurn(g);
+    expect(g.log[0]).toEqual({ type: 'heal', unitId: 's1', targetId: 's1', healed: 3 });
+
+    const h = itemsBotGame({ s1: { medkit: true, grenade: false } });
+    h.units[0].hp = 5;
+    h.units[0].ap = HEAL_AP_COST - 1;
+    expect(() => botTurn(h)).not.toThrow();
+    expect(h.log.some((e) => e.type === 'heal')).toBe(false);
+    expect(h.items?.s1.medkit).toBe(true);
+  });
+
+  it('після лікування солдат діє далі в тому ж ході', () => {
+    const g = itemsBotGame({ s1: { medkit: true, grenade: false } });
+    g.units[0].hp = 5;
+    botTurn(g);
+    expect(g.log[0].type).toBe('heal');
+    expect(g.log.slice(1).some((e) => actedBy(e, 's1'))).toBe(true);
+  });
+
+  it(`граната: рівно ${GRENADE_AP_COST} AP — кидок; на 1 AP менше — ні, без помилки`, () => {
+    const g = itemsBotGame({ s1: { medkit: false, grenade: true } });
+    g.units[0].pos = { x: 7, y: 5 };
+    g.units[0].ap = GRENADE_AP_COST;
+    botTurn(g);
+    expect(g.log[0].type).toBe('grenade');
+
+    const h = itemsBotGame({ s1: { medkit: false, grenade: true } });
+    h.units[0].pos = { x: 7, y: 5 };
+    h.units[0].ap = GRENADE_AP_COST - 1;
+    expect(() => botTurn(h)).not.toThrow();
+    expect(h.log.some((e) => e.type === 'grenade')).toBe(false);
+    expect(h.items?.s1.grenade).toBe(true);
+  });
+
+  it('після кидка гранати солдат діє далі в тому ж ході', () => {
+    const g = itemsBotGame({ s1: { medkit: false, grenade: true } });
+    g.units[0].pos = { x: 7, y: 5 };
+    botTurn(g);
+    expect(g.log[0].type).toBe('grenade');
+    expect(g.log.slice(1).some((e) => actedBy(e, 's1'))).toBe(true);
+  });
+});
+
+describe('Т.142: вибір епіцентру гранати (grenadeTarget)', () => {
+  const pair = (x: number, y: number) => [
+    makeUnit({ id: 'a1', side: 'alien', pos: { x, y }, hp: 100, maxHp: 100 }),
+    makeUnit({ id: 'a2', side: 'alien', pos: { x, y: y + 1 }, hp: 100, maxHp: 100 }),
+  ];
+
+  it(`ворог рівно на дальності ${GRENADE_RANGE} — кидок; на ${GRENADE_RANGE + 1} — ні`, () => {
+    const g = open([makeUnit({ id: 's1', side: 'player', pos: { x: 2, y: 2 }, ap: GRENADE_AP_COST }), ...pair(2 + GRENADE_RANGE, 2)], {
+      items: { s1: { medkit: false, grenade: true } },
+    });
+    botTurn(g);
+    expect(g.log[0].type).toBe('grenade');
+
+    const far = 2 + GRENADE_RANGE + 1;
+    const h = open([makeUnit({ id: 's1', side: 'player', pos: { x: 2, y: 2 }, ap: GRENADE_AP_COST }), ...pair(far, 2)], {
+      items: { s1: { medkit: false, grenade: true } },
+    });
+    expect(() => botTurn(h)).not.toThrow();
+    expect(h.log.some((e) => e.type === 'grenade')).toBe(false);
+  });
+
+  it('скупчення видно лише іншому солдатові, кидач без лінії — кидка немає', () => {
+    // s1 у кільці стін: жодної лінії, жодного руху; s2 бачить пару ворогів.
+    const ring = ['3,4', '4,4', '5,4', '3,5', '5,5', '3,6', '4,6', '5,6'];
+    const g = open(
+      [
+        makeUnit({ id: 's1', side: 'player', pos: { x: 4, y: 5 }, ap: GRENADE_AP_COST }),
+        makeUnit({ id: 's2', side: 'player', pos: { x: 8, y: 9 }, ap: 0 }),
+        ...pair(8, 5),
+      ],
+      { items: { s1: { medkit: false, grenade: true } }, blocked: ring }
+    );
+    expect(() => botTurn(g)).not.toThrow();
+    expect(g.log.some((e) => e.type === 'grenade')).toBe(false);
+    expect(g.items?.s1.grenade).toBe(true);
+  });
+
+  it('союзник у зоні кожного кандидата — кидка немає; той самий союзник мертвий — кидок є', () => {
+    const play = (alliesAlive: boolean) => {
+      const g = open(
+        [
+          makeUnit({ id: 's1', side: 'player', pos: { x: 2, y: 2 }, ap: GRENADE_AP_COST }),
+          makeUnit({ id: 's2', side: 'player', pos: { x: 7, y: 2 }, alive: alliesAlive, ap: 0 }), // у хресті a1
+          makeUnit({ id: 's3', side: 'player', pos: { x: 7, y: 3 }, alive: alliesAlive, ap: 0 }), // у хресті a2
+          ...pair(6, 2),
+        ],
+        { items: { s1: { medkit: false, grenade: true } } }
+      );
+      botTurn(g);
+      return g.log.filter((e) => e.type === 'grenade').length;
+    };
+    expect(play(true)).toBe(0);
+    expect(play(false)).toBe(1);
+  });
+});
+
+describe('Т.142: ходи, ліміти і запобіжники циклів', () => {
+  it('aliensTurn у хід гравця — помилка з повідомленням', () => {
+    const m = mkMission('u142a');
+    expect(() => aliensTurn(m.state)).toThrow('aliensTurn: зараз не хід демонів Розриву');
+  });
+
+  it('botTurn у хід прибульців — помилка з повідомленням', () => {
+    const m = mkMission('u142a');
+    botTurn(m.state);
+    expect(() => botTurn(m.state)).toThrow('botTurn: зараз не хід гравця');
+  });
+
+  it('DemoSteps після over не діє і на іншому стані (контракт «після over — без дій»)', () => {
+    const drv = new DemoSteps(240);
+    const done = mkMission('u142d', 'збирач', 7);
+    let guard = 0;
+    while (!drv.step(done.state).over) if (guard++ > 100000) throw new Error('не завершується');
+    const fresh = mkMission('u1');
+    const before = JSON.stringify(fresh.state);
+    expect(drv.step(fresh.state)).toEqual({ acted: false, over: true });
+    expect(drv.step(fresh.state)).toEqual({ acted: false, over: true });
+    expect(JSON.stringify(fresh.state)).toBe(before);
+  });
+
+  // Прибулець із штучним запасом AP і ціль, якої не вбити: кожен aiStep — постріл.
+  function alienGuard(): GameState {
+    const g = open(
+      [
+        makeUnit({ id: 's1', side: 'player', pos: { x: 9, y: 6 }, hp: 1_000_000, maxHp: 1_000_000 }),
+        makeUnit({ id: 'a1', side: 'alien', pos: { x: 6, y: 6 } }),
+      ],
+      { side: 'alien' }
+    );
+    g.units[1].ap = 1000;
+    return g;
+  }
+
+  it('aliensTurn: рівно 60 дій, кожна — справжня дія ядра; хід переходить гравцю', () => {
+    const g = alienGuard();
+    expect(aliensTurn(g)).toBe(60);
+    expect(burstsBy(g, 'a1')).toBe(60);
+    expect(g.activeSide).toBe('player');
+  });
+
+  it('autoBattle зупиняється рівно на ліміті півходів', () => {
+    // u142b без ліміту — перемога на 3-му півході; ліміт 2 зупиняє бій раніше
+    const r = autoBattle(mkMission('u142b').state, 2);
+    expect(r).toEqual({ outcome: 'триває', halfTurns: 2 });
+  });
+
+  it('DemoSteps зупиняється рівно на ліміті півходів', () => {
+    const m = mkMission('u142c');
+    const drv = new DemoSteps(3);
+    let guard = 0;
+    while (!drv.step(m.state).over) if (guard++ > 10000) throw new Error('не завершується');
+    expect(drv.halfTurnsDone).toBe(3);
+    expect(missionOutcome(m.state)).toBe('триває');
+  });
+
+  it('DemoSteps: точна форма кожного результату; дії і півходи — як у botTurn/aliensTurn', () => {
+    const instant = mkMission('u142d', 'збирач', 7);
+    const stepped = mkMission('u142d', 'збирач', 7);
+    let actions = 0;
+    let halfTurns = 0;
+    while (missionOutcome(instant.state) === 'триває' && halfTurns < 240) {
+      actions += instant.state.activeSide === 'player' ? botTurn(instant.state) : aliensTurn(instant.state);
+      halfTurns++;
+    }
+    const drv = new DemoSteps(240);
+    const seen: Record<string, number> = {};
+    let guard = 0;
+    for (;;) {
+      const r = drv.step(stepped.state);
+      const k = JSON.stringify(r);
+      seen[k] = (seen[k] ?? 0) + 1;
+      if (r.over) break;
+      if (guard++ > 100000) throw new Error('не завершується');
+    }
+    expect(seen).toEqual({
+      [JSON.stringify({ acted: true, over: false })]: actions,
+      [JSON.stringify({ acted: false, over: false })]: halfTurns,
+      [JSON.stringify({ acted: false, over: true })]: 1,
+    });
+  });
+
+  it('DemoSteps: солдат — не більше 60 дій за півхід, далі хід переходить', () => {
+    const g = open([
+      makeUnit({ id: 's1', side: 'player', pos: { x: 6, y: 6 } }),
+      makeUnit({ id: 'a1', side: 'alien', pos: { x: 9, y: 6 }, hp: 1_000_000, maxHp: 1_000_000 }),
+    ]);
+    g.units[0].ap = 1000;
+    const drv = new DemoSteps(240);
+    const acted = Array.from({ length: 61 }, () => drv.step(g).acted);
+    expect(acted.filter(Boolean).length).toBe(60);
+    expect(acted[60]).toBe(false);
+    expect(g.activeSide).toBe('alien');
+    expect(burstsBy(g, 's1')).toBe(60);
+  });
+
+  it('DemoSteps: прибулець — не більше 60 дій за півхід, далі хід переходить', () => {
+    const g = alienGuard();
+    const drv = new DemoSteps(240);
+    const acted = Array.from({ length: 61 }, () => drv.step(g).acted);
+    expect(acted.filter(Boolean).length).toBe(60);
+    expect(acted[60]).toBe(false);
+    expect(g.activeSide).toBe('player');
+    expect(burstsBy(g, 'a1')).toBe(60);
   });
 });
