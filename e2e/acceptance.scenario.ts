@@ -882,8 +882,10 @@ test('сценарій приймання ADR-0030: партія → місія 
     await expectBattleFits(page, 'підсумок ходу демонів', 740);
     await expect(info).toContainText('Хід демонів Розриву відпрацьовано (' + actions + ' дій)');
     await expect(page.locator('#bctx-turn')).toHaveText('хід ' + mirror.state.turn + ' · загін');
+    // Т.130 (vibe-audit PR #443): клік по картці — перша дія гравця, прибирає підсумок, як тап по полю
+    await page.locator(`#bsquad .sq-card[data-unit="${mirror.squad()[0].id}"]`).click();
+    await expect(page.locator('#bturn')).toBeHidden();
     await expectSquad(page, mirror);
-    await expect(page.locator('#bturn')).toBeHidden(); // перша дія гравця прибирає підсумок
   });
 
   await test.step('бій: постріл у видиму ціль (тап-тап)', async () => {

@@ -585,6 +585,7 @@ describeScenario('UI-флоу прев’ю: геосцена → місія →
       );
       expect(cap()).toBe('Стоп'); // авто-бій іде далі — підсумок його не зупиняє
       cellClick(2, 2); // клік по полю і клавіша під час авто-бою підсумок не прибирають
+      (document.querySelector('#bsquad .sq-card') as HTMLButtonElement).click(); // Т.130: і клік по картці загону
       document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Shift', code: 'ShiftLeft' }));
       expect(plate.className).toBe('done');
       btn('btn-auto-battle').click(); // «Стоп» — підсумок лишається до першої дії
