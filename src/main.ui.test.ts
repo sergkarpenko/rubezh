@@ -3145,7 +3145,7 @@ describe('Т.143: «менше руху» змінилось — перемал�
     try {
       await mountPage();
     } finally {
-      vi.unstubAllGlobals();
+      vi.stubGlobal('matchMedia', undefined); // Т.149: не unstubAllGlobals — він знімає й стаб rAF П6.16
     }
   });
   it('Т.143: подія change медіазапиту перемальовує геосцену і канву бою один раз, стартовий екран — ні', () => {
@@ -3229,8 +3229,12 @@ describe('Т.149: «менше руху» змінилось — цикл ambien
     expect(cancelled).toEqual([loop]);
   });
   it('Т.149: тумблер «Анімація» вимкнено — зняте «менше руху» циклу не поновлює', () => {
+    // продовжує стан тесту 1 (партія стартована, цикл заплановано): передумова — перевіркою, а не мовчки
+    if ($('start-screen').classList.contains('hidden') === false) startParty('42');
     const toggle = btn('settings-ambient'); // кнопка вікна «Налаштування» є в розмітці і при закритому вікні
+    const cancelsBefore = cancelled.length;
     toggle.click(); // вимкнено — ambient.pause (хендл циклу скасовано тут, не подією)
+    expect(cancelled.length).toBe(cancelsBefore + 1); // цикл справді йшов — інакше тест порожній
     expect(toggle.textContent).toContain('вимк');
     const before = scheduled.length;
     const cancels = cancelled.length;
