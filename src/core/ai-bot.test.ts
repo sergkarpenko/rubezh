@@ -423,16 +423,28 @@ describe('Т.142: вибір епіцентру гранати (grenadeTarget)',
 });
 
 describe('Т.142: ходи, ліміти і запобіжники циклів', () => {
-  it('помилки не в свій хід — з повідомленням', () => {
+  it('aliensTurn у хід гравця — помилка з повідомленням', () => {
     const m = mkMission('u142a');
-    aliensTurnWrongSide(m.state);
+    expect(() => aliensTurn(m.state)).toThrow('aliensTurn: зараз не хід демонів Розриву');
+  });
+
+  it('botTurn у хід прибульців — помилка з повідомленням', () => {
+    const m = mkMission('u142a');
     botTurn(m.state);
     expect(() => botTurn(m.state)).toThrow('botTurn: зараз не хід гравця');
   });
 
-  function aliensTurnWrongSide(state: GameState) {
-    expect(() => aliensTurn(state)).toThrow('aliensTurn: зараз не хід демонів Розриву');
-  }
+  it('DemoSteps після over не діє і на іншому стані (контракт «після over — без дій»)', () => {
+    const drv = new DemoSteps(240);
+    const done = mkMission('u142d', 'збирач', 7);
+    let guard = 0;
+    while (!drv.step(done.state).over) if (guard++ > 100000) throw new Error('не завершується');
+    const fresh = mkMission('u1');
+    const before = JSON.stringify(fresh.state);
+    expect(drv.step(fresh.state)).toEqual({ acted: false, over: true });
+    expect(drv.step(fresh.state)).toEqual({ acted: false, over: true });
+    expect(JSON.stringify(fresh.state)).toBe(before);
+  });
 
   // Прибулець із штучним запасом AP і ціль, якої не вбити: кожен aiStep — постріл.
   function alienGuard(): GameState {
