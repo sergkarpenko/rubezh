@@ -765,6 +765,14 @@ describe('спокійні кадри за «менше руху» (Т.144)', ()
     drawAnimFrame(fly.ctx, a, 1, 48, 8, 480, 480, { side: 'player', flip: false });
     const line = fly.calls.find((c) => c.m === 'lineTo');
     expect(line?.args).toEqual([3 * 48 + 24, 24]);
+    // аудит PR #457: дуло без віддачі (повний трасер на тому кадрі віддає RECOIL_PX)
+    const m0 = muzzlePoint('player', false, 24, 24, 0);
+    expect(fly.calls.find((c) => c.m === 'moveTo')?.args).toEqual([m0.x, m0.y]);
+    const full = makeTracerAnim('player', { x: 0, y: 0 }, { x: 3, y: 0 }, true);
+    full.start = 0;
+    const ff = animCtx();
+    drawAnimFrame(ff.ctx, full, 1, 48, 8, 480, 480, { side: 'player', flip: false });
+    expect(ff.calls.find((c) => c.m === 'moveTo')?.args).not.toEqual([m0.x, m0.y]);
     expect(fly.calls.filter((c) => c.m === 'arc')).toHaveLength(0);
     const rings = [a.dur * 0.6, a.dur * 0.95].map((now) => {
       const f = animCtx();
@@ -774,6 +782,16 @@ describe('спокійні кадри за «менше руху» (Т.144)', ()
     });
     expect(rings[0]).toEqual(rings[1]);
     expect(rings[0]).toHaveLength(1);
+  });
+  it('промах: лише нерухома лінія до цілі на всю тривалість, без кілець і квадратиків', () => {
+    const a = calmAnim(makeTracerAnim('alien', { x: 3, y: 0 }, { x: 0, y: 0 }, false));
+    a.start = 0;
+    for (const k of [0.1, 0.9]) {
+      const f = animCtx();
+      drawAnimFrame(f.ctx, a, a.dur * k, 48, 8, 480, 480);
+      expect(f.calls.find((c) => c.m === 'lineTo')?.args).toEqual([24, 24]);
+      expect(f.calls.filter((c) => c.m === 'arc' || c.m === 'fillRect')).toHaveLength(0);
+    }
   });
   it('вибух: кільце на місці, без розльоту частинок', () => {
     const a = calmAnim(makeBoomAnim({ x: 2, y: 2 }));
