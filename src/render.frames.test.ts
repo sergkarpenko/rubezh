@@ -349,11 +349,11 @@ describe('фідбек власника 2026-10-22: якір дула — тра
   };
 
   it('демон (натив, вліво): старт — дуло фазового різака, лівий край кадру', () => {
-    expect(tracerStart('alien', 5, 3, false)).toEqual([264 - 29, 264 - 14]); // (7,46) → +5, +33
+    expect(tracerStart('alien', 5, 3, false)).toEqual([264 - 28, 264 - 13]); // (8,48) → +6, +34
   });
 
   it('демон (дзеркало, вправо): дуло віддзеркалене до правого краю (x → 96 − x)', () => {
-    expect(tracerStart('alien', 5, 7, true)).toEqual([264 + 29, 264 - 14]); // 89 → +63
+    expect(tracerStart('alien', 5, 7, true)).toEqual([264 + 28, 264 - 13]); // 88 → +62
   });
 
   it('солдат: дуло — правий край кадру fire, на рівні зброї', () => {
@@ -366,7 +366,7 @@ describe('фідбек власника 2026-10-22: якір дула — тра
 
   it('muzzlePoint: віддача зсуває дуло назад від погляду', () => {
     expect(muzzlePoint('player', false, 264, 264, 3)).toEqual({ x: 264 + 21 - 3, y: 264 - 15 });
-    expect(muzzlePoint('alien', false, 264, 264, 3)).toEqual({ x: 264 - 29 + 3, y: 264 - 14 });
+    expect(muzzlePoint('alien', false, 264, 264, 3)).toEqual({ x: 264 - 28 + 3, y: 264 - 13 });
     expect(muzzlePoint('player', true, 264, 264, 3)).toEqual({ x: 264 - 21 + 3, y: 264 - 15 });
   });
 });
