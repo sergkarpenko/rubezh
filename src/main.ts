@@ -154,8 +154,12 @@ const sound = createSound();
 // (бій або геосцена); ambient-цикл на стартовому екрані не малює (його анімація — лише CSS, ADR-0116). Створюється
 // ДО модулів бою/панелей (deps-об'єкти беруть його за значенням — TDZ),
 // сам читає стан лише через ліниві замикання.
+// Т.143 (ADR-0124): системне «менше руху» — гейт ambient-циклу, як вимкнений тумблер
+const reducedMotionQuery =
+  typeof window !== 'undefined' && typeof window.matchMedia === 'function' ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
 const ambient = createAmbient({
   hasRaf: () => hasRaf,
+  reducedMotion: () => reducedMotionQuery?.matches ?? false,
   schedule: (cb) => requestAnimationFrame(cb),
   cancel: (h) => cancelAnimationFrame(h as number),
   now: () => performance.now(),
@@ -831,6 +835,13 @@ if (typeof document !== 'undefined') {
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) ambient.pause();
     else ambient.resume();
+  });
+  // Т.143 (ADR-0124): «менше руху» змінилось без перезавантаження — цикл стоп/старт і кадр без ефектів
+  reducedMotionQuery?.addEventListener('change', () => {
+    ambient.motionChanged();
+    if (party === null || !el('start-screen').classList.contains('hidden')) return;
+    if (ui.mission !== null) battle.renderBattle();
+    else panels.renderGeo();
   });
   // П12.3 (ADR-0065/0059): тумблер звуку мігрував з топбара у вікно
   // «Налаштування» (settings.ts) — єдине джерело стану залишається

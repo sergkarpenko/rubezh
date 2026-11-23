@@ -3125,3 +3125,38 @@ describePage('Т.137: зміна вікна перемальовує канву 
     expect(canvasOps.filter((o) => o === 'clearRect(0,0,960,960)').length).toBe(1); // рівно одна перемальовка кадру
   });
 });
+
+// Т.143 (ADR-0124): системне «менше руху» змінилось без перезавантаження — main.ts слухає медіазапит
+// prefers-reduced-motion і перемальовує відкритий бій (кадр без ефектів ambient). У jsdom matchMedia
+// немає — підміна на час монтування сторінки.
+describe('Т.143: «менше руху» змінилось — перемальовка бою', { shuffle: false }, () => {
+  const changes: (() => void)[] = [];
+  let matches = false;
+  beforeAll(async () => {
+    const mql = {
+      get matches() {
+        return matches;
+      },
+      media: '(prefers-reduced-motion: reduce)',
+      addEventListener: (_type: string, fn: () => void) => changes.push(fn),
+      removeEventListener: () => undefined,
+    };
+    vi.stubGlobal('matchMedia', () => mql);
+    try {
+      await mountPage();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+  it('Т.143: подія change медіазапиту перемальовує канву бою один раз', () => {
+    expect(changes.length).toBe(1);
+    startParty('42');
+    for (let i = 0; i < 1500 && document.querySelector('button.mission') === null; i++) btn('btn-tick').click();
+    (document.querySelector('button.mission') as HTMLButtonElement).click();
+    expect($('battle-panel').classList.contains('hidden')).toBe(false);
+    canvasOps.length = 0;
+    matches = true;
+    changes[0]!();
+    expect(canvasOps.filter((o) => o === 'clearRect(0,0,960,960)').length).toBe(1);
+  });
+});

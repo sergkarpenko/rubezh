@@ -626,3 +626,64 @@ describe('Т.132: breath', () => {
     expect(noRaf.breath({ x: 1, y: 1 })).toBe(0);
   });
 });
+
+describe('Т.143 (ADR-0124): системне «менше руху» — гейт, як вимкнений тумблер', () => {
+  it('«менше руху» з початку: цикл не планується, ефектів і дихання немає; тумблер не змінюється', () => {
+    const h = makeHarness();
+    const store = memStore();
+    const amb = createAmbient({ ...h, store, reducedMotion: () => true });
+    amb.start();
+    expect(h.scheduled()).toBe(0);
+    h.step(AMBIENT_FRAME_MS * 3);
+    expect(h.repaints.length).toBe(0);
+    const m = mockCtx();
+    amb.paintBattle(m.ctx, battleScene([cell(0, 0, true)], wounded()));
+    amb.paintGeo(m.ctx, geoScene({ x: 8, y: 4 }));
+    expect(m.ops).toEqual([]);
+    expect(amb.breath({ x: 1, y: 1 })).toBe(0);
+    expect(amb.enabled()).toBe(true); // підпис «Анімація: увімк» і ключ сховища — як були
+    expect(store.read()).toBe(null);
+  });
+
+  it('увімкнулось посеред гри: кадр циклу зупиняє планування; motionChanged знімає кадр одразу', () => {
+    const h = makeHarness();
+    let reduced = false;
+    const amb = createAmbient({ ...h, store: memStore(), reducedMotion: () => reduced });
+    amb.start();
+    h.step(0);
+    expect(h.repaints.length).toBe(1);
+    reduced = true;
+    amb.motionChanged();
+    expect(h.pending()).toBe(false);
+    h.step(AMBIENT_FRAME_MS * 3);
+    expect(h.repaints.length).toBe(1);
+    // без motionChanged цикл зупиняється сам на наступному кадрі
+    const h2 = makeHarness();
+    let r2 = false;
+    const amb2 = createAmbient({ ...h2, store: memStore(), reducedMotion: () => r2 });
+    amb2.start();
+    h2.step(0);
+    r2 = true;
+    h2.step(AMBIENT_FRAME_MS);
+    expect(h2.repaints.length).toBe(1);
+    expect(h2.pending()).toBe(false);
+  });
+
+  it('вимкнулось: motionChanged поновлює цикл; з вимкненим тумблером — ні', () => {
+    const h = makeHarness();
+    let reduced = true;
+    const amb = createAmbient({ ...h, store: memStore(), reducedMotion: () => reduced });
+    amb.start();
+    reduced = false;
+    amb.motionChanged();
+    h.step(0);
+    expect(h.repaints.length).toBe(1);
+    expect(amb.breath({ x: 1, y: 1 })).toBeGreaterThan(0);
+    const h2 = makeHarness();
+    let r2 = true;
+    const off = createAmbient({ ...h2, store: memStore('0'), reducedMotion: () => r2 });
+    r2 = false;
+    off.motionChanged();
+    expect(h2.scheduled()).toBe(0);
+  });
+});

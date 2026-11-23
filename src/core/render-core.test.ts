@@ -12,6 +12,8 @@ import {
   HELMET_SHAPES,
   fighterLook,
   fogBorderSegments,
+  fogHatchStep,
+  FOG_HATCH_STEP,
   pathLabelBox,
   pathLabelScale,
   PATH_LABEL_MIN_CSS,
@@ -673,6 +675,16 @@ describe('П14.5: хвіст перехоплення — точки з поді
 });
 
 // Т.44: межа зору — відрізки між видимою клітинкою і туманом
+describe('Т.143: fogHatchStep — крок штриха туману', () => {
+  it("8 px buffer'а, поки 5,5 CSS px не більші; на зменшеній канві — 5,5 CSS px", () => {
+    expect(FOG_HATCH_STEP).toBe(8);
+    expect(fogHatchStep(1)).toBe(8);
+    expect(fogHatchStep(8 / 5.5)).toBe(8);
+    expect(fogHatchStep(2)).toBe(11);
+    expect(fogHatchStep(4)).toBe(22);
+  });
+});
+
 describe('Т.44: fogBorderSegments — межа зору', () => {
   const field = (w: number, h: number, visible: (x: number, y: number) => boolean): TerrainCell[] =>
     Array.from({ length: w * h }, (_v, i) => ({

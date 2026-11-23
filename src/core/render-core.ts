@@ -148,6 +148,13 @@ export function hasVisibleNeighbor(vis: ReadonlySet<string>, x: number, y: numbe
   return vis.has(x - 1 + ',' + y) || vis.has(x + 1 + ',' + y) || vis.has(x + ',' + (y - 1)) || vis.has(x + ',' + (y + 1));
 }
 
+// Т.44, Т.119: крок діагоналей штриха туману, px buffer'а: 8 px, на зменшеній канві (телефон) —
+// 5,5 CSS px (px — px buffer'а на CSS px). Т.143: спільний для рендера і гейта e2e штриха.
+export const FOG_HATCH_STEP = 8;
+export function fogHatchStep(px: number): number {
+  return Math.max(FOG_HATCH_STEP, 5.5 * px);
+}
+
 // Т.44: межа зору — відрізки на спільній стороні пари «видима клітинка —
 // невидима сусідка» (4 напрямки). Координати — у клітинках (вузли сітки);
 // край поля межею не є: сусідки поза переліком клітинок немає.

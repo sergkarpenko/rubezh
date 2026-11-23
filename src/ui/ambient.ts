@@ -201,6 +201,10 @@ export interface AmbientDeps {
   active(): boolean; // Т.58: партія на екрані; на стартовому екрані цикл не стартує (вкладка з фону, тумблер)
   repaint(): void; // перемальовка активної сцени (бій або геосцена) — вирішує викликач
   store?: AmbientStore; // тумблер: сховище поза сейвом (дефолт — localStorage)
+  // Т.143 (ADR-0124, рішення власника): системне «менше руху» (prefers-reduced-motion: reduce) —
+  // гейт, як вимкнений тумблер: 0 кадрів циклу і 0 ефектів; тумблер і його персист не змінюються.
+  // Немає — «менше руху» не ввімкнено (тести без медіазапиту, jsdom).
+  reducedMotion?(): boolean;
 }
 
 export interface Ambient {
@@ -214,6 +218,9 @@ export interface Ambient {
   paintBattle(ctx: CanvasRenderingContext2D, scene: AmbientBattleScene): void;
   paintGeo(ctx: CanvasRenderingContext2D, scene: AmbientGeoScene): void;
   breath(at: Vec2): number; // Т.132: дихання бійця 0..1; вимкнено чи jsdom — 0
+  // Т.143 (ADR-0124): «менше руху» змінилось — увімкнулось: зупинити цикл; вимкнулось: поновити
+  // (ті самі гейти, що й старт). Перемальовку сцени без ефектів робить викликач.
+  motionChanged(): void;
 }
 
 export function createAmbient(deps: AmbientDeps): Ambient {
@@ -234,13 +241,15 @@ export function createAmbient(deps: AmbientDeps): Ambient {
     }
   };
   let on = readState() !== '0'; // дефолт — увімкнено (ADR-0073 п.3)
+  // Т.143 (ADR-0124): ефекти грають, лише коли тумблер увімкнено і «менше руху» не ввімкнено
+  const live = (): boolean => on && !(deps.reducedMotion?.() ?? false);
   let handle: unknown = null; // активний rAF-хендл (null — цикл не планується)
   let lastFrame = -AMBIENT_FRAME_MS; // тротлер: час останнього репейнта
 
   // Кадр циклу: гейти спочатку (вимкнено/фоновий документ — цикл зупиняється,
   // 0 перерисовок — ADR-0029 як базовий режим), потім тротлер ≥ 100 мс.
   const frame = (now: number): void => {
-    if (!on || !deps.visible()) {
+    if (!live() || !deps.visible()) {
       handle = null; // далі не плануємо; pause/resume або тумблер розбудять
       return;
     }
@@ -252,7 +261,7 @@ export function createAmbient(deps: AmbientDeps): Ambient {
   };
 
   function start(): void {
-    if (handle !== null || !on || !deps.hasRaf() || !deps.visible() || !deps.active()) return;
+    if (handle !== null || !live() || !deps.hasRaf() || !deps.visible() || !deps.active()) return;
     lastFrame = -AMBIENT_FRAME_MS; // перший кадр — одразу; далі тротлер тримає інтервал
     handle = deps.schedule(frame);
   }
@@ -279,13 +288,17 @@ export function createAmbient(deps: AmbientDeps): Ambient {
     // стаб П6.16) — 0 Canvas-викликів; подієві кадри у браузері малюють
     // ambient тим самим t (без мерехтіння між циклами кадрів).
     paintBattle: (ctx, scene) => {
-      if (!on || !deps.hasRaf()) return;
+      if (!live() || !deps.hasRaf()) return;
       paintBattleAmbient(ctx, scene, deps.now());
     },
     paintGeo: (ctx, scene) => {
-      if (!on || !deps.hasRaf()) return;
+      if (!live() || !deps.hasRaf()) return;
       paintGeoAmbient(ctx, scene, deps.now());
     },
-    breath: (at) => (on && deps.hasRaf() ? breathAmount(deps.now(), at) : 0),
+    breath: (at) => (live() && deps.hasRaf() ? breathAmount(deps.now(), at) : 0),
+    motionChanged: () => {
+      if (live()) start();
+      else pause();
+    },
   };
 }
