@@ -55,6 +55,7 @@ import { BCELL } from './grid';
 import { type LogCat } from './journal';
 import { byGender, ticksText } from './text';
 import { squadCards, squadOrder, squadStripHtml } from './squad-strip';
+import { enemyMenuHtml, enemyMenuPlace, enemyMenuView } from './enemy-menu';
 import {
   resultCardHtml,
   summarizeAlienTurn,
@@ -81,6 +82,7 @@ export interface BattleUIState {
   hoverAp: number;
   tapCell: Vec2 | null; // ADR-0027 (П6.4): клітинка першого тапу — повторний тап у неї робить хід
   aimCell: Vec2 | null; // П6.14: клітинка цілі під наведенням/першим тапом у зведеному режимі
+  menuId: string | null; // Т.131: демон, на якому відкрите меню (src/ui/enemy-menu.ts)
 }
 
 // Анімаційний рушій бою (AnimEngine у main.ts) — тонкий адаптер: черга,
@@ -357,6 +359,36 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
     if (focused !== undefined) box.querySelector<HTMLElement>('[data-unit="' + focused + '"]')?.focus();
   }
 
+  // Т.131 (кандидат 128): меню на ворогові — картка поверх поля біля демона. Лише в хід загону,
+  // без анімацій і авто-бою, на живому видимому демоні (туман, ADR-0081); інакше сховане.
+  // HTML — лише за зміни (як смуга загону): перемальовка кадру не губить клік по кнопці.
+  let menuHtml = '';
+  function renderEnemyMenu(mission: Mission): void {
+    const box = el('benemy');
+    const t = ui.menuId === null ? undefined : mission.state.units.find((u) => u.id === ui.menuId && u.alive);
+    const show = t !== undefined && playerTurnActive() && !animating() && !deps.autoBusy() && visibleCells().has(t.pos.x + ',' + t.pos.y);
+    if (!show) {
+      box.classList.add('hidden');
+      return;
+    }
+    const html = enemyMenuHtml(enemyMenuView(mission.state, t, selectedUnit()));
+    if (html !== menuHtml || box.childElementCount === 0) {
+      menuHtml = html;
+      box.innerHTML = html;
+    }
+    box.classList.remove('hidden');
+    box.dataset.unit = t.id;
+    // місце: клітинка демона в CSS px контейнера #battle-stage (канва масштабується)
+    const cv = el<HTMLCanvasElement>('battle');
+    const k = cv.width > 0 ? cv.clientWidth / cv.width : 0;
+    const field = { left: cv.offsetLeft, top: cv.offsetTop, width: cv.clientWidth, height: cv.clientHeight };
+    const cell = { left: field.left + t.pos.x * BCELL * k, top: field.top + t.pos.y * BCELL * k, width: BCELL * k, height: BCELL * k };
+    const at = enemyMenuPlace(cell, field, box.offsetWidth, box.offsetHeight);
+    box.style.left = at.left + 'px';
+    box.style.top = at.top + 'px';
+    box.dataset.side = at.side;
+  }
+
   function renderBattle(): void {
     const mission = ui.mission;
     if (!mission) return;
@@ -373,6 +405,7 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
         ? 'хід демонів Розриву'
         : 'хід ' + mission.state.turn + ' · ' + (mission.state.activeSide === 'player' ? 'загін' : 'демони Розриву');
     renderSquadStrip(mission);
+    renderEnemyMenu(mission);
     const cv = el<HTMLCanvasElement>('battle');
     const ctx = cv.getContext('2d');
     if (!ctx) return;
@@ -681,6 +714,8 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
     ui.hoverPath = null;
     ui.tapCell = null;
     ui.aimCell = null; // П6.14
+    ui.menuId = null; // Т.131
+    el('benemy').classList.add('hidden');
     deps.resetBattleLog();
     el('bresult').innerHTML = '';
     facing.clear(); // П14.3: бій закрито — напрямки погляду не переносяться

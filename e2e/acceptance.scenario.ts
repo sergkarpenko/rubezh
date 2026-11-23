@@ -232,6 +232,63 @@ async function expectBattleFits(page: Page, label: string, minField: number): Pr
   await expectSquadStrip(page, label, true); // Т.130
 }
 
+// Т.131 (ADR-0120): меню на ворогові — видно, у межах поля, не на клітинці демона, кнопки ≥ 40 px
+// заввишки, шанс швидкого пострілу — як у дзеркалі (обчислені рамки, від шрифту не залежить)
+async function expectEnemyMenu(page: Page, mirror: CoreMirror, shot: NonNullable<ReturnType<CoreMirror['shotOption']>>): Promise<void> {
+  const menu = page.locator('#benemy');
+  await expect(menu).toBeVisible();
+  await expect(menu.locator('.em-name')).toHaveText(shot.target.name);
+  await expect(menu.locator('.em-hpn')).toHaveText('HP ' + shot.target.hp + '/' + shot.target.maxHp);
+  await expect(menu.locator('[data-act="snap"] .em-meta')).toHaveText(
+    shot.shooter.weapon.modes.snap.apCost + ' AP · ~' + mirror.shotOption('snap')!.chancePct + '%'
+  );
+  const check = async (label: string): Promise<void> => {
+    const m = await page.evaluate(
+      ([cell, w]) => {
+        const f = document.getElementById('battle')!.getBoundingClientRect();
+        const b = document.getElementById('benemy')!.getBoundingClientRect();
+        const k = f.width / w;
+        const c = {
+          left: f.left + cell.x * k,
+          top: f.top + cell.y * k,
+          right: f.left + (cell.x + 1) * k,
+          bottom: f.top + (cell.y + 1) * k,
+        };
+        const all = [...document.querySelectorAll('#benemy button')];
+        const btns = all.map((x) => x.getBoundingClientRect().height);
+        // текст ширший за кнопку (вузька кнопка, шрифт CI ширший — Т.122)
+        const wide = Math.max(...all.map((x) => x.scrollWidth - x.clientWidth));
+        const over = Math.min(b.right, c.right) - Math.max(b.left, c.left) > 0 && Math.min(b.bottom, c.bottom) - Math.max(b.top, c.top) > 0;
+        return { out: Math.max(f.left - b.left, f.top - b.top, b.right - f.right, b.bottom - f.bottom), over, btns, wide };
+      },
+      [shot.target.pos, MISSION_MAP_W] as const
+    );
+    expect(m.out, label + ': меню на ворогові за межами поля').toBeLessThanOrEqual(1);
+    expect(m.over, label + ': меню на ворогові накриває клітинку демона').toBe(false);
+    expect(m.btns, label + ': кнопки меню — три постріли і граната').toHaveLength(4);
+    expect(Math.min(...m.btns), label + ': кнопка меню нижча за 40 px').toBeGreaterThanOrEqual(40);
+    expect(m.wide, label + ': текст кнопки меню ширший за кнопку').toBeLessThanOrEqual(0);
+  };
+  await check('1440 × 900');
+  // низьке вікно сітки і телефон: поле менше — картка біля демона, а не на ньому (виміри Т.131)
+  const vp = page.viewportSize()!;
+  for (const [w, h] of [
+    [1100, 540],
+    [390, 844],
+  ]) {
+    await page.keyboard.press('Escape');
+    await page.setViewportSize({ width: w, height: h });
+    await page.locator('#battle').scrollIntoViewIfNeeded();
+    await tap(page, shot.target.pos);
+    await expect(menu).toBeVisible();
+    await check(w + ' × ' + h);
+  }
+  await page.keyboard.press('Escape');
+  await page.setViewportSize(vp);
+  await tap(page, shot.target.pos);
+  await expect(menu).toBeVisible();
+}
+
 // Стан загону на сторінці = стан у дзеркалі: вибираємо кожного живого
 // оперативника і звіряємо його рядок HP/AP. Після ходу демонів це ловить
 // розбіжність у їхніх пострілах і реакційному вогні дозору.
@@ -910,6 +967,20 @@ test('сценарій приймання ADR-0030: партія → місія 
     if (shot.target.alive && mirror.sees(shot.target)) {
       await tap(page, shot.target.pos); // без зведеного режиму — характеристики демона: HP після пострілу
       await expect(info).toContainText(enemyLine(shot.target));
+      await expectEnemyMenu(page, mirror, shot); // Т.131: і меню на ворогові
+      await page.keyboard.press('Escape'); // Esc закриває меню, вибір бійця лишається
+      await expect(page.locator('#benemy')).toBeHidden();
+      await expect(unit).toHaveAttribute('aria-label', unitLine(shot.shooter));
+      // кнопка меню стріляє одразу — AP і результат, як у дзеркалі
+      if (shot.shooter.ap >= shot.shooter.weapon.modes.snap.apCost) {
+        await tap(page, shot.target.pos);
+        await page.locator('#benemy [data-act="snap"]').click();
+        await expect(page.locator('#benemy')).toBeHidden();
+        await expect(info).toContainText('(швидкий). AP');
+        mirror.shoot(shot, 'snap');
+        if (mirror.outcome() !== 'триває') return;
+        await expect(unit).toHaveAttribute('aria-label', unitLine(shot.shooter));
+      }
     }
   });
 

@@ -73,6 +73,7 @@ export interface InputDeps {
 export interface InputUI {
   battleCanvasClick(ev: MouseEvent): void;
   squadCardClick(id: string): void; // Т.130: картка смуги загону
+  enemyMenuAction(act: string): void; // Т.131: кнопка меню на ворогові (snap / aimed / auto / grenade)
   battleCanvasHover(ev: MouseEvent): void;
   battleCanvasLeave(): void;
   armFire(mode: ShotMode): void;
@@ -89,6 +90,52 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
   function cellFromEvent(ev: MouseEvent): Vec2 {
     const cv = el<HTMLCanvasElement>('battle');
     return cellFromPoint(ev.clientX, ev.clientY, cv.getBoundingClientRect(), cv);
+  }
+
+  // П14.4: характеристики демона одним рядком (#binfo) — і під меню на ворогові (Т.131)
+  function enemyInfo(a: Unit): string {
+    return (
+      a.name +
+      ': HP ' +
+      a.hp +
+      '/' +
+      a.maxHp +
+      ' · зброя «' +
+      a.weapon.name +
+      '» (пошкодження ' +
+      a.weapon.damage[0] +
+      '–' +
+      a.weapon.damage[1] +
+      ', дальність ' +
+      a.weapon.range +
+      ').'
+    );
+  }
+
+  // Т.131: закрити меню на ворогові (Esc, клік повз, зведення режиму, кінець ходу)
+  function closeMenu(): void {
+    if (ui.menuId === null) return;
+    ui.menuId = null;
+    battle.renderBattle();
+  }
+
+  // Т.131: кнопка меню на ворогові. Постріл — одразу (ті самі перевірки й рядок, що тап-тап зведеного
+  // режиму); «Граната» — зводить гранату з епіцентром на демоні: зона на полі, повторний тап по ньому — кидок.
+  function enemyMenuAction(act: string): void {
+    if (!battle.playerTurnActive() || !ui.mission || deps.autoBusy() || battle.animating()) return;
+    const t = ui.mission.state.units.find((x) => x.id === ui.menuId && x.alive);
+    const sel = battle.selectedUnit();
+    ui.menuId = null;
+    if (!t || !sel) {
+      deps.renderAll();
+      return;
+    }
+    if (act === 'grenade') {
+      armItem('grenade');
+      if (ui.itemMode === 'grenade') clickCell({ x: t.pos.x, y: t.pos.y });
+      return;
+    }
+    if (act === 'snap' || act === 'aimed' || act === 'auto') fireAt(sel, t, act);
   }
 
   function battleCanvasClick(ev: MouseEvent): void {
@@ -110,6 +157,7 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
     ui.hoverPath = null;
     ui.tapCell = null;
     ui.aimCell = null; // П6.14
+    ui.menuId = null; // Т.131: вибір іншого бійця (тап, картка, Q) закриває меню на ворогові
     battle.binfo(
       u.name + ': HP ' + u.hp + '/' + u.maxHp + ' · AP ' + u.ap + '/' + u.maxAp + '. Клікніть клітинку — рух, або кнопку пострілу.'
     );
@@ -139,34 +187,30 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
       return;
     }
 
-    // П14.4 (фідбек прев'ю): тап по ВИДИМОМУ демону Розриву без зведених
-    // режимів — його характеристики в контекст-стрічці (HP — джерело правди
-    // стану; туман не розкривається — невидима клітинка характеристик не
-    // дає, ADR-0006). Під час відтворення черги ходу ШІ демон відображається
-    // на початку шляху — клік шукає за відображуваною позицією
-    // (displayedAlienAt), бойові гілки далі працюють із фактичним u.pos.
+    // Т.131 (кандидат 128): тап по ВИДИМОМУ демону без зведених режимів — меню на ворогові
+    // (картка біля нього, src/ui/enemy-menu.ts) замість характеристик у #binfo (П14.4); повторний
+    // тап по тому самому демону меню закриває. Туман не розкривається — невидима клітинка меню не
+    // дає (ADR-0081). Поки грає анімація, картку не видно (renderEnemyMenu) — вона з'являється після
+    // неї; характеристики — і в #binfo. Демон відображається на початку шляху ходу ШІ — клік шукає
+    // за відображуваною позицією (displayedAlienAt).
     if (ui.fireMode === null && ui.itemMode === null && battle.visibleCells().has(cell.x + ',' + cell.y)) {
       const a = u !== undefined && u.side === 'alien' ? u : battle.displayedAlienAt(cell);
       if (a !== undefined) {
-        battle.binfo(
-          a.name +
-            ': HP ' +
-            a.hp +
-            '/' +
-            a.maxHp +
-            ' · зброя «' +
-            a.weapon.name +
-            '» (пошкодження ' +
-            a.weapon.damage[0] +
-            '–' +
-            a.weapon.damage[1] +
-            ', дальність ' +
-            a.weapon.range +
-            '). Виберіть режим пострілу на тулбарі, щоб атакувати.'
-        );
+        ui.menuId = ui.menuId === a.id ? null : a.id;
+        if (ui.menuId !== null) {
+          ui.hoverPath = null;
+          ui.tapCell = null;
+          battle.binfo(enemyInfo(a));
+        }
         deps.renderAll();
         return;
       }
+    }
+
+    // Т.131: відкрите меню закриває клік повз (порожня клітинка, демон у тумані) — без іншої дії
+    if (ui.menuId !== null) {
+      closeMenu();
+      return;
     }
 
     const sel = battle.selectedUnit();
@@ -309,32 +353,7 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
         return;
       }
       const mode = ui.fireMode;
-      ui.fireMode = null;
-      ui.tapCell = null;
-      ui.aimCell = null;
-      try {
-        const prevLen = st.log.length;
-        resolveAttack(st, sel.id, u.id, mode);
-        battle.enqueueAnims(prevLen); // П6.8: трасер/спалах/смерть — з подій логу
-        if (!battle.checkOutcome()) {
-          battle.binfo(
-            sel.name +
-              ' ' +
-              byGender(sel.name, 'вистрілив', 'вистрілила') +
-              ' (' +
-              MODE_LABEL[mode] +
-              '). AP ' +
-              sel.ap +
-              '/' +
-              sel.maxAp +
-              '.'
-          );
-          deps.renderAll();
-        }
-      } catch (e) {
-        battle.binfo('✗ ' + (e as Error).message);
-        deps.renderAll();
-      }
+      fireAt(sel, u, mode);
       return;
     }
 
@@ -385,6 +404,37 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
       ui.hoverPath = null;
       if (!battle.checkOutcome()) {
         battle.binfo(sel.name + (blocker ? ': шлях перекрито — ' + blocker.name + '. AP ' : ': рух. AP ') + sel.ap + '/' + sel.maxAp + '.');
+        deps.renderAll();
+      }
+    } catch (e) {
+      battle.binfo('✗ ' + (e as Error).message);
+      deps.renderAll();
+    }
+  }
+
+  // постріл (тап-тап зведеного режиму і кнопка меню на ворогові, Т.131)
+  function fireAt(sel: Unit, u: Unit, mode: ShotMode): void {
+    const st = ui.mission!.state;
+    ui.fireMode = null;
+    ui.tapCell = null;
+    ui.aimCell = null;
+    try {
+      const prevLen = st.log.length;
+      resolveAttack(st, sel.id, u.id, mode);
+      battle.enqueueAnims(prevLen); // П6.8: трасер/спалах/смерть — з подій логу
+      if (!battle.checkOutcome()) {
+        battle.binfo(
+          sel.name +
+            ' ' +
+            byGender(sel.name, 'вистрілив', 'вистрілила') +
+            ' (' +
+            MODE_LABEL[mode] +
+            '). AP ' +
+            sel.ap +
+            '/' +
+            sel.maxAp +
+            '.'
+        );
         deps.renderAll();
       }
     } catch (e) {
@@ -462,6 +512,7 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
   // (знайшов аудит). Вибір оперативника і шлях під курсором не чіпаємо; #binfo
   // пише сам драйвер, поле малюють його перший крок і обробник плитки.
   function disarm(): void {
+    ui.menuId = null; // Т.131: старт авто-бою закриває меню на ворогові
     ui.fireMode = null;
     ui.itemMode = null;
     ui.tapCell = null;
@@ -471,6 +522,7 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
   function armFire(mode: ShotMode): void {
     if (!battle.playerTurnActive() || !ui.mission) return;
     if (deps.autoBusy()) return; // П13.3: триває авто-бій — керування заблоковано
+    closeMenu(); // Т.131: дія тулбара чи клавіша закриває меню на ворогові
     const sel = battle.selectedUnit();
     if (!sel) {
       battle.binfo('Спершу клікніть свого оперативника.');
@@ -496,6 +548,7 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
   function armOverwatch(): void {
     if (!battle.playerTurnActive() || !ui.mission) return;
     if (deps.autoBusy()) return; // П13.3: триває авто-бій — керування заблоковано
+    closeMenu(); // Т.131: дія тулбара чи клавіша закриває меню на ворогові
     const sel = battle.selectedUnit();
     if (!sel) {
       battle.binfo('Спершу клікніть свого оперативника.');
@@ -521,6 +574,7 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
     if (!battle.playerTurnActive() || !ui.mission) return;
     if (deps.autoBusy()) return; // П13.3: триває авто-бій — хід веде політика ядра
     ui.hoverPath = null;
+    ui.menuId = null; // Т.131
     ui.fireMode = null;
     ui.itemMode = null; // П11.6
     ui.tapCell = null;
@@ -549,6 +603,11 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
   // П11.6: зведений витратник скасовується тим самим правилом (перший Esc).
   function cancelSelection(): void {
     if (!ui.mission) return;
+    // Т.131: Esc спершу закриває меню на ворогові (вибір бійця лишається)
+    if (ui.menuId !== null) {
+      closeMenu();
+      return;
+    }
     if (ui.fireMode !== null || ui.itemMode !== null) {
       const wasFire = ui.fireMode !== null;
       ui.fireMode = null;
@@ -575,6 +634,7 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
   function armItem(mode: 'medkit' | 'grenade'): void {
     if (!battle.playerTurnActive() || !ui.mission) return;
     if (deps.autoBusy()) return; // П13.3: триває авто-бій — керування заблоковано
+    closeMenu(); // Т.131: дія тулбара чи клавіша закриває меню на ворогові
     const sel = battle.selectedUnit();
     if (!sel) {
       battle.binfo('Спершу клікніть свого оперативника.');
@@ -623,6 +683,7 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
   function evacuateSelected(): void {
     if (!battle.playerTurnActive() || !ui.mission) return;
     if (deps.autoBusy()) return; // П13.3: триває авто-бій — керування заблоковано
+    closeMenu(); // Т.131: дія тулбара чи клавіша закриває меню на ворогові
     const sel = battle.selectedUnit();
     if (!sel) {
       battle.binfo('Спершу клікніть свого оперативника.');
@@ -719,6 +780,7 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
   return {
     battleCanvasClick,
     squadCardClick,
+    enemyMenuAction,
     battleCanvasHover,
     battleCanvasLeave,
     armFire,

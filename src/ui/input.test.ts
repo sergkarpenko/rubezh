@@ -37,6 +37,7 @@ function setupDom(): void {
       <span><b id="bctx-turn">—</b></span>
     </div>
     <div id="bsquad"></div>
+    <div id="benemy" class="hidden"></div>
     <div id="bresult"></div>
     <canvas id="battle" width="960" height="960"></canvas>
     <div id="binfo">—</div>
@@ -93,6 +94,7 @@ function makeFixture(autoBusy = false, queue: Anim[] = []): Fixture {
     hoverAp: 0,
     tapCell: null,
     aimCell: null,
+    menuId: null, // Т.131
     itemMode: null, // П11.6
   };
   const battleDeps: BattleDeps = {
@@ -487,11 +489,15 @@ describe('П14.4: характеристики демона Розриву по 
     expect(f.binfo()).toContain('HP ' + alien.hp + '/' + alien.maxHp);
     expect(f.binfo()).toContain(alien.weapon.name);
     expect(f.binfo()).toContain('дальність ' + alien.weapon.range);
-    expect(f.binfo()).toContain('режим пострілу'); // підказка атаки лишається
-    // той самий демон у тумані — характеристики не розкриваються (ADR-0006)
+    expect(f.ui.menuId).toBe(alien.id); // Т.131: і меню на ворогові
+    // той самий демон у тумані — характеристики не розкриваються (ADR-0006): перший клік лише
+    // закриває меню (клік повз, Т.131), другий — порожня клітинка
     alien.pos = home;
     expect(f.battle.visibleCells().has(home.x + ',' + home.y)).toBe(false);
     clickAt(f, home.x, home.y);
+    expect(f.ui.menuId).toBe(null);
+    clickAt(f, home.x, home.y);
+    expect(f.ui.menuId).toBe(null);
     expect(f.binfo()).not.toContain('зброя');
   });
 
@@ -1068,5 +1074,188 @@ describe('Т.130: смуга загону — клік по картці і кл
     launchMission(f);
     q(f);
     expect(f.ui.selectedId).toBeNull();
+  });
+});
+
+// Т.131 (ADR-0120): меню на ворогові — відкриття, закриття, кнопки
+describe('Т.131: меню на ворогові', () => {
+  // демон на видимій вільній клітинці за 2 від бійця (у дальності, лінія чиста — поле біля висадки)
+  function setup(autoBusy = false, queue: Anim[] = []): { f: Fixture; s: Unit; a: Unit } {
+    const f = makeFixture(autoBusy, queue);
+    launchMission(f);
+    const st = f.ui.mission!.state;
+    const s = st.units.find((u) => u.side === 'player' && u.alive)!;
+    const a = st.units.find((u) => u.side === 'alien' && u.alive)!;
+    for (const [dx, dy] of [
+      [2, 0],
+      [0, 2],
+      [2, 2],
+      [-2, 0],
+      [0, -2],
+    ]) {
+      const p = { x: s.pos.x + dx, y: s.pos.y + dy };
+      if (st.units.some((u) => u.alive && u.pos.x === p.x && u.pos.y === p.y)) continue;
+      if (st.map.blocked.has(p.x + ',' + p.y)) continue;
+      a.pos = p;
+      if (f.battle.visibleCells().has(p.x + ',' + p.y) && hasLineOfSight(st, s.pos, p)) break;
+    }
+    expect(f.battle.visibleCells().has(a.pos.x + ',' + a.pos.y)).toBe(true);
+    expect(hasLineOfSight(st, s.pos, a.pos)).toBe(true);
+    clickAt(f, s.pos.x, s.pos.y); // вибрати бійця
+    return { f, s, a };
+  }
+  const menu = (): HTMLElement => document.getElementById('benemy')!;
+
+  it('тап по демону відкриває меню (картка видна після кадру), повторний тап — закриває', () => {
+    const { f, a } = setup();
+    clickAt(f, a.pos.x, a.pos.y);
+    expect(f.ui.menuId).toBe(a.id);
+    expect(f.binfo()).toContain(a.name + ': HP');
+    f.battle.renderBattle();
+    expect(menu().classList.contains('hidden')).toBe(false);
+    expect(menu().dataset.unit).toBe(a.id);
+    expect(menu().querySelectorAll('button')).toHaveLength(4);
+    const first = menu().querySelector('button');
+    f.battle.renderBattle(); // перемальовка кадру не міняє кнопок (клік не губиться)
+    expect(menu().querySelector('button')).toBe(first);
+    clickAt(f, a.pos.x, a.pos.y);
+    expect(f.ui.menuId).toBeNull();
+    f.battle.renderBattle();
+    expect(menu().classList.contains('hidden')).toBe(true);
+  });
+
+  it('Esc закриває меню, вибір бійця лишається; другий Esc знімає вибір', () => {
+    const { f, s, a } = setup();
+    clickAt(f, a.pos.x, a.pos.y);
+    f.input.onKeyDown(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape' }));
+    expect(f.ui.menuId).toBeNull();
+    expect(menu().classList.contains('hidden')).toBe(true);
+    expect(f.ui.selectedId).toBe(s.id);
+    f.input.onKeyDown(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape' }));
+    expect(f.ui.selectedId).toBeNull();
+  });
+
+  it('клік повз (порожня клітинка) лише закриває меню — без прев’ю ходу', () => {
+    const { f, s, a } = setup();
+    clickAt(f, a.pos.x, a.pos.y);
+    const empty = { x: s.pos.x, y: s.pos.y + 1 };
+    clickAt(f, empty.x, empty.y);
+    expect(f.ui.menuId).toBeNull();
+    expect(f.ui.tapCell).toBeNull();
+    expect(f.ui.hoverPath).toBeNull();
+  });
+
+  it('вибір іншого бійця, Q, зведення режиму (плитка чи клавіша), кінець ходу і старт авто-бою закривають меню', () => {
+    const { f, s, a } = setup();
+    const other = f.ui.mission!.state.units.find((u) => u.side === 'player' && u.alive && u.id !== s.id)!;
+    const open = (): void => {
+      if (f.ui.selectedId !== s.id) clickAt(f, s.pos.x, s.pos.y);
+      clickAt(f, a.pos.x, a.pos.y);
+      expect(f.ui.menuId).toBe(a.id);
+    };
+    open();
+    clickAt(f, other.pos.x, other.pos.y);
+    expect(f.ui.menuId).toBeNull();
+    open();
+    f.input.squadCardClick(other.id);
+    expect(f.ui.menuId).toBeNull();
+    open();
+    f.input.onKeyDown(new KeyboardEvent('keydown', { key: 'q', code: 'KeyQ' }));
+    expect(f.ui.menuId).toBeNull();
+    for (const key of ['Digit1', 'Digit2', 'Digit3', 'KeyO', 'KeyG']) {
+      open();
+      f.input.onKeyDown(new KeyboardEvent('keydown', { key: key.slice(-1), code: key }));
+      expect(f.ui.menuId, key).toBeNull();
+      f.input.onKeyDown(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape' })); // зняти режим
+    }
+    open();
+    f.input.disarm();
+    expect(f.ui.menuId).toBeNull();
+    open();
+    f.input.endPlayerTurn();
+    expect(f.ui.menuId).toBeNull();
+  });
+
+  it('зі зведеним режимом тап по демону — тап-тап, як раніше, меню не відкривається', () => {
+    const { f, a } = setup();
+    f.input.armFire('snap');
+    clickAt(f, a.pos.x, a.pos.y);
+    expect(f.ui.menuId).toBeNull();
+    expect(f.binfo()).toContain('повторний тап у цю саму ціль');
+  });
+
+  it('кнопки пострілу стріляють одразу (AP і рядок, як тап-тап), меню закривається', () => {
+    for (const mode of ['snap', 'aimed', 'auto'] as const) {
+      const { f, s, a } = setup();
+      clickAt(f, a.pos.x, a.pos.y);
+      const ap = s.ap;
+      const cost = s.weapon.modes[mode].apCost;
+      f.input.enemyMenuAction(mode);
+      expect(s.ap, mode).toBe(ap - cost);
+      expect(f.ui.menuId).toBeNull();
+      expect(f.ui.mission!.state.log.some((e) => e.type === 'shot' && e.mode === mode)).toBe(true);
+      if (f.ui.battleResult === null) expect(f.binfo()).toMatch(/вистріл(ив|ила) \(/);
+    }
+  });
+
+  it('«Граната» зводить гранату з епіцентром на демоні (зона видна), повторний тап по ньому — кидок', () => {
+    const { f, s, a } = setup();
+    const items = f.ui.mission!.state.items!;
+    items[s.id] = { ...(items[s.id] ?? { medkit: false, grenade: false }), grenade: true };
+    clickAt(f, a.pos.x, a.pos.y);
+    f.input.enemyMenuAction('grenade');
+    expect(f.ui.menuId).toBeNull();
+    expect(f.ui.itemMode).toBe('grenade');
+    expect(f.ui.tapCell).toEqual(a.pos);
+    expect(f.binfo()).toContain('Повторний клік у цю клітинку — кидок');
+    const ap = s.ap;
+    clickAt(f, a.pos.x, a.pos.y);
+    expect(s.ap).toBe(ap - 4);
+    expect(items[s.id].grenade).toBe(false);
+  });
+
+  it('кнопка не діє в авто-бої, під час анімації і без відкритого меню', () => {
+    const { f, s } = setup();
+    const ap = s.ap;
+    f.input.enemyMenuAction('snap'); // меню не відкрите
+    expect(s.ap).toBe(ap);
+    const busy = setup(true);
+    busy.f.ui.menuId = busy.a.id;
+    busy.f.input.enemyMenuAction('snap');
+    expect(busy.s.ap).toBe(busy.s.maxAp);
+  });
+
+  it('під час анімації меню не видно; тап по демону запам’ятовує його — картка з’являється після анімації', () => {
+    const queue: Anim[] = [];
+    const { f, s, a } = setup(false, queue);
+    queue.push(makeMoveAnim(s, [{ x: s.pos.x, y: s.pos.y }], false));
+    clickAt(f, a.pos.x, a.pos.y);
+    expect(f.ui.menuId).toBe(a.id);
+    f.battle.renderBattle();
+    expect(menu().classList.contains('hidden')).toBe(true);
+    const ap = f.battle.selectedUnit()!.ap;
+    f.input.enemyMenuAction('snap'); // під час анімації — нічого
+    expect(f.battle.selectedUnit()!.ap).toBe(ap);
+    queue.length = 0;
+    f.battle.renderBattle();
+    expect(menu().classList.contains('hidden')).toBe(false);
+  });
+
+  it('демон зник із видимості чи загинув — картка ховається', () => {
+    const { f, a } = setup();
+    clickAt(f, a.pos.x, a.pos.y);
+    f.battle.renderBattle();
+    expect(menu().classList.contains('hidden')).toBe(false);
+    const at = { ...a.pos };
+    a.pos = { x: 19, y: 19 }; // далекий кут — туман (ADR-0081)
+    expect(f.battle.visibleCells().has('19,19')).toBe(false);
+    f.battle.renderBattle();
+    expect(menu().classList.contains('hidden')).toBe(true);
+    a.pos = at;
+    f.battle.renderBattle();
+    expect(menu().classList.contains('hidden')).toBe(false);
+    a.alive = false;
+    f.battle.renderBattle();
+    expect(menu().classList.contains('hidden')).toBe(true);
   });
 });
