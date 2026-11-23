@@ -56,7 +56,7 @@ export interface ShotOption {
   chancePct: number; // те саме округлення, що в підказці бою («~48%»)
 }
 
-// Рядок юніта в контекст-стрічці бою (#bctx-unit, battle.ts renderBattle).
+// Рядок юніта — підпис вибраної картки смуги загону (Т.130: `aria-label`, src/ui/squad-strip.ts; до Т.130 — #bctx-unit).
 export function unitLine(u: Unit): string {
   return u.name + ': HP ' + u.hp + '/' + u.maxHp + ' · AP ' + u.ap + '/' + u.maxAp;
 }

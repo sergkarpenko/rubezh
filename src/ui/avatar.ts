@@ -6,9 +6,10 @@ import { fighterLook } from '../core/render-core';
 
 const HELMET_TOPS = ['M7 13a9 9 0 0 1 18 0v5H7z', 'M6 14c0-6 4-10 10-10s10 4 10 10v4H6z', 'M8 12l3-7h10l3 7v6H8z'];
 
-export function helmetSvg(id: string, size = 24): string {
+// Т.130: clipPrefix — той самий боєць на сторінці двічі (ростер і смуга загону) не дає дубля id кліпа
+export function helmetSvg(id: string, size = 24, clipPrefix = 'av-cp-'): string {
   const { color: c, shape } = fighterLook(id);
-  const cp = 'av-cp-' + id; // id кліпа — за id бійця: у ростері кожен боєць один раз
+  const cp = clipPrefix + id; // id кліпа — за id бійця: у ростері кожен боєць один раз
   return (
     '<svg class="avatar" width="' +
     size +

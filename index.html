@@ -494,6 +494,109 @@
         flex-wrap: wrap;
         margin: 0 0 10px;
       }
+      /* Т.130 (кандидат 127): смуга загону — ряд компактних карток над полем (вікна без сітки бою:
+         телефон, вужче за 900 px; загін до трьох — SQUAD_SPAWN), у сітці бою — стовпчик праворуч від поля.
+         Риска кольору бійця — внутрішня тінь (рамка міняє розмір, Т.124) */
+      #bsquad {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin: 0 0 8px;
+      }
+      #bsquad:empty {
+        display: none;
+      }
+      #bsquad .sq-card {
+        flex: 1 1 0;
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        min-width: 0;
+        padding: 4px 6px;
+        border-radius: 8px;
+        border: 1px solid #2f4268;
+        background: linear-gradient(180deg, #1a2540, #111a2c);
+        box-shadow: inset 3px 0 0 var(--c);
+        color: #e6f0ff;
+        font-size: 12px;
+        line-height: 14px;
+        text-align: left;
+      }
+      #bsquad .sq-card.sel {
+        border-color: var(--c);
+        box-shadow:
+          inset 3px 0 0 var(--c),
+          0 0 12px var(--g);
+      }
+      @media (hover: hover) {
+        #bsquad .sq-card:hover:not(:disabled):not(.sel) {
+          border-color: #00e5ff;
+          box-shadow:
+            inset 3px 0 0 var(--c),
+            0 0 10px rgba(0, 229, 255, 0.35);
+        }
+      }
+      #bsquad .sq-card:disabled {
+        opacity: 0.5;
+        filter: grayscale(0.8);
+      }
+      #bsquad .avatar {
+        flex: none;
+      }
+      #bsquad .sq-body {
+        flex: 1 1 auto;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+      }
+      #bsquad .sq-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 6px;
+      }
+      #bsquad .sq-name {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      #bsquad .sq-hpn {
+        display: none; /* у ряду над полем — лише смуга; число HP — у стовпчику сітки бою */
+        flex: none;
+        color: #9fb0c3;
+        font-size: 12px;
+      }
+      #bsquad .sq-hp {
+        display: block;
+        height: 5px;
+        border-radius: 3px;
+        background: #2a3147;
+        overflow: hidden;
+      }
+      #bsquad .sq-hp i {
+        display: block;
+        height: 100%;
+      }
+      #bsquad .sq-ap {
+        display: flex;
+        gap: 2px;
+        height: 6px;
+      }
+      #bsquad .sq-ap i {
+        flex: 0 1 6px;
+        min-width: 2px;
+        border-radius: 1px;
+        background: #2a3a55;
+      }
+      #bsquad .sq-ap i.on {
+        background: #00e5ff;
+      }
+      #bsquad .sq-state {
+        font-size: 11px;
+        line-height: 6px;
+        color: #9fb0c3;
+        white-space: nowrap;
+      }
       /* ADR-0027 (П6.3): у бою колонка стану приглушена й неактивна
          (збереження лише на геосцені — ADR-0026) */
       #status.dimmed {
@@ -1629,7 +1732,7 @@
           box-sizing: border-box;
           display: grid;
           grid-template-columns: minmax(0, 1fr) 280px;
-          grid-template-rows: auto auto auto minmax(0, 1fr);
+          grid-template-rows: auto auto auto auto minmax(0, 1fr);
           column-gap: 12px;
         }
         #layout.in-battle #battle-panel.hidden {
@@ -1669,19 +1772,42 @@
           flex-direction: column;
           align-items: stretch;
         }
+        #layout.in-battle #bsquad {
+          grid-column: 2;
+          grid-row: 2; /* Т.130: картки загону — під стрічкою бою, на місці плашки «Юніт» */
+          flex-direction: column;
+          flex-wrap: nowrap;
+          margin: 0 0 10px;
+        }
+        #layout.in-battle #bsquad .sq-card {
+          flex: none;
+          gap: 8px;
+          padding: 5px 10px 5px 8px;
+          font-size: 13px;
+          line-height: 16px;
+        }
+        #layout.in-battle #bsquad .sq-hpn {
+          display: block;
+        }
         #layout.in-battle #bresult {
           grid-column: 2;
+          grid-row: 3;
         }
         #layout.in-battle #bturn {
           grid-column: 2;
-          grid-row: 3; /* над підказкою: поява плашки поле не зсуває */
+          grid-row: 4; /* над підказкою: поява плашки поле не зсуває */
           margin: 0 0 8px;
         }
         #layout.in-battle #binfo {
           grid-column: 2;
-          grid-row: 4;
+          grid-row: 5;
           margin: 0;
           font-size: 13px;
+          /* Т.130 (аудит PR #443): картки загону в колонці — у низьких вікнах довга підказка не розтягує
+             панель (поле росло, фокусна зона прокручувалась), а прокручується сама */
+          min-height: 0;
+          contain: size; /* висота — лише від рядка сітки (1fr), не від тексту */
+          overflow-y: auto;
         }
       }
       /* Т.32: широке вікно — журнал у бою на всю висоту на місці колонки вузла */
@@ -1743,6 +1869,10 @@
           width: auto;
           padding: 4px 0 3px;
         }
+        /* Т.130: вибулий на вузькій картці — лише значок ✝ / ⇧ (повний підпис не вміщується) */
+        #bsquad .sq-st-txt {
+          display: none;
+        }
         body:has(#layout.in-battle) header#topbar {
           position: static;
         }
@@ -1761,6 +1891,10 @@
           display: grid;
           grid-template-columns: repeat(2, 64px);
           align-content: start;
+        }
+        /* Т.130 (аудит PR #443): альбомний телефон — теж лише значок вибулого, як до 599 px */
+        #bsquad .sq-st-txt {
+          display: none;
         }
         body:has(#layout.in-battle) header#topbar {
           position: static;
@@ -1933,8 +2067,9 @@
             <span class="chip">Місія: <b id="bctx-kind">—</b></span>
             <span class="chip">Час: <b id="bctx-time">—</b></span>
             <span class="chip">Хід: <b id="bctx-turn">—</b></span>
-            <span class="chip">Юніт: <b id="bctx-unit">—</b></span>
           </div>
+          <!-- Т.130 (кандидат 127): смуга загону — картки бійців (src/ui/squad-strip.ts); клік вибирає бійця -->
+          <div id="bsquad" role="group" aria-label="Загін"></div>
           <div id="bresult"></div>
           <!-- П13.2 (ADR-0066): тулбар дій збоку (генерує src/ui/toolbar.ts); нижня смуга #bcontrols вилучена -->
           <div id="battle-stage">

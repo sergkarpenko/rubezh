@@ -35,8 +35,8 @@ function setupDom(): void {
       <span><b id="bctx-kind">—</b></span>
       <span><b id="bctx-time">—</b></span>
       <span><b id="bctx-turn">—</b></span>
-      <span><b id="bctx-unit">—</b></span>
     </div>
+    <div id="bsquad"></div>
     <div id="bresult"></div>
     <canvas id="battle" width="960" height="960"></canvas>
     <div id="binfo">—</div>
@@ -225,7 +225,7 @@ describe('input: обробники вводу бою (тап-тап, зведе
     const f = makeFixture();
     launchMission(f);
     clickAt(f, 10, 10); // порожня клітинка, вибору нема
-    expect(f.binfo()).toBe('Спершу клікніть свого оперативника (синє коло).');
+    expect(f.binfo()).toBe('Спершу виберіть свого оперативника — на полі або карткою загону.');
   });
 
   it('клік по своєму солдату — вибір і стан скинуто', () => {
@@ -986,5 +986,87 @@ describe('Т.71: евакуація (плитка і клавіша V)', () => {
     f.deps.autoBusy.mockReturnValue(false);
     yes();
     expect(squad(f)).toEqual([]);
+  });
+});
+
+describe('Т.130: смуга загону — клік по картці і клавіша Q', () => {
+  const own = (f: Fixture) => f.ui.mission!.state.units.filter((u) => u.side === 'player');
+  const q = (f: Fixture) => f.input.onKeyDown({ code: 'KeyQ', key: 'q' } as KeyboardEvent);
+
+  it('картка вибирає бійця так само, як тап по ньому на полі', () => {
+    const a = makeFixture();
+    const b = makeFixture();
+    launchMission(a);
+    launchMission(b);
+    const s = own(a)[1]!;
+    clickAt(a, s.pos.x, s.pos.y);
+    b.input.squadCardClick(s.id);
+    expect(b.ui.selectedId).toBe(s.id);
+    expect(b.binfo()).toBe(a.binfo());
+  });
+
+  it('у зведеному гелі картка пораненого союзника — ціль лікування, як тап (перший — прев’ю)', () => {
+    const run = (viaCard: boolean): Fixture => {
+      const f = makeFixture();
+      launchMission(f);
+      const [s0, s1] = own(f);
+      s1!.hp -= 3;
+      f.ui.selectedId = s0!.id;
+      f.ui.itemMode = 'medkit';
+      if (viaCard) f.input.squadCardClick(s1!.id);
+      else clickAt(f, s1!.pos.x, s1!.pos.y);
+      return f;
+    };
+    const tap = run(false);
+    const card = run(true);
+    expect(card.ui.tapCell).toEqual(tap.ui.tapCell);
+    expect(card.ui.itemMode).toBe('medkit');
+    expect(card.binfo()).toBe(tap.binfo());
+  });
+
+  it('картка загиблого і клік під час авто-бою — нічого', () => {
+    const f = makeFixture();
+    launchMission(f);
+    const s = own(f)[0]!;
+    s.alive = false;
+    f.input.squadCardClick(s.id);
+    expect(f.ui.selectedId).toBeNull();
+    const g = makeFixture(true);
+    launchMission(g);
+    g.input.squadCardClick(own(g)[0]!.id);
+    expect(g.ui.selectedId).toBeNull();
+  });
+
+  it('Q — наступний живий боєць по колу (загиблого пропускає), у зведеному гелі — вибір, не лікування', () => {
+    const f = makeFixture();
+    launchMission(f);
+    const [s0, s1, s2] = own(f);
+    q(f);
+    expect(f.ui.selectedId).toBe(s0!.id); // без вибору — перший
+    s1!.alive = false;
+    q(f);
+    expect(f.ui.selectedId).toBe(s2!.id);
+    f.ui.itemMode = 'medkit';
+    q(f);
+    expect(f.ui.selectedId).toBe(s0!.id); // по колу
+    expect(f.ui.itemMode).toBeNull();
+    expect(f.binfo()).toContain(s0!.name);
+  });
+
+  it('утримана Q і Q з Ctrl / Alt / Meta бійця не перемикають (аудит PR #443)', () => {
+    const f = makeFixture();
+    launchMission(f);
+    for (const mod of [{ repeat: true }, { ctrlKey: true }, { altKey: true }, { metaKey: true }])
+      f.input.onKeyDown({ code: 'KeyQ', key: 'q', ...mod } as unknown as KeyboardEvent);
+    expect(f.ui.selectedId).toBeNull();
+    q(f);
+    expect(f.ui.selectedId).toBe(own(f)[0]!.id);
+  });
+
+  it('Q під час авто-бою — нічого', () => {
+    const f = makeFixture(true);
+    launchMission(f);
+    q(f);
+    expect(f.ui.selectedId).toBeNull();
   });
 });

@@ -24,6 +24,7 @@ import {
   throwGrenade,
   useMedkit,
   type ShotMode,
+  type Unit,
   type Vec2,
 } from '../core/combat';
 import { findPath, pathApCost } from '../core/map';
@@ -71,6 +72,7 @@ export interface InputDeps {
 
 export interface InputUI {
   battleCanvasClick(ev: MouseEvent): void;
+  squadCardClick(id: string): void; // Т.130: картка смуги загону
   battleCanvasHover(ev: MouseEvent): void;
   battleCanvasLeave(): void;
   armFire(mode: ShotMode): void;
@@ -90,26 +92,50 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
   }
 
   function battleCanvasClick(ev: MouseEvent): void {
+    clickCell(cellFromEvent(ev));
+  }
+
+  // Т.130 (кандидат 127): клік по картці смуги загону — те саме, що тап по бійцю
+  // на полі (вибір; у зведеному гелі — ціль лікування); загиблий чи евакуйований — нічого.
+  function squadCardClick(id: string): void {
+    const u = ui.mission?.state.units.find((x) => x.id === id && x.side === 'player' && x.alive);
+    if (u) clickCell({ x: u.pos.x, y: u.pos.y });
+  }
+
+  // вибір свого солдата (тап на полі, картка смуги загону, клавіша Q — Т.130)
+  function selectOwn(u: Unit): void {
+    ui.selectedId = u.id;
+    ui.fireMode = null;
+    ui.itemMode = null; // П11.6: новий солдат — зведення витратника скидаємо
+    ui.hoverPath = null;
+    ui.tapCell = null;
+    ui.aimCell = null; // П6.14
+    battle.binfo(
+      u.name + ': HP ' + u.hp + '/' + u.maxHp + ' · AP ' + u.ap + '/' + u.maxAp + '. Клікніть клітинку — рух, або кнопку пострілу.'
+    );
+    deps.renderAll();
+  }
+
+  // Т.130 (рішення власника): Q — наступний живий боєць на полі по колу (порядок висадки);
+  // лише вибір — і в зведеному гелі (там тап по союзнику — ціль лікування)
+  function nextFighter(): void {
+    if (!battle.playerTurnActive() || !ui.mission || deps.autoBusy()) return;
+    const own = ui.mission.state.units.filter((x) => x.side === 'player' && x.alive);
+    if (own.length === 0) return;
+    const at = own.findIndex((x) => x.id === ui.selectedId);
+    selectOwn(own[(at + 1) % own.length]);
+  }
+
+  function clickCell(cell: Vec2): void {
     if (!battle.playerTurnActive() || !ui.mission) return;
     if (deps.autoBusy()) return; // П13.3: триває авто-бій — бойовище не клікається
     const st = ui.mission.state;
-    const cell = cellFromEvent(ev);
     const u = st.units.find((x) => x.alive && x.pos.x === cell.x && x.pos.y === cell.y);
 
     // П11.6: у зведеному режимі аптечки клік по СОЮЗНИКУ — ціль лікування
     // (тап-тап), а не вибір солдата; вибір у цьому режимі — лише через Esc.
     if (u && u.side === 'player' && ui.itemMode !== 'medkit') {
-      // вибір свого солдата
-      ui.selectedId = u.id;
-      ui.fireMode = null;
-      ui.itemMode = null; // П11.6: новий солдат — зведення витратника скидаємо
-      ui.hoverPath = null;
-      ui.tapCell = null;
-      ui.aimCell = null; // П6.14
-      battle.binfo(
-        u.name + ': HP ' + u.hp + '/' + u.maxHp + ' · AP ' + u.ap + '/' + u.maxAp + '. Клікніть клітинку — рух, або кнопку пострілу.'
-      );
-      deps.renderAll();
+      selectOwn(u);
       return;
     }
 
@@ -145,7 +171,7 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
 
     const sel = battle.selectedUnit();
     if (!sel) {
-      battle.binfo('Спершу клікніть свого оперативника (синє коло).');
+      battle.binfo('Спершу виберіть свого оперативника — на полі або карткою загону.');
       return;
     }
 
@@ -683,12 +709,16 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
     else if (ev.code === 'KeyG') armGrenade();
     else if (ev.code === 'KeyV')
       evacuateSelected(); // Т.71 (ADR-0075)
-    else if (ev.code === 'KeyE') endPlayerTurn();
+    else if (ev.code === 'KeyQ') {
+      // Т.130 (аудит PR #443): утримана Q і Ctrl/Alt/Meta+Q бійця не перемикають (урок Т.117)
+      if (!ev.repeat && !ev.ctrlKey && !ev.altKey && !ev.metaKey) nextFighter();
+    } else if (ev.code === 'KeyE') endPlayerTurn();
     else if (ev.key === 'Escape') cancelSelection();
   }
 
   return {
     battleCanvasClick,
+    squadCardClick,
     battleCanvasHover,
     battleCanvasLeave,
     armFire,
