@@ -5,7 +5,7 @@
 # один ряд із 5 фігур на хромакеї #00FF00, 1376x768, JPEG.
 # Відмінності від convert_units.py (П14.3): фігури не піксель-арт, тому альфа плавна
 # (матування за «зеленістю» g - max(r, b)), зменшення — LANCZOS по премножених каналах,
-# зелений відблиск на краях прибирається (g <= max(r, b)).
+# зелений відблиск на краях прибирається (g <= max(r, b)) до і після зменшення.
 # Геометрія атласа не змінюється (ADR-0121): фігура стоячих кадрів — рядки 34..92,
 # ноги — рядок 92 (ATLAS_FEET_ROW = 93 — перший рядок під ногами), якір x спільний для ряду.
 from pathlib import Path
@@ -66,6 +66,8 @@ def resize(fig, scale):
     small = np.asarray(Image.fromarray(pre, 'RGBA').resize((nw, nh), Image.LANCZOS)).astype(np.float32)
     sa = small[..., 3:4] / 255.0
     rgb = np.where(sa > 0, small[..., :3] / np.maximum(sa, 1e-6), 0)
+    # LANCZOS і ділення на малу альфу повертають зелений на краях — прибираємо ще раз
+    rgb[..., 1] = np.minimum(rgb[..., 1], np.maximum(rgb[..., 0], rgb[..., 2]))
     return np.dstack([rgb, small[..., 3:4]]).clip(0, 255).astype(np.uint8)
 
 
