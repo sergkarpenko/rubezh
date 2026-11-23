@@ -398,6 +398,14 @@
       #benemy.hidden {
         display: none;
       }
+      /* аудит PR #444: мале поле, демон у центрі — без рядків характеристик (вони в #binfo) */
+      #benemy.compact .em-hp,
+      #benemy.compact .em-line {
+        display: none;
+      }
+      #benemy.compact .em-acts {
+        margin-top: 4px;
+      }
       #benemy .em-head {
         display: flex;
         justify-content: space-between;

@@ -92,20 +92,34 @@ describe('enemyMenuPlace', () => {
   const cellAt = (x: number, y: number) => ({ left: 10 + x * 20, top: 20 + y * 20, width: 20, height: 20 });
 
   it('праворуч від клітинки, центр по висоті', () => {
-    expect(enemyMenuPlace(cellAt(2, 10), field, 200, 100)).toEqual({ left: 76, top: 180, side: 'right' });
+    expect(enemyMenuPlace(cellAt(2, 10), field, 200, 100)).toEqual({ left: 76, top: 180, side: 'right', covers: false });
   });
   it('біля правого краю — ліворуч; біля верху і низу — притиснута до меж поля', () => {
-    expect(enemyMenuPlace(cellAt(15, 0), field, 200, 100)).toEqual({ left: 104, top: 20, side: 'left' });
-    expect(enemyMenuPlace(cellAt(15, 19), field, 200, 100)).toEqual({ left: 104, top: 320, side: 'left' });
+    expect(enemyMenuPlace(cellAt(15, 0), field, 200, 100)).toEqual({ left: 104, top: 20, side: 'left', covers: false });
+    expect(enemyMenuPlace(cellAt(15, 19), field, 200, 100)).toEqual({ left: 104, top: 320, side: 'left', covers: false });
   });
   it('ні праворуч, ні ліворуч — під клітинкою, а внизу поля — над нею', () => {
-    expect(enemyMenuPlace(cellAt(9, 2), field, 250, 100)).toEqual({ left: 75, top: 86, side: 'below' });
-    expect(enemyMenuPlace(cellAt(9, 17), field, 250, 100)).toEqual({ left: 75, top: 254, side: 'above' });
+    expect(enemyMenuPlace(cellAt(9, 2), field, 250, 100)).toEqual({ left: 75, top: 86, side: 'below', covers: false });
+    expect(enemyMenuPlace(cellAt(9, 17), field, 250, 100)).toEqual({ left: 75, top: 254, side: 'above', covers: false });
   });
   it('ніде цілком — на ширшому боці, у межах поля', () => {
     const p = enemyMenuPlace(cellAt(12, 9), field, 250, 250);
     expect(p.side).toBe('left');
+    expect(p.covers).toBe(true); // накриває клітинку демона — battle.ts пробує компактну картку
     expect(p.left).toBe(10);
     expect(p.top).toBe(85);
+  });
+
+  it('аудит PR #444: компактна картка на полі 330 px (вікно 1100 × 540) не накриває демона в жодній клітинці', () => {
+    const f = { left: 0, top: 0, width: 330, height: 330 };
+    const k = 330 / 20;
+    let covers = 0;
+    for (let y = 0; y < 20; y++)
+      for (let x = 0; x < 20; x++) {
+        const cell = { left: x * k, top: y * k, width: k, height: k };
+        // 224 × 167 — повна картка, 224 × 121 — компактна (виміри Т.131 у Chrome, Inter і DejaVu Sans)
+        if (enemyMenuPlace(cell, f, 224, 167).covers && enemyMenuPlace(cell, f, 224, 121).covers) covers++;
+      }
+    expect(covers).toBe(0);
   });
 });

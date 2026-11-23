@@ -533,6 +533,7 @@ describe('П14.4: характеристики демона Розриву по 
     queue.push(makeMoveAnim(alien, [spot!, { ...alien.pos }], false));
     clickAt(f, spot!.x, spot!.y);
     expect(f.binfo()).toContain('зброя «' + alien.weapon.name + '»'); // клік знаходить відображуваного демона
+    expect(f.ui.menuId).toBeNull(); // аудит PR #444: фактично демон у тумані — меню на ворогові не відкривається
     // бойові гілки незмінні: фактична позиція демона — у тумані, постріл у
     // відображувану клітинку з недієвою зброєю не приводить до дії
   });
@@ -1251,11 +1252,24 @@ describe('Т.131: меню на ворогові', () => {
     expect(f.battle.visibleCells().has('19,19')).toBe(false);
     f.battle.renderBattle();
     expect(menu().classList.contains('hidden')).toBe(true);
+    expect(f.ui.menuId).toBeNull(); // аудит PR #444: закрито, а не лише сховано
     a.pos = at;
+    f.battle.renderBattle();
+    expect(menu().classList.contains('hidden')).toBe(true);
+    clickAt(f, a.pos.x, a.pos.y);
     f.battle.renderBattle();
     expect(menu().classList.contains('hidden')).toBe(false);
     a.alive = false;
     f.battle.renderBattle();
     expect(menu().classList.contains('hidden')).toBe(true);
+  });
+
+  it('аудит PR #444: відкрите меню — наведення не малює шлях і не переписує #binfo', () => {
+    const { f, s, a } = setup();
+    clickAt(f, a.pos.x, a.pos.y);
+    const info = f.binfo();
+    f.input.battleCanvasHover({ clientX: s.pos.x * 48 + 24, clientY: (s.pos.y + 1) * 48 + 24 } as MouseEvent);
+    expect(f.ui.hoverPath).toBeNull();
+    expect(f.binfo()).toBe(info);
   });
 });

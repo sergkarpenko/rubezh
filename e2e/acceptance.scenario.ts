@@ -276,10 +276,9 @@ async function expectEnemyMenu(page: Page, mirror: CoreMirror, shot: NonNullable
     [1100, 540],
     [390, 844],
   ]) {
-    await page.keyboard.press('Escape');
+    // картка лишається відкритою: слухач resize переставляє її на новому полі (аудит PR #444)
     await page.setViewportSize({ width: w, height: h });
     await page.locator('#battle').scrollIntoViewIfNeeded();
-    await tap(page, shot.target.pos);
     await expect(menu).toBeVisible();
     await check(w + ' × ' + h);
   }

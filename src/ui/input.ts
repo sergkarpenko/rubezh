@@ -196,8 +196,10 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
     if (ui.fireMode === null && ui.itemMode === null && battle.visibleCells().has(cell.x + ',' + cell.y)) {
       const a = u !== undefined && u.side === 'alien' ? u : battle.displayedAlienAt(cell);
       if (a !== undefined) {
-        ui.menuId = ui.menuId === a.id ? null : a.id;
-        if (ui.menuId !== null) {
+        // аудит PR #444: демон, показаний на початку шляху ходу ШІ, фактично може стояти в тумані — меню лише на видимому
+        const seen = battle.visibleCells().has(a.pos.x + ',' + a.pos.y);
+        ui.menuId = ui.menuId === a.id || !seen ? null : a.id;
+        if (ui.menuId !== null || !seen) {
           ui.hoverPath = null;
           ui.tapCell = null;
           battle.binfo(enemyInfo(a));
@@ -323,10 +325,8 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
     // ADR-0081: демон у тумані для вводу не існує — невидима клітинка поводиться
     // як порожня (гілка руху нижче), інакше підказка видає його позицію.
     if (u && u.side === 'alien' && battle.visibleCells().has(cell.x + ',' + cell.y)) {
-      if (!ui.fireMode) {
-        battle.binfo('Виберіть режим пострілу на тулбарі, потім клікніть видимого демона Розриву.');
-        return;
-      }
+      // без режиму видимого демона вище обробляє меню на ворогові (Т.131; vibe-audit PR #444) — тут лише звуження типу
+      if (!ui.fireMode) return;
       // П6.14: причини невалідної цілі — ті самі перевірки, що й assertCanFire ядра
       if (distance(sel.pos, u.pos) > sel.weapon.range) {
         battle.binfo('Ціль поза дальністю зброї (' + sel.weapon.range + ' клітинок).');
@@ -445,6 +445,8 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
 
   function battleCanvasHover(ev: MouseEvent): void {
     if (!battle.playerTurnActive() || !ui.mission) return;
+    // аудит PR #444: відкрите меню на ворогові — наведення нічого не міняє (клік повз лише закриває картку)
+    if (ui.menuId !== null) return;
     const sel = battle.selectedUnit();
     if (!sel) return;
     const cell = cellFromEvent(ev);

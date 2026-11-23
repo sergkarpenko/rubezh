@@ -366,8 +366,11 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
   function renderEnemyMenu(mission: Mission): void {
     const box = el('benemy');
     const t = ui.menuId === null ? undefined : mission.state.units.find((u) => u.id === ui.menuId && u.alive);
-    const show = t !== undefined && playerTurnActive() && !animating() && !deps.autoBusy() && visibleCells().has(t.pos.x + ',' + t.pos.y);
-    if (!show) {
+    const seen = t !== undefined && visibleCells().has(t.pos.x + ',' + t.pos.y);
+    // аудит PR #444: демон загинув чи пішов у туман — меню закрито (не лише сховано), інакше
+    // наступний тап мовчки «закривав» невидиму картку
+    if (ui.menuId !== null && (t === undefined || (!seen && !animating()))) ui.menuId = null;
+    if (t === undefined || !seen || !playerTurnActive() || animating() || deps.autoBusy()) {
       box.classList.add('hidden');
       return;
     }
@@ -378,12 +381,20 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
     }
     box.classList.remove('hidden');
     box.dataset.unit = t.id;
+    box.setAttribute('aria-label', t.name);
     // місце: клітинка демона в CSS px контейнера #battle-stage (канва масштабується)
     const cv = el<HTMLCanvasElement>('battle');
     const k = cv.width > 0 ? cv.clientWidth / cv.width : 0;
     const field = { left: cv.offsetLeft, top: cv.offsetTop, width: cv.clientWidth, height: cv.clientHeight };
     const cell = { left: field.left + t.pos.x * BCELL * k, top: field.top + t.pos.y * BCELL * k, width: BCELL * k, height: BCELL * k };
-    const at = enemyMenuPlace(cell, field, box.offsetWidth, box.offsetHeight);
+    box.classList.remove('compact');
+    let at = enemyMenuPlace(cell, field, box.offsetWidth, box.offsetHeight);
+    // мале поле, демон у центрі: повна картка ніде не вміщується — компактна (без рядків
+    // характеристик; вони в #binfo) стає під чи над демоном (аудит PR #444)
+    if (at.covers) {
+      box.classList.add('compact');
+      at = enemyMenuPlace(cell, field, box.offsetWidth, box.offsetHeight);
+    }
     box.style.left = at.left + 'px';
     box.style.top = at.top + 'px';
     box.dataset.side = at.side;

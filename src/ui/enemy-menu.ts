@@ -159,10 +159,17 @@ export interface Box {
 
 // Місце картки в межах поля (координати контейнера поля, CSS px): праворуч від
 // клітинки демона; не вміщується — ліворуч («перевертається»), далі — під нею чи над нею;
-// ніде цілком — праворуч чи ліворуч, притиснута до меж поля. Поперек — центр на клітинці,
-// притиснутий до меж поля. side — бік картки від клітинки.
+// поперек — центр на клітинці, притиснутий до меж поля. Ніде цілком (мале поле, демон у
+// центрі) — на ширшому боці, притиснута до краю, covers: true — картка накриває клітинку
+// демона, і battle.ts пробує компактну картку (аудит PR #444).
 export type MenuSide = 'right' | 'left' | 'below' | 'above';
-export function enemyMenuPlace(cell: Box, field: Box, w: number, h: number, gap = 6): { left: number; top: number; side: MenuSide } {
+export function enemyMenuPlace(
+  cell: Box,
+  field: Box,
+  w: number,
+  h: number,
+  gap = 6
+): { left: number; top: number; side: MenuSide; covers: boolean } {
   const fr = field.left + field.width;
   const fb = field.top + field.height;
   const clampX = (x: number): number => Math.max(field.left, Math.min(x, fr - w));
@@ -173,12 +180,12 @@ export function enemyMenuPlace(cell: Box, field: Box, w: number, h: number, gap 
   const left = cell.left - gap - w;
   const below = cell.top + cell.height + gap;
   const above = cell.top - gap - h;
-  let at: { left: number; top: number; side: MenuSide };
-  if (right + w <= fr) at = { left: right, top: midY, side: 'right' };
-  else if (left >= field.left) at = { left, top: midY, side: 'left' };
-  else if (below + h <= fb) at = { left: midX, top: below, side: 'below' };
-  else if (above >= field.top) at = { left: midX, top: above, side: 'above' };
-  else if (fr - right >= cell.left - gap - field.left) at = { left: clampX(right), top: midY, side: 'right' };
-  else at = { left: clampX(left), top: midY, side: 'left' };
-  return { left: Math.round(at.left), top: Math.round(at.top), side: at.side };
+  let at: { left: number; top: number; side: MenuSide; covers: boolean };
+  if (right + w <= fr) at = { left: right, top: midY, side: 'right', covers: false };
+  else if (left >= field.left) at = { left, top: midY, side: 'left', covers: false };
+  else if (below + h <= fb) at = { left: midX, top: below, side: 'below', covers: false };
+  else if (above >= field.top) at = { left: midX, top: above, side: 'above', covers: false };
+  else if (fr - right >= cell.left - gap - field.left) at = { left: clampX(right), top: midY, side: 'right', covers: true };
+  else at = { left: clampX(left), top: midY, side: 'left', covers: true };
+  return { left: Math.round(at.left), top: Math.round(at.top), side: at.side, covers: at.covers };
 }
