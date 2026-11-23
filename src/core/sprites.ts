@@ -52,6 +52,7 @@ export interface UnitSprite {
   selected: boolean;
   overwatch: boolean;
   frame?: number;
+  ring?: string; // Т.129: колір кільця під ногами (свої — колір бійця, вороги — пурпур)
 }
 
 export interface BaseSprite {

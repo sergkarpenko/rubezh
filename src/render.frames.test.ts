@@ -9,6 +9,10 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { drawAnimFrame, initPixelSprites, type MakeOffscreen } from './render';
 import {
+  RING_DY,
+  RING_RX,
+  RING_RY,
+  fighterLook,
   BOOM_MS,
   BOOM_PARTICLES,
   DEATH_MS,
@@ -660,5 +664,26 @@ describe('П14.5: хвіст перехоплення (gtrail) — згасаю�
       return { calls: s.calls, sets: s.sets };
     };
     expect(draw()).toEqual(draw());
+  });
+});
+
+// Т.129 (ADR-0118): у русі кільце кольору бійця їде з ним (аудит PR #442)
+describe('Т.129: кільце в анімації руху', () => {
+  it('еліпс кольору бійця за id — у проміжній позиції шляху', () => {
+    const a = makeMoveAnim(
+      unit('s8', 'player', 0, 0),
+      [
+        { x: 0, y: 0 },
+        { x: 1, y: 0 },
+      ],
+      false
+    );
+    a.start = 0;
+    const { ctx, calls, sets } = animCtx();
+    drawAnimFrame(ctx, a, a.dur, 48, 8); // t = 1 → клітинка (1,0)
+    const e = calls.find((c) => c.m === 'ellipse');
+    expect(e).toBeDefined();
+    expect((e!.args as number[]).slice(0, 4)).toEqual([72, 24 + RING_DY, RING_RX, RING_RY]);
+    expect(sets.filter((x) => x.p === 'strokeStyle').map((x) => x.v)).toContain(fighterLook('s8').color);
   });
 });

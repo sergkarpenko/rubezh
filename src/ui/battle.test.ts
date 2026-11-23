@@ -8,7 +8,7 @@ import { advanceTime, missionTargets } from '../core/geo';
 import { createGame, makeUnit, moveUnit, type GameState, type Unit } from '../core/combat';
 import { createParty, type Party } from '../core/save';
 import { initPixelSprites } from '../render';
-import { makeDeathAnim, makeMoveAnim, makeTracerAnim } from '../core/render-core';
+import { ALIEN_RING, RING_DY, fighterLook, makeDeathAnim, makeMoveAnim, makeTracerAnim } from '../core/render-core';
 import { createBattleUI, validFireTargets, validHealTargets, type BattleDeps, type BattleUIState } from './battle';
 import { createToolbar } from './toolbar';
 
@@ -731,6 +731,33 @@ describe('Т.44: зона ходу вибраного оперативника �
     expect(ops).toContain('fillText(2 AP,313,169)'); // Т.119: праворуч від цілі (5,3)
     expect(ops.some((o) => /^arc\(\d+,\d+,3,/.test(o))).toBe(false);
     expect(ops).not.toContain('set:strokeStyle=rgba(255,156,156,0.95)');
+  });
+
+  it('Т.129 (ADR-0118): кільце кожного бійця — колір за id, а не за місцем у загоні; ворог — пурпур', () => {
+    const { f } = setup();
+    f.ui.mission!.state = createGame({
+      map: { width: 20, height: 20, blocked: new Set() },
+      units: [
+        makeUnit({ id: 's1', side: 'player', name: 'А', pos: { x: 5, y: 5 } }),
+        makeUnit({ id: 's7', side: 'player', name: 'Б', pos: { x: 7, y: 5 } }),
+        makeUnit({ id: 's4', side: 'player', name: 'В', pos: { x: 5, y: 7 } }),
+        makeUnit({ id: 'a1', side: 'alien', name: 'Морок', pos: { x: 8, y: 7 } }),
+      ],
+    });
+    const ops = render(f);
+    const ringColor = (x: number, y: number): string | undefined => {
+      const at = ops.findIndex((o) => o.startsWith('ellipse(' + (x * 48 + 24) + ',' + (y * 48 + 24 + RING_DY) + ','));
+      if (at < 0) return undefined;
+      const set = ops
+        .slice(0, at)
+        .reverse()
+        .find((o) => o.startsWith('set:strokeStyle='));
+      return set?.slice('set:strokeStyle='.length);
+    };
+    expect(ringColor(5, 5)).toBe(fighterLook('s1').color);
+    expect(ringColor(7, 5)).toBe(fighterLook('s7').color);
+    expect(ringColor(5, 7)).toBe(fighterLook('s4').color);
+    expect(ringColor(8, 7)).toBe(ALIEN_RING);
   });
 
   it('шлях дорожчий за AP оперативника — лінія і ціна червоні; рівно стільки, скільки є, — зелені', () => {

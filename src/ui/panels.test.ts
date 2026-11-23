@@ -11,6 +11,7 @@ import { createParty, type Party } from '../core/save';
 import { ARMOR_MAX_HP_BONUS, OPTICS_ACCURACY_BONUS } from '../core/workshop';
 import { GRENADE_DAMAGE, GRENADE_RANGE, HEAL_AMOUNT, HIT_CHANCE_CAP } from '../core/combat';
 import { initPixelSprites } from '../render';
+import { fighterLook } from '../core/render-core';
 import { createPanels, gunModuleReady, hpColor, inAirCombat, readyToIssue, type PanelsDeps } from './panels';
 
 // Піксельний рушій (ADR-0031): тестовий мок фабрики offscreen-канвасів —
@@ -508,6 +509,17 @@ describe('renderRoster: ростер і чип боєготових (ADR-0027)',
     expect(box.textContent).toContain('6 оперативників (5 боєготових)');
     expect(box.innerHTML).toContain('лікарня: 3 тіки');
     expect(box.innerHTML).toContain('#ff9c9c'); // hpColor(4, 10) — поранений
+  });
+
+  it('Т.129 (ADR-0118): у кожному рядку — аватар «шолом» кольору бійця, кліп із власним id', () => {
+    const f = makeFixture();
+    f.panels.renderRoster();
+    const svgs = [...document.querySelectorAll('#roster .soldier > svg.avatar')];
+    expect(svgs.length).toBe(f.party.roster.soldiers.length);
+    expect(svgs.map((s) => s.getAttribute('data-color'))).toEqual(f.party.roster.soldiers.map((s) => fighterLook(s.id).color));
+    const clips = [...document.querySelectorAll('#roster clipPath')].map((c) => c.id);
+    expect(new Set(clips).size).toBe(clips.length);
+    expect(svgs[0]!.querySelector('g')!.getAttribute('clip-path')).toBe('url(#' + clips[0] + ')');
   });
 
   it('порожній ростер — «Загін втрачено» і підказка щодо найму', () => {

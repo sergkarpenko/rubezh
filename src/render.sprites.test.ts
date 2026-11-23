@@ -41,6 +41,7 @@ import {
   drawPathPreview,
   drawReachZone,
   drawSoldierSprite,
+  unitRing,
   drawTargetFrame,
   drawUfoSprite,
   drawUnitSprite,
@@ -82,6 +83,7 @@ import {
   UFO_SCOUT_SPRITE,
 } from './core/sprites';
 import { BCELL, GCELL } from './ui/grid';
+import { ALIEN_RING, FIGHTER_COLORS, RING_DY, RING_RX, RING_RY } from './core/render-core';
 
 // Клітиночка прев'ю: BCELL = 48 (П14.3, ADR-0068), центр (24, 24), радіус силуету 8 (як у renderBattle).
 const CX = 24;
@@ -254,7 +256,7 @@ describe('П13.5 (ADR-0068): масштаб піксель-арту — матр
 describe('спрайти юнітів: межі клітинки (урок П6.6)', () => {
   it('солдат з усіма маркерами не виходить за клітинку 48px (П14.3)', () => {
     const { ctx, calls } = mockCtx();
-    drawSoldierSprite(ctx, soldier({ selected: true, overwatch: true }));
+    drawSoldierSprite(ctx, soldier({ selected: true, overwatch: true, ring: '#8ee35b' }));
     const e = extent(calls);
     expect(e.minX).toBeGreaterThanOrEqual(0);
     expect(e.maxX).toBeLessThanOrEqual(CELL);
@@ -264,7 +266,7 @@ describe('спрайти юнітів: межі клітинки (урок П6.6
 
   it('прибульчик з усіма маркерами не виходить за клітинку 48px (П14.3)', () => {
     const { ctx, calls } = mockCtx();
-    drawAlienSprite(ctx, alien({ selected: true, overwatch: true }));
+    drawAlienSprite(ctx, alien({ selected: true, overwatch: true, ring: ALIEN_RING }));
     const e = extent(calls);
     expect(e.minX).toBeGreaterThanOrEqual(0);
     expect(e.maxX).toBeLessThanOrEqual(CELL);
@@ -1417,5 +1419,57 @@ describe('Т.44: drawPathPreview — шлях лінією і ціна біля 
     drawPathPreview(a.ctx, { ...base, path: [{ x: 5, y: 4 }], ap: 9, affordable: true });
     drawPathPreview(b.ctx, { ...base, path: [{ x: 5, y: 4 }], ap: 9, affordable: true, px: 1.25 });
     expect(b.ops).toEqual(a.ops);
+  });
+});
+
+// Т.129 (ADR-0118): кільце кольору бійця під ногами
+describe('Т.129: кільце кольору бійця під ногами', () => {
+  // мок, що запам'ятовує strokeStyle у момент виклику ellipse
+  const ringCalls = (draw: (ctx: CanvasRenderingContext2D) => void): { style: unknown; args: unknown[] }[] => {
+    const { ctx, calls } = mockCtx();
+    const rec: { style: unknown; args: unknown[] }[] = [];
+    const c = ctx as unknown as { ellipse: (...a: unknown[]) => void; strokeStyle: unknown };
+    const base = c.ellipse;
+    c.ellipse = (...a: unknown[]) => {
+      rec.push({ style: c.strokeStyle, args: a });
+      base(...a);
+    };
+    draw(ctx);
+    expect(calls.length).toBeGreaterThan(0);
+    return rec;
+  };
+
+  it('свій боєць: еліпс кольору бійця під центром клітинки, до силуету', () => {
+    const { ctx, calls } = mockCtx();
+    drawSoldierSprite(ctx, soldier({ ring: FIGHTER_COLORS[1] }));
+    const iE = calls.findIndex((c) => c.m === 'ellipse');
+    const iImg = calls.findIndex((c) => c.m === 'drawImage');
+    expect(iE).toBeGreaterThanOrEqual(0);
+    expect(iE).toBeLessThan(iImg);
+    expect(calls[iE]!.args.slice(0, 4)).toEqual([CX, CY + RING_DY, RING_RX, RING_RY]);
+    expect(ringCalls((c) => drawSoldierSprite(c, soldier({ ring: FIGHTER_COLORS[1] })))[0]!.style).toBe(FIGHTER_COLORS[1]);
+  });
+
+  it('ворог — пурпурове кільце; без поля ring і в загиблого кільця немає', () => {
+    expect(ringCalls((c) => drawAlienSprite(c, alien({ ring: unitRing('alien', 'a1') })))[0]!.style).toBe(ALIEN_RING);
+    expect(ringCalls((c) => drawSoldierSprite(c, soldier()))).toEqual([]);
+    expect(ringCalls((c) => drawSoldierSprite(c, soldier({ ring: FIGHTER_COLORS[0], hp: 0 })))).toEqual([]);
+  });
+
+  it('unitRing: свій — колір за id ростера, ворог — пурпур', () => {
+    expect(unitRing('player', 's1')).toBe(FIGHTER_COLORS[0]);
+    expect(unitRing('player', 's8')).toBe(FIGHTER_COLORS[1]);
+    expect(unitRing('alien', 's1')).toBe(ALIEN_RING);
+  });
+
+  it('кільце в межах клітинки; рамка вибору — поверх кільця', () => {
+    expect(RING_DY + RING_RY).toBeLessThanOrEqual(CELL / 2 - 1);
+    expect(RING_RX).toBeLessThanOrEqual(CELL / 2 - 1);
+    const { ctx, calls } = mockCtx();
+    drawSoldierSprite(ctx, soldier({ ring: FIGHTER_COLORS[0], selected: true }));
+    const iE = calls.findIndex((c) => c.m === 'ellipse');
+    const iBracket = calls.map((c) => c.m).lastIndexOf('stroke');
+    expect(iE).toBeGreaterThanOrEqual(0);
+    expect(iBracket).toBeGreaterThan(iE + 1); // друга лінія після кільця — дужки
   });
 });

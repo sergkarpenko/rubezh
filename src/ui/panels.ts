@@ -37,6 +37,7 @@ import { drawAnimFrame, drawFighterSprite, drawGeoBaseSprite, drawGeoTerrain, dr
 import type { Anim } from '../core/render-core';
 import { el, setWhy } from './dom';
 import { setIconText } from './icons';
+import { helmetSvg } from './avatar';
 import { GCELL } from './grid';
 import { geoEventText, type LogCat } from './journal';
 import { ticksText } from './text';
@@ -507,6 +508,7 @@ export function createPanels(deps: PanelsDeps): Panels {
       const row = document.createElement('div');
       row.className = 'soldier';
       row.innerHTML =
+        helmetSvg(s.id) + // Т.129 (ADR-0118): аватар «шолом» кольору бійця
         '<span style="min-width:64px">' +
         s.name +
         '</span>' +

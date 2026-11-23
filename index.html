@@ -527,6 +527,14 @@
         padding: 3px 0;
         font-variant-numeric: tabular-nums;
       }
+      /* Т.129 (ADR-0118): аватар «шолом» у рядку ростера */
+      #roster .soldier {
+        align-items: center;
+      }
+      #roster .soldier .avatar {
+        flex: none;
+        margin-right: -4px;
+      }
       /* T.39: панель «Дослідження» — смуга кроків і картки протоколів
          (ескіз: docs/reports/t39/sketch.webp) */
       .sci-steps {

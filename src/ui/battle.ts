@@ -38,6 +38,7 @@ import {
   drawReachZone,
   drawTargetFrame,
   drawUnitSprite,
+  unitRing,
 } from '../render';
 import {
   animT,
@@ -468,7 +469,7 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
     }
 
     // П6.7 (ADR-0029): векторні спрайти юнітів замість геометричних кружків —
-    // силует, зброя, HP, рамка вибору і маркер дозору малює render.ts
+    // силует, зброя, HP, рамка вибору, маркер дозору і кільце кольору бійця (Т.129) малює render.ts
     // (маркер дозору — строго в межах клітинки, П6.6).
     // П14.8: намальовані юніти — сцена ambient-шару (туман врахований:
     // невидимі прибульці сюди не потрапляють — ADR-0006).
@@ -528,6 +529,7 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
         selected: u.id === ui.selectedId,
         overwatch: u.overwatch,
         pose: u.id === firingId ? 'fire' : undefined, // П14.2 (ADR-0072)
+        ring: unitRing(u.side, u.id), // Т.129: кільце кольору бійця (вороги — пурпур)
         flip: (facing.get(u.id) ?? native) !== native, // П14.3: дзеркало за напрямком
       });
     }

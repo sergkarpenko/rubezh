@@ -8,6 +8,9 @@
 
 import { describe, expect, it } from 'vitest';
 import {
+  FIGHTER_COLORS,
+  HELMET_SHAPES,
+  fighterLook,
   fogBorderSegments,
   pathLabelBox,
   pathLabelScale,
@@ -819,5 +822,32 @@ describe('Т.119: pathLabelScale — множник плашки за масшт
     expect(pathLabelScale(1.25)).toBe(1); // 15 / 1,25 = 12 — рівно межа
     expect(pathLabelScale(2.5)).toBe(2); // 15 × 2 / 2,5 = 12 CSS px
     expect(pathLabelScale(0.5)).toBe(1); // збільшена канва — без зменшення
+  });
+});
+
+// Т.129 (ADR-0118): колір і форма шолома бійця — за id ростера назавжди
+describe('fighterLook: колір і форма шолома за id', () => {
+  it('перші шість — шість різних кольорів, форма 0; сьомий — колір першого, інша форма', () => {
+    const six = ['s1', 's2', 's3', 's4', 's5', 's6'].map(fighterLook);
+    expect(six.map((l) => l.color)).toEqual([...FIGHTER_COLORS]);
+    expect(six.every((l) => l.shape === 0)).toBe(true);
+    expect(fighterLook('s7')).toEqual({ index: 6, color: FIGHTER_COLORS[0], shape: 1 });
+    expect(fighterLook('s13').shape).toBe(2);
+    expect(fighterLook('s19')).toEqual({ index: 18, color: FIGHTER_COLORS[0], shape: 0 });
+  });
+
+  it('18 перших бійців — 18 різних комбінацій; той самий id — той самий вигляд', () => {
+    const combos = new Set<string>();
+    for (let i = 1; i <= FIGHTER_COLORS.length * HELMET_SHAPES; i++) {
+      const l = fighterLook('s' + i);
+      combos.add(l.color + '/' + l.shape);
+    }
+    expect(combos.size).toBe(18);
+    expect(fighterLook('s4')).toEqual(fighterLook('s4'));
+  });
+
+  it('id не з ростера — перший колір (без винятку)', () => {
+    expect(fighterLook('a1').color).toBe(FIGHTER_COLORS[0]);
+    expect(fighterLook('s0').index).toBe(0);
   });
 });

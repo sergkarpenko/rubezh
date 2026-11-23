@@ -689,3 +689,30 @@ export function animsFromEvents(events: readonly GameEvent[], units: readonly Un
   }
   return anims;
 }
+
+// Т.129 (ADR-0118): колір і форма шолома бійця — за id ростера назавжди
+// ('s1' → 0, 's7' → 6): шість кольорів × три форми шолома = 18 комбінацій;
+// сьомий і далі завербовані — повтор кольору з іншою формою. Палітра відмінна
+// від бірюзи своїх, пурпуру Розриву і бурштину головної дії (ADR-0064, ADR-0115).
+export const FIGHTER_COLORS = ['#8ee35b', '#5b9bff', '#f5e050', '#ff8a5c', '#b58cff', '#f2f5fa'] as const;
+export const ALIEN_RING = '#ff2e88'; // кільце ворогів — пурпур Розриву (ADR-0064)
+export const HELMET_SHAPES = 3;
+// Геометрія кільця під ногами (src/render.ts і гейт e2e — одне місце правди):
+// еліпс 34 × 12 px, як на аркуші, який схвалив власник (Т.129); центр нижче
+// центру клітинки, нижні дужки рамки вибору малюються поверх кільця.
+export const RING_RX = 17;
+export const RING_RY = 6;
+export const RING_DY = 16;
+
+export interface FighterLook {
+  index: number; // порядковий номер у ростері від 0
+  color: string;
+  shape: number; // 0..HELMET_SHAPES-1
+}
+
+export function fighterLook(id: string): FighterLook {
+  const m = /^s(\d+)$/.exec(id);
+  const index = m ? Math.max(0, Number(m[1]) - 1) : 0;
+  const n = FIGHTER_COLORS.length;
+  return { index, color: FIGHTER_COLORS[index % n], shape: Math.floor(index / n) % HELMET_SHAPES };
+}
