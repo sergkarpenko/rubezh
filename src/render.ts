@@ -34,6 +34,7 @@ import {
   fighterLook,
   FOG_EDGE,
   fogBorderSegments,
+  fogHatchStep,
   PATH_LABEL_CHAR_W,
   pathLabelBox,
   pathLabelScale,
@@ -284,7 +285,6 @@ const TILE_FOG = 'rgba(5,8,15,0.55)';
 // заштриховано діагоналями, межу зору обведено лінією.
 const FOG_GREY = '#808080';
 const FOG_HATCH = 'rgba(150,170,190,0.16)';
-const FOG_HATCH_STEP = 8; // px між діагоналями штриха
 const FOG_BORDER = 'rgba(125,215,255,0.6)';
 const FOG_BORDER_W = 2;
 
@@ -657,7 +657,7 @@ export function drawNightTerrain(
     // Т.119: на зменшеній канві (телефон) штрих 1 px buffer'а ставав 0,2 CSS px — товщина
     // і крок тримаються в CSS px (як на 1366 × 768: ≈ 0,7 і 5,5 px); на більшій канві — як було
     ctx.lineWidth = Math.max(1, 0.7 * px);
-    const step = Math.max(FOG_HATCH_STEP, 5.5 * px);
+    const step = fogHatchStep(px);
     ctx.beginPath();
     for (const c of cells) {
       if (c.visible) continue;

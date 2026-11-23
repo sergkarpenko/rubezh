@@ -24,8 +24,10 @@ import {
   RING_RX,
   cellHash,
   fighterLook,
+  fogHatchStep,
   pathLabelBox,
   pathLabelScale,
+  zoneOutlineSegments,
 } from '../src/core/render-core';
 import { CoreMirror, enemyLine, unitLine } from './mirror';
 
@@ -913,6 +915,14 @@ test('сценарій приймання ADR-0030: партія → місія 
     ] as const) {
       await page.setViewportSize({ width, height });
       await expectPhoneBattle(page, `${width} × ${height}`, minField, portrait);
+      if (width === 844) {
+        // Т.143: на горизонтальному телефоні тап по бійцю на канві вибирає його (cellFromPoint за масштабом показу)
+        const first = mirror.squad()[0]!;
+        await tap(page, first.pos);
+        await expect(unit, 'Т.143: тап на 844 × 390 вибирає оперативника').toHaveAttribute('aria-label', unitLine(first));
+        await page.keyboard.press('Escape');
+        await expect(unit, 'Т.143: Esc знімає вибір').toHaveCount(0);
+      }
     }
     await page.setViewportSize({ width: 1440, height: 900 });
   });
@@ -937,9 +947,35 @@ test('сценарій приймання ADR-0030: партія → місія 
         return out;
       });
     const before = await greens();
+    const reach = mirror.reach(soldier);
+    // Т.143: контур зони — лінія 2 px на сторонах клітинок зони, зсунута всередину (REACH_OUTLINE
+    // rgba(127,226,160,0.75), drawReachZone). Точки — середини відрізків контуру зони з клітинкою оперативника,
+    // піксель під лінією; відрізки між клітинками з юнітами пропущено (спрайти, кільця, дужки вибору).
+    // До вибору ці точки не зелені, після — зелені (G помітно більший за R і B, як лінія шляху)
+    const occupiedAt = (x: number, y: number): boolean => mirror.state.units.some((u) => u.alive && u.pos.x === x && u.pos.y === y);
+    const outline = zoneOutlineSegments(new Set(reach).add(soldier.pos.x + ',' + soldier.pos.y))
+      .filter(
+        (e) =>
+          !occupiedAt(e.x1 - (e.nx < 0 ? 1 : 0), e.y1 - (e.ny < 0 ? 1 : 0)) &&
+          !occupiedAt(e.x1 - (e.nx > 0 ? 1 : 0), e.y1 - (e.ny > 0 ? 1 : 0))
+      )
+      .map((e) =>
+        e.x1 === e.x2
+          ? { x: e.x1 * 48 + (e.nx > 0 ? 0 : -1), y: e.y1 * 48 + 24 }
+          : { x: e.x1 * 48 + 24, y: e.y1 * 48 + (e.ny > 0 ? 0 : -1) }
+      );
+    expect(outline.length, 'Т.143: відрізки контуру зони без юнітів поруч').toBeGreaterThan(10);
+    const outlineGreen = (): Promise<boolean[]> =>
+      page.evaluate((ps) => {
+        const cx = (document.getElementById('battle') as HTMLCanvasElement).getContext('2d')!;
+        return ps.map((p) => {
+          const d = cx.getImageData(p.x, p.y, 1, 1).data;
+          return d[1]! - d[0]! > 40 && d[1]! - d[2]! > 25;
+        });
+      }, outline);
+    expect((await outlineGreen()).filter(Boolean).length, 'Т.143: до вибору контуру немає').toBeLessThan(outline.length / 4);
     await tap(page, soldier.pos);
     await expect(unit).toHaveAttribute('aria-label', unitLine(soldier));
-    const reach = mirror.reach(soldier);
     expect(reach.size, 'Т.44: зона першого оперативника на старті (сід сценарію, 10 AP)').toBeGreaterThan(40);
     const drawn = async (): Promise<string> => {
       const after = await greens();
@@ -953,6 +989,74 @@ test('сценарій приймання ADR-0030: партія → місія 
       return cells.sort().join(' ');
     };
     await expect.poll(drawn, { message: 'Т.44: зона ходу на канві = зона з дзеркала' }).toBe([...reach].sort().join(' '));
+    await expect.poll(outlineGreen, { message: 'Т.143: контур зони — точки ' + JSON.stringify(outline) }).toEqual(outline.map(() => true));
+    // Т.143: штрих туману — діагоналі x + y = d з кроком fogHatchStep (render.ts). Середня яскравість пікселів
+    // на діагоналях вища, ніж посередині між ними, у клітинках туману без стін і юнітів (поле 4..43 px клітинки — без контуру зони)
+    const fogCells: Vec2[] = [];
+    const seenStart = mirror.seen();
+    for (let y = 0; y < MISSION_MAP_H; y++)
+      for (let x = 0; x < MISSION_MAP_W; x++)
+        if (!seenStart.has(x + ',' + y) && !mirror.state.map.blocked.has(x + ',' + y) && !occupiedAt(x, y)) fogCells.push({ x, y });
+    expect(fogCells.length, 'Т.143: клітинки туману на старті').toBeGreaterThan(20);
+    const hatch = await page.evaluate(
+      ({ cells, step }) => {
+        const cx = (document.getElementById('battle') as HTMLCanvasElement).getContext('2d')!;
+        let on = 0;
+        let nOn = 0;
+        let off = 0;
+        let nOff = 0;
+        for (const c of cells) {
+          const d = cx.getImageData(c.x * 48, c.y * 48, 48, 48).data;
+          for (let j = 4; j < 44; j++)
+            for (let i = 4; i < 44; i++) {
+              const k = (j * 48 + i) * 4;
+              const lum = 0.299 * d[k]! + 0.587 * d[k + 1]! + 0.114 * d[k + 2]!;
+              const r = (i + j + 1) % step; // зсув u + v центру пікселя від діагоналі u + v = n·step
+              if (Math.min(r, step - r) < 0.5) {
+                on += lum;
+                nOn++;
+              } else if (Math.abs(r - step / 2) < 0.5) {
+                off += lum;
+                nOff++;
+              }
+            }
+        }
+        return { on: on / nOn, off: off / nOff };
+      },
+      {
+        cells: fogCells,
+        step: fogHatchStep(
+          await page.evaluate(() => {
+            const cv = document.getElementById('battle') as HTMLCanvasElement;
+            return cv.clientWidth > 0 ? cv.width / cv.clientWidth : 1;
+          })
+        ),
+      }
+    );
+    expect(hatch.on - hatch.off, 'Т.143: штрих туману ' + JSON.stringify(hatch)).toBeGreaterThan(3);
+    // Т.143 (ADR-0124): системне «менше руху» зупиняє JS-цикл ambient (пульс стін, дихання) за увімкненої «Анімації»:
+    // за 400 мс спокою бою — жодного requestAnimationFrame; знято — цикл знову планує кадри
+    const rafCalls = (): Promise<number> =>
+      page.evaluate(
+        () =>
+          new Promise<number>((done) => {
+            const raf = window.requestAnimationFrame;
+            let n = 0;
+            window.requestAnimationFrame = (cb) => {
+              n++;
+              return raf(cb);
+            };
+            setTimeout(() => {
+              window.requestAnimationFrame = raf;
+              done(n);
+            }, 400);
+          })
+      );
+    expect(await rafCalls(), 'Т.143: ambient бою планує кадри').toBeGreaterThan(0);
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    expect(await rafCalls(), 'Т.143: «менше руху» — 0 кадрів ambient').toBe(0);
+    await page.emulateMedia({ reducedMotion: null });
+    expect(await rafCalls(), 'Т.143: «менше руху» знято — цикл знову планує кадри').toBeGreaterThan(0);
     // Т.33: причина під неактивною плиткою — у загоні на старті немає гелю
     await expect(page.locator('#btn-medkit .tb-cap')).toHaveText('без гелю');
     // ADR-0081: демон у тумані не видає себе — тап по його клітинці дає те

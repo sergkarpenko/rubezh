@@ -154,20 +154,26 @@ const sound = createSound();
 // (бій або геосцена); ambient-цикл на стартовому екрані не малює (його анімація — лише CSS, ADR-0116). Створюється
 // ДО модулів бою/панелей (deps-об'єкти беруть його за значенням — TDZ),
 // сам читає стан лише через ліниві замикання.
+// Т.143 (ADR-0124): системне «менше руху» — гейт ambient-циклу, як вимкнений тумблер
+const reducedMotionQuery =
+  typeof window !== 'undefined' && typeof window.matchMedia === 'function' ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
 const ambient = createAmbient({
   hasRaf: () => hasRaf,
+  reducedMotion: () => reducedMotionQuery?.matches ?? false,
   schedule: (cb) => requestAnimationFrame(cb),
   cancel: (h) => cancelAnimationFrame(h as number),
   now: () => performance.now(),
   visible: () => (typeof document === 'undefined' ? false : document.visibilityState === 'visible'),
   active: () => partyOnScreen,
-  repaint: () => {
-    if (party === null) return; // партії немає — 0 перерисовок (стартовий екран П12.2)
-    if (!el('start-screen').classList.contains('hidden')) return; // П14.7: ambient-цикл стартовий екран не малює (анімація стартового — CSS, ADR-0116)
-    if (ui.mission !== null) battle.renderBattle();
-    else panels.renderGeo();
-  },
+  repaint: () => repaintScene(),
 });
+// Перемальовка активної сцени — кадр ambient-циклу і зміна «менше руху» (Т.143, ADR-0124)
+function repaintScene(): void {
+  if (party === null) return; // партії немає — 0 перерисовок (стартовий екран П12.2)
+  if (!el('start-screen').classList.contains('hidden')) return; // П14.7: ambient-цикл стартовий екран не малює (анімація стартового — CSS, ADR-0116)
+  if (ui.mission !== null) battle.renderBattle();
+  else panels.renderGeo();
+}
 
 // Порядок оголошень важливий (TDZ — див. docs/workflow.md): усі змінні стану,
 // які newParty() чи обробники пишуть, оголошуються ДО першого виклику newParty().
@@ -831,6 +837,12 @@ if (typeof document !== 'undefined') {
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) ambient.pause();
     else ambient.resume();
+  });
+  // Т.143 (ADR-0124): «менше руху» змінилось без перезавантаження — цикл зупинено (увімкнулось) чи поновлено
+  // (знято, тумблер увімкнено) і сцену перемальовано: без ефектів ambient або з ними
+  reducedMotionQuery?.addEventListener('change', () => {
+    ambient.motionChanged();
+    repaintScene();
   });
   // П12.3 (ADR-0065/0059): тумблер звуку мігрував з топбара у вікно
   // «Налаштування» (settings.ts) — єдине джерело стану залишається
