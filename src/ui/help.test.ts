@@ -102,7 +102,7 @@ describe('Т.49: слово «перехоплювач» без друкарсь
     expect(text).toContain('ремонт перехоплювача');
     expect(text).not.toContain('ерехоплюач');
     expect(htmlRaw).toContain('Перехоплювач: <b id="ictx-fighter">');
-    expect(htmlRaw).toContain('<h2>Перехоплювач</h2>');
+    expect(htmlRaw).toContain('<h2 data-icon="fighter">Перехоплювач</h2>'); // Т.128: іконка заголовка
     expect(htmlRaw).not.toContain('ерехоплюач');
   });
 });

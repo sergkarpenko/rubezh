@@ -92,13 +92,23 @@ async function expectLook(page: Page): Promise<void> {
   });
 }
 
+// Т.128 (ADR-0117): вікно «Збереження» — пункт «Меню» (раніше вкладка «Система»)
+async function openSave(page: Page): Promise<void> {
+  await page.locator('#btn-menu').click();
+  await expectIcons(page, '#btn-menu-save svg.btn-icon', 16, 1, 'y');
+  await page.locator('#btn-menu-save').click();
+  await expect(page.locator('#save-dialog')).toBeVisible();
+}
+
 // Т.123 (ADR-0114): векторні іконки — svg заданого розміру в межах своєї кнопки і по її центру (іконка
 // над підписом, як канва на main: у рядку з підписом кнопка вкладки ширшає на 16 px); малюнок у сітці
 // 24 × 24 з запасом на половину лінії (getBBox — справжні межі з дугами й відносними відрізками).
 // Розмір і місце задає CSS (без правила svg має 300 × 150 і розпирає кнопку) — від шрифту не залежить.
-async function expectIcons(page: Page, selector: string, size: number, count: number): Promise<void> {
+// Т.128 (ADR-0117): іконка в рядку перед текстом (заголовок панелі, кнопка) — по центру своєї рамки
+// по вертикалі (axis 'y'), а не по горизонталі.
+async function expectIcons(page: Page, selector: string, size: number, count: number, axis: 'x' | 'y' = 'x'): Promise<void> {
   const icons = await page.evaluate(
-    (sel) =>
+    ([sel, ax]) =>
       [...document.querySelectorAll<SVGSVGElement>(sel)].map((i) => {
         const r = i.getBoundingClientRect();
         const b = i.parentElement!.getBoundingClientRect();
@@ -107,16 +117,19 @@ async function expectIcons(page: Page, selector: string, size: number, count: nu
           w: r.width,
           h: r.height,
           inside: r.left >= b.left && r.right <= b.right && r.top >= b.top && r.bottom <= b.bottom,
-          offCentre: Math.abs((r.left + r.right) / 2 - (b.left + b.right) / 2),
+          offCentre:
+            ax === 'x'
+              ? Math.abs((r.left + r.right) / 2 - (b.left + b.right) / 2)
+              : Math.abs((r.top + r.bottom) / 2 - (b.top + b.bottom) / 2),
           drawn: [box.x, box.y, box.x + box.width, box.y + box.height],
         };
       }),
-    selector
+    [selector, axis] as const
   );
   expect(icons.length, selector).toBe(count);
   for (const i of icons) {
     expect([i.w, i.h, i.inside], selector).toEqual([size, size, true]);
-    expect(i.offCentre, selector).toBeLessThanOrEqual(1);
+    expect(i.offCentre, selector).toBeLessThanOrEqual(axis === 'x' ? 1 : 2); // Т.128: у рядку центр залежить від шрифту (CI — 1,2 px)
     const [x0, y0, x1, y1] = i.drawn as [number, number, number, number];
     expect(
       x0 >= 1 && y0 >= 1 && x1 <= 23 && y1 <= 23 && Math.max(x1 - x0, y1 - y0) >= 12 && Math.min(x1 - x0, y1 - y0) >= 6,
@@ -280,7 +293,21 @@ test('сценарій приймання ADR-0030: партія → місія 
     await expect(page.locator('#ufos button.mission')).toHaveCount(mirror.targets().length);
     // Т.7: дія чекає на вкладці «Вузол» — лічильник видно з вкладки «Загін»
     await expect(page.locator('#status-tab-base .tab-badge')).toBeVisible();
-    await expectIcons(page, '#status-tabs button svg.tab-icon', 16, 3); // Т.123: іконки вкладок колонки стану
+    await expectIcons(page, '#status-tabs button svg.tab-icon', 16, 2); // Т.123: іконки вкладок колонки стану (Т.128: без «Системи»)
+    // Т.128 (ADR-0117): іконки заголовків панелей колонки і кнопки вербування — у рядку перед текстом
+    await expectIcons(page, '#status section.panel:not(.hidden) h2 svg.h-icon', 16, 2, 'y');
+    await expectIcons(page, '#btn-hire svg.btn-icon', 16, 1, 'y');
+    await page.locator('#status-tab-base').click();
+    await expectIcons(page, '#status section.panel:not(.hidden) h2 svg.h-icon', 16, 4, 'y');
+    await expectIcons(page, '#btn-hire-scientist svg.btn-icon', 16, 1, 'y');
+    // заголовок «Сенсорна сітка» з іконкою — в один рядок (рішення власника Т.128; від шрифту — запас ≈ 100 px)
+    expect(
+      await page
+        .locator('#status section.panel h2')
+        .first()
+        .evaluate((h) => h.getBoundingClientRect().height)
+    ).toBeLessThan(24);
+    await page.locator('#status-tab-squad').click();
     await expectLook(page); // Т.124: вигляд набору інтерфейсу
   });
 
@@ -298,7 +325,7 @@ test('сценарій приймання ADR-0030: партія → місія 
           document.getElementById('journal')!.getBoundingClientRect().top -
           document.getElementById('geo-panel')!.getBoundingClientRect().bottom,
       }));
-    for (const tab of ['squad', 'base', 'system']) {
+    for (const tab of ['squad', 'base']) {
       await page.locator('#status-tab-' + tab).click();
       const m = await fits();
       expect(m.page, 'вкладка ' + tab + ': сторінка вища за вікно').toBeLessThanOrEqual(m.win);
@@ -345,7 +372,7 @@ test('сценарій приймання ADR-0030: партія → місія 
     );
     expect(researchH, 'висота панелі «Дослідження»').toBeLessThanOrEqual(1150); // варіант Б без А — 1193
     await expect(armor.locator('#btn-start-0')).toHaveText('Дослідити — 96 кр.');
-    await expect(page.locator('#btn-hire-scientist')).toHaveText('Вербувати техноманта — 100 кр.');
+    await expect(page.locator('#btn-hire-scientist')).toHaveText('Вербувати техноманта (100)'); // Т.128
     // смуга кроків: три кнопки; «3. Видати» перемикає вкладку на «Загін»
     await expect(page.locator('#btn-sci-step-1')).toBeEnabled();
     await expect(page.locator('#btn-sci-step-2')).toBeEnabled();
@@ -504,9 +531,10 @@ test('сценарій приймання ADR-0030: партія → місія 
 
   await test.step('Т.47: «Продовжити» після виходу з бою — сейв завантажено, старого бою немає', async () => {
     const saved = mirror.clock();
-    await page.locator('#status-tab-system').click();
+    await openSave(page); // Т.128: «Збереження» — вікно з «Меню»
     await page.locator('#btn-save-1').click();
     await expect(page.locator('#log')).toContainText('Збережено: слот 1.');
+    await page.locator('#btn-save-close').click();
     // тік і бій — лише на сторінці: дзеркало лишається на точці сейву, а годинник покинутої партії йде далі
     await page.locator('#btn-tick').click();
     await expect(clock).not.toHaveText(saved);
@@ -930,13 +958,21 @@ test('сценарій приймання ADR-0030: партія → місія 
 
   await test.step('сейв → лоад', async () => {
     const saved = mirror.clock();
-    await page.locator('#status-tab-system').click();
+    await openSave(page); // Т.128: «Збереження» — вікно з «Меню»; фокус на «Закрити»
+    await expect(page.locator('#btn-save-close')).toBeFocused();
+    await expectIcons(page, '#save-dialog h2 svg.h-icon', 16, 1, 'y'); // Т.128: іконка заголовка вікна
     await page.locator('#btn-save-1').click();
     await expect(page.locator('#log')).toContainText('Збережено: слот 1.');
+    await expect(page.locator('#save-dialog')).toBeVisible(); // «Зберегти» вікно не закриває
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#save-dialog')).toBeHidden();
+    await expect(page.locator('#btn-menu')).toBeFocused();
     await page.locator('#btn-tick').click();
     mirror.tick();
     await expect(clock).toHaveText(mirror.clock());
+    await openSave(page);
     await page.locator('#btn-load-1').click();
+    await expect(page.locator('#save-dialog')).toBeHidden(); // вдале «Завантажити» закриває вікно
     await expect(clock).toHaveText(saved);
     await expect(page.locator('#log')).toContainText('Завантажено: слот 1 — ' + saved);
   });
@@ -1058,9 +1094,9 @@ test('Т.61: екран перемоги і рядок-пояснення ста
   await page.locator('#new-game-preset').selectOption(PRESET);
   await page.locator('#btn-new-game-start').click();
   await expect(page.locator('#geo')).toBeVisible();
-  await page.locator('#status-tab-system').click();
+  await openSave(page); // Т.128: «Збереження» — вікно з «Меню»
   await page.locator('#btn-save-1').click();
-  await expect(page.locator('#log')).toContainText('Збережено: слот 1.');
+  await expect(page.locator('#log')).toContainText('Збережено: слот 1.'); // вікно лишається — далі «Завантажити»
   const good = await page.evaluate(() => localStorage.getItem('rubezh.save.1')!);
   const won = JSON.parse(good) as { state: { campaign: { status: string } } };
   won.state.campaign.status = 'перемога';

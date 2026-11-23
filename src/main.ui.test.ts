@@ -1512,7 +1512,7 @@ describePage('П11.6: критичний флоу «дослідити → ви�
   });
 });
 
-describePage('П12.4: вкладки статус-колонки «Загін»/«База»/«Система» (ADR-0065)', () => {
+describePage('П12.4: вкладки статус-колонки «Загін»/«База» (ADR-0065; Т.128 — без «Системи», ADR-0117)', () => {
   const colPanels = (): HTMLElement[] => Array.from(document.querySelectorAll('#status section.panel[data-tab]'));
   const visible = (p: HTMLElement): boolean => !p.classList.contains('hidden');
   const visibleTitles = (): string[] =>
@@ -1520,35 +1520,36 @@ describePage('П12.4: вкладки статус-колонки «Загін»/
       .filter(visible)
       .map((p) => p.querySelector('h2')!.textContent ?? '');
 
-  it('розмітка: скелет #status-tabs у колонці, 7 панелей з data-tab; «Загін» — фінанси/ростер, «База» — сканери/винищувач/дослідження/цех (рішення власника П12.4), «Система» — збереження', () => {
+  it('розмітка: скелет #status-tabs у колонці, 6 панелей з data-tab; «Загін» — фінанси/ростер, «База» — сканери/винищувач/дослідження/цех (рішення власника П12.4); «Збереження» — вікно поза колонкою (Т.128)', () => {
     const col = htmlRaw.match(/<aside id="status">[\s\S]*?<\/aside>/)![0];
     expect(col).toContain('<div id="status-tabs"></div>'); // скелет — контент генерує модуль
-    expect((col.match(/data-tab="/g) ?? []).length).toBe(7); // усі панелі колонки розподілені
+    expect((col.match(/data-tab="/g) ?? []).length).toBe(6); // усі панелі колонки розподілені
     const byTab = (tab: string): number =>
       (col.match(new RegExp('<section class="panel" data-tab="' + tab + '">[\\s\\S]*?</section>', 'g')) ?? []).length;
     expect(byTab('squad')).toBe(2); // фінанси + ростер (ADR-0065)
     expect(byTab('base')).toBe(4); // дослідження + цех (ADR-0065) + сканери + винищувач (рішення власника)
-    expect(byTab('system')).toBe(1); // збереження (ADR-0065)
+    expect(byTab('system')).toBe(0); // Т.128: «Збереження» — вікно з «Меню»
+    expect(col).not.toContain('save-panel');
+    expect($('save-dialog').contains($('save-panel'))).toBe(true);
     // патерн стилю — як #log-tabs журналу; id кнопок — префікс status-tab- (урок П11.6)
     expect(htmlRaw).toContain('#status-tabs button.active');
-    for (const t of ['squad', 'base', 'system']) {
+    for (const t of ['squad', 'base']) {
       expect(document.getElementById('status-tab-' + t)).not.toBeNull(); // модуль згенерував кнопки
     }
+    expect(document.getElementById('status-tab-system')).toBeNull();
   });
 
-  it('флоу: перемикання вкладок показує всі 7 панелей, панелі лишаються в DOM, вибір персиститься поза сейвом', () => {
+  it('флоу: перемикання вкладок показує всі 6 панелей, панелі лишаються в DOM, вибір персиститься поза сейвом', () => {
     startParty();
-    expect(colPanels().length).toBe(7); // жодна панель не втрачена (критерій 1)
+    expect(colPanels().length).toBe(6); // жодна панель не втрачена (критерій 1)
     btn('status-tab-squad').click();
     expect(visibleTitles()).toEqual(['Фінанси', 'Ростер загону']);
     btn('status-tab-base').click();
-    expect(visibleTitles()).toEqual(['Сенсорна сітка (виявлені зонди)', 'Перехоплювач', 'Дослідження', 'Кузня']);
+    expect(visibleTitles()).toEqual(['Сенсорна сітка', 'Перехоплювач', 'Дослідження', 'Кузня']);
     // приховані панелі зберігають контент у DOM (контракти не послаблюються)
     expect($('roster').textContent).toContain('оперативник');
     expect($('money-card').textContent).not.toBe('');
-    btn('status-tab-system').click();
-    expect(visibleTitles()).toEqual(['Збереження']);
-    expect(localStorage.getItem('rubezh.settings.status-tab')).toBe('system'); // ключ П12.3-формату
+    expect(localStorage.getItem('rubezh.settings.status-tab')).toBe('base'); // ключ П12.3-формату
   });
 
   it('у бою колонка dimmed (П6.3 без змін), вкладки — у колонці; після бою dimmed знято', async () => {
@@ -2985,5 +2986,115 @@ describePage('Т.99: зупинки «До події» на сторінці і
     expect($('money').textContent).toBe('БАНКРУТ');
     expect($('next-step').classList.contains('hidden')).toBe(true);
     expect($('next-step').textContent).toBe('');
+  });
+});
+
+describePage('Т.128: «Збереження» — вікно з «Меню» (ADR-0117) та іконки панелей', () => {
+  const open = (id: string): boolean => !$(id).classList.contains('hidden');
+  const press = (key: string): void => {
+    document.dispatchEvent(new KeyboardEvent('keydown', { key, code: key, bubbles: true }));
+  };
+  const openSave = (): void => {
+    btn('btn-menu').click();
+    btn('btn-menu-save').click();
+  };
+
+  it('«Меню» → «Збереження»: меню закрито, вікно відкрите зі слотами, фокус на «Закрити»; Esc закриває і повертає фокус на «Меню»', () => {
+    localStorage.clear();
+    startParty('42');
+    openSave();
+    expect(open('game-menu')).toBe(false);
+    expect(open('save-dialog')).toBe(true);
+    expect(document.activeElement?.id).toBe('btn-save-close');
+    expect(btn('btn-save-1').disabled).toBe(false);
+    expect(document.getElementById('save-busy')).toBeNull(); // на геосцені рядка причини немає
+    const t = $('clock').textContent;
+    press(' '); // Т.43: під вікном пробіл час не рухає
+    expect($('clock').textContent).toBe(t);
+    press('Escape');
+    expect(open('save-dialog')).toBe(false);
+    expect(document.activeElement?.id).toBe('btn-menu');
+    openSave();
+    btn('btn-save-close').click();
+    expect(open('save-dialog')).toBe(false);
+    expect(document.activeElement?.id).toBe('btn-menu');
+  });
+
+  it('«Зберегти» і «Видалити» лишають вікно відкритим з оновленим слотом; вдале «Завантажити» закриває вікно (рішення власника)', () => {
+    localStorage.clear();
+    startParty('42');
+    openSave();
+    btn('btn-save-1').focus();
+    btn('btn-save-1').click();
+    expect(open('save-dialog')).toBe(true);
+    expect($('slot-1').textContent).toContain('сід 42');
+    expect(document.activeElement?.id).toBe('btn-save-1'); // перемальовка слотів фокус не губить
+    btn('btn-save-close').focus();
+    const ev = new KeyboardEvent('keydown', { key: 'Tab', code: 'Tab', bubbles: true, cancelable: true });
+    document.dispatchEvent(ev); // Т.75: Tab з останньої кнопки вікна — на першу
+    expect([ev.defaultPrevented, document.activeElement?.id]).toEqual([true, 'btn-save-1']);
+    const saved = $('clock').textContent;
+    btn('btn-save-close').click();
+    btn('btn-tick').click();
+    expect($('clock').textContent).not.toBe(saved);
+    openSave();
+    btn('btn-save-2').click();
+    btn('btn-del-2').click();
+    expect(open('save-dialog')).toBe(true);
+    expect($('slot-2').textContent).toBe('—');
+    btn('btn-load-1').click();
+    expect(open('save-dialog')).toBe(false);
+    expect($('clock').textContent).toBe(saved);
+    expect(document.activeElement?.id).toBe('btn-menu');
+  });
+
+  it('невдале «Завантажити» (пошкоджений слот) лишає вікно відкритим, помилка — у журналі', () => {
+    localStorage.clear();
+    startParty('42');
+    localStorage.setItem('rubezh.save.3', '{"зламано": true}');
+    openSave();
+    btn('btn-load-3').click();
+    expect(open('save-dialog')).toBe(true);
+    expect($('log').textContent).toContain('✗ Завантаження не вдалось');
+  });
+
+  it('у бою вікно відкривається: кнопки вимкнені, рядок причини дослівно; після бою рядка немає', async () => {
+    localStorage.clear();
+    startParty('42');
+    for (let i = 0; i < 1500 && document.querySelector('button.mission') === null; i++) btn('btn-tick').click();
+    (document.querySelector('button.mission') as HTMLButtonElement).click();
+    openSave();
+    expect(open('save-dialog')).toBe(true);
+    expect($('save-busy').textContent).toBe('Під час бою збереження недоступне');
+    for (const id of ['btn-save-1', 'btn-load-1', 'btn-del-1']) expect(btn(id).disabled).toBe(true);
+    btn('btn-save-close').click();
+    await runAutoBattle();
+    btn('btn-close').click();
+    openSave();
+    expect(document.getElementById('save-busy')).toBeNull();
+    expect(btn('btn-save-1').disabled).toBe(false);
+  });
+
+  it('іконки: заголовки шести панелей колонки, вікна «Збереження», пункт меню і дві кнопки вербування; підписи кнопок без змін', () => {
+    startParty('42');
+    const heads = [...document.querySelectorAll('#status section.panel h2, #save-dialog h2')];
+    expect(heads.map((h) => h.textContent)).toEqual([
+      'Сенсорна сітка',
+      'Перехоплювач',
+      'Фінанси',
+      'Дослідження',
+      'Кузня',
+      'Ростер загону',
+      'Збереження',
+    ]);
+    for (const h of heads) expect(h.firstElementChild?.getAttribute('class'), h.textContent ?? '').toBe('h-icon');
+    for (const id of ['btn-menu-save', 'btn-hire', 'btn-hire-scientist']) {
+      expect(btn(id).firstElementChild?.getAttribute('class'), id).toBe('btn-icon');
+      expect(btn(id).querySelectorAll('svg').length, id).toBe(1);
+    }
+    expect(btn('btn-hire').textContent).toBe('Вербувати оперативника (100)');
+    btn('btn-tick').click(); // перемальовка панелей не дублює іконок
+    expect(btn('btn-hire').querySelectorAll('svg').length).toBe(1);
+    expect(btn('btn-hire-scientist').querySelectorAll('svg').length).toBe(1);
   });
 });

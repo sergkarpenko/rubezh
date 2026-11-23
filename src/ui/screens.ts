@@ -28,6 +28,7 @@ export interface ScreensDeps {
   onContinue(): boolean; // завантажити останній активний слот; true — перехід у гру
   onHelp(): void; // «Як грати» — help.ts без змін (П9.1)
   onSettings(): void; // «Налаштування» — вікно settings.ts (П12.3, ADR-0065)
+  onSave(): void; // Т.128 (ADR-0117): «Збереження» — вікно зі слотами (було вкладкою «Система»)
   hasUnsavedChanges(): boolean; // зміни після останнього збереження (ADR-0026: сейв лише вручну)
   onExitToStart(): void; // вихід на стартовий екран (після підтвердження, якщо потрібно)
 }
@@ -97,12 +98,13 @@ function newGameDialogHtml(): string {
   );
 }
 
-// Вікно «Меню» у грі (ADR-0065): налаштування (п12.3), «Як грати», вихід.
+// Вікно «Меню» у грі (ADR-0065): Т.128 — «Збереження» (ADR-0117), налаштування (п12.3), «Як грати», вихід.
 function gameMenuHtml(): string {
   return (
     '<div class="panel screen-dialog">' +
     '<h2>Меню</h2>' +
     '<div class="start-menu">' +
+    '<button id="btn-menu-save" data-icon="save" title="Зберегти, завантажити або видалити партію">Збереження</button>' +
     '<button id="btn-menu-settings" title="Налаштування гри — зберігаються у браузері">Налаштування</button>' +
     '<button id="btn-menu-help">Як грати</button>' +
     '<button id="btn-menu-exit">На стартовий екран</button>' +
@@ -266,6 +268,10 @@ export function createScreens(deps: ScreensDeps): Screens {
   el('btn-start-settings').onclick = () => deps.onSettings(); // п12.3: вікно налаштувань
   el('btn-start-help').onclick = () => deps.onHelp();
 
+  el('btn-menu-save').onclick = () => {
+    closeMenu(); // один діалог одночасно (ADR-0065)
+    deps.onSave();
+  };
   el('btn-menu-settings').onclick = () => {
     closeMenu(); // один діалог одночасно (глибина навігації — ADR-0065)
     deps.onSettings();

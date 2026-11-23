@@ -43,13 +43,26 @@ export const ICONS = {
   // — вкладки колонки стану і журналу —
   squad: ring(12, 7, 3, W) + line('M6.5 19c0-4 2.5-6 5.5-6s5.5 2 5.5 6', W) + dot(4.5, 9.5, 2, C) + dot(19.5, 9.5, 2, C),
   base: line('M12 11v9M8 20h8', W) + dot(12, 8, 2.2, C) + line('M7 4a6.5 6.5 0 0 0 0 8M17 4a6.5 6.5 0 0 1 0 8', C),
-  system: line('M3 7h8M18 7h3M3 17h3M13 17h8', W) + ring(14.5, 7, 2.5, C) + ring(9.5, 17, 2.5, C),
   all: line('M4 6h16', C) + line('M4 12h16M4 18h10', W),
   geo: ring(12, 12, 8, W) + line('M4 12h16M12 4c-3.5 3-3.5 13 0 16M12 4c3.5 3 3.5 13 0 16', C, 1.5),
   econ:
     line('M5 8v8c0 1.7 3.1 3 7 3s7-1.3 7-3V8M5 12c0 1.7 3.1 3 7 3s7-1.3 7-3', W) +
     shape('M5 8c0-1.7 3.1-3 7-3s7 1.3 7 3-3.1 3-7 3-7-1.3-7-3z', A, 0.3),
   battle: shape('M13 2L5 13h5.5L9 22l8-11.5h-5.5z', C, 0.3),
+  // — Т.128: заголовки панелей, кнопки вербування, пункт меню «Збереження» (контури дизайн-сесії Т.125) —
+  probe:
+    shape('M3 13c0-2 4-3.5 9-3.5s9 1.5 9 3.5-4 3.5-9 3.5-9-1.5-9-3.5z', P, 0.2) +
+    line('M7.5 10c0-3 2-5 4.5-5s4.5 2 4.5 5', P) +
+    line('M8 19l-1 2M12 19.5v2M16 19l1 2', W),
+  fighter: shape('M12 2l2.5 8 6.5 5v2l-6.5-2-1 5 2 1.5v1L12 21l-3.5 1.5v-1l2-1.5-1-5L3 17v-2l6.5-5z', C, 0.2),
+  finance: ring(12, 12, 8.5, A, 0.15) + line('M12 7.5v9M14.5 9.5h-3.5a1.5 1.5 0 0 0 0 3h2a1.5 1.5 0 0 1 0 3H9.5', A),
+  research: line('M9 3h6M10 3v6l-5 9a2 2 0 0 0 2 3h10a2 2 0 0 0 2-3l-5-9V3', W) + shape('M7.5 15.5h9l1.5 3.5H6z', C, 0.6),
+  forge:
+    shape('M4 9h13c0 2.5-2 4-4.5 4v3h3v3h-10v-3h3v-3C6 13 4 11.5 4 9z', W, 0.12) +
+    `<path d="M19.5 3l.9 1.8 1.8.9-1.8.9-.9 1.8-.9-1.8-1.8-.9 1.8-.9z" fill="${A}" stroke="${A}" stroke-width="1.5"/>`,
+  roster: ring(12, 7.5, 3.5, W) + line('M5 20c0-4 3-6.5 7-6.5s7 2.5 7 6.5', W) + line('M8.5 7h7', C, 2.5),
+  tech: ring(11, 8.5, 3.5, W) + line('M4 20c0-4 3-6 7-6s7 2 7 6', W) + line('M19 3v4M17 5h4', C) + dot(19, 11, 1, C),
+  save: line('M5 4h11l3 3v13H5z', W) + line('M8 4v5h7V4M8 20v-6h8v6', C),
 } as const;
 
 export type IconName = keyof typeof ICONS;
@@ -72,4 +85,16 @@ export function createIcon(name: IconName, cls: string): SVGSVGElement {
     svg.setAttribute(k, v);
   svg.innerHTML = ICONS[name];
   return svg;
+}
+
+// Т.128: кнопка з іконкою перед підписом — svg і текстовий вузол створюються один раз, далі міняється
+// лише текст (рендер панелі не перемальовує іконку); textContent кнопки — сам підпис (svg тексту не має).
+export function setIconText(btn: HTMLElement, name: IconName, text: string): void {
+  let label = btn.lastChild;
+  if (btn.firstElementChild?.getAttribute('class') !== 'btn-icon' || label?.nodeType !== Node.TEXT_NODE) {
+    btn.textContent = '';
+    label = document.createTextNode('');
+    btn.append(createIcon(name, 'btn-icon'), label);
+  }
+  if (label.textContent !== text) label.textContent = text;
 }

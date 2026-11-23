@@ -37,6 +37,7 @@ import type { Party } from '../core/save';
 import { plainProjectEffect } from './effects';
 import { orderButtonState } from './workshop-panel';
 import { el, setWhy } from './dom';
+import { setIconText } from './icons';
 import type { LogCat } from './journal';
 import { daysText, ticksText } from './text';
 
@@ -150,7 +151,8 @@ export function createResearchPanel(deps: ResearchPanelDeps): ResearchPanel {
     // вербування техноманта (прецедент btn-hire у панелі «Фінанси»); id без змін
     const hire = document.createElement('button');
     hire.id = 'btn-hire-scientist';
-    hire.textContent = 'Вербувати техноманта — ' + hirePrice + ' кр.';
+    // Т.128 (рішення власника): іконка перед підписом, ціна в дужках — як у «Вербувати оперативника (100)»
+    setIconText(hire, 'tech', 'Вербувати техноманта (' + hirePrice + ')');
     hire.disabled = busy || party.econ.money < hirePrice;
     hire.title = hire.disabled
       ? 'Недостатньо кредитів (ціна вербування ' + hirePrice + ')'

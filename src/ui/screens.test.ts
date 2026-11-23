@@ -32,6 +32,7 @@ function makeDeps(overrides: Partial<ScreensDeps> = {}): ScreensDeps {
     onContinue: vi.fn(() => true),
     onHelp: vi.fn(),
     onSettings: vi.fn(),
+    onSave: vi.fn(),
     hasUnsavedChanges: () => false,
     onExitToStart: vi.fn(),
     ...overrides,
@@ -185,6 +186,20 @@ describe('П12.2: «Продовжити» і вікно «Меню» гри (AD
     screens.openMenu();
     screens.closeMenu();
     expect(visible('game-menu')).toBe(false);
+  });
+
+  it('Т.128 (ADR-0117): «Збереження» — перший пункт меню, перед «Налаштуваннями»; клік закриває меню і відкриває вікно (onSave)', () => {
+    const deps = makeDeps();
+    const screens = createScreens(deps);
+    screens.showGame();
+    screens.openMenu();
+    const items = [...$('game-menu').querySelectorAll('button')].map((b) => b.id);
+    expect(items).toEqual(['btn-menu-save', 'btn-menu-settings', 'btn-menu-help', 'btn-menu-exit', 'btn-menu-close']);
+    expect(btn('btn-menu-save').textContent).toBe('Збереження');
+    expect(btn('btn-menu-save').dataset.icon).toBe('save'); // іконку ставить decorateIcons (main.ts)
+    btn('btn-menu-save').click();
+    expect(deps.onSave).toHaveBeenCalledTimes(1);
+    expect(visible('game-menu')).toBe(false); // один діалог одночасно (ADR-0065)
   });
 
   it('вихід без незбережених дій — миттєвий; «на стартовий екран» без зайвих діалогів', () => {
