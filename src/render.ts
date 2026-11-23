@@ -177,11 +177,12 @@ export const ATLAS_WALK2_COL = 2;
 // Фідбек власника 2026-10-22 (юніт-атласи Gemini, PR #241): трасер бою стартує з ДУЛА
 // стрільця, а не з центру клітинки. Т.132 (ADR-0121): якір — координати дулового спалаху
 // в просторі кадру 96 × 96 fire у НАТИВНІЙ орієнтації (солдат вправо, демон вліво),
-// виміряні по атласу (найдальший піксель спалаху); дзеркалення — x → 96 − x. Підказку
+// виміряні по атласу (солдат — край ціанового спалаху, демон — край яскравого ядра);
+// дзеркалення — x → 96 − x. Підказку
 // передає ЛИШЕ бойовище (battle.ts); трасер перехоплення на геосцені — від центру.
 export const MUZZLE_ANCHOR: Readonly<Record<'player' | 'alien', { x: number; y: number }>> = {
   player: { x: 81, y: 50 }, // дуловий спалах АР-14 «Гарт» — правий край кадру fire
-  alien: { x: 10, y: 54 }, // дуловий спалах фазового різака — лівий край
+  alien: { x: 10, y: 54 }, // дуловий спалах фазового різака — лівий край яскравого ядра
 };
 
 // Точка дула на полі для центру клітинки стрільця (cx, cy); recoil — віддача, px (назад).
@@ -379,7 +380,9 @@ function drawAtlasUnit(ctx: CanvasRenderingContext2D, u: UnitSpriteView, row: 0 
   const pose = unitPose(u);
   const col = pose === 'walk' && u.step === 2 ? ATLAS_WALK2_COL : ATLAS_POSE_COL[pose];
   const o = unitFrameOrigin(u.cx, u.cy);
-  const x = o.x - (u.recoil ?? 0) * facingSign(u.side, u.flip === true);
+  // віддача — назад від РІДНОГО напрямку кадру: зсув рахується до дзеркала, і scale(-1,1)
+  // сам перевертає його на екрані (аудит PR #445: зі знаком погляду дзеркальний боєць сіпався вперед)
+  const x = o.x - (u.recoil ?? 0) * facingSign(u.side, false);
   const breath = pose === 'idle' ? (u.breath ?? 0) : 0;
   ctx.save();
   ctx.imageSmoothingEnabled = true;
@@ -460,7 +463,9 @@ function drawHpBadge(ctx: CanvasRenderingContext2D, u: UnitSpriteView): void {
   const f = Math.max(0, Math.min(1, u.maxHp > 0 ? u.hp / u.maxHp : 0));
   ctx.fillStyle = hpBarColor(u.hp, u.maxHp);
   ctx.fillRect(x, y, u.hp > 0 ? Math.max(2, HP_BAR_W * f) : 0, HP_BAR_H);
-  // число HP: плашка у верхньому правому куті клітинки (у межах BCELL 48)
+  // число HP: плашка у верхньому правому куті клітинки (у межах BCELL 48); у позі «вогонь»
+  // не малюється — вона накрила б ствол і спалах дула солдата (аудит PR #445)
+  if (u.pose === 'fire') return;
   const text = String(u.hp);
   const w = text.length * 6 + 3;
   const px = u.cx + 24 - w - 1;

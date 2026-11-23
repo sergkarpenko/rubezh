@@ -12,7 +12,7 @@
 // сітка в проміжках, м'який край туману (сенс туману незмінний).
 // П6.14: обведення валідних цілей і шанс попадання (drawTargetFrame/drawChanceLabel).
 // П14.2 (ADR-0072): атлас спрайтів юнітів бою — вибір кадру за станом юніта
-// (idle/walk/fire/death, чиста функція без RNG), nearest-neighbor 44×44 у
+// (idle/walk/fire/death, чиста функція без RNG), Т.132: 68 × 68 зі згладжуванням у
 // BCELL 48 (П14.3: walk2 — окремий кадр, фліп за напрямком), обов'язковий
 // фолбек на матриці ADR-0031 при !loaded (тести від
 // ассета не залежать — завантажувач інжектиться моком).
@@ -51,6 +51,7 @@ import {
   initMetroTiles,
   initPixelSprites,
   initUnitAtlas,
+  muzzlePoint,
   isGeoMapReady,
   isGeoTowerReady,
   isMetroTerrainReady,
@@ -83,7 +84,17 @@ import {
   UFO_SCOUT_SPRITE,
 } from './core/sprites';
 import { BCELL, GCELL } from './ui/grid';
-import { ALIEN_RING, ATLAS_FEET_ROW, BREATH_SCALE, FIGHTER_COLORS, RING_DY, RING_RX, RING_RY, UNIT_FEET_DY } from './core/render-core';
+import {
+  ALIEN_RING,
+  ATLAS_FEET_ROW,
+  BREATH_SCALE,
+  FIGHTER_COLORS,
+  HP_BAR_H,
+  RING_DY,
+  RING_RX,
+  RING_RY,
+  UNIT_FEET_DY,
+} from './core/render-core';
 
 // Клітиночка прев'ю: BCELL = 48 (П14.3, ADR-0068), центр (24, 24), радіус силуету 8 (як у renderBattle).
 const CX = 24;
@@ -878,14 +889,35 @@ describe('П14.2/П14.3 (ADR-0072): атлас спрайтів юнітів —
 
   it('Т.132: віддача зсуває кадр назад від погляду (солдат — ліворуч, демон — праворуч, дзеркало — навпаки)', () => {
     readyAtlas();
-    const x = (u: Parameters<typeof soldier>[0]): number => {
+    // лівий край кадру НА ЕКРАНІ: у дзеркалі (scale(-1,1) навколо CX) — 2·CX − (x + 68)
+    const left = (u: Parameters<typeof soldier>[0]): number => {
       const s = animCtx();
       drawUnitSprite(s.ctx, soldier(u));
-      return (s.calls.find((c) => c.m === 'drawImage')!.args as number[])[5]!;
+      const x = (s.calls.find((c) => c.m === 'drawImage')!.args as number[])[5]!;
+      return u?.flip === true ? 2 * CX - (x + ATLAS_UNIT) : x;
     };
-    expect(x({ pose: 'fire', recoil: 3 })).toBe(CX - ATLAS_UNIT / 2 - 3);
-    expect(x({ pose: 'fire', recoil: 3, side: 'alien' })).toBe(CX - ATLAS_UNIT / 2 + 3);
-    expect(x({ pose: 'fire', recoil: 3, flip: true })).toBe(CX - ATLAS_UNIT / 2 + 3);
+    const base = CX - ATLAS_UNIT / 2;
+    // назад від погляду: солдат праворуч → ліворуч; демон ліворуч → праворуч; дзеркало — навпаки
+    for (const [u, back] of [
+      [{ side: 'player' as const }, -3],
+      [{ side: 'alien' as const }, 3],
+      [{ side: 'player' as const, flip: true }, 3],
+      [{ side: 'alien' as const, flip: true }, -3],
+    ] as const) {
+      expect(left({ ...u, pose: 'fire', recoil: 3 }) - left({ ...u, pose: 'fire' }), JSON.stringify(u)).toBe(back);
+      // кадр і дуло (muzzlePoint) зсуваються однаково
+      const flip = 'flip' in u && u.flip === true;
+      expect(muzzlePoint(u.side, flip, CX, CY, 3).x - muzzlePoint(u.side, flip, CX, CY, 0).x).toBe(back);
+    }
+    expect(left({ pose: 'fire' })).toBe(base);
+  });
+
+  it('Т.132: у позі «вогонь» плашки числа HP немає (не накриває ствол), смуга HP лишається', () => {
+    readyAtlas();
+    const s = animCtx();
+    drawUnitSprite(s.ctx, soldier({ pose: 'fire', hp: 7 }));
+    expect(s.calls.some((c) => c.m === 'fillText')).toBe(false);
+    expect(s.calls.some((c) => c.m === 'fillRect' && (c.args as number[])[3] === HP_BAR_H)).toBe(true);
   });
 
   it('Т.132: дихання — стискання по висоті від низу кадру лише в позі «стій»', () => {

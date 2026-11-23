@@ -762,5 +762,5 @@ export function sparkOffset(at: Vec2, i: number, f: number): { dx: number; dy: n
 // 0..1 — поріг за хешем номера смуги, тож кадр розсипається нерівно, але детерміновано.
 export function dissolveKept(k: number, t: number): boolean {
   if (t <= 0) return true;
-  return ((k * 37) % 11) / 11 >= t * 1.25;
+  return ((k * 37) % 11) / 11 >= t;
 }

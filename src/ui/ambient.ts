@@ -148,7 +148,7 @@ export function paintBattleAmbient(ctx: CanvasRenderingContext2D, s: AmbientBatt
     if (fx >= AMBIENT_MAX_EFFECTS) break;
     if (u.maxHp <= 0 || u.hp / u.maxHp >= AMBIENT_HP_FRACTION) continue; // лише низький HP
     fx++; // hp-glow — по одному на пораненого юніта
-    // геометрія бейджа — константи render.ts (HP_BAR_*): підсвічування смуги HP
+    // геометрія бейджа — константи ядра render-core (HP_BAR_*): підсвічування смуги HP
     ctx.fillStyle = glow;
     ctx.fillRect(u.at.x * s.cell + (s.cell - HP_BAR_W) / 2, u.at.y * s.cell + s.cell / 2 + HP_BAR_Y, HP_BAR_W, HP_BAR_H);
   }
