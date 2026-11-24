@@ -1247,7 +1247,7 @@ describeScenario('П6.14: UX прицілювання — обведення ц�
 // «Граната» з клавіатури і дія меню, що вбиває останнього демона. У звичайному бою сторінки ці стани недосяжні
 // (на старті місії гранати немає, демон за 12 клітинок — далі за кидок, а демони мають 10 HP), тож блок
 // підміняє `createMission` обгорткою, що лише запам'ятовує створену місію (`vi.doMock` до `mountPage`), і
-// правити стан бою прямо: граната в оперативника, демон ближче, HP останнього демона. Код гри без змін;
+// править стан бою прямо: граната в оперативника, демон ближче, HP останнього демона. Код гри без змін;
 // `vi.doUnmock` в `afterAll` — наступні блоки монтують сторінку зі справжнім модулем.
 type CapturedMission = import('./core/mission').Mission;
 let fixtureMission: CapturedMission | null = null;
@@ -1307,10 +1307,16 @@ describe('Т.159: меню на ворогові з клавіатури — «�
   });
 
   step('«Граната» з клавіатури: граната зведена із зоною на демоні, меню закрито, фокус — на картці Олени', () => {
+    canvasOps.length = 0;
     keyboardClick(menuButton('grenade'));
     expect($('benemy').classList.contains('hidden')).toBe(true);
     expect(btn('btn-grenade').classList.contains('armed')).toBe(true);
-    expect($('binfo').textContent).toContain('Зона вибуху — епіцентр + хрест'); // зона на демоні — прев'ю першого тапу
+    expect($('binfo').textContent).toContain('Зона вибуху — епіцентр + хрест'); // прев'ю першого тапу
+    // зона саме на демоні (8,2): п'ять рамок після кольору прев'ю зони — епіцентр і хрест (grenadeZone), BCELL 48
+    const zoneAt = canvasOps.lastIndexOf('set:strokeStyle=rgba(255,159,64,0.8)');
+    expect(zoneAt).toBeGreaterThan(-1);
+    const rect = (x: number, y: number): string => 'strokeRect(' + (x * 48 + 2) + ',' + (y * 48 + 2) + ',43,43)';
+    expect(canvasOps.slice(zoneAt + 1, zoneAt + 6)).toEqual([rect(8, 2), rect(9, 2), rect(7, 2), rect(8, 3), rect(8, 1)]);
     const card = document.activeElement as HTMLElement;
     expect(card.classList.contains('sq-card')).toBe(true);
     expect(card.closest('#bsquad')).not.toBe(null);
@@ -1339,7 +1345,7 @@ describe('Т.159: меню на ворогові з клавіатури — «�
     expect($('bresult').textContent).toContain('ЗАЧИЩЕНО');
     expect(document.getElementById('btn-close')).not.toBe(null);
     expect($('benemy').classList.contains('hidden')).toBe(true);
-    // гілка `ui.battleResult === null` обробника: фокус не на картці смуги загону (її вже вимкнено)
+    // гілка `ui.battleResult === null` обробника: фокус не на картці смуги загону (смуга — під банером результату, ADR-0129 п. 3)
     expect((document.activeElement as HTMLElement).classList.contains('sq-card')).toBe(false);
   });
 });
