@@ -14,8 +14,8 @@
     "prepare": "husky",
     "lint": "eslint src scripts e2e",
     "lint:fix": "eslint src scripts e2e --fix",
-    "format": "prettier --write src index.html \"scripts/**/*.{ts,mjs}\" e2e AGENTS.md",
-    "format:check": "prettier --check src index.html \"scripts/**/*.{ts,mjs}\" e2e AGENTS.md",
+    "format": "prettier --write src index.html \"scripts/**/*.{ts,mjs}\" e2e AGENTS.md README.md",
+    "format:check": "prettier --check src index.html \"scripts/**/*.{ts,mjs}\" e2e AGENTS.md README.md",
     "docs": "typedoc"
   },
   "lint-staged": {
@@ -35,6 +35,9 @@
       "prettier --write"
     ],
     "AGENTS.md": [
+      "prettier --write"
+    ],
+    "./README.md": [
       "prettier --write"
     ]
   },
