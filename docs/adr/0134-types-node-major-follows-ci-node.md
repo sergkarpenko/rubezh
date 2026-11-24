@@ -9,13 +9,13 @@
 
 Груповий Dependabot-PR dev-залежностей #477 (24.11.2026) приніс шість оновлень: п'ять патчів і мінорів (`vitest` і `@vitest/coverage-v8` 5.1.0 → 5.1.1, `fast-check` 4.10.2 → 4.10.3, `lint-staged` 17.6.0 → 17.6.1, `typescript-eslint` 8.72.2 → 8.73.0) і одне мажорне — `@types/node` 22.20.5 → 26.6.6.
 
-Node у CI — 22 в усіх workflow (`node-version: 22` у `ci.yml`, `mutation.yml`, `preview.yml`, `preview-branch.yml`, `vibe-audit.yml`). `@types/node` дає типи для `scripts/*.ts` (`tsconfig.scripts.json`, `types: ["node"]`, ADR-0106). З типами Node 26 скрипт може викликати API, якого в Node 22 немає: `npx tsc --noEmit -p tsconfig.scripts.json` таку помилку пропустить, впаде лише запуск скрипта в CI чи в сесії. Збірки й тести PR #477 були зелені — розбіжність не проявилась, але й не перевіряється жодним гейтом.
+Node у CI — 22 у всіх п'яти workflow з `setup-node` (`node-version: 22` у `ci.yml`, `mutation.yml`, `preview.yml`, `preview-branch.yml`, `vibe-audit.yml`); `tag-version.yml` бере `node` з образу раннера лише щоб прочитати версію з `package.json`, скриптів і `tsc` не запускає. `@types/node` дає типи для `scripts/*.ts` (`tsconfig.scripts.json`, `types: ["node"]`, ADR-0106). З типами Node 26 скрипт може викликати API, якого в Node 22 немає: `npx tsc --noEmit -p tsconfig.scripts.json` таку помилку пропустить, впаде лише запуск скрипта в CI чи в сесії. Збірки й тести PR #477 були зелені — розбіжність не проявилась, але й не перевіряється жодним гейтом.
 
 ## Рішення
 
 1. У `.github/dependabot.yml` для екосистеми `npm` до правила `ignore` додано `@types/node`, `version-update:semver-major`. Мінорні й патч-оновлення `@types/node` у межах 22.x Dependabot пропонує, як і раніше.
 2. Мажор `@types/node` піднімається разом із `node-version` у workflow — окремим кроком за ADR-0012 і ADR-0018 (зміна workflow), не окремо від неї.
-3. П'ять сумісних оновлень із PR #477 внесено PR кроку Т.165 (коміт `chore(deps):`, ті самі версії, що й у #477), перевірені локально: `npm ci`, `npm test`, `tsc` ×3, `npm run lint`, `npm run format:check`, `npm run docs`, e2e. PR #477 після мержу PR кроку закривається коментарем із посиланням на цей ADR. Мерж PR власником = авторизація оновлень (ADR-0020).
+3. П'ять сумісних оновлень із PR #477 внесено PR кроку Т.165 (коміт `chore(deps):`, ті самі версії, що й у #477), перевірені локально: `npm ci`, `npm test`, `tsc` ×3, `npm run lint`, `npm run format:check`, `npm run docs`, e2e (5 сценаріїв на гілці кроку). PR #477 після мержу PR кроку закривається коментарем із посиланням на цей ADR. Мерж PR власником = авторизація оновлень (ADR-0020).
 
 ## Наслідки
 
