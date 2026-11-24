@@ -61,7 +61,7 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha || format('refs/pull/{0}/head', inputs.pr) }}
       - uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version: 26
       - name: Самоперевірка скрипта
         run: set -o pipefail; node scripts/audit-vibe-cli.mjs --self-test | tee /dev/stderr | grep -q 'помилок 0$'
       - name: Залежності і Vibe CLI
