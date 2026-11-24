@@ -41,6 +41,12 @@ import {
   animsFromEvents,
   boomParticleOffset,
   geoIsLand,
+  GEO_CELL_A,
+  GEO_CELL_B,
+  GEO_GRID_COLOR,
+  NIGHT_BG,
+  hasVisibleNeighbor,
+  terrainShade,
   GEO_LAND_ROWS,
   GEO_LAYOUT,
   geoTrailPoints,
@@ -75,7 +81,7 @@ import {
   unitFrameOrigin,
 } from './render-core';
 import { makeUnit, type GameEvent, type Unit } from './combat';
-import { createGeoGame, type GeoEvent } from './geo';
+import { WORLD_H, WORLD_W, createGeoGame, type GeoEvent } from './geo';
 
 const unit = (id: string, side: 'player' | 'alien', x: number, y: number): Unit => makeUnit({ id, side, pos: { x, y } });
 
@@ -1381,5 +1387,104 @@ describe('Т.160: старий код render-core (живі мутанти до 
     expect(kinds(animsFromEvents([{ type: 'overwatch', unitId: 's1', armed: true }], [s1]))).toEqual(['owflash']);
     expect(animsFromEvents([{ type: 'overwatch', unitId: 's1', armed: false }], [s1])).toEqual([]);
     expect(animsFromEvents([{ type: 'overwatch', unitId: 'ghost', armed: true }], [s1])).toEqual([]);
+  });
+});
+
+describe('Т.161: решта старого коду render-core (палітра, геосцена, туман, рушій, черга)', () => {
+  // Порожній рядок у fillStyle канва ігнорує мовчки — клітинка взяла б колір попередньої.
+  const HEX = /^#[0-9a-f]{6}$/;
+
+  it('палітра терену: у кожному з чотирьох наборів — чотири різні кольори #rrggbb, набори не перетинаються', () => {
+    const all = new Set<string>();
+    for (const blocked of [false, true])
+      for (const visible of [false, true]) {
+        const set = new Set<string>();
+        for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) set.add(terrainShade(x, y, blocked, visible));
+        expect(set.size).toBe(4);
+        for (const c of set) {
+          expect(c).toMatch(HEX);
+          all.add(c);
+        }
+      }
+    expect(all.size).toBe(16);
+  });
+
+  it('фон і тони геосцени — кольори #rrggbb, суша й океан різні; сітка — напівпрозорий rgba', () => {
+    for (const c of [NIGHT_BG, GEO_CELL_A, GEO_CELL_B]) expect(c).toMatch(HEX);
+    expect(GEO_CELL_A).not.toBe(GEO_CELL_B);
+    expect(GEO_GRID_COLOR).toMatch(/^rgba\(\d+,\d+,\d+,0\.\d+\)$/);
+  });
+
+  it('geoIsLand: рядок y = WORLD_H — океан і для довшого розкладу; коротший розклад не падає', () => {
+    const tall: GeoLayout = Array.from({ length: WORLD_H + 1 }, () => Array.from({ length: WORLD_W }, () => true));
+    expect(geoIsLand(tall, 3, WORLD_H - 1)).toBe(true);
+    expect(geoIsLand(tall, 3, WORLD_H)).toBe(false); // межа: y = WORLD_H — поза світом
+    expect(geoIsLand([], 3, 0)).toBe(false);
+    expect(geoIsLand(tall.slice(0, 2), 3, 5)).toBe(false);
+  });
+
+  it('hasVisibleNeighbor: кожен із чотирьох сусідів окремо — так; діагональ і сама клітинка — ні', () => {
+    for (const k of ['4,3', '6,3', '5,2', '5,4']) expect(hasVisibleNeighbor(new Set([k]), 5, 3)).toBe(true);
+    for (const k of ['4,2', '6,4', '4,4', '6,2', '5,3', '43', '53']) expect(hasVisibleNeighbor(new Set([k]), 5, 3)).toBe(false);
+  });
+
+  it('AnimEngine: busy і now; повторний push до кадру планує один кадр; push() без анімацій — один кадр до idle', () => {
+    let schedules = 0;
+    let draws = 0;
+    let idles = 0;
+    const frames: Array<(now: number) => void> = [];
+    const eng = new AnimEngine({
+      schedule: (cb) => {
+        schedules++;
+        frames.push(cb);
+        return schedules;
+      },
+      cancel: () => {},
+      draw: () => {
+        draws++;
+      },
+      onIdle: () => {
+        idles++;
+      },
+    });
+    expect(eng.busy).toBe(false);
+    eng.push(makeOwFlashAnim(unit('s1', 'player', 1, 1)));
+    eng.push(makeOwFlashAnim(unit('s1', 'player', 1, 1)));
+    expect(eng.busy).toBe(true);
+    expect(schedules).toBe(1); // кадр уже заплановано — другий push лише додає в чергу
+    frames.shift()!(1000);
+    expect(eng.now).toBe(1000);
+    // відлік — від старту анімації (1000), а не від нуля: через половину тривалості кадр ще той самий
+    frames.shift()!(1000 + OW_FLASH_MS / 2);
+    expect(eng.queued().length).toBe(2);
+    expect(eng.now).toBe(1000 + OW_FLASH_MS / 2);
+    eng.cancel();
+    frames.length = 0;
+    const before = { schedules, draws, idles };
+    eng.push();
+    expect(schedules).toBe(before.schedules + 1);
+    frames.shift()!(5000);
+    expect(draws).toBe(before.draws + 1);
+    expect(idles).toBe(before.idles + 1);
+    expect(frames.length).toBe(0);
+  });
+
+  it('AnimEngine без onIdle: черга спорожніла — кадр без помилки, далі не планується', () => {
+    const frames: Array<(now: number) => void> = [];
+    const eng = new AnimEngine({ schedule: (cb) => frames.push(cb), cancel: () => {}, draw: () => {} });
+    eng.push(makeOwFlashAnim(unit('s1', 'player', 1, 1)));
+    frames.shift()!(0);
+    expect(() => frames.shift()!(OW_FLASH_MS)).not.toThrow();
+    expect(eng.busy).toBe(false);
+    expect(frames.length).toBe(0);
+  });
+
+  it('pendingAlienMoveStarts: хід із порожнім шляхом позиції не дає; pendingDeathStarts: перша смерть, а не остання', () => {
+    const empty = makeMoveAnim(unit('a1', 'alien', 0, 0), [], false);
+    expect(pendingAlienMoveStarts([empty]).has('a1')).toBe(false);
+    const tr = makeTracerAnim('player', { x: 0, y: 0 }, { x: 1, y: 1 }, true);
+    const first = makeDeathAnim(unit('a1', 'alien', 2, 3));
+    const second = makeDeathAnim(unit('a1', 'alien', 7, 7));
+    expect(pendingDeathStarts([tr, first, second]).get('a1')).toEqual({ x: 2, y: 3 });
   });
 });

@@ -19,6 +19,7 @@
 // Кадри анімаційного шару (drawAnimFrame) — у src/render.frames.test.ts;
 // чиста логіка рушія — у src/core/render-core.test.ts (ADR-0038).
 
+import htmlRaw from '../index.html?raw';
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
   ATLAS_FRAME,
@@ -622,6 +623,11 @@ describe('П6.13: нічна палітра — терен і фон', () => {
     drawNightTerrain(s.ctx, 520, 520, [], 26);
     expect(s.ops[0]).toEqual({ set: 'fillStyle', v: NIGHT_BG });
     expect(s.ops[1]).toEqual({ m: 'fillRect', args: [0, 0, 520, 520] });
+  });
+
+  it('Т.161: NIGHT_BG — той самий колір, що CSS-тло канви в index.html (тряска оголяє край)', () => {
+    const m = /canvas \{[^}]*background: (#[0-9a-f]{6});/.exec(htmlRaw);
+    expect(m?.[1]).toBe(NIGHT_BG);
   });
 
   it('клітинки малюються зі стороною cell−1 (проміжок — під сітку, урок П6.6)', () => {
