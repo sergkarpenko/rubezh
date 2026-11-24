@@ -1190,7 +1190,14 @@ describeScenario('П6.14: UX прицілювання — обведення ц�
   step('кнопки без достатку AP — приглушені з причиною «не вистачає AP» (постріл → AP 3)', () => {
     // Т.131: другий постріл — кнопкою меню на ворогові (стріляє одразу): AP 6 − 3 = 3
     tap(16, 2);
-    document.querySelector<HTMLButtonElement>('#benemy [data-act="snap"]')!.click();
+    // Т.152: клік без миші (detail 0 — Enter / пробіл на кнопці у фокусі) — фокус на картку стрільця в смузі загону
+    const snap = document.querySelector<HTMLButtonElement>('#benemy [data-act="snap"]')!;
+    snap.focus();
+    snap.click();
+    const card = document.activeElement as HTMLElement;
+    expect(card.classList.contains('sq-card')).toBe(true);
+    expect(card.closest('#bsquad')).not.toBe(null);
+    expect(card.textContent).toContain('Олена');
     expect(unitLabel()).toContain('AP 3/10');
     expect($('binfo').textContent).toContain('Олена вистрілила (швидкий)');
     expect($('benemy').classList.contains('hidden')).toBe(true);
@@ -1222,6 +1229,17 @@ describeScenario('П6.14: UX прицілювання — обведення ц�
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  step('Т.152: дія меню на ворогові мишею (detail 1) фокус на картку стрільця не переносить', () => {
+    tap(16, 2);
+    expect($('benemy').classList.contains('hidden')).toBe(false);
+    const snap = document.querySelector<HTMLButtonElement>('#benemy [data-act="snap"]')!;
+    snap.focus(); // Chrome фокусує кнопку й на клік мишею
+    snap.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 }));
+    expect($('binfo').textContent).toContain('Олена вистрілила (швидкий)');
+    expect($('benemy').classList.contains('hidden')).toBe(true);
+    expect((document.activeElement as HTMLElement).classList.contains('sq-card')).toBe(false);
   });
 });
 
