@@ -16,8 +16,15 @@ const page = await browser.newPage({ viewport: { width: 960, height: 960 }, devi
 const errors: string[] = [];
 page.on('pageerror', (e) => errors.push(String(e)));
 await page.goto(`http://localhost:${port}/rubezh/scripts/stand.html?${query}`);
-await page.waitForSelector('body[data-ready="1"]', { timeout: 15000 });
-await page.locator('#stand').screenshot({ path: out });
+// помилки сторінки друкуються й тоді, коли стенд не дійшов до готовності
+try {
+  await page.waitForSelector('body[data-ready="1"], body[data-error]', { timeout: 15000 });
+  const failed = await page.evaluate(() => document.body.dataset.error);
+  if (failed !== undefined) errors.push('ассет не завантажився: ' + failed);
+  else await page.locator('#stand').screenshot({ path: out });
+} catch (e) {
+  errors.push(String(e));
+}
 await browser.close();
 if (errors.length) {
   console.error(errors.join('\n'));

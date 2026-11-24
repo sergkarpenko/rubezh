@@ -5,7 +5,7 @@
 // Поза збіркою гри: `npx vite --port 4180` з кореня клону, сторінка
 //   http://localhost:4180/rubezh/scripts/stand.html?seed=1&density=0.08&fog=0
 // seed і density — аргументи `makeTestMap` (поле 20 × 20); fog — стовпчик, з якого клітинки в тумані (0 — без
-// туману). Готовність — `data-ready="1"` на `body`; знімок — scripts/stand-shot.ts.
+// туману). Готовність — `data-ready="1"` на `body`, невдале завантаження ассета — `data-error`; знімок — scripts/stand-shot.ts.
 import { drawNightTerrain, initMetroMap, initMetroTiles, isMetroTerrainReady } from '../src/render';
 import { makeTestMap } from '../src/core/map';
 import type { TerrainCell } from '../src/core/render-core';
@@ -22,9 +22,13 @@ const cells: TerrainCell[] = [];
 for (let y = 0; y < map.height; y++)
   for (let x = 0; x < map.width; x++) cells.push({ x, y, blocked: map.blocked.has(x + ',' + y), visible: fog <= 0 || x < fog });
 
+// ассет не завантажився — `data-error` з адресою на `body` замість безкінечного очікування
 const load = (url: string, onLoad: (img: CanvasImageSource) => void): void => {
   const img = new Image();
   img.onload = () => onLoad(img);
+  img.onerror = () => {
+    document.body.dataset.error = url;
+  };
   img.src = url;
 };
 initMetroMap(load);
@@ -34,7 +38,7 @@ const canvas = document.getElementById('stand') as HTMLCanvasElement;
 const ctx = canvas.getContext('2d') as CanvasRenderingContext2D;
 const draw = (): void => {
   if (!isMetroTerrainReady()) {
-    requestAnimationFrame(draw);
+    if (document.body.dataset.error === undefined) requestAnimationFrame(draw);
     return;
   }
   drawNightTerrain(ctx, canvas.width, canvas.height, cells, BCELL);

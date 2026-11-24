@@ -1,12 +1,12 @@
 // scripts/measure-layout.ts — виміри «`main` проти гілки» (Т.123–Т.132, кандидат процесу 124, Т.163):
 // прямокутники кнопок і панелей на кількох розмірах вікна → JSON у stdout; дві збірки — два файли, `diff`.
 // Поза npm test і test:e2e. Збірки піднімати окремо (docs/agents/ui.md, «Крок вигляду»):
-//   npx vite preview --port 4175 --strictPort   (з копії dist main)   і   … --port 4176 (гілка)
+//   npx vite preview --port 4175 --strictPort --outDir /tmp/dist-main   (копія dist main)   і   npx vite preview --port 4176 --strictPort (гілка)
 // Запуск із кореня клону:
 //   E2E_CHROME=/шлях/до/chrome node scripts/run-ts.mjs scripts/measure-layout.ts <адреса> [dj] [--sizes 1366x768,390x844] > main.json
 //   diff main.json branch.json
 // dj — шрифт DejaVu Sans замість Inter (варіант, де ширшає текст). Стани: стартовий екран, геосцена (сід 42,
-// вкладка «База», зонд з кнопкою місії), розгорнутий журнал, бій. Число кнопок вкладок чи карток змінюється
+// вкладка «Вузол», зонд з кнопкою місії), розгорнутий журнал, бій. Число кнопок вкладок чи карток змінюється
 // навмисно лише тоді, коли крок їх міняє; решта різниці — розміри, які крок міняти не мав (ADR-0115).
 import { chromium, type Page } from '@playwright/test';
 
@@ -59,6 +59,8 @@ for (const [w, h] of sizes) {
   await p.locator('#status-tab-base').click();
   const m = p.locator('#ufos button.mission').first();
   for (let i = 0; i < 200 && !(await m.isVisible()); i++) await p.locator('#btn-tick').click();
+  if (!(await m.isVisible()))
+    throw new Error(`${w}x${h}: за 200 тіків (сід 42) кнопки місії немає — стан геосцени інший, ніж чекає скрипт`);
   out[k + ' geo'] = {
     topbar: await rects(p, '#topbar button'),
     tabs: await rects(p, '#status-tabs button'),
