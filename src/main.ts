@@ -789,7 +789,15 @@ if (typeof document !== 'undefined') {
   el('benemy').addEventListener('click', (ev) => {
     const b = (ev.target as Element).closest<HTMLButtonElement>('button[data-act]');
     if (b === null || b.disabled || b.dataset.act === undefined || autoBattle.busy) return;
+    // Т.152 (рішення власника «А. Картка стрільця»): дія з клавіатури (Enter / пробіл на кнопці у фокусі —
+    // клік без кліків миші, detail 0) — фокус на картку стрільця в смузі загону: меню закривається,
+    // і без цього фокус падав на body (наступний Tab — з верху сторінки). Клік мишею фокус не рухає.
+    const shooter = ev.detail === 0 && b === document.activeElement ? battle.selectedUnit()?.id : undefined;
     input.enemyMenuAction(b.dataset.act);
+    if (shooter !== undefined)
+      el('bsquad')
+        .querySelector<HTMLElement>('.sq-card[data-unit="' + shooter + '"]')
+        ?.focus();
   });
   // Т.131: зміна вікна (поворот планшета) — меню на ворогові стає біля демона на новому полі.
   // Т.137: канва бою — теж одразу: товщина штриха й межі туману, лінія шляху і плашка ціни тримають
