@@ -29,7 +29,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version: 26
       # ADR-0076: строго за lockfile (урок П9.4 — дрейф node_modules від lockfile)
       - run: npm ci
       # ADR-0113: кожен workflow задає defaults.run.shell: bash (pipefail) — новий workflow
@@ -79,7 +79,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version: 26
       - run: npm ci
       - name: npm test у перемішаному порядку
         env:
@@ -102,7 +102,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version: 26
       - run: npm ci
       # Типи сценарію і дзеркала: Playwright, як і vitest, типів не перевіряє
       - run: npx tsc --noEmit -p tsconfig.e2e.json

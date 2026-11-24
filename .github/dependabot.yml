@@ -20,8 +20,8 @@ updates:
     ignore:
       - dependency-name: "typescript"
         update-types: ["version-update:semver-major"]
-      # ADR-0134: мажор @types/node — лише разом із node-version у workflow (зараз 22):
-      # типи новішого Node пропускають у tsc API, якого в Node 22 немає (PR #477).
+      # ADR-0134: мажор @types/node — лише разом із node-version у workflow (зараз 26, ADR-0138):
+      # типи новішого Node пропускають у tsc API, якого в Node у CI немає (PR #477).
       - dependency-name: "@types/node"
         update-types: ["version-update:semver-major"]
     commit-message:
