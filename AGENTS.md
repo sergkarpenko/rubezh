@@ -178,9 +178,9 @@ npm test
 npx tsc --noEmit
 # Ядро без DOM (ADR-0002/0079): src/core компілюється без lib.dom
 npx tsc --noEmit -p tsconfig.core.json
-# Скрипти scripts/*.ts з типами Node (ADR-0106)
+# Скрипти scripts/*.ts і кореневі playwright*.config.ts з типами Node (ADR-0106, ADR-0140)
 npx tsc --noEmit -p tsconfig.scripts.json
-# Лінт (src, scripts і e2e, ADR-0106, ADR-0111), зокрема правила ядра (ADR-0079): Math.random/годинник/імпорти поза src/core
+# Лінт (src, scripts, e2e і playwright*.config.ts, ADR-0106, ADR-0111, ADR-0140), зокрема правила ядра (ADR-0079): Math.random/годинник/імпорти поза src/core
 npm run lint
 # typedoc = генерація довідки API (ADR-0016/0019)
 npm run docs
