@@ -1847,5 +1847,8 @@ test('Т.171: шрифт сторінки в e2e — DejaVu Sans (fonts.conf)', 
   });
   // DejaVu Sans є в системі: інакше другий рядок упав би на monospace
   expect(m.dejavu, 'DejaVu Sans не встановлено — шрифт «Як грати» і гейти ширини не ті').not.toBeCloseTo(m.mono, 1);
-  expect(m.body, 'system-ui сторінки — не DejaVu Sans: FONTCONFIG_FILE не дійшов до браузера').toBeCloseTo(m.dejavu, 2);
+  expect(
+    m.body,
+    'system-ui сторінки — не DejaVu Sans: FONTCONFIG_FILE не дійшов до браузера (у CI без нього теж DejaVu — там гейт ловить лише відсутність шрифту)'
+  ).toBeCloseTo(m.dejavu, 2);
 });
