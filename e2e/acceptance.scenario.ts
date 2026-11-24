@@ -1712,7 +1712,7 @@ test('Т.164: стартовий екран без ассета логотипа
     const m = await page.evaluate(() => {
       const text = document.querySelector('#start-logo .start-logo-text')!;
       const range = document.createRange();
-      range.selectNodeContents(text); // рамка гліфів без хвостового letter-spacing — через відступ спана
+      range.selectNodeContents(text); // рамка Range містить хвостовий letter-spacing — нижче віднімаємо ls
       const g = range.getBoundingClientRect();
       const box = document.getElementById('start-logo')!.getBoundingClientRect();
       const menu = document.querySelector('#start-screen .start-menu')!.getBoundingClientRect();
