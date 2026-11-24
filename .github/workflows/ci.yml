@@ -1,5 +1,6 @@
 # CI-гейт на PR (ADR-0025/0035/0076): типи + лінт + формат + тести + поріг покриття + звіт на Codecov (гейт codecov/patch, ADR-0034) + збірка + docs — без деплою.
 # Джоба «e2e» (ADR-0080): сценарій приймання в браузері.
+# Джоба «shuffle» (ADR-0128): npm test у перемішаному порядку, не обов'язковий чек.
 # Працює при кожному PR у main; чек «test» — required status check
 # для захисту гілки main (той самий рубіж, що й preview на push).
 name: ci
@@ -67,6 +68,29 @@ jobs:
       - run: npm run build
       # TypeDoc-довідка (ADR-0019) — перевірка генерації на PR
       - run: npm run docs
+
+  # ADR-0128: тести в перемішаному порядку (--sequence.shuffle) — ловить тести, що
+  # залежать від порядку (стаби без повернення, фейк-таймери — Т.149, Т.150). Окрема
+  # джоба, не обов'язковий чек: червона джоба мерж не блокує, але її видно в PR.
+  # Сід — з номера прогону: новий пуш — новий порядок, «Re-run» — той самий.
+  shuffle:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - run: npm ci
+      - name: npm test у перемішаному порядку
+        env:
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          seed=$(( RUN_ID % 1000000 ))
+          echo "Сід перемішування: $seed"
+          echo "Відтворити локально: npx vitest run --sequence.shuffle --sequence.seed=$seed"
+          echo "### Shuffle: сід $seed" >> "$GITHUB_STEP_SUMMARY"
+          echo "\`npx vitest run --sequence.shuffle --sequence.seed=$seed\`" >> "$GITHUB_STEP_SUMMARY"
+          npx vitest run --sequence.shuffle --sequence.seed="$seed"
 
   # ADR-0080: сценарій приймання — smoke-сценарій ADR-0030 у браузері проти збірки
   # цього ж коміту (vite build + vite preview піднімає сам Playwright), звірка
