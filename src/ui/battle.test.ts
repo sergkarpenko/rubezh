@@ -315,41 +315,44 @@ describe('battle: флоу місії (запуск/закриття/завер�
 
   it('Т.33: плашка ходу демонів — поки грають анімації і не менше секунди; далі підсумок до першої дії', () => {
     vi.useFakeTimers();
-    let queue: unknown[] = [{}];
-    const f = makeFixture({ hasRaf: () => true });
-    f.deps.anim.queued = () => queue as never;
-    f.battle.launch(firstTarget(f));
-    const plate = document.getElementById('bturn')!;
-    f.battle.alienTurnDone(f.ui.mission!.state.log.length, 'Ваш хід.');
-    f.battle.renderBattle();
-    expect(document.getElementById('binfo')!.textContent).toBe('');
-    expect(document.getElementById('bctx-turn')!.textContent).toBe('хід демонів Розриву');
-    expect(plate.classList.contains('hidden')).toBe(false);
-    expect(plate.classList.contains('done')).toBe(false);
-    expect(plate.textContent).toBe('ХІД ДЕМОНІВ РОЗРИВУ…Демони діють. Зачекайте.Клік / пробіл / Esc — пропустити');
-    expect(f.battle.playerTurnActive()).toBe(false); // хід гравця не починається
-    expect((document.getElementById('btn-end') as HTMLButtonElement).disabled).toBe(true);
-    f.battle.dismissTurnPlate(); // дія гравця плашку ходу не прибирає
-    vi.advanceTimersByTime(1000); // секунда минула, анімації ще в черзі
-    expect(f.battle.playerTurnActive()).toBe(false);
-    queue = [];
-    vi.advanceTimersByTime(100);
-    f.battle.renderBattle();
-    expect(f.battle.playerTurnActive()).toBe(true);
-    expect(plate.classList.contains('done')).toBe(true);
-    expect(document.getElementById('binfo')!.textContent).toBe('Ваш хід.');
-    expect(document.getElementById('bctx-turn')!.textContent).toMatch(/^хід \d+ · загін$/);
-    expect(plate.textContent).toBe('ХІД ДЕМОНІВ РОЗРИВУ — ПІДСУМОКДемони не атакували.Демонів у полі зору: 0');
-    f.battle.dismissTurnPlate();
-    expect(plate.classList.contains('hidden')).toBe(true);
-    f.battle.alienTurnDone(f.ui.mission!.state.log.length, '');
-    f.battle.dismissTurnPlate(true);
-    expect(f.battle.playerTurnActive()).toBe(true);
-    f.battle.alienTurnDone(f.ui.mission!.state.log.length, '');
-    f.battle.close();
-    vi.advanceTimersByTime(5000);
-    f.battle.alienTurnDone(0, ''); // без місії — нічого
-    vi.useRealTimers();
+    try {
+      let queue: unknown[] = [{}];
+      const f = makeFixture({ hasRaf: () => true });
+      f.deps.anim.queued = () => queue as never;
+      f.battle.launch(firstTarget(f));
+      const plate = document.getElementById('bturn')!;
+      f.battle.alienTurnDone(f.ui.mission!.state.log.length, 'Ваш хід.');
+      f.battle.renderBattle();
+      expect(document.getElementById('binfo')!.textContent).toBe('');
+      expect(document.getElementById('bctx-turn')!.textContent).toBe('хід демонів Розриву');
+      expect(plate.classList.contains('hidden')).toBe(false);
+      expect(plate.classList.contains('done')).toBe(false);
+      expect(plate.textContent).toBe('ХІД ДЕМОНІВ РОЗРИВУ…Демони діють. Зачекайте.Клік / пробіл / Esc — пропустити');
+      expect(f.battle.playerTurnActive()).toBe(false); // хід гравця не починається
+      expect((document.getElementById('btn-end') as HTMLButtonElement).disabled).toBe(true);
+      f.battle.dismissTurnPlate(); // дія гравця плашку ходу не прибирає
+      vi.advanceTimersByTime(1000); // секунда минула, анімації ще в черзі
+      expect(f.battle.playerTurnActive()).toBe(false);
+      queue = [];
+      vi.advanceTimersByTime(100);
+      f.battle.renderBattle();
+      expect(f.battle.playerTurnActive()).toBe(true);
+      expect(plate.classList.contains('done')).toBe(true);
+      expect(document.getElementById('binfo')!.textContent).toBe('Ваш хід.');
+      expect(document.getElementById('bctx-turn')!.textContent).toMatch(/^хід \d+ · загін$/);
+      expect(plate.textContent).toBe('ХІД ДЕМОНІВ РОЗРИВУ — ПІДСУМОКДемони не атакували.Демонів у полі зору: 0');
+      f.battle.dismissTurnPlate();
+      expect(plate.classList.contains('hidden')).toBe(true);
+      f.battle.alienTurnDone(f.ui.mission!.state.log.length, '');
+      f.battle.dismissTurnPlate(true);
+      expect(f.battle.playerTurnActive()).toBe(true);
+      f.battle.alienTurnDone(f.ui.mission!.state.log.length, '');
+      f.battle.close();
+      vi.advanceTimersByTime(5000);
+      f.battle.alienTurnDone(0, ''); // без місії — нічого
+    } finally {
+      vi.useRealTimers(); // Т.150: і на падінні — фейк-таймери не протікають у наступні тести під shuffle
+    }
   });
 
   it('Т.117: пропуск плашки «діють» — черга анімацій скидається, одразу підсумок; без плашки і в авто-бої пропуску немає', () => {
