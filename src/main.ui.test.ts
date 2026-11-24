@@ -1243,6 +1243,113 @@ describeScenario('П6.14: UX прицілювання — обведення ц�
   });
 });
 
+// Т.159 (кандидат 15): фікстура рідкісного стану для гілок обробника `#benemy` (ADR-0129, `src/main.ts`):
+// «Граната» з клавіатури і дія меню, що вбиває останнього демона. У звичайному бою сторінки ці стани недосяжні
+// (на старті місії гранати немає, демон за 12 клітинок — далі за кидок, а демони мають 10 HP), тож блок
+// підміняє `createMission` обгорткою, що лише запам'ятовує створену місію (`vi.doMock` до `mountPage`), і
+// править стан бою прямо: граната в оперативника, демон ближче, HP останнього демона. Код гри без змін;
+// `vi.doUnmock` в `afterAll` — наступні блоки монтують сторінку зі справжнім модулем.
+type CapturedMission = import('./core/mission').Mission;
+let fixtureMission: CapturedMission | null = null;
+describe('Т.159: меню на ворогові з клавіатури — «Граната» і бій, що скінчився дією меню (ADR-0129)', { shuffle: false }, () => {
+  beforeAll(async () => {
+    vi.doMock('./core/mission', async (importOriginal) => {
+      const orig = await importOriginal<typeof import('./core/mission')>();
+      return {
+        ...orig,
+        createMission: (...args: Parameters<typeof orig.createMission>): CapturedMission => {
+          fixtureMission = orig.createMission(...args);
+          return fixtureMission;
+        },
+      };
+    });
+    fixtureMission = null;
+    await mountPage();
+  });
+  afterAll(() => {
+    vi.doUnmock('./core/mission');
+    fixtureMission = null;
+  });
+  const step = scenarioSteps((n, f, t) => it(n, f, t));
+  const tap = (x: number, y: number): void => {
+    $('battle').dispatchEvent(new MouseEvent('click', { clientX: x * 48 + 24, clientY: y * 48 + 24 }));
+  };
+  const state = (): CapturedMission['state'] => fixtureMission!.state;
+  const unitNamed = (name: string) => state().units.find((u) => u.name === name)!;
+  const aliens = () => state().units.filter((u) => u.side === 'alien');
+  const menuButton = (act: string): HTMLButtonElement => document.querySelector<HTMLButtonElement>('#benemy [data-act="' + act + '"]')!;
+  // клік клавіатурою: Enter / пробіл на кнопці у фокусі — click() з detail 0
+  const keyboardClick = (b: HTMLButtonElement): void => {
+    b.focus();
+    b.click();
+  };
+
+  step('підготовка: сід 42 → місія; фікстура — граната в Олени (3,2), демон a2 на (8,2) у межах кидка', () => {
+    startParty();
+    let found = false;
+    for (let i = 0; i < 1500 && !found; i++) {
+      btn('btn-tick').click();
+      found = document.querySelector('button.mission') !== null;
+    }
+    expect(found).toBe(true);
+    (document.querySelector('button.mission') as HTMLButtonElement).click();
+    expect(fixtureMission).not.toBe(null); // обгортка бачила createMission сторінки
+    const olena = unitNamed('Олена');
+    expect(olena.pos).toEqual({ x: 3, y: 2 });
+    state().items = { ...state().items, [olena.id]: { medkit: false, grenade: true } };
+    const a2 = aliens().find((u) => u.id === 'a2')!;
+    a2.pos = { x: 8, y: 2 }; // відстань 5 ≤ GRENADE_RANGE 6
+    tap(3, 2); // вибір Олени
+    expect(unitLabel()).toContain('Олена');
+    tap(8, 2); // тап по видимому демону без зведеного режиму — меню
+    expect($('benemy').classList.contains('hidden')).toBe(false);
+    expect(menuButton('grenade').disabled).toBe(false);
+  });
+
+  step('«Граната» з клавіатури: граната зведена із зоною на демоні, меню закрито, фокус — на картці Олени', () => {
+    canvasOps.length = 0;
+    keyboardClick(menuButton('grenade'));
+    expect($('benemy').classList.contains('hidden')).toBe(true);
+    expect(btn('btn-grenade').classList.contains('armed')).toBe(true);
+    expect($('binfo').textContent).toContain('Зона вибуху — епіцентр + хрест'); // прев'ю першого тапу
+    // зона саме на демоні (8,2): п'ять рамок після кольору прев'ю зони — епіцентр і хрест (grenadeZone), BCELL 48
+    const zoneAt = canvasOps.lastIndexOf('set:strokeStyle=rgba(255,159,64,0.8)');
+    expect(zoneAt).toBeGreaterThan(-1);
+    const rect = (x: number, y: number): string => 'strokeRect(' + (x * 48 + 2) + ',' + (y * 48 + 2) + ',43,43)';
+    expect(canvasOps.slice(zoneAt + 1, zoneAt + 6)).toEqual([rect(8, 2), rect(9, 2), rect(7, 2), rect(8, 3), rect(8, 1)]);
+    const card = document.activeElement as HTMLElement;
+    expect(card.classList.contains('sq-card')).toBe(true);
+    expect(card.closest('#bsquad')).not.toBe(null);
+    expect(card.dataset.unit).toBe(unitNamed('Олена').id);
+    expect(unitLabel()).toContain('AP 10/10'); // зведення — не кидок
+    expect(state().items?.[unitNamed('Олена').id]?.grenade).toBe(true);
+  });
+
+  step('останній демон гине від дії меню з клавіатури: перемога, фокус на картку стрільця не переходить', () => {
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true })); // зняти гранату
+    expect(btn('btn-grenade').classList.contains('armed')).toBe(false);
+    for (const a of aliens()) {
+      if (a.id === 'a2') continue;
+      a.hp = 0;
+      a.alive = false;
+    }
+    const a2 = aliens().find((u) => u.id === 'a2')!;
+    a2.hp = 1; // будь-яке влучання вбиває
+    // постріл може схибити (RNG сіду): кнопка «Швидкий» з клавіатури, доки бій не скінчиться або не скінчиться AP
+    for (let i = 0; i < 3 && a2.alive; i++) {
+      tap(8, 2);
+      expect($('benemy').classList.contains('hidden')).toBe(false);
+      keyboardClick(menuButton('snap'));
+    }
+    expect(a2.alive).toBe(false);
+    expect($('bresult').textContent).toContain('ЗАЧИЩЕНО');
+    expect(document.getElementById('btn-close')).not.toBe(null);
+    expect($('benemy').classList.contains('hidden')).toBe(true);
+    // гілка `ui.battleResult === null` обробника: фокус не на картці смуги загону (смуга — під банером результату, ADR-0129 п. 3)
+    expect((document.activeElement as HTMLElement).classList.contains('sq-card')).toBe(false);
+  });
+});
+
 // П7.4 (ADR-0021/0032): критичний флоу економіки винищувача — «запуск → бій →
 // пошкодження → ремонт → знову готовий». Ремонт — гроші + тіки (патерн лікарні);
 // під час ремонту запуск перехоплення заблокований; банкрутство не змінюється.
