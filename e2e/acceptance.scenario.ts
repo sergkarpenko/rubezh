@@ -1690,6 +1690,55 @@ test('Т.61: екран перемоги і рядок-пояснення ста
   expect(errors, 'помилки сторінки: ' + errors.join(' | ')).toEqual([]);
 });
 
+// Т.164 (кандидат 153, рішення власника «А. По центру»): без ассета логотипа (офлайн, збій запиту) лишається
+// текстовий «РУБІЖ», ширший за рамку логотипа; виступав праворуч — прокрутка вбік на 320 × 568, на 568 × 270 — під
+// меню. Тут запит картинки логотипа перервано (лише `image` — модульні імпорти `vite` не чіпати, урок Т.163).
+test('Т.164: стартовий екран без ассета логотипа — текстовий логотип по центру, без прокрутки вбік', async ({ page }) => {
+  const errors = watchErrors(page); // перерваний логотип теж дає «Failed to load resource» — звірка нижче
+  const failed: string[] = [];
+  page.on('console', (m) => {
+    if (m.type() === 'error' && /\/logo[^/]*\.webp$/.test(m.location().url)) failed.push(m.location().url);
+  });
+  await page.route('**/logo*.webp', (r) => (r.request().resourceType() === 'image' ? r.abort() : r.continue()));
+  await page.goto('./');
+  const helpClose = page.locator('#btn-help-close'); // перший візит — «Як грати» поверх стартового екрана
+  if (await helpClose.isVisible()) await helpClose.click();
+  await expect(page.locator('#start-logo .start-logo-text')).toBeVisible();
+  // T94_VIEWPORTS і вікна, де виступ був лише з DejaVu Sans (360 × 640, 340 × 568), та 1366 × 768 (П14.7)
+  const sizes = [...T94_VIEWPORTS, { width: 360, height: 640 }, { width: 340, height: 568 }, { width: 1366, height: 768 }];
+  for (const size of sizes) {
+    await page.setViewportSize(size);
+    const label = 'Т.164 без ассета ' + size.width + ' × ' + size.height;
+    const m = await page.evaluate(() => {
+      const text = document.querySelector('#start-logo .start-logo-text')!;
+      const range = document.createRange();
+      range.selectNodeContents(text); // рамка гліфів без хвостового letter-spacing — через відступ спана
+      const g = range.getBoundingClientRect();
+      const box = document.getElementById('start-logo')!.getBoundingClientRect();
+      const menu = document.querySelector('#start-screen .start-menu')!.getBoundingClientRect();
+      const sc = document.getElementById('start-screen')!;
+      const ls = parseFloat(getComputedStyle(text).letterSpacing) || 0;
+      return {
+        l: g.left,
+        r: g.right - ls,
+        t: g.top,
+        b: g.bottom,
+        mid: (box.left + box.right) / 2,
+        menu: { l: menu.left, r: menu.right, t: menu.top, b: menu.bottom },
+        w: innerWidth,
+        hscroll: sc.scrollWidth - sc.clientWidth,
+      };
+    });
+    expect(m.hscroll, label + ': стартовий екран прокручується вбік').toBeLessThanOrEqual(1);
+    expect(m.l >= 0 && m.r <= m.w, label + ': текстовий логотип за краєм вікна').toBe(true);
+    expect(Math.abs((m.l + m.r) / 2 - m.mid), label + ': текстовий логотип не по центру рамки').toBeLessThanOrEqual(2);
+    const cross = Math.min(m.b, m.menu.b) - Math.max(m.t, m.menu.t) > 0 && Math.min(m.r, m.menu.r) - Math.max(m.l, m.menu.l) > 0;
+    expect(cross, label + ': текстовий логотип накриває меню').toBe(false);
+  }
+  expect(failed.length, 'запит логотипа не перервано').toBeGreaterThan(0);
+  expect(errors.length, 'помилки сторінки поза перерваним логотипом: ' + errors.join(' | ')).toBe(failed.length);
+});
+
 // Т.71 (рішення власника 18.11.2026; в описі обраного варіанта — e2e до банера): загін покидає бій з синіх клітинок висадки —
 // плиткою, клавішею V і, для останнього, через вікно підтвердження — до банера «ЗАГІН ЕВАКУЙОВАНО».
 test('Т.71: евакуація — плитка, клавіша V і вікно для останнього до банера «ЗАГІН ЕВАКУЙОВАНО»', async ({ page }) => {
