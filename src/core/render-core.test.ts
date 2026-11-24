@@ -1415,7 +1415,7 @@ describe('Т.161: решта старого коду render-core (палітра
     expect(GEO_GRID_COLOR).toMatch(/^rgba\(\d+,\d+,\d+,0\.\d+\)$/);
   });
 
-  it('geoIsLand: рядки за межами світу — океан і для довшого розкладу; коротший розклад не падає', () => {
+  it('geoIsLand: рядок y = WORLD_H — океан і для довшого розкладу; коротший розклад не падає', () => {
     const tall: GeoLayout = Array.from({ length: WORLD_H + 1 }, () => Array.from({ length: WORLD_W }, () => true));
     expect(geoIsLand(tall, 3, WORLD_H - 1)).toBe(true);
     expect(geoIsLand(tall, 3, WORLD_H)).toBe(false); // межа: y = WORLD_H — поза світом
