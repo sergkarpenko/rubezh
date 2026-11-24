@@ -1171,6 +1171,8 @@ describe('Т.160: старий код render-core (живі мутанти до 
       expect(o.dy).toBeCloseTo(dy, 12);
     }
     expect(boomParticleOffset({ x: 5, y: 2 }, 3, -0.5)).toEqual({ dx: 0, dy: 0 }); // без «зворотного» розльоту
+    // t ≈ 1e-17: 1 − t округлюється до 1, відстань 0 — від'ємні cos / sin дали б −0 без «+ 0»
+    expect(boomParticleOffset({ x: 5, y: 2 }, 3, 1e-17)).toEqual({ dx: 0, dy: 0 });
   });
 
   it('shakeOffset вибуху: перший кадр (t = 0) без зсуву; зафіксовані зсуви; без −0', () => {
