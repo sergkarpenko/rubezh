@@ -84,7 +84,7 @@
 - `codecov/patch` на коміті лише з документів може висіти `in_progress` без назви й тексту (залишки Т.58: ≈ 35 хв); перезапуск прогону `ci` (`gh api -X POST repos/sergkarpenko/rubezh/actions/runs/<id>/rerun`) дав зелений за ≈ 3 хв. Чекати не довше ≈ 10 хв після зелених `test` і `e2e` (спостереження сесії після мержу залишків Т.58).
 - Перевірка `main` без клону: `git ls-remote https://github.com/sergkarpenko/rubezh.git refs/heads/main`.
 - Червоний `e2e` може бути і на кроці apt (`Could not wait for server fd`, шрифти Playwright), не лише на `playwright install` — так само `rerun-failed-jobs` (Т.75, ≈ 3 хв).
-- Правка опису PR (`PATCH`) перезапускає обов'язковий `pr-size` — мерж через REST одразу після неї дає 405 «in progress»; повторювати циклом ≈ 15 с (спостереження пачки 1 PR Vibe, перенесено з розділу «Задача з issue» в Т.81).
+- Правка опису PR (`PATCH`) перезапускає обов'язкові `pr-size` і `check` (`check` — з Т.156, ADR-0132) — мерж через REST одразу після неї дає 405 «in progress»; повторювати циклом ≈ 15 с (спостереження пачки 1 PR Vibe, перенесено з розділу «Задача з issue» в Т.81).
 
 - **Один сценарій e2e з виводом у сесії** (Т.117): `npx playwright test -c playwright.e2e.config.ts -g "ADR-0030" --reporter=line` — `-g` за назвою сценарію («ADR-0030» — основний), `--reporter=line` — щоб вивід не губився; конфіг сам збирає й піднімає прев'ю, тож поломку в `index.html` чи `src/` він бачить без окремого `npm run build`.
 
