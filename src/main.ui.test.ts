@@ -17,7 +17,7 @@
 // П13.3 (ADR-0067): авто-бій — покрокове відтворення; фейк-таймери прокручують паузи
 // між діями ботів, поки бій не дійде до результату (банер у #bresult).
 
-import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 // index.html — через ?raw-імпорт (vitest/vite): без node:fs і process.cwd(), тож
 // @types/node не потрібен (ADR-0012 — нових залежностей немає; tsconfig.json не чіпаємо).
 import htmlRaw from '../index.html?raw';
@@ -3145,7 +3145,7 @@ describe('Т.143: «менше руху» змінилось — перемал�
     try {
       await mountPage();
     } finally {
-      vi.unstubAllGlobals();
+      vi.stubGlobal('matchMedia', undefined); // Т.149: не unstubAllGlobals — він знімає й стаб rAF П6.16
     }
   });
   it('Т.143: подія change медіазапиту перемальовує геосцену і канву бою один раз, стартовий екран — ні', () => {
@@ -3173,5 +3173,77 @@ describe('Т.143: «менше руху» змінилось — перемал�
     matches = false;
     changes[0]!();
     expect(note.classList.contains('hidden')).toBe(true);
+  });
+});
+
+// Т.149 (кандидат 143, аудит PR #458): слухач change медіазапиту «менше руху» мусить кликати
+// ambient.motionChanged() — без нього цикл ambient не зупиняється, коли «менше руху» увімкнулось, і не
+// поновлюється, коли його знято. Решта тестів сторінки монтує main.ts без rAF (П6.16: hasRaf = false, цикл
+// не планується), тому зникнення виклику їх не червонить. Тут rAF — заглушка, що лише збирає колбеки
+// (кадрів не грає), cancelAnimationFrame — журнал; стаби живуть увесь блок: schedule і cancel ambient
+// читають глобальні функції в момент виклику.
+describe('Т.149: «менше руху» змінилось — цикл ambient зупинено і поновлено', { shuffle: false }, () => {
+  const changes: (() => void)[] = [];
+  let matches = false;
+  const scheduled: number[] = []; // хендли, видані rAF-заглушкою
+  const cancelled: number[] = [];
+  beforeAll(async () => {
+    const mql = {
+      get matches() {
+        return matches;
+      },
+      media: '(prefers-reduced-motion: reduce)',
+      addEventListener: (_type: string, fn: () => void) => changes.push(fn),
+      removeEventListener: () => undefined,
+    };
+    vi.stubGlobal('matchMedia', () => mql);
+    vi.stubGlobal('requestAnimationFrame', () => {
+      scheduled.push(scheduled.length + 1);
+      return scheduled.length;
+    });
+    vi.stubGlobal('cancelAnimationFrame', (h: number) => {
+      cancelled.push(h);
+    });
+    await mountPage();
+  });
+  afterAll(() => {
+    // назад до стану П6.16 (без rAF) для наступних блоків; matchMedia в jsdom немає
+    vi.stubGlobal('requestAnimationFrame', undefined);
+    vi.stubGlobal('cancelAnimationFrame', undefined);
+    vi.stubGlobal('matchMedia', undefined);
+  });
+  it('Т.149: «менше руху» увімкнулось — хендл циклу скасовано; знято — цикл знову заплановано', () => {
+    expect(changes.length).toBe(1);
+    startParty('42'); // adoptParty → ambient.start: перший кадр циклу заплановано
+    expect(btn('btn-tick').disabled).toBe(false);
+    expect(scheduled.length).toBeGreaterThan(0);
+    const loop = scheduled[scheduled.length - 1]!; // кадрів заглушка не грає — останній хендл належить циклу
+    const before = scheduled.length;
+    matches = true;
+    changes[0]!();
+    expect(cancelled).toEqual([loop]); // ambient.pause — рівно один скасований хендл, той самий
+    expect(scheduled.length).toBe(before); // за «менше руху» цикл не плануємо
+    matches = false;
+    changes[0]!();
+    expect(scheduled.length).toBe(before + 1); // ambient.start — новий кадр циклу
+    expect(cancelled).toEqual([loop]);
+  });
+  it('Т.149: тумблер «Анімація» вимкнено — зняте «менше руху» циклу не поновлює', () => {
+    // продовжує стан тесту 1 (партія стартована, цикл заплановано): передумова — перевіркою, а не мовчки
+    if ($('start-screen').classList.contains('hidden') === false) startParty('42');
+    const toggle = btn('settings-ambient'); // кнопка вікна «Налаштування» є в розмітці і при закритому вікні
+    const cancelsBefore = cancelled.length;
+    toggle.click(); // вимкнено — ambient.pause (хендл циклу скасовано тут, не подією)
+    expect(cancelled.length).toBe(cancelsBefore + 1); // цикл справді йшов — інакше тест порожній
+    expect(toggle.textContent).toContain('вимк');
+    const before = scheduled.length;
+    const cancels = cancelled.length;
+    matches = true;
+    changes[0]!();
+    matches = false;
+    changes[0]!();
+    expect(scheduled.length).toBe(before);
+    expect(cancelled.length).toBe(cancels);
+    toggle.click(); // назад: увімкнено (ключ налаштування — у пам'яті сторінки блоку)
   });
 });
