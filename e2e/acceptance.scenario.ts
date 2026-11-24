@@ -1826,3 +1826,29 @@ test('Т.121: тап по порожній клітинці під час ані
   await expect(info).toHaveText(moved);
   expect(errors, 'помилки сторінки: ' + errors.join(' | ')).toEqual([]);
 });
+
+// Т.171 (рішення власника 24.11.2026, «А. DejaVu скрізь»; кандидат 118; ADR-0139): шрифт сторінки в e2e —
+// DejaVu Sans і в контейнері сесії, і в CI (e2e/fonts.conf через FONTCONFIG_FILE, playwright.e2e.config.ts);
+// без цього гейти ширини і висоти тексту локально міряли з Inter, а в CI — з DejaVu Sans.
+test('Т.171: шрифт сторінки в e2e — DejaVu Sans (fonts.conf)', async ({ page }) => {
+  await page.goto('./');
+  const m = await page.evaluate(() => {
+    const c = document.createElement('canvas').getContext('2d')!;
+    const s = 'Як грати — РУБІЖ: Наступний крок 0123456789';
+    const w = (family: string): number => {
+      c.font = '14px ' + family;
+      return c.measureText(s).width;
+    };
+    return {
+      body: w(getComputedStyle(document.body).fontFamily),
+      dejavu: w('"DejaVu Sans", monospace'),
+      mono: w('monospace'),
+    };
+  });
+  // DejaVu Sans є в системі: інакше другий рядок упав би на monospace
+  expect(m.dejavu, 'DejaVu Sans не встановлено — шрифт «Як грати» і гейти ширини не ті').not.toBeCloseTo(m.mono, 1);
+  expect(
+    m.body,
+    'system-ui сторінки — не DejaVu Sans: FONTCONFIG_FILE не дійшов до браузера (у CI без нього теж DejaVu — там гейт ловить лише відсутність шрифту)'
+  ).toBeCloseTo(m.dejavu, 2);
+});
