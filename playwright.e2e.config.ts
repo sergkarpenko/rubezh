@@ -8,11 +8,15 @@
 // env E2E_URL — уже запущений сервер тієї ж збірки (тоді webServer не стартує).
 // env E2E_CHROME — шлях до системного Chrome, якщо браузер Playwright не
 // встановлено (хмарні сесії агентів без доступу до CDN Playwright).
+// Шрифт (Т.171, ADR-0139): браузер e2e отримує e2e/fonts.conf через FONTCONFIG_FILE —
+// system-ui і sans-serif = DejaVu Sans і в контейнері сесії (там без нього Inter), і в CI.
+import { fileURLToPath } from 'node:url';
 import { defineConfig } from '@playwright/test';
 
 const PORT = 4173;
 const externalUrl = process.env.E2E_URL;
 const chromePath = process.env.E2E_CHROME;
+const fontEnv = { ...process.env, FONTCONFIG_FILE: fileURLToPath(new URL('./e2e/fonts.conf', import.meta.url)) };
 
 export default defineConfig({
   testDir: './e2e',
@@ -29,7 +33,7 @@ export default defineConfig({
     baseURL: externalUrl ?? `http://localhost:${PORT}/rubezh/`,
     viewport: { width: 1440, height: 900 },
     trace: 'retain-on-failure',
-    launchOptions: chromePath ? { executablePath: chromePath } : {},
+    launchOptions: { env: fontEnv, ...(chromePath ? { executablePath: chromePath } : {}) },
   },
   webServer: externalUrl
     ? undefined
