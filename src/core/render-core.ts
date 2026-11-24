@@ -694,22 +694,27 @@ export function animsFromEvents(events: readonly GameEvent[], units: readonly Un
         continue;
       }
       // П14.4: смерті уражених вибухом — ядро логує їх РАНІШЕ за grenade
-      // (цикл пошкоджень зони) — відтворюємо вибух, потім смерті і числа
-      if (next !== undefined && next.type === 'grenade' && next.unitId === e.killerId) {
-        anims.push(makeBoomAnim(next.center));
-        let j = i;
-        while (j < events.length) {
-          const d = events[j];
-          if (d.type !== 'death' || d.killerId !== next.unitId) break;
-          const v = byId.get(d.unitId);
-          if (v !== undefined) anims.push(makeDeathAnim(v));
-          j++;
-        }
-        for (const h of next.hits) {
+      // (цикл пошкоджень зони) — відтворюємо вибух, потім смерті і числа.
+      // Т.160: граната може вбити кількох — гранату шукаємо за всією серією
+      // смертей від того самого кидача (раніше — лише за наступною подією, і
+      // перший загиблий згасав до вибуху).
+      const series: Unit[] = [];
+      let g = i;
+      for (; g < events.length; g++) {
+        const d = events[g];
+        if (d.type !== 'death' || d.killerId !== e.killerId) break;
+        const v = byId.get(d.unitId);
+        if (v !== undefined) series.push(v);
+      }
+      const gr = events[g];
+      if (gr !== undefined && gr.type === 'grenade' && gr.unitId === e.killerId) {
+        anims.push(makeBoomAnim(gr.center));
+        for (const v of series) anims.push(makeDeathAnim(v));
+        for (const h of gr.hits) {
           const t = byId.get(h.unitId);
           if (t !== undefined && seen(t.pos)) anims.push(makeDNumAnim(t.pos, h.damage, false));
         }
-        i = j + 1; // events[j] — подія grenade, її вже відтворено
+        i = g + 1; // events[g] — подія grenade, її вже відтворено
         continue;
       }
       if (victim !== undefined) anims.push(makeDeathAnim(victim));
