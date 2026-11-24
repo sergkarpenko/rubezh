@@ -38,9 +38,9 @@
 npm install            # також встановлює pre-commit hook (Husky)
 npm test               # усі тести (vitest): ядро + DOM-флоу + наскрізна партія
 npm run dev            # локальний сервер розробки (vite)
-npm run lint           # ESLint (src/, scripts/, e2e/)
-npm run format:check   # Prettier (src/, index.html, scripts/**/*.{ts,mjs}, e2e/, AGENTS.md, README.md)
-npx tsc --noEmit       # типи з тестами; ядро без DOM — -p tsconfig.core.json, скрипти — -p tsconfig.scripts.json
+npm run lint           # ESLint (src/, scripts/, e2e/, playwright*.config.ts)
+npm run format:check   # Prettier (src/, index.html, scripts/**/*.{ts,mjs}, e2e/, playwright*.config.ts, AGENTS.md, README.md)
+npx tsc --noEmit       # типи з тестами; ядро без DOM — -p tsconfig.core.json, скрипти і playwright*.config.ts — -p tsconfig.scripts.json
 npm run build          # прод-збірка (vite → dist/)
 npm run docs           # TypeDoc-довідка API (HTML у dist/api)
 npm run test:e2e       # сценарій приймання в браузері (Playwright, ADR-0080)

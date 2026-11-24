@@ -12,10 +12,10 @@
     "test:mutation": "stryker run",
     "build": "vite build",
     "prepare": "husky",
-    "lint": "eslint src scripts e2e",
-    "lint:fix": "eslint src scripts e2e --fix",
-    "format": "prettier --write src index.html \"scripts/**/*.{ts,mjs}\" e2e AGENTS.md README.md",
-    "format:check": "prettier --check src index.html \"scripts/**/*.{ts,mjs}\" e2e AGENTS.md README.md",
+    "lint": "eslint src scripts e2e \"playwright*.config.ts\"",
+    "lint:fix": "eslint src scripts e2e \"playwright*.config.ts\" --fix",
+    "format": "prettier --write src index.html \"scripts/**/*.{ts,mjs}\" e2e \"playwright*.config.ts\" AGENTS.md README.md",
+    "format:check": "prettier --check src index.html \"scripts/**/*.{ts,mjs}\" e2e \"playwright*.config.ts\" AGENTS.md README.md",
     "docs": "typedoc"
   },
   "lint-staged": {
@@ -28,6 +28,10 @@
       "prettier --write"
     ],
     "e2e/**/*.ts": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "./playwright*.config.ts": [
       "eslint --fix",
       "prettier --write"
     ],
