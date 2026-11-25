@@ -7,7 +7,8 @@
 // Ціль — локальний `vite preview` зібраного dist (піднімає сам Playwright);
 // env E2E_URL — уже запущений сервер тієї ж збірки (тоді webServer не стартує).
 // env E2E_PORT — порт власного прев'ю (типово 4173; Т.178, ADR-0144): другий прогін
-// у тому самому контейнері (аудитор, прев'ю сесії) бере інший порт замість «already used».
+// у тому самому контейнері з окремої копії репозиторію (`dist/` спільний) бере інший порт
+// замість «already used».
 // env E2E_CHROME — шлях до системного Chrome, якщо браузер Playwright не
 // встановлено (хмарні сесії агентів без доступу до CDN Playwright).
 // Шрифт (Т.171, ADR-0139): браузер e2e отримує e2e/fonts.conf через FONTCONFIG_FILE —
@@ -15,11 +16,12 @@
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from '@playwright/test';
 
-// Порожнє значення — як не задане; інше не з цифр чи поза 1–65535 — помилка до старту,
+// Порожнє значення — як не задане; інше не з цифр (без нуля попереду) чи поза 1–65535 —
+// помилка до старту, і з E2E_URL теж,
 // а не тихий перехід на типовий порт (той міг бути зайнятий чужою збіркою).
 const portEnv = process.env.E2E_PORT || '4173';
 const PORT = Number(portEnv);
-if (!/^\d+$/.test(portEnv) || PORT < 1 || PORT > 65535) {
+if (!/^[1-9]\d*$/.test(portEnv) || PORT < 1 || PORT > 65535) {
   throw new Error(`E2E_PORT має бути цілим числом 1–65535, отримано «${portEnv}»`);
 }
 const externalUrl = process.env.E2E_URL;
