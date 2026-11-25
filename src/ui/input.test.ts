@@ -1368,6 +1368,37 @@ describe('п16.4: дія ролі (плитка «Роль», клавіша R)'
     expect(f.binfo()).toContain('«Польова допомога» → ');
   });
 
+  it('аудит PR #501: «Точний постріл» знімає тап у порожню клітинку (прев\u2019ю шляху), як звичайний режим', () => {
+    const { f, s } = roleSetup('sniper');
+    f.input.useRole();
+    const st = f.ui.mission!.state;
+    const free = [
+      { x: s.pos.x, y: s.pos.y + 3 },
+      { x: s.pos.x + 3, y: s.pos.y },
+      { x: s.pos.x + 1, y: s.pos.y + 3 },
+    ].find((c) => !st.map.blocked.has(c.x + ',' + c.y) && !st.units.some((u) => u.alive && u.pos.x === c.x && u.pos.y === c.y))!;
+    clickAt(f, free.x, free.y);
+    expect(f.ui.fireMode).toBeNull();
+    expect(f.ui.itemMode).toBeNull();
+  });
+
+  it('аудит PR #501: утримана R, Ctrl+R і анімація дії не роблять', () => {
+    const { f, s } = roleSetup('assault');
+    f.input.onKeyDown({ code: 'KeyR', repeat: true } as KeyboardEvent);
+    f.input.onKeyDown({ code: 'KeyR', ctrlKey: true } as KeyboardEvent);
+    f.input.onKeyDown({ code: 'KeyR', metaKey: true } as KeyboardEvent);
+    expect(s.ap).toBe(10);
+    const g = makeFixture(false, [{ kind: 'move' } as unknown as Anim]);
+    launchMission(g);
+    const st = g.ui.mission!.state;
+    const u = st.units.find((x) => x.side === 'player')!;
+    st.roles = { [u.id]: { role: 'assault', used: false } };
+    g.ui.selectedId = u.id;
+    g.input.useRole();
+    expect(u.ap).toBe(10);
+    expect(st.roles[u.id].used).toBe(false);
+  });
+
   it('«Польова допомога»: непоранена ціль — відмова, дію не витрачено', () => {
     const { f, s } = roleSetup('medic');
     f.input.useRole();

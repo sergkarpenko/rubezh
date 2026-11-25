@@ -449,6 +449,14 @@ describe('battle: флоу місії (запуск/закриття/завер�
     f.ui.selectedId = b.id;
     f.battle.renderBattle();
     expect([cap(), ap(), icon()]).toEqual(['вже було', '2 AP', 'aid']);
+    // аудит PR #501: хід демонів — плитка неактивна і з доступною дією
+    f.ui.selectedId = a.id;
+    a.ap = 10;
+    f.battle.renderBattle();
+    expect(tile.disabled).toBe(false);
+    st.activeSide = 'alien';
+    f.battle.renderBattle();
+    expect(tile.disabled).toBe(true);
   });
 
   it('п16.4: ролі ростеру — у бій місії (deployRoles); загиблий — рядок втрати, підвищені — рядок «▲ Підвищення»', () => {

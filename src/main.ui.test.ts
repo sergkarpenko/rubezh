@@ -897,6 +897,8 @@ describePage('панель збереження: 3 слоти, лише на г�
     await runAutoBattle();
     expect($('bresult').textContent).toMatch(/ЗАЧИЩЕНО|ЗАГІН ВТРАЧЕНО/);
     exitToStart(true);
+    // п16.4 (аудит PR #501): у бою є підвищені до «Боєць», але вихід на стартовий екран вікна ролі не відкриває
+    expect($('role-dialog').classList.contains('hidden')).toBe(true);
     expect($('bresult').innerHTML).toBe(''); // Т.48: завершений бій закриває вже вихід
     btn('btn-start-continue').click();
     expectLoadedGeo(money);
@@ -3402,7 +3404,18 @@ describePage('п16.4: вікно вибору ролі і ростер', () => {
     btn('btn-load-1').click();
     expect(dialog.classList.contains('hidden')).toBe(false);
     expect($('role-dialog-title').textContent).toBe('Підвищення: «Крук» — Боєць. Оберіть роль');
-    expect(document.activeElement).toBe($('btn-role-assault')); // фокус на першу роль
+    // фокус — на заголовок (аудит PR #501: утриманий Enter не обирає роль наступному), Tab — по колу кнопок
+    expect(document.activeElement).toBe($('role-dialog-title'));
+    const tab = (shift = false): void => {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', shiftKey: shift, bubbles: true }));
+    };
+    tab();
+    expect(document.activeElement).toBe($('btn-role-assault'));
+    btn('btn-role-medic').focus();
+    tab();
+    expect(document.activeElement).toBe($('btn-role-assault')); // з останньої — на першу
+    tab(true);
+    expect(document.activeElement).toBe($('btn-role-medic'));
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     dialog.click(); // клік по тлу поза панеллю
     expect(dialog.classList.contains('hidden')).toBe(false);
@@ -3423,5 +3436,29 @@ describePage('п16.4: вікно вибору ролі і ростер', () => {
     expect(rows[2]).toContain('Перший рій пережито в підвалі лікарні.');
     expect(rows[2]).toContain('досвід 0 · до «Боєць» 2');
     expect(document.querySelectorAll('#roster .soldier')[1].querySelectorAll('.chev i')).toHaveLength(3);
+  });
+
+  it('«Продовжити» зі стартового екрана із сейвом v1 — вікно ролі на ігровому екрані', () => {
+    const data = JSON.parse(localStorage.getItem('rubezh.save.1')!) as {
+      version: number;
+      state: { roster: { soldiers: { kills: number }[]; careers?: unknown } };
+    };
+    data.version = 1;
+    delete data.state.roster.careers;
+    data.state.roster.soldiers[0].kills = 0;
+    data.state.roster.soldiers[1].kills = 0;
+    data.state.roster.soldiers[2].kills = 3;
+    localStorage.setItem('rubezh.save.1', JSON.stringify(data));
+    btn('btn-menu').click();
+    btn('btn-menu-exit').click();
+    if (!$('exit-confirm').classList.contains('hidden')) btn('btn-exit-yes').click();
+    expect($('start-screen').classList.contains('hidden')).toBe(false);
+    expect($('role-dialog').classList.contains('hidden')).toBe(true);
+    btn('btn-start-continue').click();
+    expect($('start-screen').classList.contains('hidden')).toBe(true);
+    expect($('role-dialog').classList.contains('hidden')).toBe(false);
+    expect($('role-dialog-title').textContent).toBe('Підвищення: «Іскра» — Боєць. Оберіть роль');
+    btn('btn-role-assault').click();
+    expect($('role-dialog').classList.contains('hidden')).toBe(true);
   });
 });

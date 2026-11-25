@@ -86,7 +86,7 @@ export function roleDialogTitle(career: SoldierCareer): string {
 // Вміст вікна вибору ролі: заголовок, примітка, три кнопки «Роль — «Дія»» з описом.
 export function roleDialogHtml(career: SoldierCareer): string {
   return (
-    '<div class="panel screen-dialog"><h2 id="role-dialog-title">' +
+    '<div class="panel screen-dialog"><h2 id="role-dialog-title" tabindex="-1">' +
     roleDialogTitle(career) +
     '</h2><p class="meta">Роль — назавжди. Дія ролі — раз за бій.</p>' +
     ROLE_ORDER.map(

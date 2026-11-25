@@ -624,7 +624,9 @@ function promptRole(): void {
       if (box.classList.contains('hidden')) focusTopbarOpener();
     };
   }
-  box.querySelector<HTMLButtonElement>('.role-pick')?.focus();
+  // аудит PR #501: фокус — на заголовок, а не на кнопку: утриманий Enter чи подвійний тап після вибору
+  // не обирає роль наступному в черзі (роль — назавжди); Tab веде до кнопок
+  box.querySelector<HTMLElement>('#role-dialog-title')?.focus();
 }
 
 // П12.2 (ADR-0065): старт нової партії — єдиний шлях створення партії:
@@ -663,9 +665,11 @@ function continueGame(): boolean {
 // вихід із бою геосцену перемальовує (close → renderAll). Ambient-цикл стає на паузу до
 // наступної партії (adoptParty → ambient.start).
 function exitToStart(): void {
+  // Т.58: повернення вкладки з фону і тумблер налаштувань ambient на стартовому екрані не будять;
+  // п16.4 (аудит PR #501): до battle.close — його renderAll не відкриває вікно ролі над стартовим екраном
+  partyOnScreen = false;
   if (ui.mission !== null) battle.close();
   geoAnim.cancel();
-  partyOnScreen = false; // Т.58: повернення вкладки з фону і тумблер налаштувань ambient на стартовому екрані не будять
   ambient.pause();
   el('campaign-victory').classList.add('hidden'); // Т.58: вихід з екрана перемоги — екран не лишається поверх стартового
   screens?.showStart();

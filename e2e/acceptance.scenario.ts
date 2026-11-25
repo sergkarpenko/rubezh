@@ -1814,7 +1814,7 @@ test('п16.4: вікно ролі після сейву v1, ростер, кар
   await expect(dialog).toBeVisible();
   await expect(page.locator('#role-dialog-title')).toHaveText('Підвищення: «Крук» — Боєць. Оберіть роль');
   await expect(page.locator('#role-dialog .role-pick')).toHaveCount(3);
-  await expect(page.locator('#btn-role-assault')).toBeFocused();
+  await expect(page.locator('#role-dialog-title')).toBeFocused(); // аудит PR #501: фокус на заголовку, не на кнопці
   await page.keyboard.press('Escape');
   await page.mouse.click(5, 5); // клік поза панеллю вікна
   await expect(dialog, 'п16.4: Esc і клік поза вікном його не закривають').toBeVisible();

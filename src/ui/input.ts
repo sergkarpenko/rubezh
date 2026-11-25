@@ -369,7 +369,7 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
           '~' +
             Math.round(calculateHitChance(sel, ui.fireMode) * 100) +
             '% · повторний тап у цю саму ціль — постріл (' +
-            MODE_LABEL[ui.fireMode] +
+            (ui.itemMode === 'precise' ? '«Точний постріл»' : MODE_LABEL[ui.fireMode]) + // аудит PR #501
             ').'
         );
         battle.renderBattle();
@@ -582,6 +582,7 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
   function useRole(): void {
     if (!battle.playerTurnActive() || !ui.mission) return;
     if (deps.autoBusy()) return; // П13.3: триває авто-бій — керування заблоковано
+    if (battle.animating()) return; // аудит PR #501: як плитка — під час анімації дія ролі не діє
     closeMenu(); // Т.131
     const st = ui.mission.state;
     const sel = battle.selectedUnit();
@@ -858,9 +859,10 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
     else if (ev.code === 'KeyO') armOverwatch();
     else if (ev.code === 'KeyM') armMedkit();
     else if (ev.code === 'KeyG') armGrenade();
-    else if (ev.code === 'KeyR')
-      useRole(); // п16.4 (ADR-0147)
-    else if (ev.code === 'KeyV')
+    else if (ev.code === 'KeyR') {
+      // п16.4 (аудит PR #501): утримана R і Ctrl/Alt/Meta+R (перезавантаження) дії ролі не роблять (урок Т.117)
+      if (!ev.repeat && !ev.ctrlKey && !ev.altKey && !ev.metaKey) useRole();
+    } else if (ev.code === 'KeyV')
       evacuateSelected(); // Т.71 (ADR-0075)
     else if (ev.code === 'KeyQ') {
       // Т.130 (аудит PR #443): утримана Q і Ctrl/Alt/Meta+Q бійця не перемикають (урок Т.117)
