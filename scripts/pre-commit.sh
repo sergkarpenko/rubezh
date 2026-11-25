@@ -65,9 +65,10 @@ if git diff --cached --name-only | grep -qE '^\.github/workflows/'; then
 fi
 
 # 2. Запуск тестів — лише коли коміт чіпає більше, ніж документи і допоміжні скрипти
-# (ADR-0146: рівень full за scripts/ci-scope.sh; помилка скрипта — теж full)
+# (ADR-0146: рівень full за scripts/ci-scope.sh; помилка скрипта чи порожній вивід — тести)
 echo ""
-scope="$(sh scripts/ci-scope.sh --staged 2> /dev/null | sed -n 's/^level=//p')" || scope=full
+scope="$(sh scripts/ci-scope.sh --staged 2> /dev/null)" || scope=level=full
+scope="${scope#level=}"
 if [ "$scope" = docs ] || [ "$scope" = tools ]; then
     echo "--- Тести пропущено: рівень зміни «$scope» (ADR-0146) ---"
 else

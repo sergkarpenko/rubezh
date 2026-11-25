@@ -117,7 +117,13 @@ self_test() {
         git checkout -q -b mv base && git mv docs/a.md src/b.ts && git commit -q -m mv && git tag t-mv
         git checkout -q -b ln base && ln -s a.md docs/l.md && git add docs/l.md && git commit -q -m ln && git tag t-ln
         git checkout -q -b side base && echo s > src/s.ts && git add . && git commit -q -m side && git tag t-side
-        git checkout -q main
+        git checkout -q -b mix1 base && echo b >> scripts/a.ts && echo b >> src/a.ts && git commit -q -am mix1 && git tag t-mix1
+        git checkout -q -b mix2 base && echo b >> README.md && echo b >> src/a.ts && git commit -q -am mix2 && git tag t-mix2
+        git checkout -q -b tst base && echo a > src/a.test.ts && git add . && git commit -q -m tst && git tag t-tst
+        git checkout -q -b sub base
+        git update-index --add --cacheinfo "160000,$(git rev-parse base),docs/sub"
+        git commit -q -m sub && git tag t-sub
+        git checkout -q -f main
     )
     run() { (cd "$tmp" && sh "$here/ci-scope.sh" "$@"); }
     check 'діапазон: лише docs' 'level=docs' run base t-docs
@@ -127,6 +133,9 @@ self_test() {
     check 'діапазон: видалений документ' 'level=docs' run base t-del
     check 'діапазон: перенос docs → src' 'level=full' run base t-mv
     check 'діапазон: посилання в docs' 'level=full' run base t-ln
+    check 'діапазон: scripts + код гри' 'level=full' run base t-mix1
+    check 'діапазон: кореневий md + код гри' 'level=full' run base t-mix2
+    check 'діапазон: підмодуль у docs' 'level=full' run base t-sub
     check 'діапазон: порожній диф' 'level=full' run base base
     # диф — від спільного предка: чужий коміт бази рівень не піднімає
     check 'діапазон: база пішла вперед' 'level=docs' run t-side t-docs
@@ -150,6 +159,9 @@ light=true" run --light base t-tools
 light=false" run --light base t-md
     check 'легка: ADR — approve' "level=docs
 light=false" run --light base t-adr
+    # тест гри: клас auto, але рівень full — не легка
+    check 'легка: лише тест гри' "level=full
+light=false" run --light base t-tst
     check 'легка: код гри' "level=full
 light=false" run --light base t-code
 
