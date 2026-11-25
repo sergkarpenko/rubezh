@@ -351,6 +351,7 @@ describe('property: бій на випадковому бойовищі', () => 
           const seen = seenEnemies(s, side).map((u) => u.id);
           const blockers = sightBlockers(s, side);
           for (const u of s.units) if (u.alive && (u.side === side || seen.includes(u.id))) expect(blockers.has(key(u.pos))).toBe(true);
+          for (const e of seenEnemies(s, side)) expect(vis).toContain(key(e.pos));
           for (const e of s.units) {
             if (!e.alive || e.side === side || seen.includes(e.id)) continue;
             expect(blockers.has(key(e.pos))).toBe(false);

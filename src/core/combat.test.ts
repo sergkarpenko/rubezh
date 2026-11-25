@@ -573,8 +573,14 @@ describe('П11.4: лікування (аптечка)', () => {
   });
 
   it('діагональний сусід (Чебишев ≤1) — валідна ціль', () => {
+    const g = itemsGame({ s1: { medkit: true, grenade: false } }); // п17.4: s2 у фікстурі — (3,3), діагональ від s1 (2,2)
+    useMedkit(g, 's1', 's2');
+    expect(g.units[1].hp).toBe(7);
+  });
+
+  it('сусід по горизонталі — валідна ціль', () => {
     const g = itemsGame({ s1: { medkit: true, grenade: false } });
-    g.units[1].pos = { x: 3, y: 3 }; // діагональ від s1 (2,2) — відстань Чебишева 1
+    g.units[1].pos = { x: 3, y: 2 };
     useMedkit(g, 's1', 's2');
     expect(g.units[1].hp).toBe(7);
   });

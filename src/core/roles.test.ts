@@ -142,6 +142,12 @@ describe('п16.3: «Польова допомога» медика', () => {
     expect(g.units[1].hp).toBe(10);
   });
 
+  it('сусід по горизонталі — валідна ціль (п17.4: у фікстурі s2 по діагоналі)', () => {
+    const g = roleGame({ s1: slot('medic') });
+    g.units[1].pos = { x: 3, y: 2 };
+    expect(fieldAid(g, 's1', 's2').healed).toBeGreaterThan(0);
+  });
+
   it('відмови: ворог, відстань 2, здорова ціль, мертва, бракує AP — стан без змін', () => {
     const g = roleGame({ s1: slot('medic') });
     const before = snap(g);

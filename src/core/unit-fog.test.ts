@@ -20,7 +20,7 @@ import {
   type RNG,
   type Unit,
 } from './combat';
-import { computeVisibleCells, sideVisibleCells, visibleEnemies } from './map';
+import { computeVisibleCells, makeTestMap, sideVisibleCells, visibleEnemies } from './map';
 import { aiStep } from './ai';
 
 const alwaysHit: RNG = () => 0;
@@ -106,6 +106,27 @@ describe('п17.4: невидимий стороні юніт не закрива
     // видимий демонам оперативник — закриває
     const open = game([A('a1', 0, 0), P('s1', 1, 5)]);
     expect(sightBlockers(open, 'alien').has('1,5')).toBe(true);
+  });
+});
+
+describe('п17.4: видимий ворог, якого інший ворог ховає від усіх (аудит PR #509)', () => {
+  // стан реального бою: a1 (17,2) видно в першому проході, але в другому лінії до нього немає ні в кого
+  const g = (): GameState =>
+    createGame({
+      map: makeTestMap(28 * 7919, 20, 20),
+      rng: alwaysHit,
+      units: [P('s1', 9, 3), P('s2', 9, 2), P('s3', 9, 0), A('a1', 17, 2), A('a2', 16, 2), A('a3', 17, 3)],
+    });
+
+  it('лишається видимим: клітинка в тумані сторони, хоч огляду до неї немає ні в кого', () => {
+    const s = g();
+    expect(seenEnemies(s, 'player').map((u) => u.id)).toContain('a1');
+    for (const u of s.units.filter((x) => x.side === 'player')) {
+      expect(computeVisibleCells(s, u.pos, 'player').has('17,2')).toBe(false);
+      expect(hasLineOfSight(s, u.pos, { x: 17, y: 2 }, 'player')).toBe(false);
+    }
+    expect(sideVisibleCells(s, 'player').has('17,2')).toBe(true);
+    expect(sideSees(s, 'player', { x: 17, y: 2 })).toBe(true);
   });
 });
 
