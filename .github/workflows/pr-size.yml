@@ -19,9 +19,13 @@ on:
 permissions:
   contents: read
 
+# ADR-0148 (кандидат 174, Т.189): прогони одного PR — по черзі, без скасування:
+# скасована копія обов'язкового чека після PATCH опису (подія edited) блокувала
+# мерж через API. Скасування лишається лише для прогону, що чекав у черзі, коли
+# прийшов ще новіший.
 concurrency:
   group: pr-size-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 # ADR-0113: кожен крок run: — під bash з pipefail (bash --noprofile --norc -eo pipefail);
 # без цього рядка крок іде під bash -e, і код першої команди конвеєра губиться.

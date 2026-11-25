@@ -35,6 +35,13 @@ on:
 permissions:
   contents: read
 
+# ADR-0148 (кандидати 149 і 174, Т.189): прогони check одного PR — по черзі, без
+# скасування (як pr-size: скасована копія обов'язкового чека блокує мерж через
+# API); tag після мержу — окрема група, ручний запуск — без групи (run_id).
+concurrency:
+  group: iter-tag-${{ github.event.pull_request.number || github.run_id }}-${{ github.event.action == 'closed' && 'tag' || 'check' }}
+  cancel-in-progress: false
+
 # ADR-0113: кожен крок run: — під bash з pipefail (bash --noprofile --norc -eo pipefail);
 # без цього рядка крок іде під bash -e, і код першої команди конвеєра губиться.
 defaults:
@@ -54,8 +61,10 @@ jobs:
         run: sh scripts/iter-tag.sh --self-test
       - name: Назва майбутнього тегу
         env:
-          # опис PR — недовірений текст: лише через змінну середовища
+          # опис і назва PR — недовірений текст: лише через змінні середовища
           PR_BODY: ${{ github.event.pull_request.body }}
+          # назва «пX.Y …» без рядка Iter-Tag — попередження (ADR-0148, кандидат 170)
+          PR_TITLE: ${{ github.event.pull_request.title }}
           GH_TOKEN: ${{ github.token }}
         run: sh scripts/iter-tag.sh --preview
 
