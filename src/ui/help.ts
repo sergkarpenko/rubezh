@@ -64,7 +64,7 @@ function helpHtml(): string {
     SCORE_PER_MISSION_WON +
     ' за переможну місію · ' +
     SCORE_PER_VETERAN_ALIVE +
-    ' за живого ветерана · ' +
+    ' за живого оперативника · ' +
     SCORE_PER_MONEY +
     ' за кожен кредит на фініші.</li>' +
     '<li>Кредити: дотація ' +
