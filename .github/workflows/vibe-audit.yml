@@ -59,13 +59,33 @@ jobs:
           persist-credentials: false
           # голова PR, а не merge-коміт: цитати знахідок звіряються з файлами гілки
           ref: ${{ github.event.pull_request.head.sha || format('refs/pull/{0}/head', inputs.pr) }}
+      # ADR-0146: легка зміна (рівень не full і клас auto) — без аудиту; ручний запуск — завжди аудит
+      - name: Легка зміна — без аудиту
+        id: scope
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        # скрипти — з бази PR, якщо вони там є: PR не може сам оголосити себе легким
+        run: |
+          d="$RUNNER_TEMP/scope"
+          mkdir -p "$d"
+          if git cat-file -e "$BASE_SHA:scripts/ci-scope.sh" 2> /dev/null; then
+            git show "$BASE_SHA:scripts/ci-scope.sh" > "$d/ci-scope.sh"
+            git show "$BASE_SHA:scripts/pr-class.sh" > "$d/pr-class.sh"
+          else
+            cp scripts/ci-scope.sh scripts/pr-class.sh "$d/"
+          fi
+          sh "$d/ci-scope.sh" --light "$BASE_SHA" HEAD >> "$GITHUB_OUTPUT"
       - uses: actions/setup-node@v7
+        if: steps.scope.outputs.light != 'true'
         with:
           node-version: 26
       - name: Самоперевірка скрипта
+        if: steps.scope.outputs.light != 'true'
         run: set -o pipefail; node scripts/audit-vibe-cli.mjs --self-test | tee /dev/stderr | grep -q 'помилок 0$'
       - name: Залежності і Vibe CLI
         id: setup
+        if: steps.scope.outputs.light != 'true'
         # збій встановлення (npm, PyPI) — не червоний чек: аудит пише «Аудиту не було»
         continue-on-error: true
         shell: bash
@@ -79,6 +99,7 @@ jobs:
           mkdir -p "$VIBE_OUTPUT_DIR"
           cp -a "$GITHUB_WORKSPACE" "$VIBE_WORKDIR"
       - name: Аудит
+        if: steps.scope.outputs.light != 'true'
         env:
           MISTRAL_API_KEY: ${{ secrets.MISTRAL_VIBE_API_KEY }}
           GITHUB_TOKEN: ${{ github.token }}
