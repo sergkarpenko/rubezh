@@ -21,7 +21,9 @@ import { createIcon, type IconName } from './icons';
 // Ідентифікатори дій тулбара — чинні дії бою (src/ui/battle.ts + input/
 // auto-battle); «Авто»/«Стоп» — перемикач авто-бою (П13.3, ADR-0067).
 // Т.71 (ADR-0075): «Евакуація» — між гранатою і кінцем ходу.
-export type ToolbarActionId = 'snap' | 'aimed' | 'auto' | 'ow' | 'medkit' | 'grenade' | 'evac' | 'end' | 'auto-battle';
+// п16.4 (ADR-0147, рішення власника «А»): «Роль» — одна плитка дії ролі між гранатою і евакуацією;
+// підпис, іконку і ціну за роллю вибраного бійця ставить renderBattle (src/ui/roles.ts).
+export type ToolbarActionId = 'snap' | 'aimed' | 'auto' | 'ow' | 'medkit' | 'grenade' | 'role' | 'evac' | 'end' | 'auto-battle';
 
 export interface ToolbarAction {
   id: ToolbarActionId;
@@ -76,6 +78,7 @@ export const TOOLBAR_ACTIONS: readonly ToolbarAction[] = [
       '), уражає і своїх · клавіша G',
     icon: 'grenade',
   },
+  { id: 'role', btnId: 'btn-role', label: 'Роль', hint: 'Дія ролі — раз за бій · клавіша R', icon: 'dash' },
   {
     id: 'evac',
     btnId: 'btn-evac',
@@ -105,6 +108,7 @@ const TILE_KEY: Partial<Record<ToolbarActionId, string>> = {
   ow: 'O',
   medkit: 'M',
   grenade: 'G',
+  role: 'R',
   evac: 'V',
   end: 'E',
 };
@@ -130,12 +134,15 @@ export function createToolbar(root: HTMLElement, deps: ToolbarDeps): void {
     b.title = a.hint;
     b.setAttribute('aria-label', a.label);
     const icon = createIcon(a.icon, 'tb-icon');
+    icon.dataset.icon = a.icon; // п16.4: плитка «Роль» міняє іконку за роллю — renderBattle звіряє з цим
     const cap = document.createElement('span');
     cap.className = 'tb-cap';
     cap.textContent = a.label;
     b.append(icon, cap);
     const ap = a.id === 'snap' || a.id === 'aimed' || a.id === 'auto' ? RIFLE.modes[a.id].apCost : ITEM_AP[a.id];
-    for (const [cls, text] of [['tb-ap', ap === undefined ? undefined : ap + ' AP'] as const, ['tb-key', TILE_KEY[a.id]] as const]) {
+    // п16.4: ціну плитки ролі ставить renderBattle за роллю вибраного — тут порожній куток
+    const apText = a.id === 'role' ? '' : ap === undefined ? undefined : ap + ' AP';
+    for (const [cls, text] of [['tb-ap', apText] as const, ['tb-key', TILE_KEY[a.id]] as const]) {
       if (text === undefined) continue;
       const c = document.createElement('span');
       c.className = cls;

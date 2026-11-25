@@ -28,12 +28,13 @@ import {
   type Vec2,
 } from '../src/core/combat';
 import { DemoSteps, aliensTurn } from '../src/core/ai-bot';
+import { awaitingRole, newCareer, RANK_NAMES, rankOf, type SoldierRole } from '../src/core/career';
 import type { DifficultyPreset } from '../src/core/campaign';
 import { advanceTime, detectedUfos, geoClock, missionTargets, type Ufo } from '../src/core/geo';
 import { computeVisibleCells, findPath, pathApCost } from '../src/core/map';
 import { completeMission, createMission, missionOutcome, type Mission, type MissionOutcome } from '../src/core/mission';
 import { createParty, type Party } from '../src/core/save';
-import { applyMissionResult, hospitalTick, missionSquad, readySoldiers } from '../src/core/squad';
+import { applyMissionResult, chooseRole, deployRoles, hospitalTick, missionSquad, readySoldiers } from '../src/core/squad';
 import { deployConsumables } from '../src/core/workshop';
 import { TURN_PLATE_DONE } from '../src/ui/battle-feedback';
 import { byGender } from '../src/ui/text';
@@ -57,8 +58,12 @@ export interface ShotOption {
 }
 
 // Рядок юніта — підпис вибраної картки смуги загону (Т.130: `aria-label`, src/ui/squad-strip.ts; до Т.130 — #bctx-unit).
+// п16.4 (ADR-0147 п. 6): «Іван «Крук»» — позивний оперативника з пулу за номером найму (id «sN»); сценарій
+// грає свіжим ростером, тож позивний — newCareer(N − 1).
 export function unitLine(u: Unit): string {
-  return u.name + ': HP ' + u.hp + '/' + u.maxHp + ' · AP ' + u.ap + '/' + u.maxAp;
+  const n = /^s(\d+)$/.exec(u.id);
+  const who = n === null ? u.name : u.name + ' «' + newCareer(Number(n[1]) - 1).callsign + '»';
+  return who + ': HP ' + u.hp + '/' + u.maxHp + ' · AP ' + u.ap + '/' + u.maxAp;
 }
 
 // Початок підказки бою після тапу по видимому демону без зведеного режиму
@@ -136,17 +141,50 @@ export class CoreMirror {
 
   // Картки ростеру (#roster .soldier): ім'я, HP і лічильник убивств кожного
   // оперативника — відбиток усього бою (хто вижив, кого поранено, хто влучав).
+  // п16.4: рядок ростера — ім'я «позивний», далі звання, біографія, HP і вбивства, досвід
   rosterRows(): RegExp[] {
     return this.party.roster.soldiers.map(
-      (s) => new RegExp('^' + s.name + '\\s*HP ' + s.hp + '/' + s.maxHp + '(?!\\d).*⚔ ' + s.kills + '$')
+      (s) =>
+        new RegExp(
+          '^' +
+            s.name +
+            ' «' +
+            this.party.roster.careers[s.id].callsign +
+            '».*HP ' +
+            s.hp +
+            '/' +
+            s.maxHp +
+            '(?!\\d).*⚔ ' +
+            s.kills +
+            '(?!\\d)'
+        )
     );
+  }
+
+  // п16.4 (EARS 4): заголовки вікон вибору ролі по черзі ростеру (хто чекає ролі)
+  awaitingRoleTitles(): { id: string; title: string }[] {
+    return this.party.roster.soldiers
+      .filter((s) => awaitingRole(this.party.roster.careers[s.id]))
+      .map((s) => {
+        const c = this.party.roster.careers[s.id];
+        return { id: s.id, title: 'Підвищення: «' + c.callsign + '» — ' + RANK_NAMES[rankOf(c.xp)] + '. Оберіть роль' };
+      });
+  }
+
+  chooseRole(id: string, role: SoldierRole): void {
+    chooseRole(this.party.roster, id, role);
   }
 
   // --- бій: ті самі виклики ядра, що в src/ui/battle.ts та src/ui/input.ts ---
 
   launch(ufoId: string): Mission {
     const squad = missionSquad(this.party.roster);
-    this.mission = createMission(this.party.geo, ufoId, { squad, items: deployConsumables(this.party.workshop, squad) });
+    const roles = deployRoles(this.party.roster, squad); // п16.4: як launch у src/ui/battle.ts
+    this.mission = createMission(this.party.geo, ufoId, {
+      squad,
+      items: deployConsumables(this.party.workshop, squad),
+      ...(roles !== null ? { roles } : {}),
+    });
     return this.mission;
   }
 

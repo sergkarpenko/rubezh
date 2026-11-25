@@ -8,7 +8,8 @@
 // обробники вводу (модуль input) працюють із тим самим об'єктом.
 
 import { SQUAD_SPAWN, completeMission, createMission, missionOutcome, type Mission } from '../core/mission';
-import { applyMissionResult, missionSquad } from '../core/squad';
+import { applyMissionResult, deployRoles, missionSquad } from '../core/squad';
+import { RANK_NAMES, rankOf, type SoldierCareer } from '../core/career';
 // Т.28 (ADR-0091): броня й око загиблих — на склад, витратники зникають.
 // П11.4 (ADR-0058): витратники загону — копія в бій і розрахунок після бою.
 import { deployConsumables, removeLostEquipment, settleConsumables } from '../core/workshop';
@@ -55,6 +56,8 @@ import {
 import { el } from './dom';
 import { BCELL } from './grid';
 import { type LogCat } from './journal';
+import { ICONS } from './icons';
+import { ROLE_INFO, roleTileView } from './roles';
 import { byGender, ticksText } from './text';
 import { squadCards, squadOrder, squadStripHtml } from './squad-strip';
 import { enemyMenuHtml, enemyMenuPlace, enemyMenuView } from './enemy-menu';
@@ -79,7 +82,9 @@ export interface BattleUIState {
   battleResult: BattleOutcome | null;
   selectedId: string | null; // вибраний солдат
   fireMode: ShotMode | null; // «зведений» режим пострілу
-  itemMode: 'medkit' | 'grenade' | null; // П11.6 (ADR-0058): зведений режим витратника — аптечка/граната
+  // П11.6 (ADR-0058): зведений режим витратника — аптечка/граната; п16.4 (ADR-0147): дії ролей —
+  // 'precise' («Точний постріл», разом із fireMode 'aimed') і 'aid' («Польова допомога», ціль як у гелю)
+  itemMode: 'medkit' | 'grenade' | 'precise' | 'aid' | null;
   hoverPath: Vec2[] | null; // прев'ю шляху під курсором
   hoverAp: number;
   tapCell: Vec2 | null; // ADR-0027 (П6.4): клітинка першого тапу — повторний тап у неї робить хід
@@ -346,6 +351,9 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
   // (запам'ятовується на місію); HTML міняється лише за зміни стану: перемальовка кадру
   // (ambient, анімації) не замінює кнопку між натисканням і відпусканням — клік не губиться.
   const squadOrders = new WeakMap<Mission, string[]>();
+  // п16.4: кар'єри загону — знімок на запуску місії (launch): загиблий після finish зникає з ростеру,
+  // а його картка лишається з позивним і шевроном, з якими він ішов у бій
+  const squadCareers = new WeakMap<Mission, Record<string, SoldierCareer>>();
   let squadHtml = '';
   function renderSquadStrip(mission: Mission): void {
     let order = squadOrders.get(mission);
@@ -353,7 +361,7 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
       order = squadOrder(mission.state);
       squadOrders.set(mission, order);
     }
-    const html = squadStripHtml(squadCards(mission.state, order, ui.selectedId));
+    const html = squadStripHtml(squadCards(mission.state, order, ui.selectedId, squadCareers.get(mission)));
     const box = el('bsquad');
     if (html === squadHtml && box.childElementCount > 0) return;
     squadHtml = html;
@@ -528,7 +536,7 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
 
     // П11.6 (ADR-0058): обведення валідних цілей аптечки (поранені союзники
     // поруч) і прев'ю зони вибуху гранати (епіцентр + хрест) після першого тапу.
-    if (ui.itemMode === 'medkit' && sel && playerTurnActive()) {
+    if ((ui.itemMode === 'medkit' || ui.itemMode === 'aid') && sel && playerTurnActive()) {
       for (const t of validHealTargets(st, sel)) drawTargetFrame(ctx, { gx: t.pos.x, gy: t.pos.y, cell: BCELL });
     }
     if (ui.itemMode === 'grenade' && ui.tapCell) {
@@ -674,7 +682,7 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
       b.dataset.hint = hint;
       b.title = noAp ? hint + ' — не вистачає AP (потрібно ' + cost + ')' : hint;
       tileReason(b, noAp ? 'мало AP' : null);
-      b.classList.toggle('armed', ui.fireMode === m);
+      b.classList.toggle('armed', ui.fireMode === m && ui.itemMode !== 'precise'); // п16.4: «Точний» світить плитку ролі
     }
     const ow = el<HTMLButtonElement>('btn-ow');
     const owNoAp = sel !== undefined && sel.ap < OVERWATCH_AP_COST;
@@ -705,6 +713,25 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
       tileReason(b, noItem ? (mode === 'medkit' ? 'без гелю' : 'без гранат') : noAp ? 'мало AP' : null);
       b.classList.toggle('armed', ui.itemMode === mode);
     }
+
+    // п16.4 (ADR-0147, рішення власника «А»): одна плитка дії ролі — підпис, іконка й ціна за роллю
+    // вибраного; причина — з roleActionBlock ядра (EARS 6), коротко під плиткою, повністю в підказці.
+    const rb = el<HTMLButtonElement>('btn-role');
+    const rv = roleTileView(st, sel?.id ?? null);
+    rb.disabled = busy || rv.reason !== null || sel === undefined;
+    rb.title = rv.hint;
+    rb.setAttribute('aria-label', rv.label);
+    rb.dataset.role = rv.role ?? '';
+    const rIcon = rb.querySelector('svg');
+    const iconName = rv.role === null ? 'dash' : ROLE_INFO[rv.role].icon;
+    if (rIcon !== null && rIcon.dataset.icon !== iconName) {
+      rIcon.innerHTML = ICONS[iconName];
+      rIcon.dataset.icon = iconName;
+    }
+    const rAp = rb.querySelector<HTMLElement>('.tb-ap');
+    if (rAp !== null) rAp.textContent = rv.role === null ? '' : ROLE_INFO[rv.role].ap + ' AP';
+    tileReason(rb, rv.reason);
+    rb.classList.toggle('armed', ui.itemMode === 'precise' || ui.itemMode === 'aid');
 
     // Т.71 (ADR-0075, рішення власника 18.11.2026): плитка «Евакуація» — завжди в бою місії;
     // оперативник не на синій клітинці висадки чи без AP — неактивна з причиною (патерн П6.14).
@@ -752,11 +779,19 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
     try {
       const squad = missionSquad(party.roster);
       // П11.4 (ADR-0058): аптечка/граната при солдатах — у стан бою.
-      ui.mission = createMission(party.geo, ufoId, { squad, items: deployConsumables(party.workshop, squad) });
+      // п16.4 (ADR-0147): ролі загону — копія з ростеру (без ролей — бій байт-у-байт як до п16.3)
+      const roles = deployRoles(party.roster, squad);
+      ui.mission = createMission(party.geo, ufoId, {
+        squad,
+        items: deployConsumables(party.workshop, squad),
+        ...(roles !== null ? { roles } : {}),
+      });
     } catch (e) {
       deps.journal('✗ ' + (e as Error).message, 'lose');
       return;
     }
+    const all = party.roster.careers;
+    squadCareers.set(ui.mission, Object.fromEntries(Object.keys(all).map((id) => [id, { ...all[id] }])));
     facing.clear(); // П14.3: новий бій — напрямки погляду з нуля (дефолти кадрів)
     dropPlate(); // Т.33
     ui.battleResult = null;
@@ -796,8 +831,14 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
     // П11.4 (ADR-0058): витратники уцілілих — використані зникають, невикористані лишаються.
     settleConsumables(party.workshop, aftermath.survivors, mission.state.items);
     completeMission(party.geo, mission.briefing.ufoId, outcome);
-    for (const s of aftermath.lost)
-      deps.journal('✝ ' + s.name + ' ' + byGender(s.name, 'загинув у бою', 'загинула в бою'), 'lose', 'battle');
+    // п16.4 (ADR-0147 п. 7, 14; EARS 7): рядок втрати зі статистикою — у журнал і в картку результату.
+    // Журнал історії після завантаження не відтворює (adoptParty у main.ts) — подія ядра для нього не потрібна.
+    for (const line of aftermath.lossLines) deps.journal(line, 'lose', 'battle');
+    // п16.4 (рішення власника «А»): рядок підвищення для кожного нового звання
+    for (const s of aftermath.promoted) {
+      const c = party.roster.careers[s.id];
+      if (c) deps.journal('▲ Підвищення: «' + c.callsign + '» — ' + RANK_NAMES[rankOf(c.xp)].toLowerCase(), 'win', 'battle');
+    }
     for (const s of aftermath.wounded)
       deps.journal(
         '✚ ' + s.name + ' ' + byGender(s.name, 'поранений', 'поранена') + ' — лікарня: ' + ticksText(party.roster.hospital[s.id]),
@@ -812,7 +853,7 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
       aliens: aliens.length,
       bonus: outcome === 'перемога' ? missionBonus(mission.briefing.kind, party.campaign.preset) : null,
       wounded: aftermath.wounded.map((s) => s.name + ' — лікарня: ' + ticksText(party.roster.hospital[s.id])),
-      lost: aftermath.lost.map((s) => s.name + ' — ' + byGender(s.name, 'загинув', 'загинула')),
+      lost: aftermath.lossLines.map((line) => line.replace(/^✝ /, '')), // п16.4: «✝ » додає сама картка
     });
     if (outcome === 'перемога') {
       // П4.5 (ADR-0021): премія за перемогу за тип НЛО; надходження — у журнал

@@ -49,6 +49,14 @@ async function runAutoSteps(): Promise<void> {
     await vi.advanceTimersByTimeAsync(AUTO_STEP_MS);
   }
 }
+// п16.4 (ADR-0147, EARS 4): «← Повернутись на геосцену»; підвищений до «Боєць» без ролі отримує вікно
+// вибору ролі (Esc і клік поза ним не закривають) — тест обирає першу роль, доки вікно відкривається.
+function closeBattle(): void {
+  btn('btn-close').click();
+  for (let i = 0; i < 12 && !$('role-dialog').classList.contains('hidden'); i++)
+    ($('role-dialog').querySelector('.role-pick') as HTMLButtonElement).click();
+}
+
 async function runAutoBattle(): Promise<void> {
   vi.useFakeTimers(PAGE_FAKE_TIMERS);
   try {
@@ -605,7 +613,7 @@ describeScenario('UI-флоу прев’ю: геосцена → місія →
   });
 
   step('закриття бою повертає на геосцену і розблоковує час', () => {
-    btn('btn-close').click();
+    closeBattle();
     expect($('battle-panel').classList.contains('hidden')).toBe(true);
     expect($('geo-panel').classList.contains('hidden')).toBe(false); // П6.2: фокусна зона — геосцена
     expect(btn('btn-tick').disabled).toBe(false);
@@ -656,7 +664,7 @@ describeScenario('критичний флоу економіки: найм → �
   });
 
   step('поранений не боєготовий: статус у ростері, місія недоступна поки вікно триває', () => {
-    btn('btn-close').click();
+    closeBattle();
     expect($('battle-panel').classList.contains('hidden')).toBe(true);
     expect($('roster').textContent).toContain('6 оперативників (5 боєготових)');
     expect($('roster').textContent).toContain('лікарня: 14 тіків');
@@ -798,7 +806,7 @@ describePage('панель збереження: 3 слоти, лише на г�
     expect(btn('btn-load-1').disabled).toBe(true);
     expect(btn('btn-del-1').disabled).toBe(true);
     await runAutoBattle(); // завершити бій (детерміновано: сід 27)
-    btn('btn-close').click();
+    closeBattle();
     expect(btn('btn-save-1').disabled).toBe(false);
     expect(btn('btn-load-1').disabled).toBe(false);
   });
@@ -807,7 +815,7 @@ describePage('панель збереження: 3 слоти, лише на г�
     // авто-бій цієї партії: перемога, один загиблий, Іван поранений 4/11 (сід 27; п16.2 — «Боєць»)
     (document.querySelector('button.mission') as HTMLButtonElement).click();
     await runAutoBattle();
-    btn('btn-close').click();
+    closeBattle();
     expect($('roster').textContent).toContain('лікарня: 14 тіків');
     expect($('money').textContent).toBe('410'); // 300 + премія 110 (П8.6)
     btn('btn-save-3').click();
@@ -1020,7 +1028,7 @@ describeScenario('бойова фокусна зона (П6.3, ADR-0027)', (step
   step('після бою: dimmed знято, збереження активне', async () => {
     await runAutoBattle();
     expect($('bresult').textContent).toMatch(/ЗАЧИЩЕНО|ЗАГІН ВТРАЧЕНО/);
-    btn('btn-close').click();
+    closeBattle();
     expect($('geo-panel').classList.contains('hidden')).toBe(false);
     expect($('status').classList.contains('dimmed')).toBe(false);
     expect(btn('btn-save-1').disabled).toBe(false);
@@ -1197,7 +1205,8 @@ describeScenario('П6.14: UX прицілювання — обведення ц�
     const card = document.activeElement as HTMLElement;
     expect(card.classList.contains('sq-card')).toBe(true);
     expect(card.closest('#bsquad')).not.toBe(null);
-    expect(card.textContent).toContain('Олена');
+    expect(card.textContent).toContain('Шрам'); // п16.4 (ADR-0147 п. 6): на картці — позивний Олени
+    expect(card.getAttribute('aria-label')).toContain('Олена «Шрам»');
     expect(unitLabel()).toContain('AP 3/10');
     expect($('binfo').textContent).toContain('Олена вистрілила (швидкий)');
     expect($('benemy').classList.contains('hidden')).toBe(true);
@@ -1702,7 +1711,7 @@ describePage('П12.4: вкладки статус-колонки «Загін»/
     expect($('status').classList.contains('dimmed')).toBe(true); // чинний механізм П6.3
     expect($('status').contains($('status-tabs'))).toBe(true); // вкладки приглушуються разом з колонкою
     await runAutoBattle();
-    btn('btn-close').click();
+    closeBattle();
     expect($('status').classList.contains('dimmed')).toBe(false);
     expect(visibleTitles()).toEqual(['Фінанси', 'Ростер загону']); // вкладка «Загін» активна після бою
   });
@@ -1727,7 +1736,7 @@ describePage('П12.4: вкладки статус-колонки «Загін»/
     expect($('status').classList.contains('dimmed')).toBe(true);
     expect(btn('status-tab-squad').querySelector('.tab-badge')).toBeNull(); // 0 — бейдж не показується
     await runAutoBattle();
-    btn('btn-close').click();
+    closeBattle();
   });
 });
 
@@ -2474,7 +2483,7 @@ describePage('Т.66: рядок #fighter-last зникає після вигра
     expect(document.getElementById('fighter-last')).toBeNull();
     expect($('fighter').textContent ?? '').not.toContain(abortedText);
     // 6. назад на геосцену: те саме, а в журналі рядок про переривання лишився, рядка про відліт немає
-    btn('btn-close').click();
+    closeBattle();
     expect($('geo-panel').classList.contains('hidden')).toBe(false);
     expect(document.querySelectorAll('#ufos .ufo')).toHaveLength(0);
     expect($('log').textContent ?? '').not.toContain('Зонд Розриву ufo1 відлетів і зник');
@@ -2518,7 +2527,7 @@ describePage('Т.69: рядок #fighter-last лишається після пр
     expect(document.querySelectorAll('#fighter-last')).toHaveLength(1);
     expect(document.getElementById('fighter-last')?.textContent).toBe(abortedText);
     // 6. назад на геосцену: зонд у списку, місію можна повторити, рядок на панелі лишився
-    btn('btn-close').click();
+    closeBattle();
     expect($('geo-panel').classList.contains('hidden')).toBe(false);
     expect(document.querySelectorAll('#ufos .ufo button.mission')).toHaveLength(1);
     expect(document.getElementById('fighter-last')?.textContent).toBe(abortedText);
@@ -2567,7 +2576,7 @@ describePage('кандидат 55: рядок #fighter-last лишається �
     expect(document.querySelectorAll('#fighter-last')).toHaveLength(1);
     expect(document.getElementById('fighter-last')?.textContent).toBe(abortedText);
     // 5. btn-close → геосцена: кнопка місії одна (#ufos .ufo button.mission — одна), #fighter-last з тим самим текстом
-    btn('btn-close').click();
+    closeBattle();
     expect($('geo-panel').classList.contains('hidden')).toBe(false);
     expect(document.querySelectorAll('#ufos .ufo button.mission')).toHaveLength(1);
     expect(document.querySelectorAll('#fighter-last')).toHaveLength(1);
@@ -3206,7 +3215,7 @@ describePage('Т.128: «Збереження» — вікно з «Меню» (A
     for (const id of ['btn-save-1', 'btn-load-1', 'btn-del-1']) expect(btn(id).disabled).toBe(true);
     btn('btn-save-close').click();
     await runAutoBattle();
-    btn('btn-close').click();
+    closeBattle();
     openSave();
     expect(document.getElementById('save-busy')).toBeNull();
     expect(btn('btn-save-1').disabled).toBe(false);
@@ -3370,5 +3379,49 @@ describe('Т.149: «менше руху» змінилось — цикл ambien
     expect(scheduled.length).toBe(before);
     expect(cancelled.length).toBe(cancels);
     toggle.click(); // назад: увімкнено (ключ налаштування — у пам'яті сторінки блоку)
+  });
+});
+
+// п16.4 (ADR-0147 п. 5, 13, 15; EARS 4, 8, 10): вікно вибору ролі — після завантаження сейву v1
+// (міграція дає звання з kills), не закривається Esc і кліком поза ним, кілька підвищень — по черзі.
+describePage('п16.4: вікно вибору ролі і ростер', () => {
+  it('сейв v1 з kills 2 і 5 → «Крук» — Боєць, потім «Шрам» — Сержант; Esc і клік повз не закривають', () => {
+    startParty('27');
+    btn('btn-save-1').click();
+    const data = JSON.parse(localStorage.getItem('rubezh.save.1')!) as {
+      version: number;
+      state: { roster: { soldiers: { kills: number }[]; careers?: unknown } };
+    };
+    data.version = 1;
+    delete data.state.roster.careers;
+    data.state.roster.soldiers[0].kills = 2;
+    data.state.roster.soldiers[1].kills = 5;
+    localStorage.setItem('rubezh.save.1', JSON.stringify(data));
+    const dialog = $('role-dialog');
+    expect(dialog.classList.contains('hidden')).toBe(true);
+    btn('btn-load-1').click();
+    expect(dialog.classList.contains('hidden')).toBe(false);
+    expect($('role-dialog-title').textContent).toBe('Підвищення: «Крук» — Боєць. Оберіть роль');
+    expect(document.activeElement).toBe($('btn-role-assault')); // фокус на першу роль
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    dialog.click(); // клік по тлу поза панеллю
+    expect(dialog.classList.contains('hidden')).toBe(false);
+    // поки вікно відкрите, пробіл час не рухає (Т.43 — overlayOpen)
+    const clock = $('clock').textContent;
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', code: 'Space', bubbles: true }));
+    expect($('clock').textContent).toBe(clock);
+    btn('btn-role-sniper').click();
+    expect(dialog.classList.contains('hidden')).toBe(false); // наступне підвищення — по черзі
+    expect($('role-dialog-title').textContent).toBe('Підвищення: «Шрам» — Сержант. Оберіть роль');
+    btn('btn-role-medic').click();
+    expect(dialog.classList.contains('hidden')).toBe(true);
+    const rows = [...document.querySelectorAll<HTMLElement>('#roster .soldier')].map((r) => r.textContent);
+    expect(rows[0]).toContain('Іван «Крук»Боєць◎ снайпер');
+    expect(rows[0]).toContain('досвід 2 · до «Сержант» 3');
+    expect(rows[1]).toContain('Олена «Шрам»Сержант✚ медик');
+    expect(rows[2]).toContain('Тарас «Іскра»Рекрут');
+    expect(rows[2]).toContain('Перший рій пережито в підвалі лікарні.');
+    expect(rows[2]).toContain('досвід 0 · до «Боєць» 2');
+    expect(document.querySelectorAll('#roster .soldier')[1].querySelectorAll('.chev i')).toHaveLength(3);
   });
 });

@@ -38,6 +38,8 @@ import type { Anim } from '../core/render-core';
 import { el, setWhy } from './dom';
 import { setIconText } from './icons';
 import { helmetSvg } from './avatar';
+import { RANK_NAMES, rankOf } from '../core/career';
+import { chevronHtml, roleLabel, xpLine } from './roles';
 import { GCELL } from './grid';
 import { geoEventText, type LogCat } from './journal';
 import { ticksText } from './text';
@@ -507,11 +509,20 @@ export function createPanels(deps: PanelsDeps): Panels {
       const heal = party.roster.hospital[s.id];
       const row = document.createElement('div');
       row.className = 'soldier';
+      // п16.4 (ADR-0147 п. 6, EARS 8; рішення власника «А. Три рядки»): ім'я «позивний», шеврон, звання,
+      // роль, HP, вбивства; під ними — біографія і досвід до наступного звання
+      const career = party.roster.careers[s.id];
+      const rank = career ? rankOf(career.xp) : 0;
+      const role = career ? roleLabel(career) : '';
       row.innerHTML =
         helmetSvg(s.id) + // Т.129 (ADR-0118): аватар «шолом» кольору бійця
-        '<span style="min-width:64px">' +
+        '<span class="s-name">' +
         s.name +
+        (career ? ' <span class="s-call">«' + career.callsign + '»</span>' : '') +
         '</span>' +
+        (career ? chevronHtml(rank) + '<span class="s-rank">' + RANK_NAMES[rank] + '</span>' : '') +
+        (role !== '' ? '<span class="s-role' + (career?.role === null ? ' s-norole' : '') + '">' + role + '</span>' : '') +
+        (career ? '<div class="meta s-bio">' + career.bio + '</div><div class="s-stats">' : '') +
         '<span style="color:' +
         hpColor(s.hp, s.maxHp) +
         '">HP ' +
@@ -522,7 +533,9 @@ export function createPanels(deps: PanelsDeps): Panels {
         (heal !== undefined ? '<span class="meta">лікарня: ' + ticksText(heal) + '</span>' : '') +
         '<span class="kills">⚔ ' +
         s.kills +
-        '</span>';
+        '</span>' +
+        // п16.4: третій рядок — HP, лікарня, вбивства і досвід (колонка 320 px: у першому рядку вони переносились)
+        (career ? '<span class="meta">' + xpLine(career) + '</span></div>' : '');
       box.appendChild(row);
       // П11.6 (ADR-0058): екіпірування в картці оперативника — кнопки
       // «спорядити» зі складу / «зняти» назад на склад; лише на геосцені

@@ -724,6 +724,86 @@
         flex: none;
         margin-right: -4px;
       }
+      /* п16.4 (ADR-0147, рішення власника «А. Три рядки»): ім'я «позивний», шеврон, звання, роль;
+         біографія і досвід — окремими рядками під ними (з відступом під аватар) */
+      #roster .soldier {
+        flex-wrap: wrap;
+        row-gap: 0;
+        column-gap: 8px;
+      }
+      #roster .s-name {
+        min-width: 64px;
+      }
+      #roster .s-call {
+        color: #9fb0c3;
+      }
+      #roster .s-rank {
+        color: #f5c86a;
+      }
+      #roster .s-role {
+        color: #7fe2ff;
+      }
+      #roster .s-role.s-norole {
+        color: #7d8794;
+      }
+      #roster .s-bio,
+      #roster .s-stats {
+        flex-basis: 100%;
+        padding-left: 30px;
+      }
+      #roster .s-stats {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        column-gap: 8px;
+      }
+      /* п16.4 (ADR-0147 п. 6): шеврон звання кодом — 1–4 смужки бурштином */
+      .chev {
+        display: inline-flex;
+        flex-direction: column;
+        gap: 1px;
+        vertical-align: middle;
+        flex: none;
+      }
+      .chev i {
+        display: block;
+        width: 10px;
+        height: 2px;
+        background: #f5c86a;
+      }
+      /* п16.4: шеврон у правому нижньому куті аватара — позивний на вузькій картці (320 px) не обрізається */
+      #bsquad .sq-av {
+        position: relative;
+        flex: none;
+        line-height: 0;
+      }
+      #bsquad .sq-av .chev {
+        position: absolute;
+        right: -4px;
+        bottom: -3px;
+        padding: 1px;
+        border-radius: 2px;
+        background: #0b0e14;
+      }
+      #bsquad .chev i {
+        width: 8px;
+      }
+      #bsquad .sq-role {
+        color: #7fe2ff;
+        margin-right: 3px;
+      }
+      /* п16.4: вікно вибору ролі — три кнопки з описом дії */
+      .role-pick {
+        display: block;
+        width: 100%;
+        text-align: left;
+        margin: 6px 0;
+        padding: 8px 10px;
+      }
+      .role-pick .meta {
+        display: block;
+        margin-top: 2px;
+      }
       /* T.39: панель «Дослідження» — смуга кроків і картки протоколів
          (ескіз: docs/reports/t39/sketch.webp) */
       .sci-steps {
@@ -1545,6 +1625,7 @@
       #game-menu,
       #exit-confirm,
       #evac-confirm,
+      #role-dialog,
       #settings-dialog,
       #save-dialog {
         position: fixed;
@@ -1853,6 +1934,18 @@
         /* Т.118 (кандидат 19, варіант А власника): поле нижче за висоту стовпчика плиток
            (9 × 58 + 8 × 6 = 570 px; межа 554 px — 1024 × 768 з полем 558 px без змін) —
            плитки у два стовпчики (64 + 6 + 64 = 134 px), поле вписується у висоту без прокрутки */
+        /* п16.4 (ADR-0147): + плитка «Роль» — стовпчик 10 × 58 + 9 × 6 = 634 px. На висотах 554–633 px
+           (iPad 1024 × 768 — 558 px) — компактніші плитки одним стовпчиком: іконка 30 px, проміжок 4 px
+           (10 × 52 + 9 × 4 = 556 px), поле без змін; нижче 554 px — два стовпчики, як з Т.118 */
+        @container bstage (min-height: 554px) and (max-height: 633px) {
+          #btoolbar {
+            gap: 4px;
+          }
+          #btoolbar button svg.tb-icon {
+            height: 30px;
+            padding: 4px 5px 0;
+          }
+        }
         @container bstage (max-height: 553px) {
           #btoolbar {
             display: grid;
@@ -2255,6 +2348,7 @@
     <section class="hidden" id="exit-confirm"></section>
     <!-- Т.71 (ADR-0075): підтвердження евакуації останнього оперативника — контент генерує src/main.ts -->
     <section class="hidden" id="evac-confirm"></section>
+    <section class="hidden" id="role-dialog" role="dialog" aria-modal="true" aria-labelledby="role-dialog-title"></section>
     <!-- П12.3 (ADR-0065/0059): скелет вікна «Налаштування» — контент генерує
          src/ui/settings.ts; тумблер звуку мігрував сюди з топбара (П11.7) -->
     <section class="hidden" id="settings-dialog"></section>

@@ -4,8 +4,10 @@
 // Клік по картці — те саме, що тап по бійцю на полі (src/ui/input.ts).
 // Чисті функції: стан бою → дані карток → HTML; DOM чіпає лише src/ui/battle.ts.
 import type { GameState } from '../core/combat';
+import { rankOf, type SoldierCareer } from '../core/career';
 import { fighterLook } from '../core/render-core';
 import { helmetSvg } from './avatar';
+import { ROLE_INFO, chevronHtml } from './roles';
 import { byGender } from './text';
 
 export type SquadCardStatus = 'ready' | 'down' | 'evac';
@@ -19,6 +21,10 @@ export interface SquadCardView {
   maxAp: number;
   status: SquadCardStatus;
   selected: boolean;
+  // п16.4 (ADR-0147 п. 6): позивний замість імені, звання (шеврон) і значок ролі; без кар'єри — ім'я
+  callsign?: string;
+  rank?: number;
+  roleGlyph?: string;
 }
 
 // Префікс id кліпа аватара в смузі: той самий боєць є й у ростері (`av-cp-<id>`).
@@ -33,14 +39,23 @@ export function squadOrder(state: GameState): string[] {
   return ids;
 }
 
-export function squadCards(state: GameState, order: string[], selectedId: string | null): SquadCardView[] {
+export function squadCards(
+  state: GameState,
+  order: string[],
+  selectedId: string | null,
+  careers: Readonly<Record<string, SoldierCareer>> = {}
+): SquadCardView[] {
   const byId = new Map<string, { u: GameState['units'][number]; status: SquadCardStatus }>();
   for (const u of state.units) if (u.side === 'player') byId.set(u.id, { u, status: u.alive ? 'ready' : 'down' });
   for (const u of state.evacuated ?? []) byId.set(u.id, { u, status: 'evac' });
   const ids = [...order.filter((id) => byId.has(id)), ...[...byId.keys()].filter((id) => !order.includes(id))];
   return ids.map((id) => {
     const { u, status } = byId.get(id)!;
+    const c = careers[id];
+    const role = state.roles?.[id]?.role;
     return {
+      ...(c ? { callsign: c.callsign, rank: rankOf(c.xp) } : {}),
+      ...(role ? { roleGlyph: ROLE_INFO[role].glyph } : {}),
       id,
       name: u.name,
       hp: status === 'down' ? 0 : u.hp,
@@ -65,9 +80,11 @@ export function rgba(hex: string, a: number): string {
 }
 
 export function squadCardLabel(c: SquadCardView): string {
-  if (c.status === 'down') return c.name + ': ' + byGender(c.name, 'загинув', 'загинула');
-  if (c.status === 'evac') return c.name + ': евакуйовано';
-  return c.name + ': HP ' + c.hp + '/' + c.maxHp + ' · AP ' + c.ap + '/' + c.maxAp;
+  // п16.4: «Іван «Крук»» — ім'я з позивним (на картці — позивний, ім'я — у підписі для диктора й підказці)
+  const who = c.callsign === undefined ? c.name : c.name + ' «' + c.callsign + '»';
+  if (c.status === 'down') return who + ': ' + byGender(c.name, 'загинув', 'загинула');
+  if (c.status === 'evac') return who + ': евакуйовано';
+  return who + ': HP ' + c.hp + '/' + c.maxHp + ' · AP ' + c.ap + '/' + c.maxAp;
 }
 
 function cardHtml(c: SquadCardView): string {
@@ -104,9 +121,13 @@ function cardHtml(c: SquadCardView): string {
     '"' +
     (c.status !== 'ready' ? ' disabled' : '') +
     '>' +
-    helmetSvg(c.id, 24, SQUAD_CLIP_PREFIX) +
+    // п16.4: шеврон звання — у куті аватара (на вузькій картці не забирає місця в позивного)
+    (c.rank !== undefined
+      ? '<span class="sq-av">' + helmetSvg(c.id, 24, SQUAD_CLIP_PREFIX) + chevronHtml(c.rank) + '</span>'
+      : helmetSvg(c.id, 24, SQUAD_CLIP_PREFIX)) +
     '<span class="sq-body"><span class="sq-head"><span class="sq-name">' +
-    c.name +
+    (c.roleGlyph !== undefined ? '<span class="sq-role">' + c.roleGlyph + '</span>' : '') +
+    (c.callsign ?? c.name) +
     '</span><span class="sq-hpn">' +
     (c.status === 'ready' ? c.hp + '/' + c.maxHp : '') +
     '</span></span><span class="sq-hp"><i style="width:' +
