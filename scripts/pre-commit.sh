@@ -64,17 +64,23 @@ if git diff --cached --name-only | grep -qE '^\.github/workflows/'; then
     fi
 fi
 
-# 2. Запуск тестів
+# 2. Запуск тестів — лише коли коміт чіпає більше, ніж документи і допоміжні скрипти
+# (ADR-0146: рівень full за scripts/ci-scope.sh; помилка скрипта — теж full)
 echo ""
-echo "--- Запуск тестів (npm test) ---"
-if npm test > /tmp/rubezh-test-output.txt 2>&1; then
-    echo "[OK] Тести пройшли успішно"
+scope="$(sh scripts/ci-scope.sh --staged 2> /dev/null | sed -n 's/^level=//p')" || scope=full
+if [ "$scope" = docs ] || [ "$scope" = tools ]; then
+    echo "--- Тести пропущено: рівень зміни «$scope» (ADR-0146) ---"
 else
-    echo "[FAIL] Тести не пройшли!"
-    echo ""
-    echo "Остання частина виводу:"
-    tail -20 /tmp/rubezh-test-output.txt
-    exit 1
+    echo "--- Запуск тестів (npm test) ---"
+    if npm test > /tmp/rubezh-test-output.txt 2>&1; then
+        echo "[OK] Тести пройшли успішно"
+    else
+        echo "[FAIL] Тести не пройшли!"
+        echo ""
+        echo "Остання частина виводу:"
+        tail -20 /tmp/rubezh-test-output.txt
+        exit 1
+    fi
 fi
 
 # 3. Перевірка exact-байти (якщо скрипт існує)

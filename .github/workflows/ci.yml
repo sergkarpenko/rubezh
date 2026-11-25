@@ -1,5 +1,8 @@
 # CI-гейт на PR (ADR-0025/0035/0076): типи + лінт + формат + тести + поріг покриття + звіт на Codecov (гейт codecov/patch, ADR-0034) + збірка + docs — без деплою.
 # Джоба «e2e» (ADR-0080): сценарій приймання в браузері.
+# ADR-0146: обсяг перевірок — за зміненими файлами (scripts/ci-scope.sh): docs — без
+# тестів, лінту і збірки; tools (scripts/, кореневі *.md) — tsc скриптів, лінт, формат;
+# full — усе. Джоби стартують завжди (обов'язкові чеки зеленіють), зайві кроки пропущено.
 # Джоба «shuffle» (ADR-0128): npm test у перемішаному порядку; обов'язковий чек main (ADR-0131).
 # Працює при кожному PR у main; чек «test» — required status check
 # для захисту гілки main (той самий рубіж, що й preview на push).
@@ -27,11 +30,22 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          # merge-коміт PR і його батьки: HEAD^1 — база, диф HEAD^1..HEAD — зміни PR
+          fetch-depth: 2
+      # ADR-0146: помилка скрипта — червона джоба, а не пропуск перевірок
+      - name: Самоперевірка скрипта обсягу
+        run: sh scripts/ci-scope.sh --self-test
+      - name: Обсяг перевірок
+        id: scope
+        run: sh scripts/ci-scope.sh HEAD^1 HEAD >> "$GITHUB_OUTPUT"
       - uses: actions/setup-node@v7
+        if: steps.scope.outputs.level != 'docs'
         with:
           node-version: 26
       # ADR-0076: строго за lockfile (урок П9.4 — дрейф node_modules від lockfile)
       - run: npm ci
+        if: steps.scope.outputs.level != 'docs'
       # ADR-0113: кожен workflow задає defaults.run.shell: bash (pipefail) — новий workflow
       # без цього блоку червонить чек test
       - name: Workflow — bash з pipefail
@@ -48,27 +62,44 @@ jobs:
       # ADR-0076: гейти типів, лінту і формату — у CI, а не лише в pre-commit.
       # tsc перевіряє і тестові файли: vitest типи не перевіряє, typedoc тести виключає.
       - run: npx tsc --noEmit
+        if: steps.scope.outputs.level == 'full'
       # ADR-0079: ядро компілюється без lib.dom — «чисте ядро без DOM» (ADR-0002) як гейт
       - run: npx tsc --noEmit -p tsconfig.core.json
+        if: steps.scope.outputs.level == 'full'
       # ADR-0106, ADR-0140, ADR-0141: scripts/*.ts, кореневі playwright*.config.ts і
       # e2e/smoke.e2e.ts — під tsc з типами Node (@types/node; охоплення — tsconfig.scripts.json)
       - run: npx tsc --noEmit -p tsconfig.scripts.json
+        if: steps.scope.outputs.level != 'docs'
       - run: npm run lint
+        if: steps.scope.outputs.level != 'docs'
       - run: npm run format:check
-      - run: npm test
-      # Покриття ядра + поріг 80% (ADR-0017); звіт — dist/coverage
+        if: steps.scope.outputs.level != 'docs'
+      # Усі тести з покриттям ядра + поріг 80% (ADR-0017); звіт — dist/coverage.
+      # Окремого кроку npm test немає (ADR-0146): це той самий прогін без покриття.
       - run: npm run test:coverage
+        if: steps.scope.outputs.level == 'full'
       # ADR-0035: звіт на Codecov у PR — джерело даних для гейта codecov/patch (ADR-0034,
       # target 95% з codecov.yml); без цього кроку чек висить «Waiting» і блокує мердж.
       # Той самий крок і токен, що й у preview.yml (П3.1); Codecov дедуплікує за SHA.
       - name: Codecov
+        if: steps.scope.outputs.level == 'full'
         uses: codecov/codecov-action@v7
         with:
           files: dist/coverage/coverage-final.json
           token: ${{ secrets.CODECOV_TOKEN }}
+      # ADR-0146: без тестів звіту немає — порожнє завантаження закриває codecov/patch зеленим
+      - name: Codecov — без звіту
+        if: steps.scope.outputs.level != 'full'
+        uses: codecov/codecov-action@v7
+        with:
+          run_command: empty-upload
+          force: true
+          token: ${{ secrets.CODECOV_TOKEN }}
       - run: npm run build
+        if: steps.scope.outputs.level == 'full'
       # TypeDoc-довідка (ADR-0019) — перевірка генерації на PR
       - run: npm run docs
+        if: steps.scope.outputs.level == 'full'
 
   # ADR-0128: тести в перемішаному порядку (--sequence.shuffle) — ловить тести, що
   # залежать від порядку (стаби без повернення, фейк-таймери — Т.149, Т.150). Окрема
@@ -78,11 +109,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 2
+      - name: Обсяг перевірок
+        id: scope
+        run: sh scripts/ci-scope.sh HEAD^1 HEAD >> "$GITHUB_OUTPUT"
       - uses: actions/setup-node@v7
+        if: steps.scope.outputs.level == 'full'
         with:
           node-version: 26
       - run: npm ci
+        if: steps.scope.outputs.level == 'full'
       - name: npm test у перемішаному порядку
+        if: steps.scope.outputs.level == 'full'
         env:
           RUN_ID: ${{ github.run_id }}
         run: |
@@ -101,11 +140,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 2
+      - name: Обсяг перевірок
+        id: scope
+        run: sh scripts/ci-scope.sh HEAD^1 HEAD >> "$GITHUB_OUTPUT"
       - uses: actions/setup-node@v7
+        if: steps.scope.outputs.level == 'full'
         with:
           node-version: 26
       - run: npm ci
+        if: steps.scope.outputs.level == 'full'
       # Типи сценарію і дзеркала: Playwright, як і vitest, типів не перевіряє
       - run: npx tsc --noEmit -p tsconfig.e2e.json
+        if: steps.scope.outputs.level == 'full'
       - run: npx playwright install --with-deps chromium
+        if: steps.scope.outputs.level == 'full'
       - run: npm run test:e2e
+        if: steps.scope.outputs.level == 'full'
