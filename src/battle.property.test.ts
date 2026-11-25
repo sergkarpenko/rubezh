@@ -15,6 +15,8 @@ import {
   evacuate,
   fieldAid,
   hasLineOfSight,
+  seenEnemies,
+  sightBlockers,
   isBlocked,
   isInside,
   makeUnit,
@@ -37,7 +39,7 @@ import {
   type Unit,
   type Vec2,
 } from './core/combat';
-import { computeVisibleCells, findPath } from './core/map';
+import { computeVisibleCells, findPath, sideVisibleCells } from './core/map';
 import { aiStep } from './core/ai';
 import { botTurn } from './core/ai-bot';
 
@@ -291,7 +293,7 @@ describe('property: бій на випадковому бойовищі', () => 
         const s = build(arena);
         const start = s.units[0].pos;
         const goal = { x: goalCell % arena.w, y: Math.floor(goalCell / arena.w) % arena.h };
-        const seen = computeVisibleCells(s, start);
+        const seen = computeVisibleCells(s, start, s.units[0].side);
         const known = (u: Unit): boolean => seen.has(key(u.pos));
         const path = findPath(s, start, goal, 2000, seen);
         expect(path?.length ?? null).toBe(bfs(s, start, goal, known));
@@ -315,20 +317,48 @@ describe('property: бій на випадковому бойовищі', () => 
       fc.property(arenaArb, fc.nat(80), (arena, n) => {
         const s = build(arena);
         const from = s.units[0].pos;
-        const seen = computeVisibleCells(s, from);
+        const seen = computeVisibleCells(s, from, s.units[0].side);
         expect(seen.has(key(from))).toBe(true);
+        // п17.4: монотонність за рельєфом — лише з глядачем на полі: прибрана стіна може відкрити
+        // ворога, а він закриває клітинки за собою (ADR-0151)
         const walls = [...s.map.blocked];
-        const opened = { ...s, map: { ...s.map, blocked: new Set(walls.filter((_, i) => i !== n % (walls.length || 1))) } };
-        const wider = computeVisibleCells(opened, from);
-        expect([...seen].filter((c) => !wider.has(c))).toEqual([]);
+        const alone = { ...s, units: [s.units[0]] };
+        const opened = { ...alone, map: { ...s.map, blocked: new Set(walls.filter((_, i) => i !== n % (walls.length || 1))) } };
+        const wider = computeVisibleCells(opened, from, s.units[0].side);
+        const base = computeVisibleCells(alone, from, s.units[0].side);
+        expect([...base].filter((c) => !wider.has(c))).toEqual([]);
         // Т.18 (ADR-0087): хто бачить клітинку, того з неї видно — для кожної пари клітинок поля
         const cells: Vec2[] = [];
         for (let x = 0; x < s.map.width; x++) for (let y = 0; y < s.map.height; y++) cells.push({ x, y });
         const oneWay = cells.flatMap((a) =>
-          cells.filter((b) => hasLineOfSight(s, a, b) !== hasLineOfSight(s, b, a)).map((b) => key(a) + '→' + key(b))
+          cells.filter((b) => hasLineOfSight(s, a, b, 'player') !== hasLineOfSight(s, b, a, 'player')).map((b) => key(a) + '→' + key(b))
         );
         expect(oneWay).toEqual([]);
-        for (const c of cells) expect(computeVisibleCells(s, c).has(key(from))).toBe(seen.has(key(c)));
+        for (const c of cells) expect(computeVisibleCells(s, c, s.units[0].side).has(key(from))).toBe(seen.has(key(c)));
+      }),
+      RUN
+    );
+  });
+
+  // п17.4 (ADR-0151): туман сторони не залежить від юнітів, яких вона не бачить (ADR-0081), а кожен
+  // видимий їй ворог закриває огляд усім її юнітам; невидимих стороні юнітів прибирають по одному.
+  it('туман із блокуванням: невидимий стороні юніт не змінює її туману; видимий ворог — закривач', () => {
+    fc.assert(
+      fc.property(arenaArb, (arena) => {
+        const s = build(arena);
+        for (const side of ['player', 'alien'] as const) {
+          const vis = [...sideVisibleCells(s, side)].sort();
+          const seen = seenEnemies(s, side).map((u) => u.id);
+          const blockers = sightBlockers(s, side);
+          for (const u of s.units) if (u.alive && (u.side === side || seen.includes(u.id))) expect(blockers.has(key(u.pos))).toBe(true);
+          for (const e of s.units) {
+            if (!e.alive || e.side === side || seen.includes(e.id)) continue;
+            expect(blockers.has(key(e.pos))).toBe(false);
+            const without = { ...s, units: s.units.filter((u) => u !== e) };
+            expect([...sideVisibleCells(without, side)].sort()).toEqual(vis);
+            expect(seenEnemies(without, side).map((u) => u.id)).toEqual(seen);
+          }
+        }
       }),
       RUN
     );
@@ -339,8 +369,8 @@ describe('property: бій на випадковому бойовищі', () => 
   // хоч в один бік, тож стріляють обидва.
   it('лінія вогню чиста, якщо чиста хоч в один бік: оперативник і демон стріляють одне в одного', () => {
     const s = build({ w: 5, h: 5, walls: [1], spots: [2, 5], seed: 0 }); // стіна (1,0), p0 у (2,0), a1 у (0,1)
-    expect(hasLineOfSight(s, s.units[1].pos, s.units[0].pos)).toBe(true);
-    expect(hasLineOfSight(s, s.units[0].pos, s.units[1].pos)).toBe(true);
+    expect(hasLineOfSight(s, s.units[1].pos, s.units[0].pos, 'alien')).toBe(true);
+    expect(hasLineOfSight(s, s.units[0].pos, s.units[1].pos, 'player')).toBe(true);
     expect(resolveAttack(s, 'p0', 'a1', 'snap').shots).toHaveLength(1);
     endTurn(s);
     expect(resolveAttack(s, 'a1', 'p0', 'snap').shots).toHaveLength(1);

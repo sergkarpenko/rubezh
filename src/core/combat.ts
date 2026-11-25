@@ -259,19 +259,99 @@ function requireActive(state: GameState, u: Unit): void {
   if (u.side !== state.activeSide) throw new Error('Зараз хід не сторони ' + u.side);
 }
 
-function lineClear(map: GameMap, from: Vec2, to: Vec2): boolean {
+function lineClear(map: GameMap, from: Vec2, to: Vec2, blockers?: ReadonlySet<string>): boolean {
   const line = bresenham(from, to);
   for (let i = 1; i < line.length - 1; i++) {
     if (isBlocked(map, line[i])) return false;
+    if (blockers?.has(key(line[i]))) return false;
   }
   return true;
 }
 
-// Лінія вогню: проміжні клітинки (без кінців) не мають перешкод. Растеризація
-// залежить від напрямку, тож лінія чиста, якщо чиста хоч в один бік, — правило
-// симетричне: хто бачить, того бачать (ADR-0087).
-export function hasLineOfSight(state: GameState, from: Vec2, to: Vec2): boolean {
+// Лінія лише рельєфом (кінці не рахуються), симетрична (ADR-0087). п17.4: лінія кидка
+// гранати — кидок іде над головами, юніти її не закривають (ADR-0149 п. 14).
+export function hasTerrainLine(state: GameState, from: Vec2, to: Vec2): boolean {
   return lineClear(state.map, from, to) || lineClear(state.map, to, from);
+}
+
+// п17.4 (ADR-0151, рішення власника «Б. За стороною»): хто з живих юнітів закриває огляд
+// і вогонь для сторони side. Свої — завжди (сторона їх знає). Чужі — лише ті, кого бачить
+// хоч один свій юніт за першим проходом: глядач v бачить клітинку c, якщо лінія v→c чи c→v
+// чиста від рельєфу, від своїх юнітів і від чужих у клітинках, які v уже бачить. Проміжна
+// клітинка лінії Брезенгема ближча до v (Чебишов), ніж c, тож означення фундоване відстанню
+// і не залежить від невидимих юнітів — туман не видає їх (ADR-0081).
+interface SightCache {
+  sig: string;
+  blocked: ReadonlySet<string>;
+  side: Partial<Record<Side, { blockers: Set<string>; seen: Unit[] }>>;
+}
+const sightCache = new WeakMap<GameState, SightCache>();
+
+function sightOf(state: GameState, side: Side): { blockers: Set<string>; seen: Unit[] } {
+  // ключ кешу — живі юніти з позиціями і стіни (у тестах стан міняють напряму)
+  let sig = state.map.width + 'x' + state.map.height + '#' + state.map.blocked.size + ':';
+  for (const u of state.units) if (u.alive) sig += u.id + '@' + u.pos.x + ',' + u.pos.y + ';';
+  let c = sightCache.get(state);
+  if (!c || c.sig !== sig || c.blocked !== state.map.blocked) {
+    c = { sig, blocked: state.map.blocked, side: {} };
+    sightCache.set(state, c);
+  }
+  const hit = c.side[side];
+  if (hit) return hit;
+  const at = new Map<string, Unit>();
+  for (const u of state.units) if (u.alive) at.set(key(u.pos), u);
+  const own = state.units.filter((u) => u.alive && u.side === side);
+  const foes = state.units.filter((u) => u.alive && u.side !== side);
+  const memo = new Map<Unit, Map<string, boolean>>(own.map((v) => [v, new Map()]));
+  const seen = foes.filter((e) => own.some((v) => firstPassSees(state, v, e.pos, at, memo.get(v) as Map<string, boolean>)));
+  const blockers = new Set<string>([...own, ...seen].map((u) => key(u.pos)));
+  const res = { blockers, seen };
+  c.side[side] = res;
+  return res;
+}
+
+function firstPassSees(state: GameState, v: Unit, c: Vec2, at: Map<string, Unit>, memo: Map<string, boolean>): boolean {
+  if (distance(v.pos, c) > VISION_RANGE) return false;
+  const ck = key(c);
+  const m = memo.get(ck);
+  if (m !== undefined) return m;
+  const clear = (a: Vec2, b: Vec2): boolean => {
+    const line = bresenham(a, b);
+    for (let i = 1; i < line.length - 1; i++) {
+      if (isBlocked(state.map, line[i])) return false;
+      const u = at.get(key(line[i]));
+      if (u === undefined || u === v) continue;
+      if (u.side === v.side || firstPassSees(state, v, line[i], at, memo)) return false;
+    }
+    return true;
+  };
+  const r = ck === key(v.pos) || clear(v.pos, c) || clear(c, v.pos);
+  memo.set(ck, r);
+  return r;
+}
+
+// Закривачі огляду для сторони: свої живі юніти і чужі, яких сторона бачить (п17.4).
+export function sightBlockers(state: GameState, side: Side): ReadonlySet<string> {
+  return sightOf(state, side).blockers;
+}
+
+// Чужі живі юніти, яких бачить сторона side (п17.4): вони ж — видимі вороги туману.
+export function seenEnemies(state: GameState, side: Side): Unit[] {
+  return [...sightOf(state, side).seen];
+}
+
+// Лінія огляду й вогню для сторони side: проміжні клітинки (без кінців) — без рельєфу і без
+// закривачів сторони (sightBlockers). Растеризація залежить від напрямку, тож лінія чиста,
+// якщо чиста хоч в один бік — за тих самих закривачів правило симетричне (ADR-0087).
+// ignore — клітинка, яку не рахувати закривачем (юніт, що оцінює позицію, куди піде, ШІ).
+export function hasLineOfSight(state: GameState, from: Vec2, to: Vec2, side: Side, ignore?: Vec2): boolean {
+  let blockers = sightBlockers(state, side);
+  if (ignore !== undefined && blockers.has(key(ignore))) {
+    const b = new Set(blockers);
+    b.delete(key(ignore));
+    blockers = b;
+  }
+  return lineClear(state.map, from, to, blockers) || lineClear(state.map, to, from, blockers);
 }
 
 // п17.2 (ADR-0149 п. 10): чи має зброя режим (без `only` — усі три).
@@ -434,8 +514,12 @@ function fireReaction(state: GameState, shooter: Unit, target: Unit): void {
 
 // п17.3 (рішення власника «А. Лише по видимих»): чи бачить клітинку pos хоч один
 // живий юніт сторони — те саме правило, що `computeVisibleCells` / `visibleEnemies` (map.ts).
+// п17.4: плюс клітинки ворогів, яких сторона бачить (seenEnemies), — як sideVisibleCells.
 export function sideSees(state: GameState, side: Side, pos: Vec2): boolean {
-  return state.units.some((u) => u.alive && u.side === side && distance(u.pos, pos) <= VISION_RANGE && hasLineOfSight(state, u.pos, pos));
+  if (seenEnemies(state, side).some((e) => e.pos.x === pos.x && e.pos.y === pos.y)) return true;
+  return state.units.some(
+    (u) => u.alive && u.side === side && distance(u.pos, pos) <= VISION_RANGE && hasLineOfSight(state, u.pos, pos, side)
+  );
 }
 
 // Реакційний вогонь по юніту, що рухається: один постріл з кожного дозору.
@@ -446,7 +530,7 @@ function triggerOverwatch(state: GameState, mover: Unit): void {
     if (!w.alive || !w.overwatch || w.side === mover.side) continue;
     const d = distance(w.pos, mover.pos);
     if (d > w.weapon.range) continue;
-    if (!hasLineOfSight(state, w.pos, mover.pos)) continue;
+    if (!hasLineOfSight(state, w.pos, mover.pos, w.side)) continue;
     if (d > VISION_RANGE && !sideSees(state, w.side, mover.pos)) continue;
     w.overwatch = false; // дозор «розряджається» одним пострілом
     fireReaction(state, w, mover);
@@ -472,7 +556,7 @@ function assertCanFire(state: GameState, s: Unit, t: Unit, mode: ShotMode): void
       s.weapon.range === 1 ? 'Ціль не впритул: «' + s.weapon.name + '» б’ють лише сусідню клітинку' : 'Ціль поза дальністю зброї'
     );
   }
-  if (!hasLineOfSight(state, s.pos, t.pos)) throw new Error('Немає лінії вогню');
+  if (!hasLineOfSight(state, s.pos, t.pos, s.side)) throw new Error('Немає лінії вогню');
   if (s.ap < s.weapon.modes[mode].apCost) throw new Error('Недостатньо очок дій для пострілу ' + MODE_NAMES[mode]); // п17.2 (аудит PR #507): назва режиму українською
 }
 
@@ -566,7 +650,7 @@ export function throwGrenade(state: GameState, throwerId: string, center: Vec2):
   if (u.ap < GRENADE_AP_COST) throw new Error('Недостатньо очок дій для кидка');
   if (!isInside(state.map, center)) throw new Error('Епіцентр за межами мапи');
   if (distance(u.pos, center) > GRENADE_RANGE) throw new Error('Епіцентр поза дальністю кидка');
-  if (!hasLineOfSight(state, u.pos, center)) throw new Error('Немає лінії кидка');
+  if (!hasTerrainLine(state, u.pos, center)) throw new Error('Немає лінії кидка');
   const zone = grenadeZone(center);
   const affected = state.units.filter((t) => t.alive && inCells(t.pos, zone));
   // один кидок RNG на вибух — споживання rng не залежить від зони (детермінізм)

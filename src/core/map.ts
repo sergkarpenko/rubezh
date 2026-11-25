@@ -8,6 +8,7 @@
 import {
   MOVE_AP_PER_CELL,
   hasLineOfSight,
+  seenEnemies,
   isBlocked,
   isInside,
   mulberry32,
@@ -133,33 +134,44 @@ export function reachableCells(state: GameState, start: Vec2, ap: number, seen?:
 // --- Туман війни ---
 
 /**
- * Клітинки, видимі з pos (ключі "x,y"): вся клітинка «залишається видимою»,
- * якщо лінія вогню до неї чиста; стіни самі видимі, але ховають клітинки за ними.
- * range — радіус Чебишова; квадрат дальності обрізується межами мапи.
+ * Клітинки, видимі з pos глядачем сторони side (ключі "x,y"): клітинка видима, якщо лінія
+ * огляду до неї чиста (`hasLineOfSight` — рельєф і закривачі сторони, п17.4); стіни й юніти
+ * самі видимі, але ховають клітинки за собою. range — радіус Чебишова; квадрат дальності
+ * обрізується межами мапи. ignore — як у `hasLineOfSight`.
  */
-export function computeVisibleCells(state: GameState, pos: Vec2, range = VISION_RANGE): Set<string> {
+export function computeVisibleCells(state: GameState, pos: Vec2, side: Side, range = VISION_RANGE, ignore?: Vec2): Set<string> {
   const visible = new Set<string>();
   visible.add(key(pos));
   for (let dx = -range; dx <= range; dx++) {
     for (let dy = -range; dy <= range; dy++) {
       const cell = { x: pos.x + dx, y: pos.y + dy };
       if (!isInside(state.map, cell)) continue;
-      if (hasLineOfSight(state, pos, cell)) visible.add(key(cell));
+      if (hasLineOfSight(state, pos, cell, side, ignore)) visible.add(key(cell));
     }
   }
   return visible;
 }
 
 /**
- * Ворожі юніти, видимі даною стороною: хоч один її юніт бачить клітинку ворога.
+ * Туман сторони (п17.4): клітинки, які бачить хоч один її живий юніт, і клітинки ворогів,
+ * яких вона бачить (`seenEnemies`; рідко такого ворога інший видимий ворог ховає від усіх
+ * своїх — він лишається видимим, бо закриває огляд, ADR-0151).
  */
-export function visibleEnemies(state: GameState, side: Side): Unit[] {
+export function sideVisibleCells(state: GameState, side: Side): Set<string> {
   const seen = new Set<string>();
   for (const u of state.units) {
     if (u.side !== side || !u.alive) continue;
-    for (const kk of computeVisibleCells(state, u.pos)) seen.add(kk);
+    for (const kk of computeVisibleCells(state, u.pos, side)) seen.add(kk);
   }
-  return state.units.filter((u) => u.alive && u.side !== side && seen.has(key(u.pos)));
+  for (const e of seenEnemies(state, side)) seen.add(key(e.pos));
+  return seen;
+}
+
+/**
+ * Ворожі юніти, видимі даною стороною (п17.4 — `seenEnemies`, порядок масиву юнітів).
+ */
+export function visibleEnemies(state: GameState, side: Side): Unit[] {
+  return seenEnemies(state, side);
 }
 
 // --- Генератор тестових мап ---

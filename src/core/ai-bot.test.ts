@@ -474,10 +474,10 @@ describe('Т.142: ходи, ліміти і запобіжники циклів'
 
   it('DemoSteps зупиняється рівно на ліміті півходів', () => {
     const m = mkMission('u142c');
-    const drv = new DemoSteps(3);
+    const drv = new DemoSteps(2); // п17.4: на u142c бій закінчується на 3-му півході
     let guard = 0;
     while (!drv.step(m.state).over) if (guard++ > 10000) throw new Error('не завершується');
-    expect(drv.halfTurnsDone).toBe(3);
+    expect(drv.halfTurnsDone).toBe(2);
     expect(missionOutcome(m.state)).toBe('триває');
   });
 

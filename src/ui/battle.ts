@@ -28,7 +28,7 @@ import {
   type Unit,
   type Vec2,
 } from '../core/combat';
-import { computeVisibleCells, reachableCells } from '../core/map';
+import { reachableCells, sideVisibleCells } from '../core/map';
 import { geoClock } from '../core/geo';
 import type { Party } from '../core/save';
 import {
@@ -157,7 +157,7 @@ export function validFireTargets(state: GameState, shooter: Unit, vis: ReadonlyS
     if (t.side !== 'alien' || !t.alive) continue;
     if (!vis.has(t.pos.x + ',' + t.pos.y)) continue; // туман: невидима ціль не підсвічується
     if (distance(shooter.pos, t.pos) > shooter.weapon.range) continue;
-    if (!hasLineOfSight(state, shooter.pos, t.pos)) continue;
+    if (!hasLineOfSight(state, shooter.pos, t.pos, shooter.side)) continue;
     out.push(t);
   }
   return out;
@@ -312,12 +312,9 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
   }
 
   function visibleCells(): Set<string> {
-    const vis = new Set<string>();
-    if (!ui.mission) return vis;
-    for (const u of ui.mission.state.units) {
-      if (u.side === 'player' && u.alive) for (const k of computeVisibleCells(ui.mission.state, u.pos)) vis.add(k);
-    }
-    return vis;
+    // п17.4: туман сторони гравця — ядро (`sideVisibleCells`, закривачі сторони)
+    if (!ui.mission) return new Set<string>();
+    return sideVisibleCells(ui.mission.state, 'player');
   }
 
   // П14.4 (фідбек прев'ю): демон, який ВІДОБРАЖАЄТЬСЯ у клітинці. Під час

@@ -21,6 +21,7 @@ import {
   evacuate,
   fieldAid,
   hasLineOfSight,
+  hasTerrainLine,
   moveUnit,
   preciseShot,
   resolveAttack,
@@ -311,7 +312,7 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
         battle.binfo('Епіцентр поза дальністю кидка (' + GRENADE_RANGE + ' клітинок).');
         return;
       }
-      if (!hasLineOfSight(st, sel.pos, cell)) {
+      if (!hasTerrainLine(st, sel.pos, cell)) {
         battle.binfo('Немає лінії кидка до епіцентру (рельєф).');
         return;
       }
@@ -360,7 +361,7 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
         battle.binfo('Ціль поза дальністю зброї (' + sel.weapon.range + ' клітинок).');
         return;
       }
-      if (!hasLineOfSight(st, sel.pos, u.pos)) {
+      if (!hasLineOfSight(st, sel.pos, u.pos, sel.side)) {
         battle.binfo('Немає лінії вогню до цілі.');
         return;
       }
@@ -491,7 +492,7 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
         t !== undefined &&
         battle.visibleCells().has(cell.x + ',' + cell.y) &&
         distance(sel.pos, t.pos) <= sel.weapon.range &&
-        hasLineOfSight(ui.mission.state, sel.pos, t.pos);
+        hasLineOfSight(ui.mission.state, sel.pos, t.pos, sel.side);
       const next: Vec2 | null = valid ? cell : null;
       if (!sameCell(next, ui.aimCell)) {
         ui.aimCell = next;

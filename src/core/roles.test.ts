@@ -39,7 +39,7 @@ function roleGame(roles?: Record<string, UnitRole>, rng: RNG = alwaysHit): GameS
     roles,
     units: [
       makeUnit({ id: 's1', side: 'player', pos: { x: 2, y: 2 } }),
-      makeUnit({ id: 's2', side: 'player', pos: { x: 3, y: 2 }, hp: 4, maxHp: 10 }),
+      makeUnit({ id: 's2', side: 'player', pos: { x: 3, y: 3 }, hp: 4, maxHp: 10 }),
       makeUnit({ id: 'a1', side: 'alien', pos: { x: 8, y: 2 }, hp: 10, maxHp: 10 }),
       makeUnit({ id: 'a2', side: 'alien', pos: { x: 8, y: 3 }, hp: 10, maxHp: 10 }),
     ],
@@ -148,7 +148,7 @@ describe('п16.3: «Польова допомога» медика', () => {
     expect(() => fieldAid(g, 's1', 'a1')).toThrow('Допомога можлива лише своїм');
     g.units[1].pos = { x: 4, y: 2 };
     expect(() => fieldAid(g, 's1', 's2')).toThrow('Ціль поза межами допомоги (відстань ≤1)');
-    g.units[1].pos = { x: 3, y: 3 }; // діагональ — сусід
+    g.units[1].pos = { x: 3, y: 2 }; // поруч по горизонталі — сусід
     expect(() => fieldAid(g, 's1', 's1')).toThrow('Ціль не поранена');
     g.units[1].alive = false;
     expect(() => fieldAid(g, 's1', 's2')).toThrow('Ціль уже мертва');
@@ -156,7 +156,7 @@ describe('п16.3: «Польова допомога» медика', () => {
     g.units[0].ap = 1;
     expect(() => fieldAid(g, 's1', 's2')).toThrow('Недостатньо очок дій: «Польова допомога» — 2 AP');
     g.units[0].ap = 10;
-    g.units[1].pos = { x: 3, y: 2 };
+    g.units[1].pos = { x: 3, y: 3 }; // п17.4: стартова клітинка s2 — поза лінією s1→a1
     expect(snap(g)).toBe(before);
     fieldAid(g, 's1', 's2');
     expect(() => fieldAid(g, 's1', 's2')).toThrow('«Польова допомога» вже використано в цьому бою');
