@@ -2,6 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { GRENADE_AP_COST, GRENADE_RANGE, calculateHitChance, createGame, makeUnit, type GameState, type Unit } from '../core/combat';
 import { MENU_SHOTS, enemyMenuHtml, enemyMenuPlace, enemyMenuView } from './enemy-menu';
+import { makeEnemy } from '../core/enemies';
 
 function game(shooterAt: { x: number; y: number }, alienAt: { x: number; y: number }, blocked: string[] = []): GameState {
   const map = { width: 20, height: 20, blocked: new Set(blocked) };
@@ -10,6 +11,42 @@ function game(shooterAt: { x: number; y: number }, alienAt: { x: number; y: numb
   return createGame({ map, units: [s, a], items: { s1: { medkit: false, grenade: true } } });
 }
 const unit = (st: GameState, id: string): Unit => st.units.find((u) => u.id === id)!;
+
+describe('п17.2: меню на ворогові — типи ворогів (рішення власника «А. Окремий рядок»)', () => {
+  const view = (kind: 'demon' | 'hound' | 'golem' | 'eye'): string => {
+    const st = game({ x: 2, y: 2 }, { x: 5, y: 2 });
+    const e = makeEnemy(kind, 'a2', 0, { x: 6, y: 6 });
+    st.units.push(e);
+    return enemyMenuHtml(enemyMenuView(st, e, undefined));
+  };
+  it('демон — як раніше: шкода й дальність, без нових рядків', () => {
+    const h = view('demon');
+    expect(h).toContain('>Шкода 2–5 · дальність 12</div>');
+    expect(h).not.toContain('Лише');
+    expect(h).not.toContain('Броня');
+    expect(enemyMenuView(game({ x: 2, y: 2 }, { x: 5, y: 2 }), makeEnemy('demon', 'a1', 0, { x: 1, y: 1 }), undefined)).toMatchObject({
+      only: null,
+      armor: 0,
+    });
+  });
+  it('гончак — «впритул» замість дальності', () => {
+    const h = view('hound');
+    expect(h).toContain('Гончак 1');
+    expect(h).toContain('>Шкода 3–6 · впритул</div>');
+    expect(h).not.toContain('Лише');
+  });
+  it('голем — рядок броні', () => {
+    const h = view('golem');
+    expect(h).toContain('>Шкода 3–6 · дальність 8</div>');
+    expect(h).toContain('<div class="em-line">Броня 2: −2 від влучання</div>');
+  });
+  it('око — рядок «Лише прицільний»', () => {
+    const h = view('eye');
+    expect(h).toContain('>Шкода 3–7 · дальність 16</div>');
+    expect(h).toContain('<div class="em-line">Лише прицільний</div>');
+    expect(h).not.toContain('Броня');
+  });
+});
 
 describe('enemyMenuView', () => {
   it('без бійця — картка лише з інформацією про демона', () => {

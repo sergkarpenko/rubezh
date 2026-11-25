@@ -15,10 +15,16 @@
 // Евакуйований вилучений з units → не ціль ШІ/пострілів/гранат/дозору
 // (формальні тести — П15.3); бій без евакуації — байт-у-байт незмінний.
 //
+// п17.2 (ADR-0149 п. 9–11): типи ворогів — необов'язкові `Unit.kind` і
+// `Unit.armor`, режими зброї `Weapon.only`; броня — у fireOnce (постріл, дозор,
+// «Точний постріл»), граната її не враховує. Без цих полів — байт-у-байт як раніше.
+//
 // Чиста логіка: жодних залежностей від DOM/Canvas.
 // Уся недетермінованість ізольована в ін'єктованому RNG (детерміновані тести і реплеї).
 // Дизайн шансів за мотивами X-COM: влучність = вроджена точність солдата × модифікатор типу пострілу.
 // Ітерація 2: дозор (overwatch) з реакційним вогнем під час ходу ворога.
+
+import type { EnemyKind } from './enemies';
 
 export type RNG = () => number; // [0, 1)
 
@@ -39,6 +45,9 @@ export interface Weapon {
   damage: [number, number];
   range: number;
   modes: Record<ShotMode, ShotProfile>;
+  // п17.2 (ADR-0149 п. 10): доступні режими; без поля — усі три. Профілі недоступних
+  // режимів дорівнюють дозволеному (дозор бере `modes.snap`).
+  only?: ShotMode[];
 }
 
 export interface Unit {
@@ -55,6 +64,8 @@ export interface Unit {
   alive: boolean;
   kills: number;
   overwatch: boolean; // дозор: реакційний вогонь під час ходу ворога
+  kind?: EnemyKind; // п17.2 (ADR-0149 п. 9): тип ворога; відсутній — демон (і оперативник)
+  armor?: number; // п17.2 (ADR-0149 п. 5, 11): мінус від кожного влучання пострілу
 }
 
 // П11.4 (ADR-0058): витратники юніта в цьому бою. «По одній на місцію»:
@@ -137,6 +148,9 @@ export const FIELD_AID_AP_COST = 2; // «Польова допомога»: 2 AP
 export const FIELD_AID_AMOUNT = HEAL_AMOUNT; // +3 HP за правилом гелю, без гелю
 
 export const EVAC_AP_COST = 2; // П15.2 (ADR-0075): «Евакуація» — 2 AP (кандидат, probe П15.5)
+
+// п17.2: назви режимів у повідомленнях ядра (як підписи плиток UI)
+const MODE_NAMES: Record<ShotMode, string> = { snap: '«Швидкий»', aimed: '«Прицільний»', auto: '«Черга»' };
 
 export const RIFLE: Weapon = {
   name: 'АР-14 «Гарт»',
@@ -250,6 +264,11 @@ function lineClear(map: GameMap, from: Vec2, to: Vec2): boolean {
 // симетричне: хто бачить, того бачать (ADR-0087).
 export function hasLineOfSight(state: GameState, from: Vec2, to: Vec2): boolean {
   return lineClear(state.map, from, to) || lineClear(state.map, to, from);
+}
+
+// п17.2 (ADR-0149 п. 10): чи має зброя режим (без `only` — усі три).
+export function weaponHasMode(w: Weapon, mode: ShotMode): boolean {
+  return w.only === undefined || w.only.includes(mode);
 }
 
 // Влучність не залежить від цілі (як в оригіналі): точність солдата × режим пострілу.
@@ -368,6 +387,7 @@ export function moveUnit(state: GameState, unitId: string, path: Vec2[], stopAtU
 // ADR-0003: порядок викликів RNG фіксований — кидок влучності, потім лише
 // при влучанні кидок пошкодження.
 // п16.3: mult — множник шкоди «Точного пострілу» (округлення вниз); RNG той самий.
+// п17.2 (ADR-0149 п. 11): броня цілі — після множника, не менше 1; подія несе шкоду після броні.
 function fireOnce(
   state: GameState,
   shooter: Unit,
@@ -382,6 +402,7 @@ function fireOnce(
     const dmin = shooter.weapon.damage[0],
       dmax = shooter.weapon.damage[1];
     damage = Math.floor((dmin + Math.floor(state.rng() * (dmax - dmin + 1))) * mult);
+    if (target.armor !== undefined && target.armor > 0) damage = Math.max(1, damage - target.armor);
     target.hp -= damage;
     if (target.hp <= 0) {
       target.hp = 0;
@@ -395,11 +416,12 @@ function fireOnce(
 }
 
 // Один реакційний постріл дозору: режим snap без витрати AP (AP зарезервовані),
-// зі штрафом точності OVERWATCH_ACC_PENALTY.
+// зі штрафом точності OVERWATCH_ACC_PENALTY. п17.2: зброя з `only` — профіль
+// `modes.snap` дорівнює дозволеному, подія пише режим `only[0]`.
 function fireReaction(state: GameState, shooter: Unit, target: Unit): void {
   const profile = shooter.weapon.modes.snap;
   const chance = Math.min(HIT_CHANCE_CAP, Math.max(HIT_CHANCE_FLOOR, shooter.firingAccuracy * profile.accuracyMod * OVERWATCH_ACC_PENALTY));
-  fireOnce(state, shooter, target, 'snap', chance);
+  fireOnce(state, shooter, target, shooter.weapon.only?.[0] ?? 'snap', chance);
 }
 
 // Реакційний вогонь по юніту, що рухається: один постріл з кожного дозору.
@@ -425,7 +447,13 @@ function assertCanFire(state: GameState, s: Unit, t: Unit, mode: ShotMode): void
   requireActive(state, s);
   if (!t.alive) throw new Error('Ціль уже мертва');
   if (s.side === t.side) throw new Error('Вогонь по своїх заборонений');
-  if (distance(s.pos, t.pos) > s.weapon.range) throw new Error('Ціль поза дальністю зброї');
+  // п17.2 (ADR-0149 п. 10, EARS 5): режим, якого немає у зброї; ціль ближнього бою — лише впритул
+  if (!weaponHasMode(s.weapon, mode)) throw new Error('Зброя «' + s.weapon.name + '» не має режиму ' + MODE_NAMES[mode]);
+  if (distance(s.pos, t.pos) > s.weapon.range) {
+    throw new Error(
+      s.weapon.range === 1 ? 'Ціль не впритул: «' + s.weapon.name + '» б’ють лише сусідню клітинку' : 'Ціль поза дальністю зброї'
+    );
+  }
   if (!hasLineOfSight(state, s.pos, t.pos)) throw new Error('Немає лінії вогню');
   if (s.ap < s.weapon.modes[mode].apCost) throw new Error('Недостатньо очок дій для пострілу ' + mode);
 }

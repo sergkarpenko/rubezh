@@ -7,6 +7,7 @@
 // (src/render.ts), планувальник кадрів ін'єктується викликачем.
 
 import { type GameEvent, type Side, type Unit, type Vec2 } from './combat';
+import type { EnemyKind } from './enemies';
 // П14.5: розкладка геосцени 16×8 і хвіст перехоплення читають розміри світу та
 // події журналу з geo.ts (лише типи/константи — ядро не змінюється, ADR-0002).
 import { WORLD_H, WORLD_W, type GeoEvent } from './geo';
@@ -309,6 +310,7 @@ export interface MoveAnim extends CalmFlag {
   kind: 'move';
   unitId: string;
   side: Side;
+  enemyKind?: EnemyKind; // п17.2: тип ворога — кільце й літера їдуть разом із ним (без поля — демон)
   path: Vec2[]; // [from, to1, ...] — клітинкові координати
   hp: number; // знімок стану на момент постановки в чергу
   hpMax: number; // П14.4: показник життя — частка hp/maxHp у смузі HP
@@ -403,7 +405,7 @@ export interface GeoTrailAnim extends CalmFlag {
 // Знімки стану беруться ПІСЛЯ застосування дії ядром (позиція/HP уже фінальні,
 // лог — джерело істини про те, що відбулося).
 export function makeMoveAnim(u: Unit, path: Vec2[], selected: boolean): MoveAnim {
-  return {
+  const anim: MoveAnim = {
     kind: 'move',
     unitId: u.id,
     side: u.side,
@@ -415,6 +417,8 @@ export function makeMoveAnim(u: Unit, path: Vec2[], selected: boolean): MoveAnim
     dur: Math.max(1, path.length - 1) * MOVE_MS_PER_CELL,
     start: null,
   };
+  if (u.kind !== undefined) anim.enemyKind = u.kind; // п17.2: демон — без поля, як раніше
+  return anim;
 }
 export function makeTracerAnim(side: Side, from: Vec2, to: Vec2, hit: boolean): TracerAnim {
   return { kind: 'tracer', side, from, to, hit, dur: TRACER_MS + (hit ? IMPACT_MS : 0), start: null };
@@ -761,6 +765,15 @@ export function animsFromEvents(events: readonly GameEvent[], units: readonly Un
 // від бірюзи своїх, пурпуру Розриву і бурштину головної дії (ADR-0064, ADR-0115).
 export const FIGHTER_COLORS = ['#8ee35b', '#5b9bff', '#f5e050', '#ff8a5c', '#b58cff', '#f2f5fa'] as const;
 export const ALIEN_RING = '#ff2e88'; // кільце ворогів — пурпур Розриву (ADR-0064)
+// п17.2 (ADR-0149 п. 4, 15; рішення власника «Б. Контраст»): до мальованих кадрів п17.5 тип
+// ворога видно кільцем кольору типу і літерою в лівому верхньому куті клітинки; демон —
+// пурпур, як раніше; три нові кольори не збігаються з шістьма кольорами бійців.
+export const ENEMY_LOOK: Record<EnemyKind, { ring: string; letter: string }> = {
+  demon: { ring: ALIEN_RING, letter: 'Д' },
+  hound: { ring: '#ff3b30', letter: 'Гн' },
+  golem: { ring: '#8fa3b8', letter: 'Гл' },
+  eye: { ring: '#2ee6d6', letter: 'О' },
+};
 export const HELMET_SHAPES = 3;
 // Геометрія кільця під ногами (src/render.ts і гейт e2e — одне місце правди):
 // еліпс 34 × 12 px, як на аркуші, який схвалив власник (Т.129); центр нижче

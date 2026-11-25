@@ -9,6 +9,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   ALIEN_RING,
+  ENEMY_LOOK,
   FIGHTER_COLORS,
   HELMET_SHAPES,
   fighterLook,
@@ -1133,6 +1134,26 @@ describe('Т.147: межі гілок render-core (живі мутанти Т.11
   it('ALIEN_RING — колір #rrggbb, відмінний від кольорів бійців', () => {
     expect(ALIEN_RING).toMatch(/^#[0-9a-f]{6}$/);
     expect(FIGHTER_COLORS as readonly string[]).not.toContain(ALIEN_RING);
+  });
+  it('п17.2: ENEMY_LOOK — демон пурпур «Д»; чотири різні кольори, жоден не колір бійця; літери різні', () => {
+    expect(ENEMY_LOOK.demon).toEqual({ ring: ALIEN_RING, letter: 'Д' });
+    expect(ENEMY_LOOK.hound).toEqual({ ring: '#ff3b30', letter: 'Гн' });
+    expect(ENEMY_LOOK.golem).toEqual({ ring: '#8fa3b8', letter: 'Гл' });
+    expect(ENEMY_LOOK.eye).toEqual({ ring: '#2ee6d6', letter: 'О' });
+    const looks = Object.values(ENEMY_LOOK);
+    expect(new Set(looks.map((l) => l.ring)).size).toBe(4);
+    expect(new Set(looks.map((l) => l.letter)).size).toBe(4);
+    for (const l of looks) {
+      expect(l.ring).toMatch(/^#[0-9a-f]{6}$/);
+      expect(FIGHTER_COLORS as readonly string[]).not.toContain(l.ring);
+      expect(l.letter.length).toBeLessThanOrEqual(2); // плашка ≤ 15 px — не заходить на число HP
+    }
+  });
+  it('п17.2: makeMoveAnim несе тип ворога; демон і оперативник — без поля', () => {
+    const d = unit('a1', 'alien', 1, 1);
+    expect('enemyKind' in makeMoveAnim(d, [{ x: 1, y: 1 }], false)).toBe(false);
+    expect('enemyKind' in makeMoveAnim(unit('s1', 'player', 1, 1), [{ x: 1, y: 1 }], false)).toBe(false);
+    expect(makeMoveAnim({ ...d, kind: 'golem' }, [{ x: 1, y: 1 }], false).enemyKind).toBe('golem');
   });
   it('recoilPx: рівно чверть польоту — уже 1 px; частка ≤ 0 — без віддачі', () => {
     expect(recoilPx(0.25, 1)).toBe(1);

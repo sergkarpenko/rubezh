@@ -15,7 +15,7 @@
 // байт-у-байт незмінний, RNG не викликається, туман (видимість) вирішує викликаюч.
 
 import {
-  ALIEN_RING,
+  ENEMY_LOOK,
   RING_DY,
   RING_RX,
   RING_RY,
@@ -61,6 +61,7 @@ import {
 // П14.5: розмір світу для замикання скан-зони по X (куля; як RADAR_RANGE у geo.ts).
 import { WORLD_W } from './core/geo';
 import { grenadeZone } from './core/combat';
+import type { EnemyKind } from './core/enemies';
 import {
   ALIEN_STAND,
   ALIEN_STEP,
@@ -215,6 +216,7 @@ export interface UnitSpriteView extends UnitSprite {
   maxHp: number; // П14.4: показник життя — частка hp/maxHp у смузі HP
   recoil?: number; // Т.132: віддача пострілу, px — фігура відходить назад від погляду
   breath?: number; // Т.132: «дихання» у спокої, 0..1 (ambient-шар; стискання по висоті від ніг)
+  letter?: string; // п17.2 (ADR-0149 п. 15): літера типу ворога в лівому верхньому куті клітинки
 }
 
 // Поза за станом юніта — чиста функція, детермінована (без RNG, ADR-0003):
@@ -483,8 +485,29 @@ function drawHpBadge(ctx: CanvasRenderingContext2D, u: UnitSpriteView): void {
 }
 
 // Т.129 (ADR-0118): колір кільця за стороною — свій боєць за id, ворог — пурпур.
-export function unitRing(side: 'player' | 'alien', id: string): string {
-  return side === 'player' ? fighterLook(id).color : ALIEN_RING;
+// п17.2 (ADR-0149 п. 15): ворог — колір свого типу (без типу — демон, пурпур).
+export function unitRing(side: 'player' | 'alien', id: string, kind?: EnemyKind): string {
+  return side === 'player' ? fighterLook(id).color : ENEMY_LOOK[kind ?? 'demon'].ring;
+}
+
+// п17.2: літера типу ворога (свій боєць — без літери).
+export function unitLetter(side: 'player' | 'alien', kind?: EnemyKind): string | undefined {
+  return side === 'player' ? undefined : ENEMY_LOOK[kind ?? 'demon'].letter;
+}
+
+// п17.2 (ADR-0149 п. 4; рішення власника «Б. Контраст»): літера типу — плашка в лівому
+// верхньому куті клітинки, дзеркально до числа HP, колір — колір кільця; як і число HP,
+// у позі «вогонь» не малюється (накрила б ствол і спалах дула), загиблому — теж.
+function drawKindLetter(ctx: CanvasRenderingContext2D, u: UnitSpriteView): void {
+  if (u.letter === undefined || u.pose === 'fire' || u.hp <= 0) return;
+  const w = u.letter.length * 6 + 3;
+  const px = u.cx - 24 + 1;
+  ctx.fillStyle = HP_PLATE_BG;
+  ctx.fillRect(px, u.cy - 23, w, 11);
+  ctx.fillStyle = u.ring ?? ENEMY_LOOK.demon.ring;
+  ctx.font = 'bold 10px monospace';
+  ctx.textBaseline = 'top';
+  ctx.fillText(u.letter, px + 1, u.cy - 21);
 }
 
 // Т.129 (ADR-0118): кільце кольору бійця під ногами — еліпс 34 × 12 px біля
@@ -539,6 +562,7 @@ export function drawAlienSprite(ctx: CanvasRenderingContext2D, u: UnitSpriteView
   else drawPixelSprite(ctx, (u.frame ?? 0) === 1 ? ALIEN_STEP : ALIEN_STAND, u.cx, u.cy, SPRITE_SCALE);
   if (u.overwatch) drawOverwatchMarker(ctx, u);
   drawHpBadge(ctx, u); // П14.4: смуга HP + число у кутковій зоні (читабельність)
+  drawKindLetter(ctx, u); // п17.2: літера типу ворога
   if (u.selected) drawSelectionBrackets(ctx, u.cx, u.cy);
 }
 
@@ -1135,7 +1159,8 @@ export function drawAnimFrame(
         maxHp: a.hpMax,
         selected: a.selected,
         overwatch: a.overwatch,
-        ring: unitRing(a.side, a.unitId),
+        ring: unitRing(a.side, a.unitId, a.enemyKind),
+        letter: unitLetter(a.side, a.enemyKind),
         flip: dir !== 0 && dir !== (a.side === 'player' ? 1 : -1),
       });
       ctx.globalAlpha = 1;
@@ -1160,7 +1185,8 @@ export function drawAnimFrame(
       maxHp: a.hpMax, // П14.4: смуга HP під час руху
       selected: a.selected,
       overwatch: a.overwatch,
-      ring: unitRing(a.side, a.unitId), // Т.129: кільце їде разом із бійцем
+      ring: unitRing(a.side, a.unitId, a.enemyKind), // Т.129: кільце їде разом із бійцем
+      letter: unitLetter(a.side, a.enemyKind), // п17.2: і літера типу
       frame,
       step: frame === 1 ? 2 : 1, // П14.3: двокадрова ходьба — walk1/walk2 (фолбек — frame)
       flip: dir !== 0 && dir !== native,

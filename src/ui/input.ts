@@ -100,8 +100,15 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
     return cellFromPoint(ev.clientX, ev.clientY, cv.getBoundingClientRect(), cv);
   }
 
-  // П14.4: характеристики демона одним рядком (#binfo) — і під меню на ворогові (Т.131)
+  // П14.4: характеристики демона одним рядком (#binfo) — і під меню на ворогові (Т.131).
+  // п17.2 (ADR-0149 п. 15): як у меню — «впритул», «лише прицільний», броня.
   function enemyInfo(a: Unit): string {
+    const w = a.weapon;
+    const only =
+      w.only?.length === 1 && w.range > 1
+        ? ', лише ' + (w.only[0] === 'aimed' ? 'прицільний' : w.only[0] === 'snap' ? 'швидкий' : 'черга')
+        : '';
+    const armor = a.armor !== undefined && a.armor > 0 ? ' Броня ' + a.armor + ': −' + a.armor + ' від влучання.' : '';
     return (
       a.name +
       ': HP ' +
@@ -109,14 +116,15 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
       '/' +
       a.maxHp +
       ' · зброя «' +
-      a.weapon.name +
+      w.name +
       '» (пошкодження ' +
-      a.weapon.damage[0] +
+      w.damage[0] +
       '–' +
-      a.weapon.damage[1] +
-      ', дальність ' +
-      a.weapon.range +
-      ').'
+      w.damage[1] +
+      (w.range === 1 ? ', впритул' : ', дальність ' + w.range) +
+      only +
+      ').' +
+      armor
     );
   }
 

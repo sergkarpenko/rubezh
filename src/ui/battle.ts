@@ -39,6 +39,7 @@ import {
   drawReachZone,
   drawTargetFrame,
   drawUnitSprite,
+  unitLetter,
   unitRing,
 } from '../render';
 import {
@@ -611,7 +612,8 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
         pose: u.id === firingId ? 'fire' : undefined, // П14.2 (ADR-0072)
         recoil: u.id === firingId ? recoil : 0, // Т.132: віддача пострілу
         breath: u.id === firingId ? 0 : (deps.ambient.breath?.(at) ?? 0), // Т.132: дихання у спокої
-        ring: unitRing(u.side, u.id), // Т.129: кільце кольору бійця (вороги — пурпур)
+        ring: unitRing(u.side, u.id, u.kind), // Т.129: кільце кольору бійця; п17.2: ворог — колір типу
+        letter: unitLetter(u.side, u.kind), // п17.2 (ADR-0149 п. 15): літера типу ворога
         flip: (facing.get(u.id) ?? native) !== native, // П14.3: дзеркало за напрямком
       });
     }
