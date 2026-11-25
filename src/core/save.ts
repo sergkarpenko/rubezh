@@ -158,15 +158,21 @@ function copyCareers(soldiers: Unit[], careers: Record<string, SoldierCareer>): 
 
 const ROLES: readonly (SoldierRole | null)[] = ['assault', 'sniper', 'medic', null];
 
-function validCareer(c: unknown): boolean {
+// Кар'єра v2: типи полів, невід'ємні лічильники і зараховані вбивства не
+// більше за kills юніта (інакше settleCareer зменшив би досвід — аудит PR #499).
+function validCareer(c: unknown, kills: number): boolean {
   if (c === null || typeof c !== 'object') return false;
   const k = c as Record<string, unknown>;
   return (
     typeof k.callsign === 'string' &&
     typeof k.bio === 'string' &&
     Number.isInteger(k.xp) &&
+    (k.xp as number) >= 0 &&
     Number.isInteger(k.missions) &&
+    (k.missions as number) >= 0 &&
     Number.isInteger(k.killsCounted) &&
+    (k.killsCounted as number) >= 0 &&
+    (k.killsCounted as number) <= kills &&
     ROLES.includes(k.role as SoldierRole | null)
   );
 }
@@ -393,7 +399,7 @@ function parseSave(json: string): SaveData {
     if (
       cs === null ||
       typeof cs !== 'object' ||
-      !st.roster.soldiers.every((s) => s !== null && typeof s === 'object' && validCareer(cs[s.id]))
+      !st.roster.soldiers.every((s) => s !== null && typeof s === 'object' && validCareer(cs[s.id], s.kills))
     ) {
       fail("Пошкоджені дані збереження: кар'єри оперативників");
     }

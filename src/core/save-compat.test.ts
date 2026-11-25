@@ -228,6 +228,14 @@ describe('п16.2: сейв v1 мігрує у v2 (ADR-0147 п. 15, EARS 10)', ()
     expect(() => deserializeParty(bad((c) => (c.s1.role = 'pilot')))).toThrow(msg);
     expect(() => deserializeParty(bad((c) => (c.s1.xp = 1.5)))).toThrow(msg);
     expect(() => deserializeParty(bad((c) => (c.s1.callsign = 7)))).toThrow(msg);
+    expect(() => deserializeParty(bad((c) => (c.s1.bio = 1)))).toThrow(msg);
+    expect(() => deserializeParty(bad((c) => (c.s1.missions = 1.5)))).toThrow(msg);
+    expect(() => deserializeParty(bad((c) => (c.s1.killsCounted = '0')))).toThrow(msg);
+    // аудит PR #499: від'ємні лічильники і зараховані вбивства понад kills юніта
+    expect(() => deserializeParty(bad((c) => (c.s1.xp = -1)))).toThrow(msg);
+    expect(() => deserializeParty(bad((c) => (c.s1.missions = -1)))).toThrow(msg);
+    expect(() => deserializeParty(bad((c) => (c.s1.killsCounted = -1)))).toThrow(msg);
+    expect(() => deserializeParty(bad((c) => (c.s1.killsCounted = 1)))).toThrow(msg); // у s1 фікстури kills 0
     const noCareers = structuredClone(v2);
     delete noCareers.state.roster.careers;
     expect(() => deserializeParty(JSON.stringify(noCareers))).toThrow(msg);

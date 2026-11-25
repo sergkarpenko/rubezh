@@ -194,7 +194,8 @@ export function missionRisksBankruptcy(
 // юніти на полі, потім евакуйовані (детермінізм, ADR-0003).
 // п16.2 (ADR-0147 п. 10): уцілілий — +1 місія, досвід за місію і вбивства
 // цієї місії, прирости нових звань (settleCareer); загиблий — рядок втрати
-// з кар'єри до вилучення. Тики лікарні — з різниці maxHp − hp, прирости
+// з кар'єри до вилучення; виклик — один раз на місію (повторний на тому самому
+// стані дав би ще +1 місію і досвід). Тики лікарні — з різниці maxHp − hp, прирости
 // звання її не міняють.
 export function applyMissionResult(roster: Roster, state: GameState): MissionAftermath {
   const deployed = [...state.units.filter((u) => u.side === 'player'), ...(state.evacuated ?? [])];

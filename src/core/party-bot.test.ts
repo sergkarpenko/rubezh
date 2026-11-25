@@ -265,7 +265,8 @@ describe('П11.8: політика науки — повний флоу (фік�
     expect(a.scientistsHired).toBe(2);
     expect(a.completedProjects).toEqual(['armor']);
     expect(a.workshopProduced).toBe(7);
-    expect(a.equippedItems).toBe(32); // п16.2 (ADR-0147): менше загиблих — 41 → 32 // броня загиблих повертається на склад і йде наступним
+    // броня загиблих повертається на склад і йде наступним; п16.2 (ADR-0147): менше загиблих — 41 → 32
+    expect(a.equippedItems).toBe(32);
     expect(a.salarySpent).toBe(140); // 2 × 10 × 7 діб (14 очок, 2 очки на добу)
     expect(a.projectSpent).toBe(96);
     expect(a.workshopSpent).toBe(420);
