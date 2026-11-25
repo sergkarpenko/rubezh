@@ -11,7 +11,7 @@
 // вкладка «Вузол», зонд з кнопкою місії), розгорнутий журнал, бій. Число кнопок вкладок чи карток змінюється
 // навмисно лише тоді, коли крок їх міняє; решта різниці — розміри, які крок міняти не мав (ADR-0115).
 import type { Page } from '@playwright/test';
-import { launchChrome } from './launch-chrome';
+import { launchChrome, warnDj } from './launch-chrome';
 
 // під run-ts.mjs аргументи йдуть після шляху до скрипта; «--» пропускається
 const args = process.argv.slice(process.argv.findIndex((a) => a.endsWith('.ts')) + 1).filter((a) => a !== '--');
@@ -44,6 +44,7 @@ const rects = (p: Page, sel: string): Promise<string[]> =>
 const pageSize = (p: Page): Promise<string> =>
   p.evaluate(() => document.documentElement.scrollWidth + 'x' + document.documentElement.scrollHeight);
 
+warnDj(args);
 const browser = await launchChrome({ inter: font === 'inter' });
 const out: Record<string, Record<string, string[] | string>> = {};
 for (const [w, h] of sizes) {

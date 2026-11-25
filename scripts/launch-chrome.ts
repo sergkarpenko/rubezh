@@ -6,10 +6,16 @@
 import { fileURLToPath } from 'node:url';
 import { chromium, type Browser } from '@playwright/test';
 
+// колишній прапорець dj скриптів вимірів: DejaVu тепер типово — попередження в stderr (аудит PR #489)
+export const warnDj = (args: string[]): void => {
+  if (args.includes('dj')) console.error('dj: з Т.175 DejaVu Sans — типово; для Inter — прапорець inter');
+};
+
 export const FONTS_CONF = fileURLToPath(new URL('../e2e/fonts.conf', import.meta.url));
 
-export const launchChrome = (opts: { inter?: boolean } = {}): Promise<Browser> =>
-  chromium.launch({
-    executablePath: process.env.E2E_CHROME,
-    ...(opts.inter ? {} : { env: { ...process.env, FONTCONFIG_FILE: FONTS_CONF } }),
-  });
+// `inter`: FONTCONFIG_FILE з оточення запуску прибирається — інакше «без конфіга» взяв би чужий (аудит Vibe PR #489)
+export const launchChrome = (opts: { inter?: boolean } = {}): Promise<Browser> => {
+  const rest = { ...process.env };
+  delete rest.FONTCONFIG_FILE;
+  return chromium.launch({ executablePath: process.env.E2E_CHROME, env: opts.inter ? rest : { ...rest, FONTCONFIG_FILE: FONTS_CONF } });
+};

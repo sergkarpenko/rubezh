@@ -8,7 +8,7 @@
 // docs/agents/ui.md); css — варіант-прототип стилями поверх сторінки; shots — знімки кожного вікна.
 // Межу `@media` міряти з сусідніми розмірами (межа ± 1 і ± 20 px) — додати їх у SIZES свого кроку.
 import fs from 'node:fs';
-import { launchChrome } from './launch-chrome';
+import { launchChrome, warnDj } from './launch-chrome';
 
 type Box = { t: number; b: number; l: number; r: number };
 
@@ -33,6 +33,7 @@ const SIZES: [number, number][] = [
   [320, 420], [320, 460], [720, 481], [800, 500], [900, 515],
 ]; // prettier-ignore
 
+warnDj(args);
 const browser = await launchChrome({ inter });
 const out: string[] = [];
 for (const note of [false, true]) {
