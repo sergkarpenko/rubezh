@@ -2,12 +2,13 @@
 // рамки логотипа, підпису, меню, версії й банера Т.93, перетин рамок (min(низ) − max(верх) > 0 — накриття,
 // без перетину по ширині — не накриття), вихід за вікно, прокрутка по висоті й убік. Рядок на вікно × банер / без.
 // Поза npm test і test:e2e. Запуск із кореня клону (збірка — `npx vite preview --port 4175 --strictPort`):
-//   E2E_CHROME=/шлях/до/chrome node scripts/run-ts.mjs scripts/measure-start.ts <адреса> <мітка> [dj] [nologo] [css=<файл>] [shots=<тека>]
-// dj — шрифт DejaVu Sans; nologo — запит логотипа `**/logo*.webp` перервано (текстовий логотип вищий,
+//   E2E_CHROME=/шлях/до/chrome node scripts/run-ts.mjs scripts/measure-start.ts <адреса> <мітка> [inter] [nologo] [css=<файл>] [shots=<тека>]
+// Шрифт — як у e2e: DejaVu Sans (e2e/fonts.conf, Т.175); inter — шрифт системи без конфіга (у контейнері —
+// Inter); колишній dj нічого не змінює; nologo — запит логотипа `**/logo*.webp` перервано (текстовий логотип вищий,
 // docs/agents/ui.md); css — варіант-прототип стилями поверх сторінки; shots — знімки кожного вікна.
 // Межу `@media` міряти з сусідніми розмірами (межа ± 1 і ± 20 px) — додати їх у SIZES свого кроку.
-import { chromium } from '@playwright/test';
 import fs from 'node:fs';
+import { launchChrome } from './launch-chrome';
 
 type Box = { t: number; b: number; l: number; r: number };
 
@@ -15,12 +16,12 @@ const args = process.argv.slice(process.argv.findIndex((a) => a.endsWith('.ts'))
 const [url, label] = args;
 if (!url || !label) {
   console.error(
-    'Використання: node scripts/run-ts.mjs scripts/measure-start.ts <адреса> <мітка> [dj] [nologo] [css=<файл>] [shots=<тека>]'
+    'Використання: node scripts/run-ts.mjs scripts/measure-start.ts <адреса> <мітка> [inter] [nologo] [css=<файл>] [shots=<тека>]'
   );
   process.exit(2);
 }
 const opt = (name: string): string | undefined => args.find((a) => a.startsWith(name + '='))?.slice(name.length + 1);
-const dj = args.includes('dj');
+const inter = args.includes('inter');
 const nologo = args.includes('nologo');
 const cssFile = opt('css');
 const css = cssFile ? fs.readFileSync(cssFile, 'utf8') : '';
@@ -32,7 +33,7 @@ const SIZES: [number, number][] = [
   [320, 420], [320, 460], [720, 481], [800, 500], [900, 515],
 ]; // prettier-ignore
 
-const browser = await chromium.launch({ executablePath: process.env.E2E_CHROME });
+const browser = await launchChrome({ inter });
 const out: string[] = [];
 for (const note of [false, true]) {
   for (const [w, h] of SIZES) {
@@ -43,7 +44,6 @@ for (const note of [false, true]) {
     await page.goto(url);
     const hc = page.locator('#btn-help-close');
     if (await hc.isVisible()) await hc.click();
-    if (dj) await page.addStyleTag({ content: 'body, button { font-family: "DejaVu Sans" !important }' });
     if (css) await page.addStyleTag({ content: css });
     if (!nologo)
       await page
