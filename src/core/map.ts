@@ -17,9 +17,11 @@ import {
   type Side,
   type Unit,
   type Vec2,
+  VISION_RANGE,
 } from './combat';
 
-export const VISION_RANGE = 12;
+// п17.3: константа переїхала в combat.ts (її бере дозор); тут — реекспорт для чинних імпортів.
+export { VISION_RANGE };
 
 function key(pos: Vec2): string {
   return pos.x + ',' + pos.y;

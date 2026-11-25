@@ -6,7 +6,7 @@
 // Canvas/DOM API (ADR-0002) — Canvas-виклики живуть у шарі відображення
 // (src/render.ts), планувальник кадрів ін'єктується викликачем.
 
-import { type GameEvent, type Side, type Unit, type Vec2 } from './combat';
+import { lineCells, type GameEvent, type Side, type Unit, type Vec2 } from './combat';
 import type { EnemyKind } from './enemies';
 // П14.5: розкладка геосцени 16×8 і хвіст перехоплення читають розміри світу та
 // події журналу з geo.ts (лише типи/константи — ядро не змінюється, ADR-0002).
@@ -327,6 +327,7 @@ export interface TracerAnim extends CalmFlag {
   hit: boolean;
   dur: number; // TRACER_MS (+ IMPACT_MS при влучанні)
   start: number | null;
+  fog?: true; // п17.3: стрілець у тумані — from = перша видима клітинка лінії, пози «вогонь» і спалаху дула немає
 }
 export interface DeathAnim extends CalmFlag {
   kind: 'death';
@@ -662,6 +663,21 @@ export function animsFromEvents(events: readonly GameEvent[], units: readonly Un
   const byId = new Map(units.map((u) => [u.id, u]));
   const seen = (p: Vec2): boolean => vis === undefined || vis.has(p.x + ',' + p.y);
   const anims: Anim[] = [];
+  // п17.3 (рішення власника «А. Від краю туману»): стрілець у тумані (око з 13–16 клітинок)
+  // позиції не видає — трасер стартує з першої видимої клітинки лінії до цілі;
+  // видимої клітинки на лінії немає — трасера немає. Набір видимих — гравця, тож
+  // правило — для стрільця-ворога (клітинка свого бійця видима завжди).
+  const tracer = (shooter: Unit, to: Vec2, hit: boolean): void => {
+    if (shooter.side === 'player' || seen(shooter.pos)) {
+      anims.push(makeTracerAnim(shooter.side, { ...shooter.pos }, { ...to }, hit));
+      return;
+    }
+    const from = lineCells(shooter.pos, to).find(seen);
+    if (from === undefined) return;
+    const a = makeTracerAnim(shooter.side, { ...from }, { ...to }, hit);
+    a.fog = true;
+    anims.push(a);
+  };
   let i = 0;
   while (i < events.length) {
     const e = events[i];
@@ -685,7 +701,7 @@ export function animsFromEvents(events: readonly GameEvent[], units: readonly Un
       if (next !== undefined && next.type === 'shot' && next.targetId === e.unitId) {
         const shooter = byId.get(next.shooterId);
         if (shooter !== undefined && victim !== undefined) {
-          anims.push(makeTracerAnim(shooter.side, { ...shooter.pos }, { ...victim.pos }, next.hit));
+          tracer(shooter, victim.pos, next.hit);
           anims.push(makeDeathAnim(victim));
           // П14.4: число фатального пошкодження — після згасання силуета
           if (next.hit && next.damage > 0 && seen(victim.pos)) anims.push(makeDNumAnim(victim.pos, next.damage, false));
@@ -725,7 +741,7 @@ export function animsFromEvents(events: readonly GameEvent[], units: readonly Un
       const shooter = byId.get(e.shooterId);
       const target = byId.get(e.targetId);
       if (shooter !== undefined && target !== undefined) {
-        anims.push(makeTracerAnim(shooter.side, { ...shooter.pos }, { ...target.pos }, e.hit));
+        tracer(shooter, target.pos, e.hit);
         // П14.4: число пошкодження над ціллю — лише при влучанні з реальною
         // шкодою і лише для видимих цілей (туман не розкривається, ADR-0006)
         if (e.hit && e.damage > 0 && seen(target.pos)) anims.push(makeDNumAnim(target.pos, e.damage, false));

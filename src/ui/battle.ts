@@ -457,7 +457,8 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
     // логіка вибору). Туман: невидимий стрілець у статичному проході й так
     // пропускається — поза на нього нічого не розкриває (ADR-0006).
     let firingId: string | null = null;
-    if (activeAnim !== null && activeAnim.kind === 'tracer') {
+    // п17.3: трасер з туману (`fog`) стрільця на полі не має — і пози «вогонь» теж
+    if (activeAnim !== null && activeAnim.kind === 'tracer' && activeAnim.fog !== true) {
       const shooter = st.units.find(
         (u) => u.alive && u.side === activeAnim.side && u.pos.x === activeAnim.from.x && u.pos.y === activeAnim.from.y
       );
