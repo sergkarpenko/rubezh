@@ -131,6 +131,9 @@ export const HIT_CHANCE_FLOOR = 0.02;
 export const HIT_CHANCE_CAP = 0.95;
 export const OVERWATCH_AP_COST = 3; // вартість дозору
 export const OVERWATCH_ACC_PENALTY = 0.7; // штраф точності реакційного пострілу
+// Радіус огляду юніта (Чебишев). п17.3: тут, а не в map.ts, — його бере дозор
+// (`triggerOverwatch`); map.ts реекспортує ту саму константу.
+export const VISION_RANGE = 12;
 
 // П11.4 (ADR-0058): параметри нових бойових дій. Усі числа — КАНДИДАТИ,
 // тунінг probe-симуляціями П11.8 (патерн П10.4).
@@ -203,6 +206,11 @@ function key(pos: Vec2): string {
 
 export function distance(a: Vec2, b: Vec2): number {
   return Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y));
+}
+
+// п17.3: клітинки лінії від a до b включно з кінцями (Брезенгем у напрямку a→b) — трасер від краю туману.
+export function lineCells(a: Vec2, b: Vec2): Vec2[] {
+  return bresenham(a, b);
 }
 
 function bresenham(a: Vec2, b: Vec2): Vec2[] {
@@ -424,12 +432,22 @@ function fireReaction(state: GameState, shooter: Unit, target: Unit): void {
   fireOnce(state, shooter, target, shooter.weapon.only?.[0] ?? 'snap', chance);
 }
 
+// п17.3 (рішення власника «А. Лише по видимих»): чи бачить клітинку pos хоч один
+// живий юніт сторони — те саме правило, що `computeVisibleCells` / `visibleEnemies` (map.ts).
+export function sideSees(state: GameState, side: Side, pos: Vec2): boolean {
+  return state.units.some((u) => u.alive && u.side === side && distance(u.pos, pos) <= VISION_RANGE && hasLineOfSight(state, u.pos, pos));
+}
+
 // Реакційний вогонь по юніту, що рухається: один постріл з кожного дозору.
+// п17.3: далі за огляд (VISION_RANGE) — лише по цілі, яку бачить сторона дозорця
+// (око б'є на 16); у межах огляду лінія вогню вже означає, що дозорець бачить ціль сам.
 function triggerOverwatch(state: GameState, mover: Unit): void {
   for (const w of state.units) {
     if (!w.alive || !w.overwatch || w.side === mover.side) continue;
-    if (distance(w.pos, mover.pos) > w.weapon.range) continue;
+    const d = distance(w.pos, mover.pos);
+    if (d > w.weapon.range) continue;
     if (!hasLineOfSight(state, w.pos, mover.pos)) continue;
+    if (d > VISION_RANGE && !sideSees(state, w.side, mover.pos)) continue;
     w.overwatch = false; // дозор «розряджається» одним пострілом
     fireReaction(state, w, mover);
     if (!mover.alive) return;

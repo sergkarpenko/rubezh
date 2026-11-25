@@ -1509,3 +1509,56 @@ describe('Т.161: решта старого коду render-core (палітра
     expect(pendingDeathStarts([tr, first, second]).get('a1')).toEqual({ x: 2, y: 3 });
   });
 });
+
+describe('п17.3: трасер стрільця з туману — від краю туману (рішення власника «А»)', () => {
+  const eye = unit('a1', 'alien', 0, 0);
+  const s1 = unit('s1', 'player', 15, 0);
+  const shot = (hit: boolean): GameEvent => ({ type: 'shot', shooterId: 'a1', targetId: 's1', mode: 'aimed', hit, damage: hit ? 4 : 0 });
+  // гравець бачить x ≥ 3 рядка y = 0
+  const vis = new Set(Array.from({ length: 13 }, (_, i) => i + 3 + ',0'));
+
+  it('стрілець у тумані: from — перша видима клітинка лінії, позначка fog', () => {
+    const [tr] = animsFromEvents([shot(false)], [eye, s1], vis);
+    expect(tr).toMatchObject({ kind: 'tracer', side: 'alien', from: { x: 3, y: 0 }, to: { x: 15, y: 0 }, fog: true });
+  });
+
+  it('стрілець видимий або набору немає — від стрільця, без позначки', () => {
+    const [a] = animsFromEvents([shot(true)], [eye, s1]);
+    expect(a).toMatchObject({ kind: 'tracer', from: { x: 0, y: 0 } });
+    expect('fog' in a).toBe(false);
+    const [b] = animsFromEvents([shot(true)], [eye, s1], new Set([...vis, '0,0']));
+    expect('fog' in b).toBe(false);
+  });
+
+  it('фатальний постріл з туману — той самий край, далі згасання', () => {
+    const anims = animsFromEvents([{ type: 'death', unitId: 's1', killerId: 'a1' }, shot(true)], [eye, s1], vis);
+    expect(anims[0]).toMatchObject({ kind: 'tracer', from: { x: 3, y: 0 }, fog: true });
+    expect(anims[1]).toMatchObject({ kind: 'death', unitId: 's1' });
+  });
+
+  it('на лінії немає видимої клітинки — трасер лише в клітинці цілі (хід, де гине весь загін)', () => {
+    const [tr] = animsFromEvents([shot(false)], [eye, s1], new Set());
+    expect(tr).toMatchObject({ kind: 'tracer', from: { x: 15, y: 0 }, to: { x: 15, y: 0 }, fog: true });
+  });
+
+  // аудит PR #508: units і vis — стан після всієї пачки (ходу), позиція стрільця — на момент пострілу
+  it('постріл, потім рух: туман — за клітинкою пострілу, а не фінальною', () => {
+    const far = unit('a1', 'alien', 0, 1); // фінальна клітинка, видима
+    const target = unit('s1', 'player', 15, 0);
+    const ev: GameEvent[] = [shot(false), { type: 'move', unitId: 'a1', from: { x: 0, y: 0 }, to: { x: 0, y: 1 } }];
+    const view = new Set([...vis, '0,1']);
+    expect(animsFromEvents(ev, [far, target], view)[0]).toMatchObject({ from: { x: 3, y: 0 }, fog: true });
+    // з видимої клітинки (3,0) у туман (2,0): постріл не з туману — від стрільця, без позначки
+    const hid = unit('a1', 'alien', 2, 0);
+    const ev2: GameEvent[] = [shot(false), { type: 'move', unitId: 'a1', from: { x: 3, y: 0 }, to: { x: 2, y: 0 } }];
+    expect('fog' in animsFromEvents(ev2, [hid, target], vis)[0]).toBe(false);
+  });
+
+  it('у межах огляду 12 туману немає (ціль бачить стрільця сама) — демон як раніше', () => {
+    const d = unit('a1', 'alien', 0, 0);
+    const near = unit('s1', 'player', 12, 0);
+    const [tr] = animsFromEvents([shot(false)], [d, near], new Set());
+    expect(tr).toMatchObject({ kind: 'tracer', from: { x: 0, y: 0 }, to: { x: 12, y: 0 } });
+    expect('fog' in tr).toBe(false);
+  });
+});
