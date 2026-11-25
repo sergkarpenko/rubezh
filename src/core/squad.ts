@@ -25,6 +25,7 @@ import type { GameState, Unit } from './combat';
 import { hirePrice, spend, type EconomyState } from './economy';
 import { type DifficultyPreset, DEFAULT_PRESET, DIFFICULTY_MULTIPLIERS } from './campaign';
 import { makeSoldier, SQUAD_SPAWN } from './mission';
+import { lossLine, newCareer, settleCareer, type SoldierCareer } from './career';
 
 export const STARTING_ROSTER_SIZE = 6; // два повні загони + запас
 export const HEAL_TICKS_PER_HP = 2; // ADR-0021: 1 HP = 2 тики геосцени
@@ -49,12 +50,19 @@ export interface Roster {
   soldiers: Unit[]; // живі солдати; загиблі вилучаються (перма-смерть)
   hired: number; // скільки всього пройшло через ростер (для унікальності id/імен)
   hospital: Record<string, number>; // id пораненого → тики одужання, що лишилися
+  // п16.2 (ADR-0147): id оперативника → кар'єра (позивний, біографія, досвід,
+  // роль). Окремо від Unit: юніт бою (і прибульці) кар'єри не має.
+  careers: Record<string, SoldierCareer>;
 }
 
 export interface MissionAftermath {
   lost: Unit[]; // солдати, вилучені з ростеру (загинули в бою)
   survivors: Unit[]; // усі виживші (готові + поранені)
   wounded: Unit[]; // поранені — на лікуванні в лікарні (підмножина survivors)
+  // п16.2 (ADR-0147): уцілілі з новим званням (порядок — як survivors)
+  promoted: Unit[];
+  // п16.2 (ADR-0147 п. 14, EARS 7): рядки втрати «✝ Втрата: …» (порядок — як lost)
+  lossLines: string[];
 }
 
 // Солдат ростеру за порядковим індексом (0-based): ім'я з циклічного пулу,
@@ -77,8 +85,13 @@ export function createRoster(size: number = STARTING_ROSTER_SIZE, preset: Diffic
     throw new Error('Розмір ростеру має бути цілим числом від 1');
   }
   const soldiers: Unit[] = [];
-  for (let i = 0; i < size; i++) soldiers.push(rosterSoldier(i, preset));
-  return { soldiers, hired: size, hospital: {} };
+  const careers: Record<string, SoldierCareer> = {};
+  for (let i = 0; i < size; i++) {
+    const s = rosterSoldier(i, preset);
+    soldiers.push(s);
+    careers[s.id] = newCareer(i);
+  }
+  return { soldiers, hired: size, hospital: {}, careers };
 }
 
 // Найм нового солдата за гроші (ADR-0021): списує ціну найму за пресетом
@@ -89,6 +102,7 @@ export function createRoster(size: number = STARTING_ROSTER_SIZE, preset: Diffic
 export function hireSoldier(econ: EconomyState, roster: Roster, preset: DifficultyPreset = DEFAULT_PRESET): Unit {
   spend(econ, hirePrice(preset));
   const soldier = rosterSoldier(roster.hired, preset);
+  roster.careers[soldier.id] = newCareer(roster.hired);
   roster.hired += 1;
   roster.soldiers.push(soldier);
   return soldier;
@@ -100,6 +114,7 @@ export function fireSoldier(roster: Roster, id: string): Unit {
   const rec = roster.soldiers.find((s) => s.id === id);
   if (!rec) throw new Error('Оперативника немає в ростері: ' + id);
   roster.soldiers = roster.soldiers.filter((s) => s.id !== id);
+  delete roster.careers[id];
   return rec;
 }
 
@@ -177,22 +192,34 @@ export function missionRisksBankruptcy(
 // з поля бою → у списку evacuated стану бою, EARS 6: лікарня при пораненні,
 // предмети/kills збережені, перма-смерть не зачіпається); порядок — спершу
 // юніти на полі, потім евакуйовані (детермінізм, ADR-0003).
+// п16.2 (ADR-0147 п. 10): уцілілий — +1 місія, досвід за місію і вбивства
+// цієї місії, прирости нових звань (settleCareer); загиблий — рядок втрати
+// з кар'єри до вилучення; виклик — один раз на місію (повторний на тому самому
+// стані дав би ще +1 місію і досвід). Тики лікарні — з різниці maxHp − hp, прирости
+// звання її не міняють.
 export function applyMissionResult(roster: Roster, state: GameState): MissionAftermath {
   const deployed = [...state.units.filter((u) => u.side === 'player'), ...(state.evacuated ?? [])];
   if (deployed.length === 0) throw new Error('У стані місії немає оперативників гравця');
   const lost: Unit[] = [];
   const survivors: Unit[] = [];
   const wounded: Unit[] = [];
+  const promoted: Unit[] = [];
+  const lossLines: string[] = [];
   for (const u of deployed) {
     const rec = roster.soldiers.find((s) => s.id === u.id);
     if (!rec) throw new Error('Оперативник не з цього ростеру: ' + u.id);
+    const career = roster.careers[rec.id];
+    if (!career) throw new Error("Немає кар'єри оперативника: " + rec.id);
     if (!u.alive) {
       roster.soldiers = roster.soldiers.filter((s) => s.id !== u.id);
       delete roster.hospital[u.id];
+      delete roster.careers[u.id];
+      lossLines.push(lossLine(rec, career));
       lost.push(rec);
     } else {
       rec.ap = rec.maxAp;
       rec.overwatch = false;
+      if (settleCareer(rec, career) > 0) promoted.push(rec);
       if (rec.hp < rec.maxHp) {
         roster.hospital[rec.id] = (rec.maxHp - rec.hp) * HEAL_TICKS_PER_HP;
         wounded.push(rec);
@@ -200,5 +227,5 @@ export function applyMissionResult(roster: Roster, state: GameState): MissionAft
       survivors.push(rec);
     }
   }
-  return { lost, survivors, wounded };
+  return { lost, survivors, wounded, promoted, lossLines };
 }

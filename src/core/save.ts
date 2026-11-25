@@ -7,13 +7,15 @@
 // партія продовжує траєкторію оригіналу байт-у-байт.
 // ADR-0026: активна місія не зберігається (кнопки активні лише на геосцені);
 // метадані слоту — похідні від збереженого стану.
-// Формат: { version: 1, seed, savedAt, state }. Невідома версія або пошкоджений
+// Формат: { version: 2, seed, savedAt, state } (п16.2, ADR-0147 п. 15: v2 —
+// кар'єри оперативників roster.careers; сейв v1 мігрує на вході, migrateCareers). Невідома версія або пошкоджений
 // JSON — throw з українським текстом, без часткового стану. Зміни схеми —
 // новою версією + міграцією на вході.
 
 import { mulberry32, type StatefulRng, type Unit, type Vec2 } from './combat';
 import { createGeoGame, type GeoEvent, type GeoState, type Ufo } from './geo';
 import { createRoster, type Roster } from './squad';
+import { applyRankBonus, newCareer, rankOf, type SoldierCareer, type SoldierRole } from './career';
 import { createEconomy, type EconomyEvent, type EconomyState } from './economy';
 import { createIntercept, interceptRngState, type Fighter, type InterceptEvent, type InterceptState } from './intercept';
 import { createCampaign, DEFAULT_PRESET, type CampaignState, type DifficultyPreset } from './campaign';
@@ -28,7 +30,9 @@ import {
   type WorkshopState,
 } from './workshop';
 
-export const SAVE_VERSION = 1;
+export const SAVE_VERSION = 2;
+// п16.2 (ADR-0147 п. 15): сейв v1 (до Фази 16) вантажиться з міграцією кар'єр.
+export const SAVE_VERSION_V1 = 1;
 export const SAVE_SLOTS = 3; // ADR-0026: три слоти, ключі rubezh.save.1..3 у main.ts
 
 // П12.6 (ADR-0064/0026): міграція ключів каталогів при завантаженні сейвів
@@ -141,6 +145,54 @@ interface RosterSave {
   soldiers: Unit[];
   hired: number;
   hospital: Record<string, number>;
+  careers?: Record<string, SoldierCareer>; // п16.2: обов'язкове у v2, немає у v1
+}
+
+// п16.2 (ADR-0147): копія кар'єр у порядку ростеру — save → load → save дає
+// той самий рядок (детермінізм, ADR-0003).
+function copyCareers(soldiers: Unit[], careers: Record<string, SoldierCareer>): Record<string, SoldierCareer> {
+  const out: Record<string, SoldierCareer> = {};
+  for (const s of soldiers) out[s.id] = { ...careers[s.id] };
+  return out;
+}
+
+const ROLES: readonly (SoldierRole | null)[] = ['assault', 'sniper', 'medic', null];
+
+// Кар'єра v2: типи полів, невід'ємні лічильники і зараховані вбивства не
+// більше за kills юніта (інакше settleCareer зменшив би досвід — аудит PR #499).
+function validCareer(c: unknown, kills: number): boolean {
+  if (c === null || typeof c !== 'object') return false;
+  const k = c as Record<string, unknown>;
+  return (
+    typeof k.callsign === 'string' &&
+    typeof k.bio === 'string' &&
+    Number.isInteger(k.xp) &&
+    (k.xp as number) >= 0 &&
+    Number.isInteger(k.missions) &&
+    (k.missions as number) >= 0 &&
+    Number.isInteger(k.killsCounted) &&
+    (k.killsCounted as number) >= 0 &&
+    (k.killsCounted as number) <= kills &&
+    ROLES.includes(k.role as SoldierRole | null)
+  );
+}
+
+// п16.2 (ADR-0147 п. 15, EARS 10): міграція ростеру сейву v1. Оперативник
+// старого сейву: досвід = kills (вбивства вже зараховано), місій 0, позивний і
+// біографія з пулів за порядковим номером найму (id «sN» → номер N − 1), без
+// ролі; звання з досвіду — прирости в запис юніта (soldiers — уже копії).
+function migrateCareers(soldiers: Unit[]): Record<string, SoldierCareer> {
+  const out: Record<string, SoldierCareer> = {};
+  for (const s of soldiers) {
+    const m = /^s(\d+)$/.exec(s.id);
+    if (!m || Number(m[1]) < 1) fail('Пошкоджені дані збереження: ростер');
+    const career = newCareer(Number(m[1]) - 1);
+    career.xp = s.kills;
+    career.killsCounted = s.kills;
+    applyRankBonus(s, rankOf(career.xp));
+    out[s.id] = career;
+  }
+  return out;
 }
 
 interface EconSave {
@@ -248,6 +300,7 @@ export function serializeParty(party: Party, savedAt: string = ''): string {
         soldiers: party.roster.soldiers.map((s) => ({ ...s, pos: { ...s.pos }, weapon: { ...s.weapon } })),
         hired: party.roster.hired,
         hospital: { ...party.roster.hospital },
+        careers: copyCareers(party.roster.soldiers, party.roster.careers),
       },
       econ: {
         money: party.econ.money,
@@ -306,7 +359,7 @@ function parseSave(json: string): SaveData {
   if (data === null || typeof data !== 'object' || Array.isArray(data)) {
     fail('Пошкоджені дані збереження: очікувався об’єкт');
   }
-  if (data.version !== SAVE_VERSION) {
+  if (data.version !== SAVE_VERSION && data.version !== SAVE_VERSION_V1) {
     fail('Невідома версія збереження: ' + String(data.version) + ' (очікується ' + SAVE_VERSION + ')');
   }
   if (!Number.isInteger(data.seed)) {
@@ -339,6 +392,17 @@ function parseSave(json: string): SaveData {
     typeof st.roster?.hospital !== 'object'
   ) {
     fail('Пошкоджені дані збереження: ростер');
+  }
+  // п16.2 (ADR-0147): у v2 кар'єра — у кожного оперативника ростеру.
+  if (data.version === SAVE_VERSION) {
+    const cs = st.roster.careers;
+    if (
+      cs === null ||
+      typeof cs !== 'object' ||
+      !st.roster.soldiers.every((s) => s !== null && typeof s === 'object' && validCareer(cs[s.id], s.kills))
+    ) {
+      fail("Пошкоджені дані збереження: кар'єри оперативників");
+    }
   }
   if (!Number.isInteger(st.econ?.money) || !Number.isInteger(st.econ?.lastAllowanceDay) || !Array.isArray(st.econ?.log)) {
     fail('Пошкоджені дані збереження: економіка');
@@ -426,13 +490,17 @@ export function deserializeParty(json: string): Party {
   // П8.2 (ADR-0033): відсутні поля (старі сейви) = «триває» + пресет «норма» (DEFAULT_PRESET).
   const ccsv = data.state.campaign;
   const cc = ccsv ?? { status: 'триває' as const, preset: DEFAULT_PRESET, score: null, victoryDay: null };
+  const soldiers = data.state.roster.soldiers.map((s) => ({ ...s, pos: { ...s.pos } }));
+  // п16.2 (ADR-0147 п. 15): v1 — міграція кар'єр, v2 — копія (parseSave перевірив).
+  const careersSv = data.version === SAVE_VERSION ? data.state.roster.careers : undefined;
   return {
     seed: data.seed,
     geo,
     roster: {
-      soldiers: data.state.roster.soldiers.map((s) => ({ ...s, pos: { ...s.pos } })),
+      soldiers,
       hired: data.state.roster.hired,
       hospital: { ...data.state.roster.hospital },
+      careers: careersSv !== undefined ? copyCareers(soldiers, careersSv) : migrateCareers(soldiers),
     },
     econ: {
       money: data.state.econ.money,

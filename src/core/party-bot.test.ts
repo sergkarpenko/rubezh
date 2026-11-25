@@ -95,14 +95,16 @@ describe('П8.5: оркестратор — повна партія (фіксо�
     // П8.6/П14.8: числа лінії тунінгу (probe-перед-тестами, урок П8.5); WORLD_H 9
     // (фідбек П14.8) і симетрична лінія вогню (Т.18, ADR-0087) зсунули
     // траєкторії: залишок 2610, ваги рахунку (ветерани 50, гроші 0.25) → тотал 4203.
-    expect(r.score).toEqual({ ufosShotDown: 0, missionsWon: 22, veteransAlive: 5, moneyLeft: 2610, total: 4203 });
-    expect(r.missionsLaunched).toBe(26);
+    // п16.2 (ADR-0147): прирости звань (+1 HP, +0,03 точності) зменшили втрати
+    // (30 → 22) і найм (29 → 21): залишок 3410, тотал 4403; баланс — probe п16.5.
+    expect(r.score).toEqual({ ufosShotDown: 0, missionsWon: 22, veteransAlive: 5, moneyLeft: 3410, total: 4403 });
+    expect(r.missionsLaunched).toBe(24);
     expect(r.missionsWon).toBe(22);
-    expect(r.missionsLost).toBe(4);
-    expect(r.soldiersLost).toBe(30);
-    expect(r.soldiersWounded).toBe(21);
-    expect(r.hiredTotal).toBe(29);
-    expect(r.hireSpent).toBe(29 * hirePrice('норма')); // П11.8: hirePrice «норми» = 100
+    expect(r.missionsLost).toBe(2);
+    expect(r.soldiersLost).toBe(22);
+    expect(r.soldiersWounded).toBe(20);
+    expect(r.hiredTotal).toBe(21);
+    expect(r.hireSpent).toBe(21 * hirePrice('норма')); // П11.8: hirePrice «норми» = 100
   });
 
   // Т.22 (ADR-0089): чинний бот не банкрутує — останній загін без грошей на найм
@@ -112,9 +114,10 @@ describe('П8.5: оркестратор — повна партія (фіксо�
   it('чинний бот на колись банкрутному сіді 16 «норма» виграє партію', () => {
     const r = simulateParty(16, 'норма');
     expect(r.outcome).toBe('перемога');
-    expect(r.missionsLaunched).toBe(42);
+    // п16.2 (ADR-0147): прирости звань — 42 → 41 місія, 50 → 45 загиблих.
+    expect(r.missionsLaunched).toBe(41);
     expect(r.missionsWon).toBe(35);
-    expect(r.soldiersLost).toBe(50);
+    expect(r.soldiersLost).toBe(45);
   }, 30_000); // issue #377: явний тайм-аут замість дефолтних 5000 мс (під покриттям повільніше)
 
   it('банкрутство (ADR-0021): наука без найму, сід 26 «норма» — боєготових немає і грошей немає', () => {
@@ -262,14 +265,15 @@ describe('П11.8: політика науки — повний флоу (фік�
     expect(a.scientistsHired).toBe(2);
     expect(a.completedProjects).toEqual(['armor']);
     expect(a.workshopProduced).toBe(7);
-    expect(a.equippedItems).toBe(41); // броня загиблих повертається на склад і йде наступним
+    // броня загиблих повертається на склад і йде наступним; п16.2 (ADR-0147): менше загиблих — 41 → 32
+    expect(a.equippedItems).toBe(32);
     expect(a.salarySpent).toBe(140); // 2 × 10 × 7 діб (14 очок, 2 очки на добу)
     expect(a.projectSpent).toBe(96);
     expect(a.workshopSpent).toBe(420);
     expect(a.scientistsFired).toBe(0); // лічильник — лише авто-звільнення за невиплату
     expect(Math.max(...a.scientistsByDay)).toBe(2);
     expect(a.scientistsByDay[a.scientistsByDay.length - 1]).toBe(0); // штат звільнено після протоколу
-    expect(a.missionsLaunched).toBe(45);
+    expect(a.missionsLaunched).toBe(44); // п16.2: 45 → 44
     expect(a.missionsWon).toBe(39);
   }, 30_000); // дві повні партії з наукою: під інструментуванням покриття в CI не вкладається в 5 с
 

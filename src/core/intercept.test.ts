@@ -527,7 +527,7 @@ describe('intercept: авторемонт без боєготових (Т.26)', 
     const econ = createEconomy();
     econ.money = FIGHTER_REPAIR_COST + hirePrice() - 1;
     expect(repairRisksBankruptcy(econ, allWounded())).toBe(true);
-    expect(repairRisksBankruptcy(econ, { soldiers: [], hired: 4, hospital: {} })).toBe(true); // ростер порожній
+    expect(repairRisksBankruptcy(econ, { soldiers: [], hired: 4, hospital: {}, careers: {} })).toBe(true); // ростер порожній
     expect(repairRisksBankruptcy(econ, createRoster(1))).toBe(false); // є боєготовий
     econ.money += 1;
     expect(repairRisksBankruptcy(econ, allWounded())).toBe(false);

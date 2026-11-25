@@ -22,6 +22,7 @@ import {
 } from './squad';
 import { createEconomy, HIRE_PRICE, hirePrice, spend } from './economy';
 import { createWorkshop, deployConsumables, equipItem, settleConsumables } from './workshop';
+import { BIOGRAPHIES, CALLSIGNS } from './career';
 
 // Геопартія з вручну «посадженим» НЛО (спавн вимкнено) — для точкових сценаріїв.
 function mkGeo(ufoId: string): GeoState {
@@ -81,7 +82,7 @@ describe('squad: підбір загону', () => {
     const r = createRoster();
     expect(() => missionSquad(r, 0)).toThrow();
     expect(() => missionSquad(r, 4)).toThrow();
-    expect(() => missionSquad({ soldiers: [], hired: 0, hospital: {} })).toThrow();
+    expect(() => missionSquad({ soldiers: [], hired: 0, hospital: {}, careers: {} })).toThrow();
   });
 });
 
@@ -102,8 +103,11 @@ describe('squad: результат місії', () => {
     expect(af.survivors.map((s) => s.id)).toEqual(['s1', 's2', 's3']);
     expect(af.wounded.map((s) => s.id)).toEqual(['s1']);
     expect(r.soldiers.length).toBe(6);
-    // ADR-0021: hp не відновлюється — поранений чекає одужання тіками
-    expect(r.soldiers[0].hp).toBe(4);
+    // ADR-0021: hp не відновлюється — поранений чекає одужання тіками;
+    // п16.2 (ADR-0147): місія + 2 вбивства = 3 досвіду → «Боєць»: maxHp і hp +1
+    expect(af.promoted.map((s) => s.id)).toEqual(['s1']);
+    expect(r.soldiers[0].hp).toBe(5);
+    expect(r.soldiers[0].maxHp).toBe(11);
     expect(r.soldiers[0].ap).toBe(10);
     expect(r.soldiers[0].overwatch).toBe(false);
     expect(r.soldiers[0].kills).toBe(2); // стаж ветерана зберігається
@@ -529,5 +533,69 @@ describe('squad: Т.14 — пул імен, межі розміру, причи�
     expect(applyMissionResult(r, m.state).survivors.map((s) => s.id)).toEqual(['s1', 's2', 's3']);
     m.state.units = m.state.units.filter((u) => u.side === 'alien');
     expect(() => applyMissionResult(r, m.state)).toThrow('У стані місії немає оперативників гравця');
+  });
+});
+
+describe("squad: п16.2 — кар'єра в ростері (ADR-0147, EARS 1–3, 7)", () => {
+  it('стартовий ростер і найм: позивний і біографія за номером найму; з 13-го — з номером', () => {
+    const r = createRoster(12);
+    expect(r.soldiers.map((s) => r.careers[s.id].callsign)).toEqual(CALLSIGNS);
+    expect(r.careers.s1).toEqual({ callsign: 'Крук', bio: BIOGRAPHIES[0], xp: 0, missions: 0, killsCounted: 0, role: null });
+    const econ = createEconomy();
+    econ.money = 1000;
+    const s13 = hireSoldier(econ, r);
+    expect(s13.id).toBe('s13');
+    expect(r.careers.s13.callsign).toBe('Крук 2');
+    expect(r.careers.s13.bio).toBe(BIOGRAPHIES[0]);
+  });
+
+  it("звільнення прибирає кар'єру", () => {
+    const r = createRoster(3);
+    fireSoldier(r, 's2');
+    expect(Object.keys(r.careers)).toEqual(['s1', 's3']);
+  });
+
+  it("уцілілі й евакуйовані — досвід за місію і вбивства місії; загиблий — рядок втрати і без кар'єри", () => {
+    const r = createRoster(6);
+    r.soldiers[0].kills = 3; // ветеран: 3 вбивства вже зараховано в минулих місіях
+    r.careers.s1 = { ...r.careers.s1, xp: 4, missions: 1, killsCounted: 3 };
+    const squad = missionSquad(r, 3);
+    const m = createMission(mkGeo('uX'), 'uX', { squad });
+    const [s1, s2, s3] = squad;
+    s1.kills = 4; // +1 вбивство в цій місії: 4 + 1 + 1 = 6 → «Сержант»
+    s2.kills = 1; // +1: 0 + 1 + 1 = 2 → «Боєць»
+    evacuate(m.state, s2.id);
+    s3.kills = 2;
+    s3.alive = false;
+    s3.hp = 0;
+    killSide(m, 'alien');
+    const af = applyMissionResult(r, m.state);
+    expect(r.careers.s1).toMatchObject({ xp: 6, missions: 2, killsCounted: 4 });
+    expect(r.careers.s2).toMatchObject({ xp: 2, missions: 1, killsCounted: 1 });
+    expect(af.promoted.map((s) => s.id)).toEqual(['s1', 's2']);
+    expect([s1.maxHp, s1.firingAccuracy]).toEqual([11, 0.63]); // одне нове звання (Боєць → Сержант)
+    expect([s2.maxHp, s2.firingAccuracy]).toEqual([11, 0.63]);
+    expect(r.careers.s3).toBeUndefined();
+    expect(af.lossLines).toEqual(['✝ Втрата: рекрут «Іскра» — 1 місія, 2 вбивства']);
+  });
+
+  it('без підвищення — promoted порожній, характеристики без змін', () => {
+    const r = createRoster(3);
+    const m = createMission(mkGeo('uY'), 'uY', { squad: missionSquad(r) });
+    killSide(m, 'alien');
+    const af = applyMissionResult(r, m.state);
+    expect(af.promoted).toEqual([]);
+    expect(r.soldiers.map((s) => [r.careers[s.id].xp, s.maxHp])).toEqual([
+      [1, 10],
+      [1, 10],
+      [1, 10],
+    ]);
+  });
+
+  it("оперативник без кар'єри → помилка", () => {
+    const r = createRoster(3);
+    const m = createMission(mkGeo('uZ'), 'uZ', { squad: missionSquad(r) });
+    delete r.careers.s2;
+    expect(() => applyMissionResult(r, m.state)).toThrow("Немає кар'єри оперативника: s2");
   });
 });

@@ -148,8 +148,8 @@ describe('save: зіпсовані дані (критерій П5.2)', () => {
   it('невідома/майбутня версія — throw українською', () => {
     const p = createParty(42);
     const json = serializeParty(p, 'T');
-    const v2 = JSON.stringify({ ...JSON.parse(json), version: 2 });
-    expect(() => deserializeParty(v2)).toThrow('Невідома версія збереження: 2');
+    const v3 = JSON.stringify({ ...JSON.parse(json), version: 3 });
+    expect(() => deserializeParty(v3)).toThrow('Невідома версія збереження: 3');
     const vStr = JSON.stringify({ ...JSON.parse(json), version: '1' });
     expect(() => deserializeParty(vStr)).toThrow('Невідома версія збереження');
   });
@@ -517,7 +517,7 @@ describe('save: цех (П11.3, ADR-0026)', () => {
 // --- П15.2 (ADR-0075/0026): сейв-контракт третього результату місії ---
 
 describe('save: П15.2 — «евакуйовано» (EARS 7)', () => {
-  it('mission_evacuated у журналі партії переживає round-trip; SAVE_VERSION не зріс', () => {
+  it('mission_evacuated у журналі партії переживає round-trip', () => {
     const p = createParty(42);
     p.geo.ufos.push({
       id: 'uV1',
@@ -537,7 +537,7 @@ describe('save: П15.2 — «евакуйовано» (EARS 7)', () => {
     }
     completeMission(p.geo, 'uV1', 'евакуйовано');
     const json = serializeParty(p, 'T');
-    expect(SAVE_VERSION).toBe(1); // формат сейву не зростає (ADR-0026)
+    expect(SAVE_VERSION).toBe(2); // п16.2 (ADR-0147 п. 15): v2 — кар'єри; П15.2 формат не міняв
     expect(json.includes('mission_evacuated')).toBe(true);
     expect(json.includes('evacuated') === json.includes('mission_evacuated')).toBe(true); // стан бою поза сейвом
     const restored = deserializeParty(json);
@@ -615,7 +615,7 @@ describe('save: Т.12 — кожне поле сейву перевіряєть�
 
   it('тексти відмов називають причину: некоректний JSON, очікувана версія', () => {
     expect(() => deserializeParty('{не json')).toThrow('Пошкоджені дані збереження: некоректний JSON');
-    expect(() => deserializeParty(corrupt('version', 2))).toThrow(`Невідома версія збереження: 2 (очікується ${SAVE_VERSION})`);
+    expect(() => deserializeParty(corrupt('version', 3))).toThrow(`Невідома версія збереження: 3 (очікується ${SAVE_VERSION})`);
   });
 
   it('round-trip стану не за замовчуванням: лікарня, погоня винищувача, НЛО в бою, рахунок кампанії', () => {
