@@ -4,7 +4,7 @@
 // «норма»): українські значення ProjectId/ItemId виступають ключами у сейві
 // (completed/store/queue/логи). Після П12.6 ключі каталогів англійські, назви —
 // відображувані значення; сейви ≤0.3.0 мігруються при завантаженні (save.ts,
-// LEGACY_PROJECT_KEYS), version 1 не зростає (ADR-0026).
+// LEGACY_PROJECT_KEYS), version 1 не зростала (ADR-0026); п16.2 — v2 з міграцією кар'єр (кінець файла).
 //
 // Генерація фікстури (детермінований сценарій, код до серії П12.6):
 // createParty(42) → 60 тіків → 2 техноманти, старт «аптечки» і «оптичного
@@ -25,7 +25,8 @@ import { workshopTick } from './workshop';
 import { hospitalTick } from './squad';
 import { interceptTick, repairTick } from './intercept';
 import { campaignTick } from './campaign';
-import { deserializeParty, serializeParty, type Party } from './save';
+import { deserializeParty, SAVE_VERSION, serializeParty, type Party } from './save';
+import { awaitingRole, BIOGRAPHIES, CALLSIGNS, rankOf } from './career';
 
 // Сейс-фікстура ≤0.3.0 (див. шапку; відображувані назви — ДО мапи ADR-0064).
 const FIXTURE = `{"version":1,"seed":42,"savedAt":"2026-10-18T12:00:00.000Z","state":{"geo":{"rngState":1177001285,"minute":5460,"base":{"x":8,"y":4},"ufos":[],"log":[{"type":"ufo_spawned","ufoId":"ufo1","kind":"розвідник","pos":{"x":13,"y":0},"minute":570},{"type":"ufo_move","ufoId":"ufo1","from":{"x":13,"y":0},"to":{"x":12,"y":0},"minute":570},{"type":"ufo_detected","ufoId":"ufo1","pos":{"x":12,"y":0},"minute":570},{"type":"ufo_move","ufoId":"ufo1","from":{"x":12,"y":0},"to":{"x":11,"y":0},"minute":600},{"type":"ufo_move","ufoId":"ufo1","from":{"x":11,"y":0},"to":{"x":10,"y":0},"minute":630},{"type":"ufo_move","ufoId":"ufo1","from":{"x":10,"y":0},"to":{"x":9,"y":0},"minute":660},{"type":"ufo_landed","ufoId":"ufo1","pos":{"x":9,"y":0},"minute":660},{"type":"ufo_spawned","ufoId":"ufo2","kind":"розвідник","pos":{"x":13,"y":3},"minute":750},{"type":"ufo_move","ufoId":"ufo2","from":{"x":13,"y":3},"to":{"x":12,"y":3},"minute":750},{"type":"ufo_detected","ufoId":"ufo2","pos":{"x":12,"y":3},"minute":750},{"type":"ufo_move","ufoId":"ufo2","from":{"x":12,"y":3},"to":{"x":12,"y":2},"minute":780},{"type":"ufo_landed","ufoId":"ufo2","pos":{"x":12,"y":2},"minute":780},{"type":"ufo_left","ufoId":"ufo1","minute":900},{"type":"ufo_left","ufoId":"ufo2","minute":1020},{"type":"day","day":2,"minute":1440},{"type":"ufo_spawned","ufoId":"ufo3","kind":"розвідник","pos":{"x":7,"y":4},"minute":1560},{"type":"ufo_move","ufoId":"ufo3","from":{"x":7,"y":4},"to":{"x":8,"y":4},"minute":1560},{"type":"ufo_detected","ufoId":"ufo3","pos":{"x":8,"y":4},"minute":1560},{"type":"ufo_move","ufoId":"ufo3","from":{"x":8,"y":4},"to":{"x":9,"y":4},"minute":1590},{"type":"ufo_move","ufoId":"ufo3","from":{"x":9,"y":4},"to":{"x":10,"y":4},"minute":1620},{"type":"ufo_move","ufoId":"ufo3","from":{"x":10,"y":4},"to":{"x":11,"y":4},"minute":1650},{"type":"ufo_move","ufoId":"ufo3","from":{"x":11,"y":4},"to":{"x":11,"y":3},"minute":1680},{"type":"ufo_move","ufoId":"ufo3","from":{"x":11,"y":3},"to":{"x":12,"y":3},"minute":1710},{"type":"ufo_move","ufoId":"ufo3","from":{"x":12,"y":3},"to":{"x":12,"y":2},"minute":1740},{"type":"ufo_move","ufoId":"ufo3","from":{"x":12,"y":2},"to":{"x":13,"y":2},"minute":1770},{"type":"ufo_move","ufoId":"ufo3","from":{"x":13,"y":2},"to":{"x":13,"y":1},"minute":1800},{"type":"ufo_move","ufoId":"ufo3","from":{"x":13,"y":1},"to":{"x":14,"y":1},"minute":1830},{"type":"ufo_move","ufoId":"ufo3","from":{"x":14,"y":1},"to":{"x":14,"y":0},"minute":1860},{"type":"ufo_landed","ufoId":"ufo3","pos":{"x":14,"y":0},"minute":1860},{"type":"ufo_left","ufoId":"ufo3","minute":2100},{"type":"day","day":3,"minute":2880},{"type":"ufo_spawned","ufoId":"ufo4","kind":"збирач","pos":{"x":10,"y":7},"minute":3180},{"type":"ufo_move","ufoId":"ufo4","from":{"x":10,"y":7},"to":{"x":10,"y":6},"minute":3180},{"type":"ufo_detected","ufoId":"ufo4","pos":{"x":10,"y":6},"minute":3180},{"type":"ufo_move","ufoId":"ufo4","from":{"x":10,"y":6},"to":{"x":10,"y":5},"minute":3240},{"type":"ufo_move","ufoId":"ufo4","from":{"x":10,"y":5},"to":{"x":11,"y":5},"minute":3300},{"type":"ufo_move","ufoId":"ufo4","from":{"x":11,"y":5},"to":{"x":11,"y":4},"minute":3360},{"type":"ufo_move","ufoId":"ufo4","from":{"x":11,"y":4},"to":{"x":12,"y":4},"minute":3420},{"type":"ufo_spawned","ufoId":"ufo5","kind":"розвідник","pos":{"x":15,"y":4},"minute":3480},{"type":"ufo_move","ufoId":"ufo4","from":{"x":12,"y":4},"to":{"x":12,"y":3},"minute":3480},{"type":"ufo_move","ufoId":"ufo5","from":{"x":15,"y":4},"to":{"x":15,"y":3},"minute":3480},{"type":"ufo_move","ufoId":"ufo5","from":{"x":15,"y":3},"to":{"x":15,"y":2},"minute":3510},{"type":"ufo_move","ufoId":"ufo4","from":{"x":12,"y":3},"to":{"x":13,"y":3},"minute":3540},{"type":"ufo_move","ufoId":"ufo5","from":{"x":15,"y":2},"to":{"x":15,"y":1},"minute":3540},{"type":"ufo_landed","ufoId":"ufo5","pos":{"x":15,"y":1},"minute":3540},{"type":"ufo_move","ufoId":"ufo4","from":{"x":13,"y":3},"to":{"x":13,"y":2},"minute":3600},{"type":"ufo_move","ufoId":"ufo4","from":{"x":13,"y":2},"to":{"x":14,"y":2},"minute":3660},{"type":"ufo_move","ufoId":"ufo4","from":{"x":14,"y":2},"to":{"x":14,"y":1},"minute":3720},{"type":"ufo_landed","ufoId":"ufo4","pos":{"x":14,"y":1},"minute":3720},{"type":"ufo_left","ufoId":"ufo5","minute":3780},{"type":"ufo_left","ufoId":"ufo4","minute":4200},{"type":"day","day":4,"minute":4320}],"spawnChance":0.03,"maxUfos":3,"nextId":6},"roster":{"soldiers":[{"name":"Іван","hp":10,"maxHp":10,"ap":10,"maxAp":10,"firingAccuracy":0.6,"weapon":{"name":"АР-14 «Гарт»","damage":[3,6],"range":12,"modes":{"auto":{"apCost":4,"accuracyMod":0.5,"shots":3},"snap":{"apCost":3,"accuracyMod":0.8,"shots":1},"aimed":{"apCost":5,"accuracyMod":1.15,"shots":1}}},"alive":true,"kills":0,"overwatch":false,"id":"s1","side":"player","pos":{"x":0,"y":0}},{"name":"Олена","hp":10,"maxHp":10,"ap":10,"maxAp":10,"firingAccuracy":0.6,"weapon":{"name":"АР-14 «Гарт»","damage":[3,6],"range":12,"modes":{"auto":{"apCost":4,"accuracyMod":0.5,"shots":3},"snap":{"apCost":3,"accuracyMod":0.8,"shots":1},"aimed":{"apCost":5,"accuracyMod":1.15,"shots":1}}},"alive":true,"kills":0,"overwatch":false,"id":"s2","side":"player","pos":{"x":0,"y":0}},{"name":"Тарас","hp":10,"maxHp":10,"ap":10,"maxAp":10,"firingAccuracy":0.6,"weapon":{"name":"АР-14 «Гарт»","damage":[3,6],"range":12,"modes":{"auto":{"apCost":4,"accuracyMod":0.5,"shots":3},"snap":{"apCost":3,"accuracyMod":0.8,"shots":1},"aimed":{"apCost":5,"accuracyMod":1.15,"shots":1}}},"alive":true,"kills":0,"overwatch":false,"id":"s3","side":"player","pos":{"x":0,"y":0}},{"name":"Марія","hp":10,"maxHp":10,"ap":10,"maxAp":10,"firingAccuracy":0.6,"weapon":{"name":"АР-14 «Гарт»","damage":[3,6],"range":12,"modes":{"auto":{"apCost":4,"accuracyMod":0.5,"shots":3},"snap":{"apCost":3,"accuracyMod":0.8,"shots":1},"aimed":{"apCost":5,"accuracyMod":1.15,"shots":1}}},"alive":true,"kills":0,"overwatch":false,"id":"s4","side":"player","pos":{"x":0,"y":0}},{"name":"Богдан","hp":10,"maxHp":10,"ap":10,"maxAp":10,"firingAccuracy":0.6,"weapon":{"name":"АР-14 «Гарт»","damage":[3,6],"range":12,"modes":{"auto":{"apCost":4,"accuracyMod":0.5,"shots":3},"snap":{"apCost":3,"accuracyMod":0.8,"shots":1},"aimed":{"apCost":5,"accuracyMod":1.15,"shots":1}}},"alive":true,"kills":0,"overwatch":false,"id":"s5","side":"player","pos":{"x":0,"y":0}},{"name":"Софія","hp":10,"maxHp":10,"ap":10,"maxAp":10,"firingAccuracy":0.6,"weapon":{"name":"АР-14 «Гарт»","damage":[3,6],"range":12,"modes":{"auto":{"apCost":4,"accuracyMod":0.5,"shots":3},"snap":{"apCost":3,"accuracyMod":0.8,"shots":1},"aimed":{"apCost":5,"accuracyMod":1.15,"shots":1}}},"alive":true,"kills":0,"overwatch":false,"id":"s6","side":"player","pos":{"x":0,"y":0}},{"name":"Дмитро","hp":10,"maxHp":10,"ap":10,"maxAp":10,"firingAccuracy":0.6,"weapon":{"name":"АР-14 «Гарт»","damage":[3,6],"range":12,"modes":{"auto":{"apCost":4,"accuracyMod":0.5,"shots":3},"snap":{"apCost":3,"accuracyMod":0.8,"shots":1},"aimed":{"apCost":5,"accuracyMod":1.15,"shots":1}}},"alive":true,"kills":0,"overwatch":false,"id":"s7","side":"player","pos":{"x":0,"y":0}}],"hired":7,"hospital":{}},"econ":{"money":3685,"lastAllowanceDay":3,"log":[{"type":"allowance","day":1,"amount":75},{"type":"spend","amount":100},{"type":"spend","amount":100},{"type":"spend","amount":100},{"type":"spend","amount":90},{"type":"allowance","day":2,"amount":75},{"type":"spend","amount":40},{"type":"allowance","day":3,"amount":75},{"type":"spend","amount":40},{"type":"spend","amount":40},{"type":"spend","amount":40},{"type":"spend","amount":140},{"type":"spend","amount":50},{"type":"spend","amount":100}]},"intercept":{"rngState":42,"fighter":{"hp":4,"pos":{"x":0,"y":0},"status":"на базі","targetId":null},"ufoHp":{},"activeUfoId":null,"round":0,"log":[]},"campaign":{"status":"триває","preset":"норма","score":null,"victoryDay":null},"hints":{"intercept":false,"mission":false,"repair":false},"research":{"scientists":[{"id":"в1","name":"Зінаїда"},{"id":"в2","name":"Ярослав"}],"hired":2,"slots":2,"active":[{"id":"осколкова граната","invested":4}],"completed":["оптичний приціл","аптечка"],"pool":0,"lastSalaryDay":3,"log":[{"type":"hire","name":"Зінаїда"},{"type":"hire","name":"Ярослав"},{"type":"project_started","id":"аптечка"},{"type":"project_started","id":"оптичний приціл"},{"type":"salary","day":2,"amount":40},{"type":"points","day":2,"amount":2},{"type":"project_completed","id":"оптичний приціл"},{"type":"project_completed","id":"аптечка"},{"type":"salary","day":3,"amount":40},{"type":"points","day":3,"amount":2},{"type":"project_started","id":"осколкова граната"}]},"workshop":{"queue":[{"id":"оптичний приціл","ticksLeft":7}],"store":{"аптечка":1,"осколкова граната":0,"оптичний приціл":0,"легка броня":0,"гарматний модуль":0},"equipped":{"s1":{"armor":false,"optics":false,"medkit":true,"grenade":false}},"log":[{"type":"order","id":"аптечка","ticks":12},{"type":"order","id":"аптечка","ticks":12},{"type":"produced","id":"аптечка"},{"type":"equip","soldierId":"s1","id":"аптечка"},{"type":"order","id":"оптичний приціл","ticks":20},{"type":"produced","id":"аптечка"}]}}}`;
@@ -159,5 +160,77 @@ describe('П12.6: продовження сіда 42 — види подій і 
     expect(p.research.active).toEqual([{ id: 'grenade', invested: 8 }]);
     expect(p.workshop.queue).toEqual([]);
     expect(p.workshop.store).toEqual({ medkit: 1, grenade: 0, optics: 1, armor: 0, 'gun-module': 0 });
+  });
+});
+
+// --- п16.2 (ADR-0147 п. 15, EARS 10): сейв v1 → v2 з міграцією кар'єр ---
+
+// Сейв v1 з ветеранами: та сама фікстура, у s1 — 5 вбивств і поранення 7/10 у
+// лікарні, у s2 — 2 вбивства, у s3 — чужий id (сейв не з цього коду).
+function v1With(edit: (soldiers: Record<string, unknown>[], roster: Record<string, unknown>) => void): string {
+  const data = JSON.parse(FIXTURE) as { state: { roster: Record<string, unknown> & { soldiers: Record<string, unknown>[] } } };
+  edit(data.state.roster.soldiers, data.state.roster);
+  return JSON.stringify(data);
+}
+
+describe('п16.2: сейв v1 мігрує у v2 (ADR-0147 п. 15, EARS 10)', () => {
+  it('новобранці фікстури: позивні й біографії за номером, досвід 0, без ролі', () => {
+    const p = deserializeParty(FIXTURE);
+    expect(p.roster.soldiers.map((s) => p.roster.careers[s.id].callsign)).toEqual(CALLSIGNS.slice(0, 7));
+    expect(p.roster.careers.s7).toEqual({ callsign: 'Грім', bio: BIOGRAPHIES[6], xp: 0, missions: 0, killsCounted: 0, role: null });
+    expect(p.roster.soldiers.every((s) => s.maxHp === 10 && s.firingAccuracy === 0.6)).toBe(true);
+  });
+
+  it('ветерани: досвід = kills, звання з приростами, тики лікарні без змін; роль чекає вибору', () => {
+    const json = v1With((soldiers, roster) => {
+      soldiers[0].kills = 5;
+      soldiers[0].hp = 7;
+      soldiers[1].kills = 2;
+      roster.hospital = { s1: 6 };
+    });
+    const p = deserializeParty(json);
+    const [s1, s2, s3] = p.roster.soldiers;
+    expect(p.roster.careers.s1).toMatchObject({ xp: 5, missions: 0, killsCounted: 5, role: null });
+    expect(rankOf(p.roster.careers.s1.xp)).toBe(2); // «Сержант»: два звання понад «Рекрут»
+    expect([s1.hp, s1.maxHp, s1.firingAccuracy]).toEqual([9, 12, 0.66]);
+    expect(p.roster.hospital).toEqual({ s1: 6 });
+    expect([s2.maxHp, s2.firingAccuracy]).toEqual([11, 0.63]);
+    expect([s3.maxHp, s3.firingAccuracy]).toEqual([10, 0.6]);
+    expect(awaitingRole(p.roster.careers.s1)).toBe(true);
+    expect(awaitingRole(p.roster.careers.s3)).toBe(false);
+  });
+
+  it('збережена після міграції — v2; v2 вантажиться і зберігається байт-у-байт', () => {
+    const p = deserializeParty(v1With((soldiers) => void (soldiers[0].kills = 5)));
+    const json = serializeParty(p, 'T');
+    expect(JSON.parse(json).version).toBe(SAVE_VERSION);
+    expect(SAVE_VERSION).toBe(2);
+    const again = deserializeParty(json);
+    expect(serializeParty(again, 'T')).toBe(json);
+    expect(again.roster.soldiers[0].maxHp).toBe(12); // прирости не застосовуються вдруге
+  });
+
+  it('id оперативника не «sN» у сейві v1 → відмова, як пошкоджений ростер', () => {
+    const json = v1With((soldiers) => void (soldiers[2].id = 'x3'));
+    expect(() => deserializeParty(json)).toThrow('Пошкоджені дані збереження: ростер');
+    expect(() => deserializeParty(v1With((soldiers) => void (soldiers[2].id = 's0')))).toThrow('ростер');
+  });
+
+  it("сейв v2 без кар'єри оперативника чи з хибною роллю → відмова", () => {
+    const v2 = JSON.parse(serializeParty(deserializeParty(FIXTURE), 'T'));
+    const bad = (edit: (c: Record<string, Record<string, unknown>>) => void): string => {
+      const d = structuredClone(v2);
+      edit(d.state.roster.careers);
+      return JSON.stringify(d);
+    };
+    const msg = "Пошкоджені дані збереження: кар'єри оперативників";
+    expect(() => deserializeParty(bad((c) => delete c.s3))).toThrow(msg);
+    expect(() => deserializeParty(bad((c) => (c.s1.role = 'pilot')))).toThrow(msg);
+    expect(() => deserializeParty(bad((c) => (c.s1.xp = 1.5)))).toThrow(msg);
+    expect(() => deserializeParty(bad((c) => (c.s1.callsign = 7)))).toThrow(msg);
+    const noCareers = structuredClone(v2);
+    delete noCareers.state.roster.careers;
+    expect(() => deserializeParty(JSON.stringify(noCareers))).toThrow(msg);
+    expect(deserializeParty(bad((c) => (c.s1.role = 'sniper'))).roster.careers.s1.role).toBe('sniper');
   });
 });

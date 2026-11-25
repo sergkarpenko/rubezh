@@ -40,6 +40,7 @@ import { DIFFICULTY_MULTIPLIERS, VICTORY_DAY, campaignTick, type DifficultyPrese
 import { completeMission, createMission } from './core/mission';
 import { autoBattle } from './core/ai-bot';
 import { createParty, deserializeParty, serializeParty, type Party } from './core/save';
+import { KILL_XP, MISSION_XP, RANK_ACCURACY_BONUS, RANK_HP_BONUS, rankOf } from './core/career';
 
 const RUN = { seed: 20261111, numRuns: 100 };
 const CHOICES = ['далека', 'середня', 'впритул', 'відступ'] as const;
@@ -196,10 +197,27 @@ function broken(p: Party): string[] {
     const eq = workshop.equipped[s.id];
     must(s.alive && s.hp > 0 && s.hp <= s.maxHp, s.id + ': hp ' + s.hp + '/' + s.maxHp);
     must(s.hp === s.maxHp || roster.hospital[s.id] !== undefined, s.id + ': поранений поза лікарнею');
-    const maxHp = Math.round(10 * DIFFICULTY_MULTIPLIERS[campaign.preset].hpBonusMultiplier) + (eq?.armor ? ARMOR_MAX_HP_BONUS : 0);
-    const accuracy = 0.6 + (eq?.optics ? OPTICS_ACCURACY_BONUS : 0);
-    must(s.maxHp === maxHp && Math.abs(s.firingAccuracy - accuracy) < 1e-9, s.id + ': характеристики не відповідають екіпіруванню');
+    // п16.2 (ADR-0147): кар'єра є в кожного; досвід — місії й зараховані вбивства;
+    // прирости звання — поверх бази й екіпірування.
+    const career = roster.careers[s.id];
+    must(career !== undefined, s.id + ": без кар'єри");
+    if (career === undefined) continue;
+    must(
+      career.killsCounted === s.kills && career.xp === career.missions * MISSION_XP + career.killsCounted * KILL_XP,
+      s.id + ': досвід ' + career.xp + ' не з місій і вбивств'
+    );
+    const rank = rankOf(career.xp);
+    const maxHp =
+      Math.round(10 * DIFFICULTY_MULTIPLIERS[campaign.preset].hpBonusMultiplier) +
+      (eq?.armor ? ARMOR_MAX_HP_BONUS : 0) +
+      rank * RANK_HP_BONUS;
+    const accuracy = 0.6 + (eq?.optics ? OPTICS_ACCURACY_BONUS : 0) + rank * RANK_ACCURACY_BONUS;
+    must(
+      s.maxHp === maxHp && Math.abs(s.firingAccuracy - accuracy) < 1e-9,
+      s.id + ': характеристики не відповідають екіпіруванню і званню'
+    );
   }
+  must(Object.keys(roster.careers).length === ids.size, "кар'єра без оперативника");
   must(
     Object.entries(roster.hospital).every(([id, left]) => ids.has(id) && left >= 1),
     'лікарня: чужий запис або нуль тіків'

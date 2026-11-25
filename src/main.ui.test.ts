@@ -660,7 +660,7 @@ describeScenario('критичний флоу економіки: найм → �
     expect($('battle-panel').classList.contains('hidden')).toBe(true);
     expect($('roster').textContent).toContain('6 оперативників (5 боєготових)');
     expect($('roster').textContent).toContain('лікарня: 14 тіків');
-    expect($('roster').textContent).toContain('HP 3/10');
+    expect($('roster').textContent).toContain('HP 4/11'); // п16.2: 2 вбивства + місія → «Боєць», +1 HP
     expect(btn('btn-tick').disabled).toBe(false);
   });
 
@@ -804,7 +804,7 @@ describePage('панель збереження: 3 слоти, лише на г�
   });
 
   it('лікарня у сейві: поранений відновлюється після завантаження', async () => {
-    // авто-бій цієї партії: перемога, один загиблий, Іван поранений 3/10 (сід 27)
+    // авто-бій цієї партії: перемога, один загиблий, Іван поранений 4/11 (сід 27; п16.2 — «Боєць»)
     (document.querySelector('button.mission') as HTMLButtonElement).click();
     await runAutoBattle();
     btn('btn-close').click();
@@ -815,7 +815,7 @@ describePage('панель збереження: 3 слоти, лише на г�
     expect($('roster').textContent).not.toContain('лікарня');
     btn('btn-load-3').click();
     expect($('roster').textContent).toContain('лікарня: 14 тіків');
-    expect($('roster').textContent).toContain('HP 3/10');
+    expect($('roster').textContent).toContain('HP 4/11'); // п16.2: 2 вбивства + місія → «Боєць», +1 HP
     expect($('money').textContent).toBe('410');
   });
 
