@@ -8,7 +8,9 @@
 // (typeof document): node-середовище (vitest) імпортує модуль без побічних ефектів.
 
 import { RADAR_RANGE, advanceTime } from './core/geo';
-import { hireSoldier, hospitalTick, isBankrupt } from './core/squad';
+import { chooseRole, hireSoldier, hospitalTick, isBankrupt } from './core/squad';
+import { awaitingRole, type SoldierRole } from './core/career';
+import { roleDialogHtml } from './ui/roles';
 import { economyTick } from './core/economy';
 // П11.2 (ADR-0058): тік науки — після дотації того ж дня; без вчених — no-op.
 import { researchTick } from './core/research';
@@ -221,6 +223,7 @@ const OVERLAY_IDS = [
   'exit-confirm',
   'campaign-victory',
   'evac-confirm',
+  'role-dialog', // п16.4 (ADR-0147): вікно вибору ролі — Esc і клік поза ним його не закривають
 ];
 // Т.73: одна перевірка «відкрите вікно» (той самий OVERLAY_IDS, що й в обробнику пробілу нижче)
 function overlayOpen(): boolean {
@@ -597,6 +600,33 @@ function renderAll(): void {
   // deps.inBattle() || deps.isGameOver() тут тотожне (ui.mission !== null || gameOver)
   statusTabs?.setAttention('squad', ui.mission !== null || gameOver ? 0 : readyToIssue(party));
   if (ui.mission) battle.renderBattle();
+  else promptRole();
+}
+
+// п16.4 (ADR-0147 п. 5, 13; EARS 4, 10): вікно «Підвищення: «<позивний>» — Боєць. Оберіть роль» для
+// першого в ростері, хто досяг «Боєць» без ролі (після місії і після завантаження сейву v1). Esc і клік
+// поза вікном не закривають (вибір обов'язковий); кілька підвищень — вікна по черзі (наступне — після вибору).
+function promptRole(): void {
+  const box = el('role-dialog');
+  if (party === null || ui.mission !== null || !partyOnScreen || !box.classList.contains('hidden')) return;
+  const p = party;
+  const s = p.roster.soldiers.find((x) => p.roster.careers[x.id] !== undefined && awaitingRole(p.roster.careers[x.id]));
+  if (s === undefined) return;
+  box.innerHTML = roleDialogHtml(p.roster.careers[s.id]);
+  box.dataset.unit = s.id;
+  box.classList.remove('hidden');
+  for (const b of box.querySelectorAll<HTMLButtonElement>('.role-pick')) {
+    b.onclick = () => {
+      chooseRole(p.roster, s.id, b.dataset.role as SoldierRole);
+      box.classList.add('hidden');
+      box.innerHTML = '';
+      renderAll(); // наступне підвищення (якщо є) відкривається тут
+      if (box.classList.contains('hidden')) focusTopbarOpener();
+    };
+  }
+  // аудит PR #501: фокус — на заголовок, а не на кнопку: утриманий Enter чи подвійний тап після вибору
+  // не обирає роль наступному в черзі (роль — назавжди); Tab веде до кнопок
+  box.querySelector<HTMLElement>('#role-dialog-title')?.focus();
 }
 
 // П12.2 (ADR-0065): старт нової партії — єдиний шлях створення партії:
@@ -635,9 +665,11 @@ function continueGame(): boolean {
 // вихід із бою геосцену перемальовує (close → renderAll). Ambient-цикл стає на паузу до
 // наступної партії (adoptParty → ambient.start).
 function exitToStart(): void {
+  // Т.58: повернення вкладки з фону і тумблер налаштувань ambient на стартовому екрані не будять;
+  // п16.4 (аудит PR #501): до battle.close — його renderAll не відкриває вікно ролі над стартовим екраном
+  partyOnScreen = false;
   if (ui.mission !== null) battle.close();
   geoAnim.cancel();
-  partyOnScreen = false; // Т.58: повернення вкладки з фону і тумблер налаштувань ambient на стартовому екрані не будять
   ambient.pause();
   el('campaign-victory').classList.add('hidden'); // Т.58: вихід з екрана перемоги — екран не лишається поверх стартового
   screens?.showStart();
@@ -744,6 +776,8 @@ if (typeof document !== 'undefined') {
       else if (id === 'ow') input.armOverwatch();
       else if (id === 'medkit') input.armMedkit();
       else if (id === 'grenade') input.armGrenade();
+      else if (id === 'role')
+        input.useRole(); // п16.4 (ADR-0147)
       else if (id === 'evac')
         input.evacuateSelected(); // Т.71 (ADR-0075)
       else if (id === 'end') input.endPlayerTurn();
@@ -829,7 +863,10 @@ if (typeof document !== 'undefined') {
   // Т.75: пастка фокусу — Tab і Shift+Tab ходять по колу всередині відкритого вікна (вікно — за порядком Esc)
   document.addEventListener('keydown', (ev) => {
     if (ev.key !== 'Tab') return;
-    const box = [...Object.keys(OVERLAY_ESC_CLOSE), 'campaign-victory'].map((id) => el(id)).find((o) => !o.classList.contains('hidden'));
+    // п16.4: вікно вибору ролі — поверх інших, першим
+    const box = ['role-dialog', ...Object.keys(OVERLAY_ESC_CLOSE), 'campaign-victory']
+      .map((id) => el(id))
+      .find((o) => !o.classList.contains('hidden'));
     if (box === undefined) return;
     const items = [...box.querySelectorAll<HTMLElement>(FOCUSABLE)].filter(
       (e) => !(e as HTMLButtonElement).disabled && !e.hidden && e.closest('.hidden') === null

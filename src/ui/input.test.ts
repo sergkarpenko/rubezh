@@ -49,6 +49,7 @@ function setupDom(): void {
       <button id="btn-ow">Дозор</button>
       <button id="btn-medkit">Лікування</button>
       <button id="btn-grenade">Граната</button>
+      <button id="btn-role">Роль</button>
       <button id="btn-evac">Евакуація</button>
       <button id="btn-end">Кінець ходу</button>
       <button id="btn-auto-battle"><span class="tb-cap">Авто</span></button>
@@ -1271,5 +1272,138 @@ describe('Т.131: меню на ворогові', () => {
     f.input.battleCanvasHover({ clientX: s.pos.x * 48 + 24, clientY: (s.pos.y + 1) * 48 + 24 } as MouseEvent);
     expect(f.ui.hoverPath).toBeNull();
     expect(f.binfo()).toBe(info);
+  });
+});
+
+// п16.4 (ADR-0147 п. 3, 11; EARS 5, 6; рішення власника «А»): плитка «Роль» і клавіша R —
+// «Ривок» одразу, «Точний постріл» і «Польова допомога» — зведення й тап-тап по цілі.
+describe('п16.4: дія ролі (плитка «Роль», клавіша R)', () => {
+  function roleSetup(role: 'assault' | 'sniper' | 'medic'): { f: Fixture; s: Unit; mate: Unit; a: Unit } {
+    const f = makeFixture();
+    launchMission(f);
+    const st = f.ui.mission!.state;
+    const [s, mate] = st.units.filter((u) => u.side === 'player');
+    st.roles = { [s.id]: { role, used: false } };
+    const a = st.units.find((u) => u.side === 'alien' && u.alive)!;
+    for (const [dx, dy] of [
+      [2, 0],
+      [0, 2],
+      [2, 2],
+      [-2, 0],
+      [0, -2],
+    ]) {
+      const p = { x: s.pos.x + dx, y: s.pos.y + dy };
+      if (st.units.some((u) => u.alive && u.pos.x === p.x && u.pos.y === p.y) || st.map.blocked.has(p.x + ',' + p.y)) continue;
+      a.pos = p;
+      if (f.battle.visibleCells().has(p.x + ',' + p.y) && hasLineOfSight(st, s.pos, p)) break;
+    }
+    clickAt(f, s.pos.x, s.pos.y);
+    return { f, s, mate, a };
+  }
+
+  it('без вибору — підказка; без ролі — причина без винятку; з дією вже використаною — текст ядра', () => {
+    const f = makeFixture();
+    launchMission(f);
+    f.input.useRole();
+    expect(f.binfo()).toContain('Спершу');
+    const s = f.ui.mission!.state.units.find((u) => u.side === 'player')!;
+    clickAt(f, s.pos.x, s.pos.y);
+    f.input.onKeyDown({ code: 'KeyR' } as KeyboardEvent);
+    expect(f.binfo()).toContain('ролі немає');
+    f.ui.mission!.state.roles = { [s.id]: { role: 'assault', used: true } };
+    f.input.useRole();
+    expect(f.binfo()).toBe('✗ «Ривок» вже використано в цьому бою');
+    expect(f.ui.itemMode).toBeNull();
+  });
+
+  it('«Ривок» — одразу: +4 AP, прапорець, рядок журналу; плитка — «вже було»', () => {
+    const { f, s } = roleSetup('assault');
+    f.input.onKeyDown({ code: 'KeyR' } as KeyboardEvent);
+    expect(s.ap).toBe(14);
+    expect(f.ui.mission!.state.roles![s.id].used).toBe(true);
+    expect(f.binfo()).toContain('«Ривок» — AP 14/10');
+    expect(f.ui.mission!.state.log.at(-1)).toEqual({ type: 'dash', unitId: s.id, bonus: 4 });
+  });
+
+  it('«Точний постріл»: зведення (прицільний режим), тап-тап по демону — точний постріл, 6 AP', () => {
+    const { f, s, a } = roleSetup('sniper');
+    f.input.useRole();
+    expect(f.ui.itemMode).toBe('precise');
+    expect(f.ui.fireMode).toBe('aimed');
+    expect(f.binfo()).toContain('«Точний постріл»');
+    clickAt(f, a.pos.x, a.pos.y); // шанс
+    expect(f.binfo()).toContain('повторний тап');
+    clickAt(f, a.pos.x, a.pos.y); // постріл
+    const log = f.ui.mission!.state.log;
+    expect(log.some((e) => e.type === 'precise_shot' && e.targetId === a.id)).toBe(true);
+    expect(s.ap).toBe(10 - 6);
+    expect(f.ui.itemMode).toBeNull();
+    expect(f.binfo()).toContain('(«Точний постріл»)');
+  });
+
+  it('«Точний постріл»: Esc і звичайний режим знімають мітку — далі звичайний постріл', () => {
+    const { f } = roleSetup('sniper');
+    f.input.useRole();
+    f.input.onKeyDown({ key: 'Escape', code: 'Escape' } as KeyboardEvent);
+    expect(f.ui.itemMode).toBeNull();
+    expect(f.binfo()).toBe('Дію ролі скасовано.');
+    f.input.useRole();
+    f.input.armFire('snap');
+    expect(f.ui.itemMode).toBeNull();
+    expect(f.ui.fireMode).toBe('snap');
+  });
+
+  it('«Польова допомога»: тап-тап по пораненому сусідові (і собі), без гелю, 2 AP', () => {
+    const { f, s, mate } = roleSetup('medic');
+    mate.hp = mate.maxHp - 4;
+    f.input.useRole();
+    expect(f.ui.itemMode).toBe('aid');
+    clickAt(f, mate.pos.x, mate.pos.y);
+    expect(f.binfo()).toContain('«Польова допомога» (+3 HP, 2 AP)');
+    expect(f.ui.selectedId).toBe(s.id); // у режимі союзник — ціль, не вибір
+    clickAt(f, mate.pos.x, mate.pos.y);
+    expect(mate.hp).toBe(mate.maxHp - 1);
+    expect(s.ap).toBe(10 - 2);
+    expect(f.ui.mission!.state.log.some((e) => e.type === 'field_aid')).toBe(true);
+    expect(f.binfo()).toContain('«Польова допомога» → ');
+  });
+
+  it('аудит PR #501: «Точний постріл» знімає тап у порожню клітинку (прев\u2019ю шляху), як звичайний режим', () => {
+    const { f, s } = roleSetup('sniper');
+    f.input.useRole();
+    const st = f.ui.mission!.state;
+    const free = [
+      { x: s.pos.x, y: s.pos.y + 3 },
+      { x: s.pos.x + 3, y: s.pos.y },
+      { x: s.pos.x + 1, y: s.pos.y + 3 },
+    ].find((c) => !st.map.blocked.has(c.x + ',' + c.y) && !st.units.some((u) => u.alive && u.pos.x === c.x && u.pos.y === c.y))!;
+    clickAt(f, free.x, free.y);
+    expect(f.ui.fireMode).toBeNull();
+    expect(f.ui.itemMode).toBeNull();
+  });
+
+  it('аудит PR #501: утримана R, Ctrl+R і анімація дії не роблять', () => {
+    const { f, s } = roleSetup('assault');
+    f.input.onKeyDown({ code: 'KeyR', repeat: true } as KeyboardEvent);
+    f.input.onKeyDown({ code: 'KeyR', ctrlKey: true } as KeyboardEvent);
+    f.input.onKeyDown({ code: 'KeyR', metaKey: true } as KeyboardEvent);
+    expect(s.ap).toBe(10);
+    const g = makeFixture(false, [{ kind: 'move' } as unknown as Anim]);
+    launchMission(g);
+    const st = g.ui.mission!.state;
+    const u = st.units.find((x) => x.side === 'player')!;
+    st.roles = { [u.id]: { role: 'assault', used: false } };
+    g.ui.selectedId = u.id;
+    g.input.useRole();
+    expect(u.ap).toBe(10);
+    expect(st.roles[u.id].used).toBe(false);
+  });
+
+  it('«Польова допомога»: непоранена ціль — відмова, дію не витрачено', () => {
+    const { f, s } = roleSetup('medic');
+    f.input.useRole();
+    clickAt(f, s.pos.x, s.pos.y);
+    expect(f.binfo()).toBe('Ціль не поранена — дію не витрачено.');
+    expect(f.ui.mission!.state.roles![s.id].used).toBe(false);
   });
 });

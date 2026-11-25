@@ -237,6 +237,12 @@ export function battleEventText(e: GameEvent, name: (id: string) => string): { t
     const hits = e.hits.length > 0 ? e.hits.map((h) => '−' + h.damage + ' ' + name(h.unitId)).join(', ') : 'у зоні нікого';
     return { text: '✦ ' + name(e.unitId) + ' кидає гранату в (' + e.center.x + ', ' + e.center.y + '): ' + hits, cls: '' };
   }
+  // п16.4 (ADR-0147, рішення власника «А»): дії ролей; «Точний постріл» — мітка перед звичайним рядком пострілу
+  if (e.type === 'dash') return { text: '» ' + name(e.unitId) + ': «Ривок» +' + e.bonus + ' AP', cls: '' };
+  if (e.type === 'precise_shot') return { text: '◎ ' + name(e.shooterId) + ': «Точний постріл»', cls: '' };
+  if (e.type === 'field_aid') {
+    return { text: '✚ ' + name(e.unitId) + ': «Польова допомога» → ' + name(e.targetId) + ' +' + e.healed + ' HP', cls: 'win' };
+  }
   // Т.75 (рішення власника 19.11.2026): рядок евакуації — без роду, як рядок під полем бою
   if (e.type === 'evac_unit') {
     return { text: '⇧ Евакуйовано: ' + name(e.unitId), cls: '' };

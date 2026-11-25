@@ -814,9 +814,10 @@ test('сценарій приймання ADR-0030: партія → місія 
     // Т.32: розкладка бою на трьох розмірах вікна (журнал збоку / смугою)
     // Т.33: ціна в AP і клавіша — у кутках плиток дій
     // Т.71: плитка «Евакуація» — 2 AP, клавіша V
-    await expect(page.locator('#btoolbar .tb-key')).toHaveText(['1', '2', '3', 'O', 'M', 'G', 'V', 'E']);
-    await expect(page.locator('#btoolbar .tb-ap')).toHaveText(['3 AP', '5 AP', '4 AP', '3 AP', '4 AP', '4 AP', '2 AP']); // snap, aimed, auto, дозор, гель, граната, евакуація
-    await expectIcons(page, '#btoolbar button svg.tb-icon', 36, 9); // Т.123: іконки плиток дій
+    // п16.4 (ADR-0147): плитка «Роль» — клавіша R, ціна за роллю вибраного (у новобранців ролі немає — порожньо)
+    await expect(page.locator('#btoolbar .tb-key')).toHaveText(['1', '2', '3', 'O', 'M', 'G', 'R', 'V', 'E']);
+    await expect(page.locator('#btoolbar .tb-ap')).toHaveText(['3 AP', '5 AP', '4 AP', '3 AP', '4 AP', '4 AP', '', '2 AP']); // snap, aimed, auto, дозор, гель, граната, роль, евакуація
+    await expectIcons(page, '#btoolbar button svg.tb-icon', 36, 10); // Т.123: іконки плиток дій
     // Т.44: туман знебарвлено — у клітинках туману (без стіни, декору, юніта і м'якого краю) середній розкид
     // каналів max(R,G,B) − min(R,G,B) у центральній ділянці 24 × 24 px не більший за 9 (до Т.44 — 13,6–18,3);
     // видимі клітинки кольорові. Пікселі канви від шрифту машини не залежать.
@@ -1292,6 +1293,13 @@ test('сценарій приймання ADR-0030: партія → місія 
     await page.locator('#btn-close').click();
     await expect(page.locator('#geo-panel')).toBeVisible();
     await expect(page.locator('#battle-panel')).toBeHidden();
+    // п16.4 (EARS 4): підвищені до «Боєць» без ролі — вікно вибору ролі по черзі; сценарій обирає снайпера, дзеркало — теж
+    for (const { id, title } of mirror.awaitingRoleTitles()) {
+      await expect(page.locator('#role-dialog-title')).toHaveText(title);
+      await page.locator('#btn-role-sniper').click();
+      mirror.chooseRole(id, 'sniper');
+    }
+    await expect(page.locator('#role-dialog')).toBeHidden();
     // відбиток бою в ростері: хто вижив, HP і вбивства кожного — як у дзеркалі
     await expect(page.locator('#roster .soldier')).toHaveText(mirror.rosterRows());
     await expect(page.locator('#ready')).toHaveText(mirror.readyChip());
@@ -1772,6 +1780,78 @@ test('Т.71: евакуація — плитка, клавіша V і вікно
   await page.locator('#btn-evac-yes').click();
   await expect(page.locator('#evac-confirm')).toBeHidden();
   await expect(page.locator('#bresult')).toContainText('ЗАГІН ЕВАКУЙОВАНО — врятовані на базі, зонд Розриву лишається активним');
+  expect(errors, 'помилки сторінки: ' + errors.join(' | ')).toEqual([]);
+});
+
+// п16.4 (ADR-0147 п. 5–8, 13, 15; EARS 4, 6, 8, 10; рішення власника Т.186 «А»): сейв v1 з вбивствами →
+// вікно вибору ролі (Esc не закриває, кілька — по черзі) → ростер у три рядки → у бою картка з позивним,
+// шевроном і значком ролі, плитка «Роль» за роллю вибраного; «Ривок» — клавішею R.
+test('п16.4: вікно ролі після сейву v1, ростер, картка смуги загону і плитка «Роль»', async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.goto('./');
+  const helpClose = page.locator('#btn-help-close');
+  if (await helpClose.isVisible()) await helpClose.click();
+  await page.locator('#btn-start-new').click();
+  await page.locator('#new-game-seed').fill(String(SEED));
+  await page.locator('#new-game-preset').selectOption(PRESET);
+  await page.locator('#btn-new-game-start').click();
+  await openSave(page);
+  await page.locator('#btn-save-1').click();
+  await expect(page.locator('#log')).toContainText('Збережено: слот 1.');
+  await page.evaluate(() => {
+    const d = JSON.parse(localStorage.getItem('rubezh.save.1')!) as {
+      version: number;
+      state: { roster: { soldiers: { kills: number }[]; careers?: unknown } };
+    };
+    d.version = 1; // сейв v0.7.0: кар'єр немає, досвід — з kills (міграція п16.2)
+    delete d.state.roster.careers;
+    d.state.roster.soldiers[0].kills = 2; // «Крук» — Боєць
+    d.state.roster.soldiers[1].kills = 5; // «Шрам» — Сержант
+    localStorage.setItem('rubezh.save.1', JSON.stringify(d));
+  });
+  await page.locator('#btn-load-1').click();
+  const dialog = page.locator('#role-dialog');
+  await expect(dialog).toBeVisible();
+  await expect(page.locator('#role-dialog-title')).toHaveText('Підвищення: «Крук» — Боєць. Оберіть роль');
+  await expect(page.locator('#role-dialog .role-pick')).toHaveCount(3);
+  await expect(page.locator('#role-dialog-title')).toBeFocused(); // аудит PR #501: фокус на заголовку, не на кнопці
+  await page.keyboard.press('Escape');
+  await page.mouse.click(5, 5); // клік поза панеллю вікна
+  await expect(dialog, 'п16.4: Esc і клік поза вікном його не закривають').toBeVisible();
+  await page.locator('#btn-role-assault').click();
+  await expect(page.locator('#role-dialog-title')).toHaveText('Підвищення: «Шрам» — Сержант. Оберіть роль');
+  await page.locator('#btn-role-medic').click();
+  await expect(dialog).toBeHidden();
+  await page.locator('#status-tab-squad').click();
+  const first = page.locator('#roster .soldier').first();
+  await expect(first).toContainText('Іван «Крук»');
+  await expect(first).toContainText('» штурмовик');
+  await expect(first).toContainText('Роки в диспетчерській метро');
+  await expect(first).toContainText('досвід 2 · до «Сержант» 3');
+  await expect(first.locator('.chev i')).toHaveCount(2);
+
+  await page.locator('#status-tab-base').click();
+  const mission = page.locator('#ufos button.mission').first();
+  for (let i = 0; i < MAX_TICKS_TO_MISSION && !(await mission.isVisible()); i++) await page.locator('#btn-tick').click();
+  await mission.click();
+  await expect(page.locator('#battle-panel')).toBeVisible();
+  const card = page.locator('#bsquad .sq-card').first();
+  await expect(card.locator('.sq-name')).toHaveText('»Крук');
+  await expect(card.locator('.chev i')).toHaveCount(2);
+  await card.click();
+  const tile = page.locator('#btn-role');
+  await expect(tile).toBeEnabled();
+  await expect(tile.locator('.tb-cap')).toHaveText('Ривок');
+  await expect(tile.locator('.tb-ap')).toHaveText('0 AP');
+  await page.keyboard.press('r');
+  await expect(page.locator('#binfo')).toHaveText('Іван: «Ривок» — AP 14/10 цього ходу.');
+  await expect(tile.locator('.tb-cap')).toHaveText('вже було');
+  await expect(tile).toBeDisabled();
+  await expect(page.locator('#log')).toContainText('» Іван: «Ривок» +4 AP');
+  await page.locator('#bsquad .sq-card').nth(1).click();
+  await expect(tile.locator('.tb-cap')).toHaveText('Допомога');
+  await page.locator('#bsquad .sq-card').nth(2).click();
+  await expect(tile.locator('.tb-cap')).toHaveText('без ролі');
   expect(errors, 'помилки сторінки: ' + errors.join(' | ')).toEqual([]);
 });
 

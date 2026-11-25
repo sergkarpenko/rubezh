@@ -10,6 +10,8 @@ import {
   EVAC_AP_COST,
   GRENADE_AP_COST,
   GRENADE_RANGE,
+  FIELD_AID_AMOUNT,
+  FIELD_AID_AP_COST,
   HEAL_AMOUNT,
   HEAL_AP_COST,
   OVERWATCH_AP_COST,
@@ -17,11 +19,15 @@ import {
   distance,
   endTurn,
   evacuate,
+  fieldAid,
   hasLineOfSight,
   moveUnit,
+  preciseShot,
   resolveAttack,
+  roleActionBlock,
   setOverwatch,
   throwGrenade,
+  useDash,
   useMedkit,
   type ShotMode,
   type Unit,
@@ -32,6 +38,7 @@ import { aliensTurn } from '../core/ai-bot';
 import { el } from './dom';
 import { BCELL } from './grid';
 import { MODE_LABEL } from './journal';
+import { ROLE_INFO } from './roles';
 import { byGender } from './text';
 import { evacBlockReason, type BattleUI, type BattleUIState } from './battle';
 
@@ -80,6 +87,7 @@ export interface InputUI {
   armOverwatch(): void;
   armMedkit(): void; // П11.6 (ADR-0058): зведення аптечки (клавіша M)
   armGrenade(): void; // П11.6 (ADR-0058): зведення гранати (клавіша G)
+  useRole(): void; // п16.4 (ADR-0147): дія ролі вибраного (плитка «Роль», клавіша R)
   evacuateSelected(): void; // Т.71 (ADR-0075): евакуація вибраного (клавіша V)
   disarm(): void; // Т.46: старт авто-бою знімає зведений постріл і витратник
   endPlayerTurn(): void;
@@ -182,7 +190,8 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
 
     // П11.6: у зведеному режимі аптечки клік по СОЮЗНИКУ — ціль лікування
     // (тап-тап), а не вибір солдата; вибір у цьому режимі — лише через Esc.
-    if (u && u.side === 'player' && ui.itemMode !== 'medkit') {
+    // п16.4: «Польова допомога» медика зведена — так само (ціль за правилом гелю)
+    if (u && u.side === 'player' && ui.itemMode !== 'medkit' && ui.itemMode !== 'aid') {
       selectOwn(u);
       return;
     }
@@ -223,10 +232,13 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
 
     // П11.6 (ADR-0058): зведені витратники — тап-тап (дзеркало пострілу П6.14):
     // перший тап — підказка/прев'ю зони, повторний тап у ту саму ціль — дія.
-    if (ui.itemMode === 'medkit') {
+    // п16.4 (ADR-0147 п. 11): «Польова допомога» — той самий тап-тап і ціль, що в гелю, без гелю
+    if (ui.itemMode === 'medkit' || ui.itemMode === 'aid') {
+      const aid = ui.itemMode === 'aid';
+      const what = aid ? '«Польова допомога»' : 'Гель';
       const t = st.units.find((x) => x.alive && x.side === 'player' && x.pos.x === cell.x && x.pos.y === cell.y);
       if (!t) {
-        battle.binfo('Гель: клікніть пораненого союзника поруч (≤1 клітинка).');
+        battle.binfo(what + ': клікніть пораненого союзника поруч (≤1 клітинка).');
         return;
       }
       if (distance(sel.pos, t.pos) > 1) {
@@ -234,7 +246,7 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
         return;
       }
       if (t.hp >= t.maxHp) {
-        battle.binfo('Ціль не поранена — гель не витрачається.');
+        battle.binfo(aid ? 'Ціль не поранена — дію не витрачено.' : 'Ціль не поранена — гель не витрачається.');
         return;
       }
       if (ui.tapCell === null || ui.tapCell.x !== cell.x || ui.tapCell.y !== cell.y) {
@@ -245,10 +257,10 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
             t.hp +
             '/' +
             t.maxHp +
-            ') — повторний клік у цю ціль — лікування (+' +
-            HEAL_AMOUNT +
-            ' HP, ' +
-            HEAL_AP_COST +
+            ') — повторний клік у цю ціль — ' +
+            (aid
+              ? '«Польова допомога» (+' + FIELD_AID_AMOUNT + ' HP, ' + FIELD_AID_AP_COST
+              : 'лікування (+' + HEAL_AMOUNT + ' HP, ' + HEAL_AP_COST) +
             ' AP).'
         );
         battle.renderBattle();
@@ -258,10 +270,21 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
       ui.tapCell = null;
       try {
         const prevLen = st.log.length;
-        const res = useMedkit(st, sel.id, t.id);
+        const res = aid ? fieldAid(st, sel.id, t.id) : useMedkit(st, sel.id, t.id);
         battle.enqueueAnims(prevLen);
         if (!battle.checkOutcome()) {
-          battle.binfo(sel.name + ' лікує ' + t.name + ': +' + res.healed + ' HP. AP ' + sel.ap + '/' + sel.maxAp + '.');
+          battle.binfo(
+            sel.name +
+              (aid ? ': «Польова допомога» → ' : ' лікує ') +
+              t.name +
+              ': +' +
+              res.healed +
+              ' HP. AP ' +
+              sel.ap +
+              '/' +
+              sel.maxAp +
+              '.'
+          );
           deps.renderAll();
         }
       } catch (e) {
@@ -346,7 +369,7 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
           '~' +
             Math.round(calculateHitChance(sel, ui.fireMode) * 100) +
             '% · повторний тап у цю саму ціль — постріл (' +
-            MODE_LABEL[ui.fireMode] +
+            (ui.itemMode === 'precise' ? '«Точний постріл»' : MODE_LABEL[ui.fireMode]) + // аудит PR #501
             ').'
         );
         battle.renderBattle();
@@ -365,6 +388,7 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
     // лінії й зони ще не видно, а ціна рахувалась би від клітинки, де оперативник зупиниться
     if (battle.animating()) return;
     ui.fireMode = null;
+    if (ui.itemMode === 'precise') ui.itemMode = null; // п16.4: «Точний постріл» знято разом із режимом пострілу
     ui.aimCell = null; // П6.14: зведений режим знято — підказки прицілювання теж
     try {
       // ADR-0081: шлях планується за видимим — юніт у тумані його не перекриває
@@ -415,12 +439,16 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
   // постріл (тап-тап зведеного режиму і кнопка меню на ворогові, Т.131)
   function fireAt(sel: Unit, u: Unit, mode: ShotMode): void {
     const st = ui.mission!.state;
+    // п16.4: зведений «Точний постріл» — прицільний режим із міткою itemMode 'precise' (ADR-0147 п. 11)
+    const precise = ui.itemMode === 'precise';
+    ui.itemMode = null;
     ui.fireMode = null;
     ui.tapCell = null;
     ui.aimCell = null;
     try {
       const prevLen = st.log.length;
-      resolveAttack(st, sel.id, u.id, mode);
+      if (precise) preciseShot(st, sel.id, u.id);
+      else resolveAttack(st, sel.id, u.id, mode);
       battle.enqueueAnims(prevLen); // П6.8: трасер/спалах/смерть — з подій логу
       if (!battle.checkOutcome()) {
         battle.binfo(
@@ -428,7 +456,7 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
             ' ' +
             byGender(sel.name, 'вистрілив', 'вистрілила') +
             ' (' +
-            MODE_LABEL[mode] +
+            (precise ? '«Точний постріл»' : MODE_LABEL[mode]) +
             '). AP ' +
             sel.ap +
             '/' +
@@ -538,12 +566,72 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
       return;
     }
     ui.fireMode = mode;
+    if (ui.itemMode === 'precise') ui.itemMode = null; // п16.4: звичайний режим замість «Точного пострілу»
     ui.tapCell = null; // П6.14: нове зведення — ціль обираємо заново (тап-тап з нуля)
     ui.aimCell = null;
     const chance = Math.round(calculateHitChance(sel, mode) * 100);
     battle.binfo(
       MODE_LABEL[mode] + ' постріл: ' + cost + ' AP · ~' + chance + '% · тапніть обведену ціль — шанс, повторний тап — постріл.'
     );
+    battle.renderBattle();
+  }
+
+  // п16.4 (ADR-0147 п. 3, 11; рішення власника «А»): плитка «Роль» і клавіша R — дія ролі вибраного.
+  // «Ривок» — одразу; «Точний постріл» і «Польова допомога» зводяться, далі тап-тап по цілі.
+  // Недоступна дія — причина з roleActionBlock ядра (EARS 6), без винятку.
+  function useRole(): void {
+    if (!battle.playerTurnActive() || !ui.mission) return;
+    if (deps.autoBusy()) return; // П13.3: триває авто-бій — керування заблоковано
+    if (battle.animating()) return; // аудит PR #501: як плитка — під час анімації дія ролі не діє
+    closeMenu(); // Т.131
+    const st = ui.mission.state;
+    const sel = battle.selectedUnit();
+    if (!sel) {
+      battle.binfo('Спершу клікніть свого оперативника.');
+      return;
+    }
+    const role = st.roles?.[sel.id]?.role;
+    if (role === undefined) {
+      battle.binfo(sel.name + ': ролі немає — роль обирається зі звання «Боєць» після місії.');
+      return;
+    }
+    const block = roleActionBlock(st, sel.id, role);
+    if (block !== null) {
+      battle.binfo('✗ ' + block);
+      return;
+    }
+    if (role === 'assault') {
+      ui.fireMode = null;
+      ui.itemMode = null;
+      ui.tapCell = null;
+      ui.aimCell = null;
+      const prevLen = st.log.length;
+      useDash(st, sel.id);
+      battle.enqueueAnims(prevLen);
+      battle.binfo(sel.name + ': «Ривок» — AP ' + sel.ap + '/' + sel.maxAp + ' цього ходу.');
+      deps.renderAll();
+      return;
+    }
+    ui.tapCell = null;
+    ui.aimCell = null;
+    if (role === 'sniper') {
+      ui.fireMode = 'aimed';
+      ui.itemMode = 'precise';
+      const chance = Math.round(calculateHitChance(sel, 'aimed') * 100);
+      battle.binfo(
+        '«Точний постріл»: ' + ROLE_INFO.sniper.desc + ' · ~' + chance + '% · тапніть обведену ціль — шанс, повторний тап — постріл.'
+      );
+    } else {
+      ui.fireMode = null;
+      ui.itemMode = 'aid';
+      battle.binfo(
+        '«Польова допомога»: тапніть пораненого союзника поруч (≤1, себе теж) — повторний тап у ціль — допомога (+' +
+          FIELD_AID_AMOUNT +
+          ' HP, ' +
+          FIELD_AID_AP_COST +
+          ' AP).'
+      );
+    }
     battle.renderBattle();
   }
 
@@ -612,11 +700,12 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
     }
     if (ui.fireMode !== null || ui.itemMode !== null) {
       const wasFire = ui.fireMode !== null;
+      const wasRole = ui.itemMode === 'precise' || ui.itemMode === 'aid'; // п16.4
       ui.fireMode = null;
       ui.itemMode = null;
       ui.tapCell = null;
       ui.aimCell = null; // П6.14
-      battle.binfo(wasFire ? 'Режим пострілу скасовано.' : 'Режим витратника скасовано.');
+      battle.binfo(wasRole ? 'Дію ролі скасовано.' : wasFire ? 'Режим пострілу скасовано.' : 'Режим витратника скасовано.');
       battle.renderBattle();
       return;
     }
@@ -770,7 +859,10 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
     else if (ev.code === 'KeyO') armOverwatch();
     else if (ev.code === 'KeyM') armMedkit();
     else if (ev.code === 'KeyG') armGrenade();
-    else if (ev.code === 'KeyV')
+    else if (ev.code === 'KeyR') {
+      // п16.4 (аудит PR #501): утримана R і Ctrl/Alt/Meta+R (перезавантаження) дії ролі не роблять (урок Т.117)
+      if (!ev.repeat && !ev.ctrlKey && !ev.altKey && !ev.metaKey) useRole();
+    } else if (ev.code === 'KeyV')
       evacuateSelected(); // Т.71 (ADR-0075)
     else if (ev.code === 'KeyQ') {
       // Т.130 (аудит PR #443): утримана Q і Ctrl/Alt/Meta+Q бійця не перемикають (урок Т.117)
@@ -789,6 +881,7 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
     armOverwatch,
     armMedkit,
     armGrenade,
+    useRole,
     evacuateSelected,
     disarm,
     endPlayerTurn,

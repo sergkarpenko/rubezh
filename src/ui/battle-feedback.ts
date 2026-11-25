@@ -58,7 +58,7 @@ export interface ResultCard {
   aliens: number;
   bonus: number | null; // null — премії немає (поразка, евакуація)
   wounded: readonly string[]; // «Ім'я — лікарня: 8 тіків»
-  lost: readonly string[]; // «Ім'я — загинув»
+  lost: readonly string[]; // п16.4: «Втрата: рекрут «Крук» — 1 місія, 0 вбивств» (рядок втрати без «✝ »)
 }
 
 export function resultCardHtml(c: ResultCard): string {

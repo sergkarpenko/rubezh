@@ -58,6 +58,7 @@ describe('Т.33: ціна в AP і клавіша в кутках плитки',
       ['btn-ow', OVERWATCH_AP_COST + ' AP', 'O'],
       ['btn-medkit', HEAL_AP_COST + ' AP', 'M'],
       ['btn-grenade', GRENADE_AP_COST + ' AP', 'G'],
+      ['btn-role', '', 'R'], // п16.4: ціну ставить renderBattle за роллю вибраного
       ['btn-evac', EVAC_AP_COST + ' AP', 'V'],
       ['btn-end', null, 'E'],
       ['btn-auto-battle', null, null],
@@ -71,7 +72,18 @@ describe('тулбар: перелік дій (П13.2, ADR-0066)', () => {
     createToolbar(document.getElementById('btoolbar')!, { onAction });
     const buttons = [...document.querySelectorAll<HTMLButtonElement>('#btoolbar button')];
     expect(buttons.map((b) => b.id)).toEqual(TOOLBAR_ACTIONS.map((a) => a.btnId)); // той самий порядок
-    expect(TOOLBAR_ACTIONS.map((a) => a.id)).toEqual(['snap', 'aimed', 'auto', 'ow', 'medkit', 'grenade', 'evac', 'end', 'auto-battle']);
+    expect(TOOLBAR_ACTIONS.map((a) => a.id)).toEqual([
+      'snap',
+      'aimed',
+      'auto',
+      'ow',
+      'medkit',
+      'grenade',
+      'role',
+      'evac',
+      'end',
+      'auto-battle',
+    ]);
     expect(TOOLBAR_ACTIONS.map((a) => a.label)).toEqual([
       'Швидкий',
       'Прицільний',
@@ -79,6 +91,7 @@ describe('тулбар: перелік дій (П13.2, ADR-0066)', () => {
       'Дозор',
       'Лікування',
       'Граната',
+      'Роль',
       'Евакуація',
       'Кінець',
       'Авто',

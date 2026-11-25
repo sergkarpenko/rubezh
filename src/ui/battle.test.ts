@@ -282,10 +282,10 @@ describe('battle: флоу місії (запуск/закриття/завер�
       return vi.mocked(f.deps.journal).mock.calls.map((c) => c[0]);
     };
     const a = run('Олена', 'Іван', 4);
-    expect(a).toContain('✝ Олена загинула в бою');
+    expect(a).toContain('✝ Втрата: рекрут «Шрам» — 1 місія, 0 вбивств'); // п16.4 (EARS 7): рядок втрати без роду
     expect(a).toContain('✚ Іван поранений — лікарня: 8 тіків');
     const b = run('Іван', 'Олена', 1);
-    expect(b).toContain('✝ Іван загинув у бою');
+    expect(b).toContain('✝ Втрата: рекрут «Крук» — 1 місія, 0 вбивств');
     expect(b).toContain('✚ Олена поранена — лікарня: 2 тіки');
   });
 
@@ -304,7 +304,7 @@ describe('battle: флоу місії (запуск/закриття/завер�
     expect(text).toContain('Демонів знищено' + aliens.length + ' з ' + aliens.length);
     expect(text).toMatch(/Премія\+\d+ кр\./);
     expect(text).toContain('✚ Іван — лікарня: 8 тіків');
-    expect(text).toContain('✝ Олена — загинула');
+    expect(text).toContain('✝ Втрата: рекрут «Шрам» — 1 місія, 0 вбивств'); // п16.4 (EARS 7)
     const g = makeFixture();
     g.battle.launch(firstTarget(g));
     g.battle.finish('поразка');
@@ -427,6 +427,58 @@ describe('battle: флоу місії (запуск/закриття/завер�
     expect(cap('btn-grenade').textContent).toBe('Граната');
   });
 
+  it('п16.4: плитка «Роль» — підпис, іконка й ціна за роллю вибраного, причина з ядра (EARS 6)', () => {
+    const f = makeFixture();
+    f.battle.launch(firstTarget(f));
+    const st = f.ui.mission!.state;
+    const [a, b] = st.units.filter((u) => u.side === 'player');
+    const tile = document.getElementById('btn-role') as HTMLButtonElement;
+    const cap = (): string => tile.querySelector('.tb-cap')!.textContent!;
+    const ap = (): string => tile.querySelector('.tb-ap')!.textContent!;
+    const icon = (): string => tile.querySelector('svg')!.dataset.icon!;
+    f.ui.selectedId = a.id;
+    f.battle.renderBattle();
+    expect([cap(), ap(), tile.disabled]).toEqual(['без ролі', '', true]);
+    st.roles = { [a.id]: { role: 'sniper', used: false }, [b.id]: { role: 'medic', used: true } };
+    f.battle.renderBattle();
+    expect([cap(), ap(), icon(), tile.disabled, tile.getAttribute('aria-label')]).toEqual(['Точний', '6 AP', 'precise', false, 'Точний']);
+    a.ap = 5;
+    f.battle.renderBattle();
+    expect([cap(), tile.disabled]).toEqual(['мало AP', true]);
+    expect(tile.title).toContain('Недостатньо очок дій: «Точний постріл» — 6 AP');
+    f.ui.selectedId = b.id;
+    f.battle.renderBattle();
+    expect([cap(), ap(), icon()]).toEqual(['вже було', '2 AP', 'aid']);
+    // аудит PR #501: хід демонів — плитка неактивна і з доступною дією
+    f.ui.selectedId = a.id;
+    a.ap = 10;
+    f.battle.renderBattle();
+    expect(tile.disabled).toBe(false);
+    st.activeSide = 'alien';
+    f.battle.renderBattle();
+    expect(tile.disabled).toBe(true);
+  });
+
+  it('п16.4: ролі ростеру — у бій місії (deployRoles); загиблий — рядок втрати, підвищені — рядок «▲ Підвищення»', () => {
+    const f = makeFixture();
+    const party = f.deps.getParty();
+    const [first, second] = party.roster.soldiers;
+    party.roster.careers[first.id] = { ...party.roster.careers[first.id], xp: 2, role: 'assault' };
+    party.roster.careers[second.id] = { ...party.roster.careers[second.id], xp: 1 };
+    f.battle.launch(firstTarget(f));
+    const st = f.ui.mission!.state;
+    expect(st.roles).toEqual({ [first.id]: { role: 'assault', used: false } });
+    for (const u of st.units) if (u.side === 'alien') u.alive = false;
+    st.units.find((u) => u.id === first.id)!.alive = false;
+    f.battle.finish('перемога');
+    const lines = vi.mocked(f.deps.journal).mock.calls.map((c) => c[0]);
+    expect(lines).toContain('✝ Втрата: боєць «Крук» — 1 місія, 0 вбивств');
+    expect(lines).toContain('▲ Підвищення: «Шрам» — боєць');
+    // картка смуги загону лишає загиблому позивний, з яким він ішов у бій
+    f.battle.renderBattle();
+    expect(document.querySelector('#bsquad [data-unit="' + first.id + '"] .sq-name')!.textContent).toBe('»Крук');
+  });
+
   it('поразка: банер «загін втрачено», НЛО лишається активним', () => {
     const f = makeFixture();
     f.battle.launch(firstTarget(f));
@@ -529,11 +581,11 @@ describe('тулбар: причини блокування дій (П13.2, кр
     const icons = (): Element[] => [...document.querySelectorAll('#btoolbar svg.tb-icon')];
     const before = icons();
     const drawn = before.map((i) => i.outerHTML);
-    expect(before.length).toBe(9);
+    expect(before.length).toBe(10); // п16.4: + плитка «Роль»
     f.battle.renderBattle(); // стан плиток — DOM, іконки не чіпаються
     f.battle.renderBattle();
     const after = icons();
-    expect(after.length).toBe(9);
+    expect(after.length).toBe(10);
     after.forEach((icon, i) => expect(icon).toBe(before[i])); // ті самі вузли, не перестворені
     expect(after.map((i) => i.outerHTML)).toEqual(drawn);
   });
