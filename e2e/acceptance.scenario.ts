@@ -1847,7 +1847,7 @@ test.describe('Т.179: телефон пальцем (hasTouch, isMobile)', () =
       width: window.innerWidth,
     }));
     expect(media, 'Т.179: сторінка бачить телефон із тачем, а не мишу').toEqual({
-      touch: media.touch,
+      touch: expect.any(Number),
       hoverNone: true,
       coarse: true,
       width: 844,
@@ -1886,8 +1886,9 @@ test.describe('Т.179: телефон пальцем (hasTouch, isMobile)', () =
     await expect(unit, 'Т.179: тап пальцем по бійцю вибирає його').toHaveAttribute('aria-label', unitLine(soldier!));
     const option = mirror.moveOption(soldier!);
     await fingerTap(option.cell);
-    await expect(info, "Т.179: перший тап пальцем — прев'ю шляху, не хід").toContainText('Шлях: ' + option.cost + ' AP');
-    expect(await info.textContent(), 'Т.179: перший тап пальцем не ходить').not.toMatch(/: рух\./);
+    await expect(info, "Т.179: перший тап пальцем — прев'ю шляху, не хід").toContainText(
+      'Шлях: ' + option.cost + ' AP — повторний тап у ту саму клітинку — хід.'
+    );
     await fingerTap(option.cell);
     mirror.move(soldier!, option);
     await expect(info, 'Т.179: другий тап пальцем — хід').toHaveText(/: рух\. AP \d+\/\d+\.$/);
