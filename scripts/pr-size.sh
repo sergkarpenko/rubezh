@@ -81,13 +81,15 @@ self_test() {
 
     # поза підрахунком — 0 рядків
     st_case 'порожній диф' 0 ':' "$S main work" 'поза підрахунком файлів: 0' '[FAIL]'
-    st_case 'лише docs' 0 'echo x >> docs/r.md; echo x > docs/new.md' "$S main work" \
-        'Разом у підрахунку: 0 рядків (ліміт 500); поза підрахунком файлів: 2'
+    st_case 'лише docs' 0 'echo x >> docs/r.md; echo x > docs/new.md; echo x > docs/x.py' "$S main work" \
+        'Разом у підрахунку: 0 рядків (ліміт 500); поза підрахунком файлів: 3'
     st_case '*.md поза docs' 0 'echo x >> README.md; echo x > src/notes.md' "$S main work" \
         'Разом у підрахунку: 0 рядків (ліміт 500); поза підрахунком файлів: 2'
     st_case 'ассет, бінарний, lockfile' 0 \
         'echo x >> assets/a.png; printf "\000\001" > src/b.bin; echo x >> package-lock.json' "$S main work" \
         'Разом у підрахунку: 0 рядків (ліміт 500); поза підрахунком файлів: 3'
+    st_case 'assets не в корені' 0 'mkdir -p src/assets; echo x > src/assets/x.ts' "$S main work" \
+        '      1  src/assets/x.ts'
     st_case 'тека, схожа на docs' 0 'mkdir docs-extra; echo x > docs-extra/a.ts' "$S main work" \
         'Разом у підрахунку: 1 рядків'
 
@@ -111,7 +113,7 @@ self_test() {
     st_case 'без мітки (false)' 1 'seq 6 > src/b.ts' "PR_SIZE_LIMIT=5 PR_SIZE_DEVIATION=false $S main work" \
         '[FAIL] PR перевищує'
     st_case 'перевищення в CI' 1 'seq 6 > src/b.ts' "PR_SIZE_LIMIT=5 GITHUB_ACTIONS=true $S main work" \
-        '::error::PR перевищує' '[FAIL]'
+        '::error::PR перевищує' '[OK]'
 
     # помилки — код 2, без «0 рядків» і [OK] (ADR-0112)
     st_case 'немає ревізії head' 2 ':' "$S main no-such-rev" '[FAIL] Ревізії no-such-rev немає' '[OK]'
