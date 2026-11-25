@@ -257,6 +257,28 @@ describe('п17.3: око (ADR-0149 п. 13)', () => {
     expect(shots(st, 'a1')).toHaveLength(0);
   });
 
+  // аудит PR #508 (Н-4): з двох клітинок відходу на відстані 6 — та, звідки є постріл
+  it('відхід: на рівній відстані — клітинка з пострілом', () => {
+    const walls = ['1,5', '5,7', '7,3', '4,6', '4,9', '8,3', '9,8', '1,10', '11,5', '3,2', '7,9', '6,8', '0,1', '3,6'];
+    const e = makeEnemy('eye', 'a1', 0, { x: 5, y: 5 });
+    const st = battle([e, op('s1', { x: 7, y: 5 })], openMap(12, 12, walls));
+    aiStep(st);
+    expect(e.pos).toEqual({ x: 1, y: 4 }); // (1,6) — теж 6, але без лінії вогню
+    aiStep(st);
+    expect(shots(st, 'a1')).toHaveLength(1);
+  });
+
+  // аудит PR #508 (Н-1): підхід зупиняється перед відстанню 6 — і коли шлях веде впритул
+  it('підхід в обхід стіни не підходить ближче 6', () => {
+    const wall = Array.from({ length: 21 }, (_, y) => '5,' + y);
+    const e = makeEnemy('eye', 'a1', 0, { x: 4, y: 0 });
+    const spotter = makeEnemy('demon', 'a2', 0, { x: 12, y: 0 });
+    const st = battle([e, spotter, op('s1', { x: 7, y: 0 })], openMap(30, 30, wall));
+    spotter.ap = 0;
+    playAlienTurn(st);
+    expect(distance(e.pos, { x: 7, y: 0 })).toBeGreaterThanOrEqual(EYE_KEEP_DISTANCE);
+  });
+
   it('на позиції пострілу без AP на постріл — дозор, а не підхід', () => {
     const e = makeEnemy('eye', 'a1', 0, { x: 0, y: 5 });
     const st = battle([e, op('s1', { x: 10, y: 5 })]);

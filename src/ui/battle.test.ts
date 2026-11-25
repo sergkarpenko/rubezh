@@ -687,6 +687,28 @@ describe('Фікс П14.8 (фідбек валідації): смерть у ч�
     expect(ops2).toContain('moveTo(292,251)');
   });
 
+  // п17.3 (ADR-0150, аудит PR #508): трасер з туману (`fog`) починається в першій видимій клітинці —
+  // демон, що там стоїть, не стрілець: без пози «вогонь» і дула, лінія — від центру клітинки
+  it('трасер з туману: юніт у клітинці from — не стрілець, старт від центру', () => {
+    const f = makeFixture();
+    f.battle.launch(firstTarget(f));
+    f.ui.mission!.state = createGame({
+      map: { width: 20, height: 20, blocked: new Set<string>() },
+      units: [
+        makeUnit({ id: 's1', side: 'player', name: 'Гарт', pos: { x: 3, y: 5 }, hp: 10, maxHp: 10 }),
+        makeUnit({ id: 'a1', side: 'alien', name: 'Морок', pos: { x: 5, y: 5 }, hp: 10, maxHp: 10 }),
+      ],
+    });
+    const fog = makeTracerAnim('alien', { x: 5, y: 5 }, { x: 3, y: 5 }, false);
+    fog.fog = true;
+    fog.start = 0;
+    f.deps.anim.active = () => fog;
+    f.deps.anim.queued = () => [fog];
+    const ops = withRecCtx(() => f.battle.renderBattle());
+    expect(ops).toContain('moveTo(264,264)');
+    expect(ops).not.toContain('moveTo(236,251)');
+  });
+
   // Т.132 (ADR-0121): дихання питає ambient-шар для кожного намальованого бійця, крім стрільця
   it('breath — для видимих живих юнітів за клітинкою; стрілець активного трасера — без дихання', () => {
     const f = makeFixture();

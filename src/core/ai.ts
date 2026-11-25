@@ -122,11 +122,10 @@ function cheapestShotAp(u: Unit): number {
 
 // Гончак (ADR-0149 п. 13): ціль — найменше HP серед видимих, рівність — найближчий
 // (далі — порядок юнітів); удар, якщо впритул; інакше рух до клітинки впритул
-// (8 сусідів — Чебишев 1). Дійде цього ходу — лишає AP на удар, ні — біжить на всі AP.
+// (8 сусідів — Чебишев 1) на всі AP; дійшов і лишилось ≥ 3 AP — наступний крок б'є.
 // Недосяжна ціль — наступна за тим самим порядком. Дозору не тримає.
 function houndStep(state: GameState, u: Unit, enemies: Unit[], patrol?: Vec2[]): boolean {
   if (enemies.length === 0) return patrolStep(state, u, patrol, false);
-  const strike = cheapestShotAp(u);
   const order = [...enemies].sort((a, b) => a.hp - b.hp || distance(u.pos, a.pos) - distance(u.pos, b.pos));
   for (const t of order) {
     const mode = bestShootMode(state, u, t);
@@ -137,7 +136,7 @@ function houndStep(state: GameState, u: Unit, enemies: Unit[], patrol?: Vec2[]):
     if (distance(u.pos, t.pos) <= 1) return false; // уже впритул до своєї цілі, AP на удар немає — чекає
     const path = pathAdjacent(state, u.pos, t.pos);
     if (path === null) continue;
-    moveUnit(state, u.id, path.length <= u.ap - strike ? path : path.slice(0, u.ap));
+    moveUnit(state, u.id, path.slice(0, u.ap)); // аудит PR #508: окремого резерву немає — шлях до цілі коротший за AP
     return true;
   }
   return false;
