@@ -97,14 +97,16 @@ describe('П8.5: оркестратор — повна партія (фіксо�
     // траєкторії: залишок 2610, ваги рахунку (ветерани 50, гроші 0.25) → тотал 4203.
     // п16.2 (ADR-0147): прирости звань (+1 HP, +0,03 точності) зменшили втрати
     // (30 → 22) і найм (29 → 21): залишок 3410, тотал 4403; баланс — probe п16.5.
-    expect(r.score).toEqual({ ufosShotDown: 0, missionsWon: 22, veteransAlive: 5, moneyLeft: 3410, total: 4403 });
+    // п16.3 (ADR-0147 п. 3, 12): дії ролей бота — втрати 22 → 20, найм 21 → 18,
+    // залишок 3710, ветеранів 4, тотал 4428.
+    expect(r.score).toEqual({ ufosShotDown: 0, missionsWon: 22, veteransAlive: 4, moneyLeft: 3710, total: 4428 });
     expect(r.missionsLaunched).toBe(24);
     expect(r.missionsWon).toBe(22);
     expect(r.missionsLost).toBe(2);
-    expect(r.soldiersLost).toBe(22);
-    expect(r.soldiersWounded).toBe(20);
-    expect(r.hiredTotal).toBe(21);
-    expect(r.hireSpent).toBe(21 * hirePrice('норма')); // П11.8: hirePrice «норми» = 100
+    expect(r.soldiersLost).toBe(20);
+    expect(r.soldiersWounded).toBe(21);
+    expect(r.hiredTotal).toBe(18);
+    expect(r.hireSpent).toBe(18 * hirePrice('норма')); // П11.8: hirePrice «норми» = 100
   });
 
   // Т.22 (ADR-0089): чинний бот не банкрутує — останній загін без грошей на найм
@@ -114,10 +116,11 @@ describe('П8.5: оркестратор — повна партія (фіксо�
   it('чинний бот на колись банкрутному сіді 16 «норма» виграє партію', () => {
     const r = simulateParty(16, 'норма');
     expect(r.outcome).toBe('перемога');
-    // п16.2 (ADR-0147): прирости звань — 42 → 41 місія, 50 → 45 загиблих.
-    expect(r.missionsLaunched).toBe(41);
-    expect(r.missionsWon).toBe(35);
-    expect(r.soldiersLost).toBe(45);
+    // п16.2 (ADR-0147): прирости звань — 42 → 41 місія, 50 → 45 загиблих;
+    // п16.3: дії ролей — 41 → 39 місій, 35 → 32 виграних, 45 → 39 загиблих.
+    expect(r.missionsLaunched).toBe(39);
+    expect(r.missionsWon).toBe(32);
+    expect(r.soldiersLost).toBe(39);
   }, 30_000); // issue #377: явний тайм-аут замість дефолтних 5000 мс (під покриттям повільніше)
 
   it('банкрутство (ADR-0021): наука без найму, сід 26 «норма» — боєготових немає і грошей немає', () => {
@@ -265,15 +268,15 @@ describe('П11.8: політика науки — повний флоу (фік�
     expect(a.scientistsHired).toBe(2);
     expect(a.completedProjects).toEqual(['armor']);
     expect(a.workshopProduced).toBe(7);
-    // броня загиблих повертається на склад і йде наступним; п16.2 (ADR-0147): менше загиблих — 41 → 32
-    expect(a.equippedItems).toBe(32);
+    // броня загиблих повертається на склад і йде наступним; п16.2 (ADR-0147): менше загиблих — 41 → 32; п16.3 (ролі) — 28
+    expect(a.equippedItems).toBe(28);
     expect(a.salarySpent).toBe(140); // 2 × 10 × 7 діб (14 очок, 2 очки на добу)
     expect(a.projectSpent).toBe(96);
     expect(a.workshopSpent).toBe(420);
     expect(a.scientistsFired).toBe(0); // лічильник — лише авто-звільнення за невиплату
     expect(Math.max(...a.scientistsByDay)).toBe(2);
     expect(a.scientistsByDay[a.scientistsByDay.length - 1]).toBe(0); // штат звільнено після протоколу
-    expect(a.missionsLaunched).toBe(44); // п16.2: 45 → 44
+    expect(a.missionsLaunched).toBe(43); // п16.2: 45 → 44; п16.3: 43
     expect(a.missionsWon).toBe(39);
   }, 30_000); // дві повні партії з наукою: під інструментуванням покриття в CI не вкладається в 5 с
 

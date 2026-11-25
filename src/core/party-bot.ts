@@ -26,7 +26,17 @@
 
 import { TICK_MINUTES, advanceTime, chebyshevWrap, geoDay, missionTargets, type GeoState, type Ufo } from './geo';
 import { creditMissionBonus, economyTick, hirePrice } from './economy';
-import { applyMissionResult, hireSoldier, hospitalTick, isBankrupt, missionRisksBankruptcy, missionSquad, readySoldiers } from './squad';
+import {
+  applyMissionResult,
+  assignBotRoles,
+  deployRoles,
+  hireSoldier,
+  hospitalTick,
+  isBankrupt,
+  missionRisksBankruptcy,
+  missionSquad,
+  readySoldiers,
+} from './squad';
 import { FIGHTER_MAX_HP, FIGHTER_REPAIR_COST, interceptRound, interceptTick, repairTick, startIntercept, startRepair } from './intercept';
 import { BALANCED_POLICY, type InterceptPolicy } from './intercept-bot';
 import { autoBattle, type EvacPolicy } from './ai-bot';
@@ -349,13 +359,19 @@ export function partyBotMissionStep(party: Party, policy: PartyBotPolicy): Missi
   const squad = missionSquad(party.roster, policy.missionSquadSize);
   const consumables = deployConsumables(party.workshop, squad);
   const hasItems = Object.keys(consumables).length > 0;
-  const mission = createMission(party.geo, target.id, hasItems ? { squad, items: consumables } : { squad });
+  const roles = deployRoles(party.roster, squad); // п16.3: ролі загону; без ролей — бій як до п16.3
+  const mission = createMission(party.geo, target.id, {
+    squad,
+    ...(hasItems ? { items: consumables } : {}),
+    ...(roles ? { roles } : {}),
+  });
   const battle = autoBattle(mission.state, undefined, policy.evac); // ліміт півходів autoBattle — рідкісний тупик
   // Т.76: «евакуйовано» — НЛО лишається, премії немає (completeMission); тупик — поразка, як і раніше.
   const outcome: 'перемога' | 'поразка' | 'евакуйовано' =
     battle.outcome === 'перемога' ? 'перемога' : battle.outcome === 'евакуйовано' ? 'евакуйовано' : 'поразка';
   completeMission(party.geo, mission.briefing.ufoId, outcome);
   const aftermath = applyMissionResult(party.roster, mission.state);
+  assignBotRoles(party.roster); // п16.3 (ADR-0147 п. 12): роль кожному, хто дослужився до «Боєць»
   removeLostEquipment(party.workshop, aftermath.lost); // броня й око — на склад (ADR-0091)
   settleConsumables(party.workshop, aftermath.survivors, mission.state.items); // витратники (П11.4)
   if (outcome === 'перемога') {
