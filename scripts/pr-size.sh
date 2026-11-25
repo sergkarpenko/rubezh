@@ -10,14 +10,138 @@
 # перевірку, лише друкується. У CI прапорець = мітка `size-deviation` на PR.
 #
 # Локально (прогноз дифа до пушу):  ./scripts/pr-size.sh origin/main HEAD
+# Самоперевірка (ADR-0143; перший крок джоби pr-size):  sh scripts/pr-size.sh --self-test
+#   — виписані випадки в тимчасовому репозиторії: код 0 — усі зійшлись, 1 — ні.
 # Код виходу: 0 — у межах ліміту або відхилення заплановане; 1 — перевищення;
 # 2 — неправильні аргументи або помилка git (немає ревізії чи спільного предка,
 # ADR-0112): число не пораховано, «0 рядків» і [OK] не друкуються.
 
 set -eu
 
+# Самоперевірка (ADR-0143): кожен випадок — гілка work від main у тимчасовому
+# репозиторії, запуск цього самого скрипта і звірка коду виходу та рядків виводу.
+ST_FAILED=0
+ST_COUNT=0
+
+st_fail() {
+    ST_FAILED=$((ST_FAILED + 1))
+    echo "[FAIL] $1"
+}
+
+# st_case <назва> <код> <зміна на work> <запуск> [<рядок є у виводі>] [<рядка немає>]
+st_case() {
+    ST_COUNT=$((ST_COUNT + 1))
+    git checkout -q -B work main
+    git clean -qffdx
+    eval "$3"
+    git add -A
+    git commit -q --allow-empty -m work
+    rc=0
+    out="$(eval "$4" 2>&1)" || rc=$?
+    cd "$ST_REPO"
+    if [ "$rc" -ne "$2" ]; then
+        st_fail "$1: очікувався код $2, отримано $rc"
+        printf '%s\n' "$out"
+        return 0
+    fi
+    if [ -n "${5:-}" ] && ! printf '%s\n' "$out" | grep -q -F -e "$5"; then
+        st_fail "$1: у виводі немає «$5»"
+        printf '%s\n' "$out"
+    fi
+    if [ -n "${6:-}" ] && printf '%s\n' "$out" | grep -q -F -e "$6"; then
+        st_fail "$1: у виводі є «$6»"
+        printf '%s\n' "$out"
+    fi
+}
+
+self_test() {
+    script="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
+    T="$(mktemp -d)"
+    trap 'rm -rf "$T"' EXIT
+    # оточення джоби (GITHUB_ACTIONS=true) і локальні змінні не мають впливати на випадки
+    unset GITHUB_ACTIONS PR_SIZE_DEVIATION PR_SIZE_LIMIT
+    ST_REPO="$T/r"
+    mkdir "$ST_REPO"
+    cd "$ST_REPO"
+    git init -q .
+    git checkout -q -b main
+    git config user.email pr-size@example.invalid
+    git config user.name pr-size
+    git config commit.gpgsign false
+    git config core.hooksPath /dev/null
+    mkdir -p docs src assets
+    echo base > docs/r.md
+    echo base > README.md
+    echo base > assets/a.png
+    echo base > package-lock.json
+    seq 10 > src/a.ts
+    git add -A
+    git commit -q -m base
+    S='sh "$script"'
+
+    # поза підрахунком — 0 рядків
+    st_case 'порожній диф' 0 ':' "$S main work" 'поза підрахунком файлів: 0' '[FAIL]'
+    st_case 'лише docs' 0 'echo x >> docs/r.md; echo x > docs/new.md' "$S main work" \
+        'Разом у підрахунку: 0 рядків (ліміт 500); поза підрахунком файлів: 2'
+    st_case '*.md поза docs' 0 'echo x >> README.md; echo x > src/notes.md' "$S main work" \
+        'Разом у підрахунку: 0 рядків (ліміт 500); поза підрахунком файлів: 2'
+    st_case 'ассет, бінарний, lockfile' 0 \
+        'echo x >> assets/a.png; printf "\000\001" > src/b.bin; echo x >> package-lock.json' "$S main work" \
+        'Разом у підрахунку: 0 рядків (ліміт 500); поза підрахунком файлів: 3'
+    st_case 'тека, схожа на docs' 0 'mkdir docs-extra; echo x > docs-extra/a.ts' "$S main work" \
+        'Разом у підрахунку: 1 рядків'
+
+    # код — додані + видалені
+    st_case 'код: додані + видалені' 0 'sed -i.bak 1s/1/один/ src/a.ts; rm src/a.ts.bak; echo x >> src/a.ts' \
+        "$S main work" '      3  src/a.ts'
+    st_case 'шлях не ASCII' 0 'echo x > src/звіт.ts' "$S main work" '      1  src/звіт.ts'
+    st_case 'запуск із підтеки' 0 'echo x >> src/a.ts' "(cd docs && $S main work)" '      1  src/a.ts'
+    st_case 'диф від merge-base' 0 \
+        'git checkout -q -B side main; seq 20 > src/m.ts; git add -A; git commit -q -m side; git checkout -q work; echo x >> docs/r.md' \
+        "$S side work" 'Разом у підрахунку: 0 рядків'
+
+    # ліміт і відхилення
+    st_case 'ліміт 500 — рівно' 0 'seq 500 > src/big.ts' "$S main work" '[OK] У межах ліміту'
+    st_case 'ліміт 500 + 1' 1 'seq 501 > src/big.ts' "$S main work" \
+        '[FAIL] PR перевищує ліміт ADR-0036: 501 рядків коду (ліміт 500, перевищення 1)' '[OK]'
+    st_case 'PR_SIZE_LIMIT — рівно' 0 'seq 5 > src/b.ts' "PR_SIZE_LIMIT=5 $S main work" '[OK] У межах ліміту'
+    st_case 'PR_SIZE_LIMIT + 1' 1 'seq 6 > src/b.ts' "PR_SIZE_LIMIT=5 $S main work" '[FAIL] PR перевищує' '[OK]'
+    st_case 'мітка size-deviation' 0 'seq 6 > src/b.ts' "PR_SIZE_LIMIT=5 PR_SIZE_DEVIATION=true $S main work" \
+        '[OK] Перевищення на 1 рядків — плановане відхилення'
+    st_case 'без мітки (false)' 1 'seq 6 > src/b.ts' "PR_SIZE_LIMIT=5 PR_SIZE_DEVIATION=false $S main work" \
+        '[FAIL] PR перевищує'
+    st_case 'перевищення в CI' 1 'seq 6 > src/b.ts' "PR_SIZE_LIMIT=5 GITHUB_ACTIONS=true $S main work" \
+        '::error::PR перевищує' '[FAIL]'
+
+    # помилки — код 2, без «0 рядків» і [OK] (ADR-0112)
+    st_case 'немає ревізії head' 2 ':' "$S main no-such-rev" '[FAIL] Ревізії no-such-rev немає' '[OK]'
+    st_case 'немає ревізії base' 2 ':' "$S no-such-rev work" '[FAIL] Ревізії no-such-rev немає' 'Разом у підрахунку'
+    st_case 'помилка git у CI' 2 ':' "GITHUB_ACTIONS=true $S no-such-rev work" '::error::Ревізії no-such-rev' '[FAIL]'
+    st_case 'немає спільного предка' 2 \
+        'git checkout -q --orphan lone; git rm -rqf .; echo x > o.ts; git add o.ts; git commit -q -m lone; git checkout -q work' \
+        "$S lone work" 'немає спільного предка' '[OK]'
+    # git diff падає після перевірок ревізій: blob гілки work зіпсовано (видалено об'єкт)
+    st_case 'помилка git diff' 2 'echo pr-size-self-test > src/c.ts' \
+        "rm -f .git/objects/\$(git rev-parse work:src/c.ts | sed 's#^..#&/#') && $S main work" \
+        'git diff main...work завершився з помилкою' 'Разом у підрахунку'
+    st_case 'один аргумент' 2 ':' "$S main" 'Використання' 'Разом у підрахунку'
+    st_case 'три аргументи' 2 ':' "$S main work extra" 'Використання'
+
+    cd /
+    if [ "$ST_FAILED" -ne 0 ]; then
+        echo "[FAIL] Самоперевірка pr-size.sh: $ST_FAILED з $ST_COUNT"
+        return 1
+    fi
+    echo "[OK] Самоперевірка pr-size.sh: $ST_COUNT випадків"
+}
+
+if [ "$#" -eq 1 ] && [ "$1" = "--self-test" ]; then
+    self_test
+    exit 0
+fi
+
 if [ "$#" -ne 2 ]; then
-    echo "Використання: $0 <base> <head>" >&2
+    echo "Використання: $0 <base> <head> | --self-test" >&2
     exit 2
 fi
 
