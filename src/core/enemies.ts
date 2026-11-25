@@ -61,6 +61,7 @@ export interface EnemyKindDef {
 }
 
 // Числа — ADR-0149 п. 2 («Помітна різниця»); probe п17.6 може їх змінити рішенням власника.
+// Точність демона — баланс 3.6 (.50/.45/.40), циклічно за порядком серед демонів.
 export const ENEMY_KINDS: Record<EnemyKind, EnemyKindDef> = {
   demon: { name: 'Демон', hp: 10, ap: 10, accuracy: [0.5, 0.45, 0.4], weapon: ALIEN_CUTTER, armor: 0, fromDay: 1 },
   hound: { name: 'Гончак', hp: 7, ap: 14, accuracy: [0.85], weapon: HOUND_CLAWS, armor: 0, fromDay: 6 },

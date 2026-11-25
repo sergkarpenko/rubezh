@@ -455,7 +455,7 @@ function assertCanFire(state: GameState, s: Unit, t: Unit, mode: ShotMode): void
     );
   }
   if (!hasLineOfSight(state, s.pos, t.pos)) throw new Error('Немає лінії вогню');
-  if (s.ap < s.weapon.modes[mode].apCost) throw new Error('Недостатньо очок дій для пострілу ' + mode);
+  if (s.ap < s.weapon.modes[mode].apCost) throw new Error('Недостатньо очок дій для пострілу ' + MODE_NAMES[mode]); // п17.2 (аудит PR #507): назва режиму українською
 }
 
 export function resolveAttack(state: GameState, shooterId: string, targetId: string, mode: ShotMode): AttackResult {

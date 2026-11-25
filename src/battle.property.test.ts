@@ -185,19 +185,25 @@ function broken(s: GameState, ids: string): string[] {
   }
   // п17.2 (ADR-0149, «Наслідки»): позиції — відтворенням журналу від старту; кожен постріл —
   // режимом своєї зброї і в межах її дальності (гончак — не далі 1 клітинки); влучання — не
-  // менше 1 шкоди, у броньовану ціль — не більше max(1, ⌊макс × множник⌋ − броня)
+  // менше 1 шкоди і в межах [max(1, ⌊мін × m⌋ − броня), max(1, ⌊макс × m⌋ − броня)], де m — множник
+  // «Точного пострілу», якщо перед подією стоїть precise_shot того самого стрільця (аудит PR #507)
   const pos = new Map(startOf.get(s) ?? []);
   const byId = new Map(all(s).map((u) => [u.id, u]));
-  for (const e of s.log) {
+  for (const [i, e] of s.log.entries()) {
     if (e.type === 'move') pos.set(e.unitId, e.to);
     if (e.type !== 'shot') continue;
     const sh = byId.get(e.shooterId)!;
     const tg = byId.get(e.targetId)!;
     if (!weaponHasMode(sh.weapon, e.mode)) bad.push(sh.id + ': режим ' + e.mode + ' не зброї «' + sh.weapon.name + '»');
     if (distance(pos.get(sh.id)!, pos.get(tg.id)!) > sh.weapon.range) bad.push(sh.id + ': постріл далі дальності ' + sh.weapon.range);
-    if (e.hit && e.damage < 1) bad.push(sh.id + ': влучання без шкоди');
-    const cap = Math.max(1, Math.floor(sh.weapon.damage[1] * PRECISE_DAMAGE_MULT) - (tg.armor ?? 0));
-    if (tg.armor !== undefined && e.damage > cap) bad.push(tg.id + ': броня не врахована, шкода ' + e.damage);
+    if (!e.hit) continue;
+    // precise_shot стоїть перед shot; при вбивстві між ними — death
+    const prev = s.log[i - 1]?.type === 'death' ? s.log[i - 2] : s.log[i - 1];
+    const m = prev !== undefined && prev.type === 'precise_shot' && prev.shooterId === sh.id ? PRECISE_DAMAGE_MULT : 1;
+    const armor = tg.armor ?? 0;
+    const lo = Math.max(1, Math.floor(sh.weapon.damage[0] * m) - armor);
+    const hi = Math.max(1, Math.floor(sh.weapon.damage[1] * m) - armor);
+    if (e.damage < lo || e.damage > hi) bad.push(tg.id + ': шкода ' + e.damage + ' поза ' + lo + '–' + hi + ' (броня ' + armor + ')');
   }
   return bad;
 }

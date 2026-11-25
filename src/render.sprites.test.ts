@@ -445,6 +445,24 @@ describe('читабельність стану (ADR-0007)', () => {
     expect((owA!.args as number[])[1]).toBe(CX - 21); // Т.132: правий верхній — число HP, низ — смуга HP
     expect((owA!.args as number[])[2]).toBe(CY - 21);
   });
+
+  it('п17.2 (аудит PR #507): ворог з літерою типу — знак дозору праворуч від плашки, не під нею', () => {
+    const rf = rasterFactory();
+    initPixelSprites(rf.make);
+    for (const [letter, w] of [
+      ['Гн', 15],
+      ['Д', 9],
+    ] as const) {
+      const a = mockCtx();
+      drawAlienSprite(a.ctx, alien({ overwatch: true, letter, ring: ALIEN_RING, hp: 10 }));
+      const ow = a.calls.find((c) => c.m === 'drawImage' && (c.args as number[])[3] === 10);
+      const x = (ow!.args as number[])[1];
+      expect(x).toBe(CX - 23 + w + 1); // центр знака — на 6 px правіше краю плашки
+      expect(x).toBeGreaterThanOrEqual(CX - 23 + w); // плашка x [CX-23, CX-23+w) знака не накриває
+      expect(x + 10).toBeLessThan(CX + 24 - (2 * 6 + 3) - 1); // і знак не доходить до плашки числа HP «10»
+      expect((ow!.args as number[])[2]).toBe(CY - 21);
+    }
+  });
 });
 
 describe('детермінованість малювання (ADR-0003 — без RNG)', () => {

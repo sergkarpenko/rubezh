@@ -409,10 +409,12 @@ function drawAtlasUnit(ctx: CanvasRenderingContext2D, u: UnitSpriteView, row: 0 
   ctx.restore();
 }
 
-function drawOverwatchMarker(ctx: CanvasRenderingContext2D, u: UnitSprite): void {
+function drawOverwatchMarker(ctx: CanvasRenderingContext2D, u: UnitSpriteView): void {
   // Т.132: верхній лівий кут клітинки для обох сторін — правий верхній зайняло число HP,
-  // нижній край — смуга HP; більша фігура (68 px) стоїть по центру між ними
-  drawPixelSprite(ctx, OW_BOLT, u.cx - OW_OFF, u.cy - OW_OFF, SPRITE_SCALE);
+  // нижній край — смуга HP; більша фігура (68 px) стоїть по центру між ними.
+  // п17.2 (аудит PR #507): кут зайняла плашка літери типу ворога — знак стає праворуч від неї
+  const x = u.letter === undefined ? u.cx - OW_OFF : u.cx - 24 + 1 + letterPlateW(u.letter) + OW_GAP;
+  drawPixelSprite(ctx, OW_BOLT, x, u.cy - OW_OFF, SPRITE_SCALE);
 }
 
 // Рамка вибору (доробка П6.12 за валідацією власника): кутові дужки по кутах
@@ -498,9 +500,13 @@ export function unitLetter(side: 'player' | 'alien', kind?: EnemyKind): string |
 // п17.2 (ADR-0149 п. 4; рішення власника «Б. Контраст»): літера типу — плашка в лівому
 // верхньому куті клітинки, дзеркально до числа HP, колір — колір кільця; як і число HP,
 // у позі «вогонь» не малюється (накрила б ствол і спалах дула), загиблому — теж.
+const OW_GAP = 6; // від плашки літери до центру знака дозору (півширина знака 5 + 1 px)
+function letterPlateW(letter: string): number {
+  return letter.length * 6 + 3;
+}
 function drawKindLetter(ctx: CanvasRenderingContext2D, u: UnitSpriteView): void {
   if (u.letter === undefined || u.pose === 'fire' || u.hp <= 0) return;
-  const w = u.letter.length * 6 + 3;
+  const w = letterPlateW(u.letter);
   const px = u.cx - 24 + 1;
   ctx.fillStyle = HP_PLATE_BG;
   ctx.fillRect(px, u.cy - 23, w, 11);
