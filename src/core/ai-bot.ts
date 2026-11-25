@@ -5,6 +5,9 @@
 // П11.4 (ADR-0058): бот синхронізований з витратниками — лікування при
 // пораненні (аптечка), граната при скупченні ворогів (grenadeTarget);
 // без предметів логіка байт-у-байт незмінна (критерій 1 П11.4).
+// п16.3 (ADR-0147 п. 12): дії ролей — допомога медика першою, точний постріл
+// снайпера замість звичайного, ривок штурмовика, коли AP не вистачає на чергу;
+// без ролей (state.roles немає) логіка байт-у-байт незмінна.
 //
 // Дзеркало ШІ прибульців 3.5 (src/core/ai.ts): найближча видима ціль → постріл
 // (auto > aimed > snap за очікуваним пошкодженням); не можна — рух у бік цілі;
@@ -21,6 +24,10 @@ import {
   throwGrenade,
   useMedkit,
   evacuate,
+  fieldAid,
+  preciseShot,
+  roleActionBlock,
+  useDash,
   EVAC_AP_COST,
   GRENADE_RANGE,
   HEAL_AP_COST,
@@ -88,6 +95,11 @@ function retreatStep(state: GameState, u: Unit): boolean | null {
 // Т.76: з політикою евакуації — відступ після аптечки (лікування першим).
 function soldierStep(state: GameState, u: Unit, evac?: EvacPolicy): boolean {
   if (!u.alive || u.ap <= 0) return false;
+  const aid = aidTarget(state, u);
+  if (aid) {
+    fieldAid(state, u.id, aid.id);
+    return true;
+  }
   const items = state.items?.[u.id];
   if (items?.medkit && u.hp < u.maxHp && u.ap >= HEAL_AP_COST) {
     useMedkit(state, u.id, u.id);
@@ -117,6 +129,15 @@ function soldierStep(state: GameState, u: Unit, evac?: EvacPolicy): boolean {
   }
   const target = nearestEnemy(u, enemies);
   const mode = bestShootMode(state, u, target);
+  if (mode && roleActionBlock(state, u.id, 'sniper') === null) {
+    preciseShot(state, u.id, target.id); // дальність і лінія — ті самі, що в bestShootMode
+    return true;
+  }
+  // Ривок: ворога видно, а на чергу AP бракує — +4 AP, далі звичайний вибір
+  if (u.ap < u.weapon.modes.auto.apCost && roleActionBlock(state, u.id, 'assault') === null) {
+    useDash(state, u.id);
+    return true;
+  }
   if (mode) {
     resolveAttack(state, u.id, target.id, mode);
     return true;
@@ -127,6 +148,19 @@ function soldierStep(state: GameState, u: Unit, evac?: EvacPolicy): boolean {
     return true;
   }
   return false;
+}
+
+// п16.3: ціль «Польової допомоги» для бота — медик із невикористаною дією,
+// поранений свій на відстані ≤1 (зокрема сам медик): найбільша нестача HP,
+// рівність — порядок масиву юнітів (детермінізм). null — допомога не потрібна.
+function aidTarget(state: GameState, u: Unit): Unit | null {
+  if (roleActionBlock(state, u.id, 'medic') !== null) return null;
+  let best: Unit | null = null;
+  for (const t of state.units) {
+    if (!t.alive || t.side !== u.side || t.hp >= t.maxHp || distance(u.pos, t.pos) > 1) continue;
+    if (best === null || t.maxHp - t.hp > best.maxHp - best.hp) best = t;
+  }
+  return best;
 }
 
 // Кращий епіцентр гранати для бота (П11.4, ADR-0058): позиція видимого ворога,

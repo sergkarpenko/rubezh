@@ -21,11 +21,21 @@
 // «поранений» (ростер.hospital[id] = тики одужання), не потрапляє в missionSquad;
 // відлік веде hospitalTick(roster) — 1 тік геосцени, HEAL_TICKS_PER_HP тиків на HP.
 
-import type { GameState, Unit } from './combat';
+import type { GameState, Unit, UnitRole } from './combat';
 import { hirePrice, spend, type EconomyState } from './economy';
 import { type DifficultyPreset, DEFAULT_PRESET, DIFFICULTY_MULTIPLIERS } from './campaign';
 import { makeSoldier, SQUAD_SPAWN } from './mission';
-import { lossLine, newCareer, settleCareer, type SoldierCareer } from './career';
+import {
+  awaitingRole,
+  lossLine,
+  newCareer,
+  rankOf,
+  ROLE_RANK,
+  settleCareer,
+  SOLDIER_ROLES,
+  type SoldierCareer,
+  type SoldierRole,
+} from './career';
 
 export const STARTING_ROSTER_SIZE = 6; // два повні загони + запас
 export const HEAL_TICKS_PER_HP = 2; // ADR-0021: 1 HP = 2 тики геосцени
@@ -228,4 +238,57 @@ export function applyMissionResult(roster: Roster, state: GameState): MissionAft
     }
   }
   return { lost, survivors, wounded, promoted, lossLines };
+}
+
+// --- п16.3 (ADR-0147 п. 11–13): ролі ---
+
+// Ролі загону на місію (id → роль, прапорець «використано» скинуто) — копія
+// для стану бою, як deployConsumables (ADR-0058): ядро бою кар'єри не знає.
+// Оперативник без ролі запису не має; порожній результат — null, і місія
+// створюється без ролей (бій байт-у-байт як до п16.3).
+export function deployRoles(roster: Roster, squad: Unit[]): Record<string, UnitRole> | null {
+  const roles: Record<string, UnitRole> = {};
+  for (const u of squad) {
+    const role = roster.careers[u.id]?.role;
+    if (role) roles[u.id] = { role, used: false };
+  }
+  return Object.keys(roles).length > 0 ? roles : null;
+}
+
+// Вибір ролі (ADR-0147 п. 5, 13): лише оперативник ростеру, що чекає вибору
+// (звання «Боєць» і вище без ролі); роль назавжди.
+export function chooseRole(roster: Roster, id: string, role: SoldierRole): void {
+  const career = roster.careers[id];
+  if (!career || !roster.soldiers.some((s) => s.id === id)) throw new Error('Оперативника немає в ростері: ' + id);
+  if (!SOLDIER_ROLES.includes(role)) throw new Error('Невідома роль: ' + String(role));
+  if (career.role !== null) throw new Error('Роль уже обрано: ' + id);
+  if (!awaitingRole(career)) throw new Error('Роль обирається зі звання «Боєць»: ' + id);
+  career.role = role;
+}
+
+// Роль для бота партії (ADR-0147 п. 12): якої найменше серед оперативників
+// ростеру зі званням (від «Боєць», зокрема в лікарні); рівність — штурмовик →
+// снайпер → медик. Без RNG (ADR-0003).
+export function botRole(roster: Roster): SoldierRole {
+  const count: Record<SoldierRole, number> = { assault: 0, sniper: 0, medic: 0 };
+  for (const s of roster.soldiers) {
+    const c = roster.careers[s.id];
+    if (c && c.role !== null && rankOf(c.xp) >= ROLE_RANK) count[c.role] += 1;
+  }
+  let best = SOLDIER_ROLES[0];
+  for (const r of SOLDIER_ROLES) if (count[r] < count[best]) best = r;
+  return best;
+}
+
+// Бот партії після місії: кожному, хто чекає ролі, — за botRole, по черзі
+// ростеру (наступний бачить ролі попередніх). Повертає id із новою роллю.
+export function assignBotRoles(roster: Roster): string[] {
+  const assigned: string[] = [];
+  for (const s of roster.soldiers) {
+    const c = roster.careers[s.id];
+    if (!c || !awaitingRole(c)) continue;
+    chooseRole(roster, s.id, botRole(roster));
+    assigned.push(s.id);
+  }
+  return assigned;
 }

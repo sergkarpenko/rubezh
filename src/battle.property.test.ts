@@ -9,19 +9,24 @@ import { describe, expect, it } from 'vitest';
 import fc from 'fast-check';
 import {
   createGame,
+  DASH_AP_BONUS,
   endTurn,
   evacuate,
+  fieldAid,
   hasLineOfSight,
   isBlocked,
   isInside,
   makeUnit,
   moveUnit,
   mulberry32,
+  preciseShot,
   resolveAttack,
   setOverwatch,
   throwGrenade,
   unitAt,
+  useDash,
   useMedkit,
+  type BattleRole,
   type GameState,
   type ShotMode,
   type StatefulRng,
@@ -33,6 +38,7 @@ import { aiStep } from './core/ai';
 import { botTurn } from './core/ai-bot';
 
 const RUN = { seed: 20261111, numRuns: 150 };
+const ROLES: BattleRole[] = ['assault', 'sniper', 'medic'];
 const key = (p: Vec2): string => p.x + ',' + p.y;
 const DIRS: Vec2[] = [
   { x: 1, y: 0 },
@@ -45,6 +51,7 @@ const DIRS: Vec2[] = [
 
 // Бойовище: поле 5×5…9×9, стіни, 4–6 юнітів почергово двох сторін, у кожного
 // аптечка і граната; зона евакуації — стартові клітинки оперативників.
+// п16.3: оперативники мають ролі по черзі — штурмовик, снайпер, медик.
 const arenaArb = fc.record({
   w: fc.integer({ min: 5, max: 9 }),
   h: fc.integer({ min: 5, max: 9 }),
@@ -77,6 +84,7 @@ function build(a: Arena): GameState {
     rng: mulberry32(a.seed),
     items: Object.fromEntries(units.map((u) => [u.id, { medkit: true, grenade: true }])),
     evacZone: units.filter((u) => u.side === 'player').map((u) => u.pos),
+    roles: Object.fromEntries(units.filter((u) => u.side === 'player').map((u, i) => [u.id, { role: ROLES[i % 3], used: false }])),
   });
 }
 
@@ -84,7 +92,7 @@ function build(a: Arena): GameState {
 // живого юніта сторони, що ходить (ціль — живого ворога), більший — будь-якого,
 // тож серед дій є й недозволені: чужий хід, мертвий, вогонь по своїх, поза полем.
 const actArb = fc.record({
-  t: fc.constantFrom('step', 'go', 'shoot', 'watch', 'grenade', 'heal', 'evac', 'end', 'bot'),
+  t: fc.constantFrom('step', 'go', 'shoot', 'watch', 'grenade', 'heal', 'evac', 'end', 'bot', 'dash', 'precise', 'aid'),
   u: fc.nat(5),
   v: fc.nat(5),
   x: fc.integer({ min: -1, max: 9 }),
@@ -119,7 +127,7 @@ function bfs(s: GameState, start: Vec2, goal: Vec2, known: (u: Unit) => boolean 
 
 const all = (s: GameState): Unit[] => [...s.units, ...(s.evacuated ?? [])];
 const snap = (s: GameState): string =>
-  JSON.stringify([s.units, s.evacuated, s.turn, s.activeSide, s.items, s.log, (s.rng as StatefulRng).state]);
+  JSON.stringify([s.units, s.evacuated, s.turn, s.activeSide, s.items, s.roles, s.log, (s.rng as StatefulRng).state]);
 
 // Що в стані бою порушено (порожній список — усе гаразд).
 function broken(s: GameState, ids: string): string[] {
@@ -128,7 +136,9 @@ function broken(s: GameState, ids: string): string[] {
   for (const u of s.units) {
     if (!isInside(s.map, u.pos) || isBlocked(s.map, u.pos)) bad.push(u.id + ': поза полем або в стіні');
     if (u.hp < 0 || u.hp > u.maxHp || u.alive !== u.hp > 0) bad.push(u.id + ': hp ' + u.hp + ', alive ' + u.alive);
-    if (u.ap < 0 || u.ap > u.maxAp) bad.push(u.id + ': ap ' + u.ap);
+    // п16.3: «Ривок» дає AP понад максимум — лише штурмовикові, що його використав
+    const dashed = s.roles?.[u.id]?.role === 'assault' && s.roles[u.id].used;
+    if (u.ap < 0 || u.ap > u.maxAp + (dashed ? DASH_AP_BONUS : 0)) bad.push(u.id + ': ap ' + u.ap);
     if (u.alive && cells.has(key(u.pos))) bad.push('двоє живих у клітинці ' + key(u.pos));
     if (u.alive) cells.add(key(u.pos));
   }
@@ -143,6 +153,13 @@ function broken(s: GameState, ids: string): string[] {
     const kills = all(s).reduce((sum, u) => sum + (u.side === side ? u.kills : 0), 0);
     const scored = deaths.filter((e) => sideOf.get(e.killerId) === side && sideOf.get(e.unitId) !== side).length;
     if (kills !== scored) bad.push('лічильник убивств ' + side + ': ' + kills + ', у журналі ' + scored);
+  }
+  // п16.3: дія ролі — раз за бій: прапорець «використано» ⇔ рівно одна подія ролі юніта
+  for (const [id, r] of Object.entries(s.roles ?? {})) {
+    const n = s.log.filter(
+      (e) => ((e.type === 'dash' || e.type === 'field_aid') && e.unitId === id) || (e.type === 'precise_shot' && e.shooterId === id)
+    ).length;
+    if (n !== (r.used ? 1 : 0)) bad.push(id + ': дія ролі ' + n + ' разів, used ' + r.used);
   }
   return bad;
 }
@@ -182,6 +199,9 @@ function act(s: GameState, a: Act, check: boolean): void {
     else if (a.t === 'grenade') throwGrenade(s, u.id, cell);
     else if (a.t === 'heal') useMedkit(s, u.id, a.v % 2 === 0 ? u.id : v.id);
     else if (a.t === 'evac') evacuate(s, u.id);
+    else if (a.t === 'dash') useDash(s, u.id);
+    else if (a.t === 'precise') preciseShot(s, u.id, v.id);
+    else if (a.t === 'aid') fieldAid(s, u.id, a.v % 2 === 0 ? u.id : s.units[a.v % s.units.length].id);
     else endTurn(s);
   } catch (e) {
     if ((e as Error).constructor !== Error) throw e; // TypeError тощо — дефект, а не відмова

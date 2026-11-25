@@ -9,7 +9,7 @@ import fc from 'fast-check';
 import type { Vec2 } from './core/combat';
 import { WORLD_H, WORLD_W, advanceTime, geoDay, missionTargets, type Ufo } from './core/geo';
 import { createEconomy, creditMissionBonus, economyTick } from './core/economy';
-import { applyMissionResult, hireSoldier, hospitalTick, isBankrupt, missionSquad } from './core/squad';
+import { applyMissionResult, assignBotRoles, deployRoles, hireSoldier, hospitalTick, isBankrupt, missionSquad } from './core/squad';
 import { PROJECTS, PROJECT_CATALOG, fireScientist, hireScientist, researchTick, startProject } from './core/research';
 import {
   ARMOR_MAX_HP_BONUS,
@@ -40,7 +40,7 @@ import { DIFFICULTY_MULTIPLIERS, VICTORY_DAY, campaignTick, type DifficultyPrese
 import { completeMission, createMission } from './core/mission';
 import { autoBattle } from './core/ai-bot';
 import { createParty, deserializeParty, serializeParty, type Party } from './core/save';
-import { KILL_XP, MISSION_XP, RANK_ACCURACY_BONUS, RANK_HP_BONUS, rankOf } from './core/career';
+import { awaitingRole, KILL_XP, MISSION_XP, RANK_ACCURACY_BONUS, RANK_HP_BONUS, rankOf, ROLE_RANK } from './core/career';
 
 const RUN = { seed: 20261111, numRuns: 100 };
 const CHOICES = ['далека', 'середня', 'впритул', 'відступ'] as const;
@@ -82,10 +82,16 @@ function tick(p: Party): void {
 function mission(p: Party, i: number): void {
   const targets = missionTargets(p.geo);
   const squad = missionSquad(p.roster);
-  const m = createMission(p.geo, targets[i % (targets.length || 1)]?.id ?? '', { squad, items: deployConsumables(p.workshop, squad) });
+  const roles = deployRoles(p.roster, squad) ?? undefined; // п16.3: ролі загону — як у бота партії
+  const m = createMission(p.geo, targets[i % (targets.length || 1)]?.id ?? '', {
+    squad,
+    items: deployConsumables(p.workshop, squad),
+    roles,
+  });
   const fought = autoBattle(m.state).outcome;
   const outcome = fought === 'триває' ? 'поразка' : fought;
   const aftermath = applyMissionResult(p.roster, m.state);
+  assignBotRoles(p.roster);
   removeLostEquipment(p.workshop, aftermath.lost);
   settleConsumables(p.workshop, aftermath.survivors, m.state.items);
   completeMission(p.geo, m.briefing.ufoId, outcome);
@@ -207,6 +213,9 @@ function broken(p: Party): string[] {
       s.id + ': досвід ' + career.xp + ' не з місій і вбивств'
     );
     const rank = rankOf(career.xp);
+    // п16.3 (ADR-0147 п. 12): роль — лише зі звання «Боєць»; після місії ніхто не чекає ролі
+    must(career.role === null || rank >= ROLE_RANK, s.id + ': роль у рекрута');
+    must(!awaitingRole(career), s.id + ': чекає ролі після місії');
     const maxHp =
       Math.round(10 * DIFFICULTY_MULTIPLIERS[campaign.preset].hpBonusMultiplier) +
       (eq?.armor ? ARMOR_MAX_HP_BONUS : 0) +

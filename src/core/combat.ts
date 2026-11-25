@@ -7,6 +7,9 @@
 // П11.4 (ADR-0058): бойові дії з витратниками — «Лікування» (аптечка)
 // і «Кидок гранати» (осколкова). ШІ прибульців предметів не має (MVP);
 // бій без предметів — байт-у-байт незмінний (критерій П11.4).
+// п16.3 (ADR-0147 п. 3, 11): дії ролей раз за бій — «Ривок» штурмовика,
+// «Точний постріл» снайпера, «Польова допомога» медика; бій без ролей —
+// байт-у-байт незмінний.
 // П15.2 (ADR-0075): евакуація з місії — дія evacuate: активний солдат у
 // клітинці зони висадки (evacZone) знімається з поля у список evacuated.
 // Евакуйований вилучений з units → не ціль ШІ/пострілів/гранат/дозору
@@ -63,6 +66,15 @@ export interface UnitItems {
   grenade: boolean; // «Осколкова граната»: доступна дія «Кидок»
 }
 
+// п16.3 (ADR-0147 п. 3, 11): роль оперативника і прапорець «дію використано»
+// в стані бою — як витратники ADR-0058: кар'єри ростеру ядро бою не знає,
+// копію на місію готує squad.ts (`deployRoles`).
+export type BattleRole = 'assault' | 'sniper' | 'medic';
+export interface UnitRole {
+  role: BattleRole;
+  used: boolean; // дію ролі використано в цьому бою
+}
+
 export type GameEvent =
   | { type: 'move'; unitId: string; from: Vec2; to: Vec2 }
   | { type: 'shot'; shooterId: string; targetId: string; mode: ShotMode; hit: boolean; damage: number }
@@ -73,7 +85,13 @@ export type GameEvent =
   | { type: 'heal'; unitId: string; targetId: string; healed: number }
   | { type: 'grenade'; unitId: string; center: Vec2; hits: { unitId: string; damage: number }[] }
   // П15.2 (ADR-0075): солдат евакуйований з зони висадки (одна подія на солдата)
-  | { type: 'evac_unit'; unitId: string };
+  | { type: 'evac_unit'; unitId: string }
+  // п16.3 (ADR-0147 п. 11): дії ролей. «Точний постріл» — мітка перед звичайною
+  // подією shot (режим aimed, шкода вже з множником), тож анімація і звук пострілу
+  // ті самі, що в прицільного.
+  | { type: 'dash'; unitId: string; ap: number }
+  | { type: 'precise_shot'; shooterId: string; targetId: string }
+  | { type: 'field_aid'; unitId: string; targetId: string; healed: number };
 
 export interface GameMap {
   width: number;
@@ -94,6 +112,7 @@ export interface GameState {
   // П15.2 (ADR-0075): евакуйовані солдати — зняті з поля, поза units.
   // Стан бою (сейв у бою недоступний, ADR-0026): формат сейву не змінюється.
   evacuated?: Unit[];
+  roles?: Record<string, UnitRole>; // п16.3: ролі оперативників у цьому бою (id → роль)
 }
 
 export const MOVE_AP_PER_CELL = 1;
@@ -109,6 +128,13 @@ export const HEAL_AMOUNT = 3; // +3 HP, не вище maxHp
 export const GRENADE_AP_COST = 4; // «Кидок гранати»: 4 AP
 export const GRENADE_RANGE = 6; // дальність кидка (Чебишев) — менша за радіус огляду 12 (map.ts)
 export const GRENADE_DAMAGE: [number, number] = [3, 5]; // пошкодження всієї зони вибуху (один кидок RNG)
+
+// п16.3 (ADR-0147 п. 3): дії ролей; числа — кандидати, probe п16.5.
+export const DASH_AP_BONUS = 4; // «Ривок»: +4 AP цього ходу, сам — 0 AP, AP може перевищити максимум
+export const PRECISE_AP_COST = 6; // «Точний постріл»: 6 AP
+export const PRECISE_DAMAGE_MULT = 1.5; // шкода ×1,5 з округленням униз
+export const FIELD_AID_AP_COST = 2; // «Польова допомога»: 2 AP
+export const FIELD_AID_AMOUNT = HEAL_AMOUNT; // +3 HP за правилом гелю, без гелю
 
 export const EVAC_AP_COST = 2; // П15.2 (ADR-0075): «Евакуація» — 2 AP (кандидат, probe П15.5)
 
@@ -257,6 +283,7 @@ export interface CreateGameOptions {
   startingSide?: Side;
   items?: Record<string, UnitItems>; // П11.4: витратники юнітів у цьому бою
   evacZone?: Vec2[]; // П15.2 (ADR-0075): зона висадки для евакуації (mission.ts)
+  roles?: Record<string, UnitRole>; // п16.3: ролі оперативників (deployRoles у squad.ts)
 }
 
 export function createGame(opts: CreateGameOptions): GameState {
@@ -271,6 +298,7 @@ export function createGame(opts: CreateGameOptions): GameState {
     evacZone: opts.evacZone?.map((c) => ({ ...c })), // П15.2: копія — зона не мутується боєм
     evacuated: [], // П15.2 (ADR-0075): евакуйовані цього бою
   };
+  if (opts.roles) state.roles = opts.roles; // п16.3: без ролей — стан як до п16.3
   for (const u of state.units) if (u.side === state.activeSide) u.ap = u.maxAp;
   return state;
 }
@@ -338,13 +366,21 @@ export function moveUnit(state: GameState, unitId: string, path: Vec2[], stopAtU
 // кидок влучності, пошкодження, смерть цілі; події — у state.log.
 // ADR-0003: порядок викликів RNG фіксований — кидок влучності, потім лише
 // при влучанні кидок пошкодження.
-function fireOnce(state: GameState, shooter: Unit, target: Unit, mode: ShotMode, chance: number): { hit: boolean; damage: number } {
+// п16.3: mult — множник шкоди «Точного пострілу» (округлення вниз); RNG той самий.
+function fireOnce(
+  state: GameState,
+  shooter: Unit,
+  target: Unit,
+  mode: ShotMode,
+  chance: number,
+  mult = 1
+): { hit: boolean; damage: number } {
   const hit = state.rng() < chance;
   let damage = 0;
   if (hit) {
     const dmin = shooter.weapon.damage[0],
       dmax = shooter.weapon.damage[1];
-    damage = dmin + Math.floor(state.rng() * (dmax - dmin + 1));
+    damage = Math.floor((dmin + Math.floor(state.rng() * (dmax - dmin + 1))) * mult);
     target.hp -= damage;
     if (target.hp <= 0) {
       target.hp = 0;
@@ -537,4 +573,86 @@ export function evacuate(state: GameState, unitId: string): EvacuateResult {
   (state.evacuated ??= []).push(u);
   state.log.push({ type: 'evac_unit', unitId: u.id });
   return { unit: u };
+}
+
+// --- п16.3 (ADR-0147 п. 3, 11): дії ролей раз за бій ---
+
+const ROLE_NAMES: Record<BattleRole, string> = { assault: 'штурмовик', sniper: 'снайпер', medic: 'медик' };
+const ROLE_ACTION_NAMES: Record<BattleRole, string> = {
+  assault: '«Ривок»',
+  sniper: '«Точний постріл»',
+  medic: '«Польова допомога»',
+};
+const ROLE_AP_COST: Record<BattleRole, number> = { assault: 0, sniper: PRECISE_AP_COST, medic: FIELD_AID_AP_COST };
+
+// Чому дія ролі юніта недоступна без огляду цілі (null — доступна): немає ролі,
+// роль інша, вже використано, юніта немає на полі, бракує AP. Для плитки UI (п16.4) і бота; ціль
+// перевіряє сама дія. Не кидає — читає стан.
+export function roleActionBlock(state: GameState, unitId: string, role: BattleRole): string | null {
+  const slot = state.roles?.[unitId];
+  if (!slot) return 'Немає ролі: дія ' + ROLE_ACTION_NAMES[role] + ' недоступна';
+  if (slot.role !== role) return ROLE_ACTION_NAMES[role] + ' — дія ролі ' + ROLE_NAMES[role] + 'а';
+  if (slot.used) return ROLE_ACTION_NAMES[role] + ' вже використано в цьому бою';
+  const u = state.units.find((x) => x.id === unitId);
+  if (!u) return 'Оперативника немає на полі бою'; // евакуйований (ADR-0075)
+  if (u.ap < ROLE_AP_COST[role]) return 'Недостатньо очок дій: ' + ROLE_ACTION_NAMES[role] + ' — ' + ROLE_AP_COST[role] + ' AP';
+  return null;
+}
+
+// Спільні перевірки дії ролі: активна сторона, роль, прапорець, AP. Порядок
+// фіксований (детермінізм, ADR-0003); стан не змінюється до кінця перевірок.
+function requireRole(state: GameState, u: Unit, role: BattleRole): UnitRole {
+  requireActive(state, u);
+  const reason = roleActionBlock(state, u.id, role);
+  if (reason !== null) throw new Error(reason);
+  return state.roles![u.id];
+}
+
+export interface DashResult {
+  ap: number; // AP юніта після ривка
+}
+
+// «Ривок» штурмовика (ADR-0147 п. 3): +4 AP цього ходу, сам коштує 0 AP;
+// AP може перевищити максимум — наступний хід відновлює maxAp (endTurn).
+export function useDash(state: GameState, unitId: string): DashResult {
+  const u = getUnit(state, unitId);
+  const slot = requireRole(state, u, 'assault');
+  u.ap += DASH_AP_BONUS;
+  slot.used = true;
+  state.log.push({ type: 'dash', unitId: u.id, ap: DASH_AP_BONUS });
+  return { ap: u.ap };
+}
+
+// «Точний постріл» снайпера (ADR-0147 п. 3, 11): 6 AP, один постріл з
+// модифікатором прицільного режиму (точність, дальність і лінія вогню — як у
+// aimed), шкода ×1,5 з округленням униз. Подія precise_shot — перед shot.
+export function preciseShot(state: GameState, shooterId: string, targetId: string): AttackResult {
+  const s = getUnit(state, shooterId);
+  const t = getUnit(state, targetId);
+  const slot = requireRole(state, s, 'sniper');
+  assertCanFire(state, s, t, 'aimed');
+  s.ap -= PRECISE_AP_COST;
+  slot.used = true;
+  state.log.push({ type: 'precise_shot', shooterId: s.id, targetId: t.id });
+  const shot = fireOnce(state, s, t, 'aimed', calculateHitChance(s, 'aimed'), PRECISE_DAMAGE_MULT);
+  return { shots: [shot], targetDown: !t.alive };
+}
+
+// «Польова допомога» медика (ADR-0147 п. 3, 11): 2 AP, +3 HP не вище maxHp
+// без гелю; ціль і сусідство — за правилом гелю (useMedkit): сам медик або
+// свій на відстані ≤1 (Чебишев), лише поранений.
+export function fieldAid(state: GameState, medicId: string, targetId: string): HealResult {
+  const u = getUnit(state, medicId);
+  const slot = requireRole(state, u, 'medic');
+  const t = getUnit(state, targetId);
+  if (!t.alive) throw new Error('Ціль уже мертва');
+  if (t.side !== u.side) throw new Error('Допомога можлива лише своїм');
+  if (distance(u.pos, t.pos) > 1) throw new Error('Ціль поза межами допомоги (відстань ≤1)');
+  if (t.hp >= t.maxHp) throw new Error('Ціль не поранена');
+  const healed = Math.min(FIELD_AID_AMOUNT, t.maxHp - t.hp);
+  t.hp += healed;
+  u.ap -= FIELD_AID_AP_COST;
+  slot.used = true;
+  state.log.push({ type: 'field_aid', unitId: u.id, targetId: t.id, healed });
+  return { healed };
 }

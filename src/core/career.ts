@@ -9,7 +9,7 @@
 // правилом. Прирости звання (HP, точність) пишуться в запис юніта ростеру
 // в момент підвищення (`promote`) — ядро бою кар'єри не знає.
 
-import type { Unit } from './combat';
+import type { BattleRole, Unit } from './combat';
 
 // Пули позивних і біографій (ADR-0147 п. 16; власник править у рев'ю PR п16.2).
 export const CALLSIGNS = ['Крук', 'Шрам', 'Іскра', 'Тінь', 'Сокіл', 'Байт', 'Грім', 'Рись', 'Кремінь', 'Мла', 'Вольт', 'Оса'];
@@ -40,7 +40,10 @@ export const KILL_XP = 1; // досвід за кожне вбивство в м
 // Звання, з якого оперативник обирає роль (ADR-0147 п. 1).
 export const ROLE_RANK = 1;
 
-export type SoldierRole = 'assault' | 'sniper' | 'medic';
+// Роль — той самий тип, що в ядрі бою (combat.ts, п16.3): копію на місію дає deployRoles (squad.ts).
+export type SoldierRole = BattleRole;
+// Порядок ролей — рівність у правилі бота (ADR-0147 п. 12): штурмовик → снайпер → медик.
+export const SOLDIER_ROLES: readonly SoldierRole[] = ['assault', 'sniper', 'medic'];
 
 export interface SoldierCareer {
   callsign: string;
