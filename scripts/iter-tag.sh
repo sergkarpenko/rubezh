@@ -10,7 +10,9 @@
 # перший живий прогін. Режими:
 #   PR_BODY="…" iter-tag.sh    — друкує назву тегу; без рядка — нічого
 #   iter-tag.sh --check <назва> — перевіряє назву і друкує її
-#   iter-tag.sh --preview       — джоба check: назва майбутнього тегу, чи вільна
+#   iter-tag.sh --preview       — джоба check: назва майбутнього тегу, чи вільна;
+#                                 PR кроку фази (у назві PR «пX.Y», $PR_TITLE)
+#                                 без рядка — попередження (кандидат 170, Т.189)
 #   iter-tag.sh --plan          — джоба tag: назва і коміт у $GITHUB_OUTPUT
 #   iter-tag.sh --put           — джоба tag: створює тег $TAG на коміті $SHA
 #   iter-tag.sh --self-test     — перевірка скрипта на виписаних випадках
@@ -72,10 +74,21 @@ summary() {
     echo "$1" >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
 }
 
+# Назва PR кроку фази («п16.5 (Т.187): …») — друкує очікуваний тег iter-16.5; інакше нічого.
+# Альтернатива, а не набір у дужках: літера «п» — два байти, набір залежав би від локалі.
+step_hint() {
+    step="$(printf '%s\n' "$1" | grep -oE '(^|[^0-9A-Za-z.])п[0-9]+\.[0-9]+' | head -n 1 || true)"
+    [ -n "$step" ] || return 0
+    printf 'iter-%s\n' "${step##*п}"
+}
+
 preview() {
     tag="$(from_body "${PR_BODY:-}")" || return 1
     if [ -z "$tag" ]; then
-        if printf '%s\n' "${PR_BODY:-}" | grep -qi 'iter-tag'; then
+        hint="$(step_hint "${PR_TITLE:-}")"
+        if [ -n "$hint" ]; then
+            echo "::warning::Назва PR — крок фази, а рядка «Iter-Tag: $hint» в описі немає — тег не буде поставлено (ADR-0093)"
+        elif printf '%s\n' "${PR_BODY:-}" | grep -qi 'iter-tag'; then
             echo "::warning::В описі PR згадано Iter-Tag, але рядка «Iter-Tag: iter-X.Y» з початку рядка немає — тег не буде поставлено"
         fi
         summary "Рядка Iter-Tag в описі PR немає — після мержу тег не ставиться."
@@ -171,6 +184,11 @@ run_stub() {
     )
 }
 
+# preview_as <назва PR> <опис> — preview без рядка тегу (запитів gh немає)
+preview_as() {
+    PR_TITLE="$1" PR_BODY="$2" preview
+}
+
 self_test() {
     FAILED=0
     A=6bbff2732a86ef98c3fc68ebdd47152eb34321a7
@@ -212,8 +230,21 @@ self_test() {
     expect 'sha: великі літери' 1 '' check_sha 'D9AB9B7D8B75BEDBAC90A5ECC49899665970E57C'
     expect 'sha: другий рядок' 1 '' check_sha "$A${NL}x"
 
+    # назва PR кроку фази (кандидат 170)
+    expect 'hint: крок фази' 0 'iter-16.5' step_hint 'п16.5 (Т.187): probe-баланс'
+    expect 'hint: крок фази в кінці назви' 0 'iter-16.2' step_hint "feat(core): кар'єра (п16.2, Т.184)"
+    expect 'hint: крок з двозначними числами' 0 'iter-17.12' step_hint 'feat(ui): п17.12 — вороги'
+    expect 'hint: технічний крок' 0 '' step_hint 'docs(workflow): Т.180 — запис'
+    expect 'hint: без кроку' 0 '' step_hint 'docs(agents): уроки'
+    expect 'hint: п без крапки' 0 '' step_hint 'п16 — план'
+    expect 'hint: п після цифри' 0 '' step_hint 'v2п16.5'
+    expect 'hint: п після латинської літери' 0 '' step_hint 'vп16.5'
+
     # джоба check
     expect 'preview: без рядка' 0 '|створень 0' run_stub preview 'PR_BODY=опис'
+    expect 'preview: крок фази без рядка — попередження' 0 '::warning::Назва PR — крок фази, а рядка «Iter-Tag: iter-16.5» в описі немає — тег не буде поставлено (ADR-0093)' preview_as 'п16.5 (Т.187): probe' 'опис'
+    expect 'preview: не крок фази — без попередження' 0 '' preview_as 'docs: уроки' 'опис'
+    expect 'preview: крок фази з рядком — без попередження' 0 '|створень 0' run_stub preview 'PR_TITLE=п16.5: probe' 'PR_BODY=Iter-Tag: iter-16.5'
     expect 'preview: нова назва' 0 '|створень 0' run_stub preview 'PR_BODY=Iter-Tag: iter-T.34'
     expect 'preview: назва зайнята' 1 '' run_stub preview 'PR_BODY=Iter-Tag: iter-T.33' "STUB_REF=commit $B"
     expect 'preview: недопустима назва' 1 '' run_stub preview 'PR_BODY=Iter-Tag: v1'

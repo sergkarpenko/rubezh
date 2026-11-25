@@ -209,25 +209,59 @@ export async function probe({ fetch, key, log }) {
   }
 }
 
-async function github(fetch, token, method, path, body) {
-  const res = await fetch(`https://api.github.com/${path}`, {
-    method,
-    headers: { authorization: `Bearer ${token}`, accept: 'application/vnd.github+json', 'content-type': 'application/json' },
-    body: body ? JSON.stringify(body) : undefined,
-  });
-  if (!res.ok) throw new Error(`GitHub ${method} ${path}: ${res.status} ${cut(await res.text(), 200)}`);
-  return res.status === 204 ? null : res.json();
+/** Паузи між спробами запиту GitHub на 5xx чи збій мережі (кандидат процесу 169, Т.189): три спроби. */
+export const GITHUB_RETRY_MS = [3000, 10000];
+const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
+
+/**
+ * Запит REST GitHub. 5xx і збій мережі — повтор із паузами GITHUB_RETRY_MS; 4xx — одразу помилка.
+ * POST не повторюється: запис міг відбутися до збою відповіді, і повтор дав би дубль — повтор робить upsertComment.
+ * Помилка, після якої повтор має сенс, має поле retriable.
+ */
+export async function github(fetch, token, method, path, body, wait = sleep) {
+  const tries = method === 'POST' ? 1 : GITHUB_RETRY_MS.length + 1;
+  for (let i = 0; ; i++) {
+    let err;
+    try {
+      const res = await fetch(`https://api.github.com/${path}`, {
+        method,
+        headers: { authorization: `Bearer ${token}`, accept: 'application/vnd.github+json', 'content-type': 'application/json' },
+        body: body ? JSON.stringify(body) : undefined,
+      });
+      if (res.ok) return res.status === 204 ? null : res.json();
+      err = new Error(`GitHub ${method} ${path}: ${res.status} ${cut(await res.text(), 200)}`);
+      err.retriable = res.status >= 500;
+    } catch (e) {
+      // збій мережі (fetch кидає TypeError); помилка розбору JSON відповіді — теж тут, повтор їй не шкодить
+      err = e;
+      err.retriable = true;
+    }
+    if (!err.retriable || i + 1 >= tries) throw err;
+    await wait(GITHUB_RETRY_MS[i]);
+  }
 }
 
-async function upsertComment(fetch, token, repo, number, body) {
+/** Коментар аудиту: знайти свій і оновити або створити. Збій 5xx чи мережі — повтор цілком (пошук знайде вже записаний). */
+export async function upsertComment(fetch, token, repo, number, body, wait = sleep) {
+  for (let i = 0; ; i++) {
+    try {
+      return await upsertOnce(fetch, token, repo, number, body, wait);
+    } catch (e) {
+      if (!e.retriable || i >= GITHUB_RETRY_MS.length) throw e;
+      await wait(GITHUB_RETRY_MS[i]);
+    }
+  }
+}
+
+async function upsertOnce(fetch, token, repo, number, body, wait) {
   let mine = null;
   for (let page = 1; page <= 30 && !mine; page++) {
-    const batch = await github(fetch, token, 'GET', `repos/${repo}/issues/${number}/comments?per_page=100&page=${page}`);
+    const batch = await github(fetch, token, 'GET', `repos/${repo}/issues/${number}/comments?per_page=100&page=${page}`, undefined, wait);
     mine = batch.find((c) => c.user?.login === 'github-actions[bot]' && c.body?.includes(MARKER)) ?? null;
     if (batch.length < 100) break;
   }
-  if (mine) await github(fetch, token, 'PATCH', `repos/${repo}/issues/comments/${mine.id}`, { body });
-  else await github(fetch, token, 'POST', `repos/${repo}/issues/${number}/comments`, { body });
+  if (mine) await github(fetch, token, 'PATCH', `repos/${repo}/issues/comments/${mine.id}`, { body }, wait);
+  else await github(fetch, token, 'POST', `repos/${repo}/issues/${number}/comments`, { body }, wait);
 }
 
 /** Аргументи Vibe: запис файлів вимкнено (діє з --auto-approve), bash лишається для пошуку і тестів. */
@@ -305,7 +339,7 @@ function runVibe(spawn, args, { env, outDir, seconds }) {
  * Аудит одного PR. git читає з оригінального checkout (вміст файлів — з об'єктів коміту голови PR,
  * а не з робочої теки: bash Vibe міг би її змінити); spawn запускає Vibe. Будь-який збій — коментар.
  */
-export async function audit({ env, fetch, log, spawn = spawnSync, gitRun }) {
+export async function audit({ env, fetch, log, spawn = spawnSync, gitRun, wait = sleep }) {
   const repo = env.GITHUB_REPOSITORY;
   const token = env.GITHUB_TOKEN;
   const key = env.MISTRAL_API_KEY;
@@ -319,7 +353,7 @@ export async function audit({ env, fetch, log, spawn = spawnSync, gitRun }) {
   const probeLine = existsSync(probeFile) ? readFileSync(probeFile, 'utf8').trim() : '';
   const say = async (r) => {
     const text = redact(renderComment(scrub({ ...r, model, probe: probeLine }, [key])), [key]);
-    await upsertComment(fetch, token, repo, number, text);
+    await upsertComment(fetch, token, repo, number, text, wait);
     log(text);
   };
   let usage = '';
@@ -327,7 +361,7 @@ export async function audit({ env, fetch, log, spawn = spawnSync, gitRun }) {
     if (!key) return await say({ ok: false, reason: 'секрету MISTRAL_VIBE_API_KEY немає' });
     if (env.SETUP_OUTCOME && env.SETUP_OUTCOME !== 'success')
       return await say({ ok: false, reason: `встановлення залежностей чи Vibe CLI не вдалося (${env.SETUP_OUTCOME}) — див. журнал джоби` });
-    const pr = await github(fetch, token, 'GET', `repos/${repo}/pulls/${number}`);
+    const pr = await github(fetch, token, 'GET', `repos/${repo}/pulls/${number}`, undefined, wait);
     const base = pr.base.sha;
     const headSha = pr.head.sha;
     const names = git('diff', '--name-only', `${base}...${headSha}`).split('\n').filter(Boolean);
@@ -473,11 +507,15 @@ async function selfTest() {
   writeFileSync(join(tmp, 'dir', 'f.ts'), 'export const answer = 43; // змінено «аудитором»\n');
   const outDir = join(tmp, 'out');
   mkdirSync(outDir);
-  const pass = async ({ stdout, status = 0, exportJson, envExtra = {}, crash = false, retry, stderr }) => {
+  const pass = async ({ stdout, status = 0, exportJson, envExtra = {}, crash = false, retry, stderr, flaky = 0 }) => {
     const posted = [];
     posted.calls = [];
     const fetch = async (url, o = {}) => {
       if (crash && url.includes('/pulls/')) return { ok: false, status: 500, text: async () => 'boom' };
+      if (flaky > 0 && url.includes('/pulls/')) {
+        flaky--;
+        return { ok: false, status: 503, text: async () => 'unavailable' };
+      }
       if (url.includes('/pulls/'))
         return { ok: true, status: 200, json: async () => ({ title: 'T', body: 'B', base: { sha: baseSha }, head: { sha: headSha } }) };
       if (url.includes('comments?per_page=100')) return { ok: true, status: 200, json: async () => [] };
@@ -506,7 +544,7 @@ async function selfTest() {
       ...envExtra,
     };
     posted.logs = [];
-    await audit({ env, fetch, log: (m) => posted.logs.push(String(m)), spawn });
+    await audit({ env, fetch, log: (m) => posted.logs.push(String(m)), spawn, wait: async () => {} });
     return posted;
   };
   const good =
@@ -603,6 +641,56 @@ async function selfTest() {
   check('прохід: збій встановлення — «Аудиту не було»', r[0].includes('встановлення залежностей'));
   r = await pass({ stdout: good, crash: true });
   check('прохід: збій GitHub API — коментар «збій скрипта»', r.length === 1 && r[0].includes('збій скрипта'));
+  // кандидат процесу 169 (Т.189): повтор запитів GitHub на 5xx і збій мережі
+  {
+    const waits = [];
+    const wait = async (ms) => waits.push(ms);
+    const ok = (json) => ({ ok: true, status: 200, json: async () => json });
+    const bad = (status) => ({ ok: false, status, text: async () => 'x' });
+    const seq = (list) => {
+      const calls = [];
+      const f = async (url, o = {}) => {
+        calls.push(`${o.method} ${url}`);
+        const next = list.shift();
+        if (next === 'net') throw new TypeError('fetch failed');
+        return next;
+      };
+      f.calls = calls;
+      return f;
+    };
+    let f = seq([bad(503), bad(502), ok({ n: 1 })]);
+    let got = await github(f, 't', 'GET', 'x', undefined, wait).catch((e) => e);
+    check(
+      'github: 503, 502, 200 — результат з третьої спроби, паузи 3 і 10 с',
+      got.n === 1 && f.calls.length === 3 && waits.join() === '3000,10000'
+    );
+    waits.length = 0;
+    f = seq([bad(503), bad(503), bad(503), ok({})]);
+    got = await github(f, 't', 'GET', 'x', undefined, wait).catch((e) => e);
+    check('github: 503 тричі — помилка retriable після трьох спроб', got instanceof Error && got.retriable && f.calls.length === 3);
+    waits.length = 0;
+    f = seq([bad(404), ok({})]);
+    got = await github(f, 't', 'GET', 'x', undefined, wait).catch((e) => e);
+    check('github: 404 — одразу помилка без повтору', got instanceof Error && !got.retriable && f.calls.length === 1 && waits.length === 0);
+    f = seq(['net', ok({ n: 2 })]);
+    got = await github(f, 't', 'PATCH', 'x', {}, wait).catch((e) => e);
+    check('github: збій мережі — повтор', got.n === 2 && f.calls.length === 2);
+    f = seq([bad(503), ok({})]);
+    got = await github(f, 't', 'POST', 'x', {}, wait).catch((e) => e);
+    check('github: POST не повторюється', got instanceof Error && got.retriable && f.calls.length === 1);
+    f = seq([ok([]), bad(503), ok([]), { ok: true, status: 201, json: async () => ({}) }]);
+    got = await upsertComment(f, 't', 'o/r', 5, 'b', wait).catch((e) => e);
+    check(
+      'upsertComment: POST 503 — пошук і POST ще раз',
+      !(got instanceof Error) && f.calls.length === 4 && f.calls.filter((c) => c.startsWith('POST')).length === 2
+    );
+    f = seq([ok([]), bad(422)]);
+    got = await upsertComment(f, 't', 'o/r', 5, 'b', wait).catch((e) => e);
+    check('upsertComment: 422 — без повтору', got instanceof Error && f.calls.length === 2);
+    // поломка повтору: без нього 503 на /pulls/ одразу дає «збій скрипта» — перевіряє наступний прохід
+  }
+  r = await pass({ stdout: good, exportJson: '{"outcome":"finished","usage":{},"cost_usd":0.1}', flaky: 2 });
+  check('прохід: два 503 на /pulls/ — аудит іде далі', r.length === 1 && !r[0].includes('збій скрипта'));
   rmSync(tmp, { recursive: true, force: true });
   console.log(`audit-vibe-cli self-test: помилок ${errors}`);
   return errors;
