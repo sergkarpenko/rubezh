@@ -7,6 +7,7 @@
 
 import { describe, expect, it } from 'vitest';
 import fc from 'fast-check';
+import { ENEMY_ORDER, makeEnemy } from './core/enemies';
 import {
   createGame,
   DASH_AP_BONUS,
@@ -26,6 +27,9 @@ import {
   unitAt,
   useDash,
   useMedkit,
+  weaponHasMode,
+  distance,
+  PRECISE_DAMAGE_MULT,
   type BattleRole,
   type GameState,
   type ShotMode,
@@ -60,6 +64,9 @@ const arenaArb = fc.record({
   seed: fc.nat(),
 });
 type Arena = typeof arenaArb extends fc.Arbitrary<infer T> ? T : never;
+// п17.2: стартові позиції юнітів бою (ключ — масив юнітів з build) — відтворення позицій за журналом
+const start = new WeakMap<object, Map<string, Vec2>>();
+const startOf = new WeakMap<GameState, Map<string, Vec2>>();
 
 function build(a: Arena): GameState {
   const n = a.w * a.h;
@@ -74,15 +81,20 @@ function build(a: Arena): GameState {
     taken.add(c);
     if (i === 0) first = c;
     const side = i % 2 === 0 ? 'player' : 'alien';
-    return makeUnit({ id: side[0] + i, side, pos: at(c), hp: 10 - (i % 3) });
+    if (side === 'player') return makeUnit({ id: side[0] + i, side, pos: at(c), hp: 10 - (i % 3) });
+    // п17.2 (ADR-0149): вороги всіх чотирьох типів — тип з номера клітинки (spot < 7 — демон: приклади Т.18 лишаються з демоном)
+    const e = makeEnemy(ENEMY_ORDER[Math.floor(spot / 7) % ENEMY_ORDER.length], side[0] + i, 0, at(c));
+    e.hp = e.maxHp - (i % 3);
+    return e;
   });
+  start.set(units, new Map(units.map((u) => [u.id, { ...u.pos }])));
   const blocked = new Set(
     a.walls
       .map((c) => c % n)
       .filter((c) => !taken.has(c))
       .map((c) => key(at(c)))
   );
-  return createGame({
+  const state = createGame({
     map: { width: a.w, height: a.h, blocked },
     units,
     rng: mulberry32(a.seed),
@@ -90,6 +102,8 @@ function build(a: Arena): GameState {
     evacZone: units.filter((u) => u.side === 'player').map((u) => u.pos),
     roles: Object.fromEntries(units.filter((u) => u.side === 'player').map((u, i) => [u.id, { role: ROLES[i % 3], used: false }])),
   });
+  startOf.set(state, start.get(units)!);
+  return state;
 }
 
 // Дія: тип і «сирі» числа; яке з них потрібне — вирішує тип. Малий індекс бере
@@ -168,6 +182,28 @@ function broken(s: GameState, ids: string): string[] {
       (e) => ((e.type === 'dash' || e.type === 'field_aid') && e.unitId === id) || (e.type === 'precise_shot' && e.shooterId === id)
     ).length;
     if (n !== (r.used ? 1 : 0)) bad.push(id + ': дія ролі ' + n + ' разів, used ' + r.used);
+  }
+  // п17.2 (ADR-0149, «Наслідки»): позиції — відтворенням журналу від старту; кожен постріл —
+  // режимом своєї зброї і в межах її дальності (гончак — не далі 1 клітинки); влучання — не
+  // менше 1 шкоди і в межах [max(1, ⌊мін × m⌋ − броня), max(1, ⌊макс × m⌋ − броня)], де m — множник
+  // «Точного пострілу», якщо перед подією стоїть precise_shot того самого стрільця (аудит PR #507)
+  const pos = new Map(startOf.get(s) ?? []);
+  const byId = new Map(all(s).map((u) => [u.id, u]));
+  for (const [i, e] of s.log.entries()) {
+    if (e.type === 'move') pos.set(e.unitId, e.to);
+    if (e.type !== 'shot') continue;
+    const sh = byId.get(e.shooterId)!;
+    const tg = byId.get(e.targetId)!;
+    if (!weaponHasMode(sh.weapon, e.mode)) bad.push(sh.id + ': режим ' + e.mode + ' не зброї «' + sh.weapon.name + '»');
+    if (distance(pos.get(sh.id)!, pos.get(tg.id)!) > sh.weapon.range) bad.push(sh.id + ': постріл далі дальності ' + sh.weapon.range);
+    if (!e.hit) continue;
+    // precise_shot стоїть перед shot; при вбивстві між ними — death
+    const prev = s.log[i - 1]?.type === 'death' ? s.log[i - 2] : s.log[i - 1];
+    const m = prev !== undefined && prev.type === 'precise_shot' && prev.shooterId === sh.id ? PRECISE_DAMAGE_MULT : 1;
+    const armor = tg.armor ?? 0;
+    const lo = Math.max(1, Math.floor(sh.weapon.damage[0] * m) - armor);
+    const hi = Math.max(1, Math.floor(sh.weapon.damage[1] * m) - armor);
+    if (e.damage < lo || e.damage > hi) bad.push(tg.id + ': шкода ' + e.damage + ' поза ' + lo + '–' + hi + ' (броня ' + armor + ')');
   }
   return bad;
 }

@@ -5,6 +5,7 @@
 // дозор, скасування, гарячі клавіші) на детермінованій партії (сід 42).
 // DOM-флоу застосунку — у main.ui.test.ts.
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { EYE_BEAM, GOLEM_CANNON, HOUND_CLAWS } from '../core/enemies';
 import { advanceTime, missionTargets } from '../core/geo';
 import { distance, hasLineOfSight, type Unit } from '../core/combat';
 import { findPath } from '../core/map';
@@ -1107,6 +1108,23 @@ describe('Т.131: меню на ворогові', () => {
     return { f, s, a };
   }
   const menu = (): HTMLElement => document.getElementById('benemy')!;
+
+  it('п17.2: тип ворога — #binfo і меню: «впритул», «лише прицільний», броня', () => {
+    const cases = [
+      { w: HOUND_CLAWS, armor: undefined, info: '(пошкодження 3–6, впритул).', line: 'Шкода 3–6 · впритул' },
+      { w: EYE_BEAM, armor: undefined, info: '(пошкодження 3–7, дальність 16, лише прицільний).', line: 'Лише прицільний' },
+      { w: GOLEM_CANNON, armor: 2, info: '(пошкодження 3–6, дальність 8). Броня 2: −2 від влучання.', line: 'Броня 2: −2 від влучання' },
+    ];
+    for (const c of cases) {
+      const { f, a } = setup();
+      a.weapon = c.w;
+      if (c.armor !== undefined) a.armor = c.armor;
+      clickAt(f, a.pos.x, a.pos.y);
+      expect(f.binfo()).toContain('«' + c.w.name + '» ' + c.info);
+      f.battle.renderBattle();
+      expect(menu().textContent).toContain(c.line);
+    }
+  });
 
   it('тап по демону відкриває меню (картка видна після кадру), повторний тап — закриває', () => {
     const { f, a } = setup();

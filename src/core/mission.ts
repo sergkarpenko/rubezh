@@ -17,7 +17,8 @@
 //   сіди seed+0..N, доки всі точки висадки і НЛО не стануть досяжними з зони
 //   висадки — інакше місію фізично неможливо виграти. Перший сід, що підійшов,
 //   детермінований для даної місії.
-// - Розвідник → 2 прибульці, збирач → 3 (баланс підбере ітерація 6).
+// - Розвідник → 2 прибульці, збирач → 3 (баланс підбере ітерація 6); п17.2 (ADR-0149):
+//   склад за добою — enemyMix (src/core/enemies.ts), доби 1–5 — лише демони.
 // - Перемога = усі прибульці мертві → НЛО зникає з геосцени («зачищено»).
 // - Поразка = увесь загін мертвий → НЛО лишається до кінця вікна; загін
 //   втрачено (перма-смерть). П15.2 (ADR-0075): третій результат «евакуйовано» —
@@ -28,7 +29,6 @@
 //   (для точкових тестів без ростеру).
 
 import {
-  ALIEN_CUTTER,
   RIFLE,
   createGame,
   isInside,
@@ -42,7 +42,8 @@ import {
   type Vec2,
 } from './combat';
 import { makeTestMap } from './map';
-import { missionTargets, type GeoState, type Ufo, type UfoKind } from './geo';
+import { geoDay, missionTargets, type GeoState, type Ufo, type UfoKind } from './geo';
+import { enemyMix, makeEnemies } from './enemies';
 
 export const MISSION_MAP_W = 20;
 export const MISSION_MAP_H = 20;
@@ -59,8 +60,6 @@ export const ALIEN_SPAWN: Vec2[] = [
 ];
 
 export const ALIENS_PER_KIND: Record<UfoKind, number> = { розвідник: 2, збирач: 3 };
-// Точність прибульців — за балансом 3.6 (.50/.45/.40), циклічно.
-const ALIEN_ACCURACY = [0.5, 0.45, 0.4];
 
 // Детермінований сід місії (FNV-1a) з ідентифікатора НЛО та хвилини запуску.
 // Один і той самий хід гри → та сама мапа і той самий бойовий RNG.
@@ -155,20 +154,11 @@ export function createMission(geo: GeoState, ufoId: string, opts: CreateMissionO
     u.pos = { ...SQUAD_SPAWN[i] };
   });
 
+  // п17.2 (ADR-0149 п. 3, 8, 12): склад за добою кампанії окремим генератором від сіду
+  // місії — бойовий RNG не зсувається; доби 1–5 — лише демони, як до фази 17.
+  // П12.6 (ADR-0064): «демон Розриву», не «прибулець».
   const n = ALIENS_PER_KIND[ufo.kind];
-  const aliens: Unit[] = [];
-  for (let i = 0; i < n; i++) {
-    aliens.push(
-      makeUnit({
-        id: 'a' + (i + 1),
-        side: 'alien',
-        name: 'Демон ' + (i + 1), // П12.6 (ADR-0064): «демон Розриву», не «прибулець»
-        pos: { ...ALIEN_SPAWN[i] },
-        firingAccuracy: ALIEN_ACCURACY[i % ALIEN_ACCURACY.length],
-        weapon: ALIEN_CUTTER,
-      })
-    );
-  }
+  const aliens: Unit[] = makeEnemies(enemyMix(geoDay(geo), n, seed), ALIEN_SPAWN);
 
   const state = createGame({ map, units: [...squad, ...aliens], rng, items: opts.items, evacZone: SQUAD_SPAWN, roles: opts.roles });
   return { briefing: { ufoId: ufo.id, kind: ufo.kind, aliens: n, minute: geo.minute }, state };

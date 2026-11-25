@@ -6,18 +6,19 @@
 // ADR-0003: Детермінізм — RNG не потрібен, порядок цілей фіксований
 // ADR-0006: Туман війни — список цілей формує викликаючий (visibleEnemies)
 
-import { distance, hasLineOfSight, type GameState, type ShotMode, type Unit, type Vec2 } from './combat';
+import { distance, hasLineOfSight, weaponHasMode, type GameState, type ShotMode, type Unit, type Vec2 } from './combat';
 import { findPath } from './map';
 
 // Пріоритет режимів пострілу: за очікуваним пошкодженням на постріл.
 export const MODE_PRIORITY: ShotMode[] = ['auto', 'aimed', 'snap'];
 
 // Найкращий доступний режим пострілу: дальність + LOS + AP, інакше null.
+// п17.2 (ADR-0149 п. 10): лише режими зброї (`Weapon.only`) — гончак б'є, око цілиться.
 export function bestShootMode(state: GameState, u: Unit, target: Unit): ShotMode | null {
   if (distance(u.pos, target.pos) > u.weapon.range) return null;
   if (!hasLineOfSight(state, u.pos, target.pos)) return null;
   for (const mode of MODE_PRIORITY) {
-    if (u.ap >= u.weapon.modes[mode].apCost) return mode;
+    if (weaponHasMode(u.weapon, mode) && u.ap >= u.weapon.modes[mode].apCost) return mode;
   }
   return null;
 }

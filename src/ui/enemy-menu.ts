@@ -4,6 +4,9 @@
 // (стріляють одразу) і «Граната» (зводить гранату з епіцентром на демоні).
 // Укриття в грі немає: шанс — лише від стрільця і режиму (ADR-0004).
 // Чисті функції: стан бою → дані картки → HTML і місце; DOM чіпає src/ui/battle.ts.
+// п17.2 (ADR-0149 п. 15; рішення власника «А. Окремий рядок»): ближній бій — «впритул»
+// замість дальності; зброя з одним режимом — рядок «Лише …»; броня — рядок «Броня N: −N
+// від влучання». Назва типу — в імені («Гончак 1»).
 import {
   GRENADE_AP_COST,
   GRENADE_RANGE,
@@ -35,6 +38,8 @@ export interface EnemyMenuView {
   weapon: string;
   damage: readonly [number, number];
   weaponRange: number;
+  only: ShotMode | null; // п17.2: єдиний режим зброї ворога (око — прицільний), інакше null
+  armor: number; // п17.2: броня (голем — 2), 0 — без броні
   // null — бійця не вибрано: картка лише з інформацією
   shooter: { dist: number; shots: EnemyMenuShot[]; grenade: MenuBlock } | null;
 }
@@ -59,6 +64,8 @@ export function enemyMenuView(state: GameState, target: Unit, shooter: Unit | un
     weapon: w.name,
     damage: w.damage,
     weaponRange: w.range,
+    only: w.only?.length === 1 ? w.only[0] : null,
+    armor: target.armor ?? 0,
     shooter: null,
   };
   if (shooter === undefined) return view;
@@ -137,9 +144,11 @@ export function enemyMenuHtml(v: EnemyMenuView): string {
     v.damage[0] +
     '–' +
     v.damage[1] +
-    ' · дальність ' +
-    v.weaponRange +
+    (v.weaponRange === 1 ? ' · впритул' : ' · дальність ' + v.weaponRange) +
     '</div>';
+  // п17.2: рядок єдиного режиму — для зброї на відстані (удар гончака вже «впритул»)
+  if (v.only !== null && v.weaponRange > 1) html += '<div class="em-line">Лише ' + SHOT_LABEL[v.only].toLowerCase() + '</div>';
+  if (v.armor > 0) html += '<div class="em-line">Броня ' + v.armor + ': −' + v.armor + ' від влучання</div>';
   const s = v.shooter;
   if (s === null) return html + '<div class="em-line em-hint">Виберіть бійця — тоді постріли.</div>';
   html += '<div class="em-line">Відстань ' + s.dist + '</div><div class="em-acts">';
