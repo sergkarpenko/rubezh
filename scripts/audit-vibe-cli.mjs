@@ -218,8 +218,8 @@ const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
  * POST не повторюється: запис міг відбутися до збою відповіді, і повтор дав би дубль — повтор робить upsertComment.
  * Помилка, після якої повтор має сенс, має поле retriable.
  */
-export async function github(fetch, token, method, path, body, wait = sleep) {
-  const tries = method === 'POST' ? 1 : GITHUB_RETRY_MS.length + 1;
+export async function github(fetch, token, method, path, body, wait = sleep, once = false) {
+  const tries = method === 'POST' || once ? 1 : GITHUB_RETRY_MS.length + 1;
   for (let i = 0; ; i++) {
     let err;
     try {
@@ -228,12 +228,12 @@ export async function github(fetch, token, method, path, body, wait = sleep) {
         headers: { authorization: `Bearer ${token}`, accept: 'application/vnd.github+json', 'content-type': 'application/json' },
         body: body ? JSON.stringify(body) : undefined,
       });
-      if (res.ok) return res.status === 204 ? null : res.json();
+      if (res.ok) return res.status === 204 ? null : await res.json();
       err = new Error(`GitHub ${method} ${path}: ${res.status} ${cut(await res.text(), 200)}`);
       err.retriable = res.status >= 500;
     } catch (e) {
       // збій мережі (fetch кидає TypeError); помилка розбору JSON відповіді — теж тут, повтор їй не шкодить
-      err = e;
+      err = e instanceof Error ? e : new Error(String(e));
       err.retriable = true;
     }
     if (!err.retriable || i + 1 >= tries) throw err;
@@ -241,7 +241,10 @@ export async function github(fetch, token, method, path, body, wait = sleep) {
   }
 }
 
-/** Коментар аудиту: знайти свій і оновити або створити. Збій 5xx чи мережі — повтор цілком (пошук знайде вже записаний). */
+/**
+ * Коментар аудиту: знайти свій і оновити або створити. Збій 5xx чи мережі — повтор цілком (пошук знайде вже записаний);
+ * запити всередині — по одній спробі, щоб повтори не множились (до трьох спроб операції, паузи 3 і 10 с).
+ */
 export async function upsertComment(fetch, token, repo, number, body, wait = sleep) {
   for (let i = 0; ; i++) {
     try {
@@ -256,11 +259,19 @@ export async function upsertComment(fetch, token, repo, number, body, wait = sle
 async function upsertOnce(fetch, token, repo, number, body, wait) {
   let mine = null;
   for (let page = 1; page <= 30 && !mine; page++) {
-    const batch = await github(fetch, token, 'GET', `repos/${repo}/issues/${number}/comments?per_page=100&page=${page}`, undefined, wait);
+    const batch = await github(
+      fetch,
+      token,
+      'GET',
+      `repos/${repo}/issues/${number}/comments?per_page=100&page=${page}`,
+      undefined,
+      wait,
+      true
+    );
     mine = batch.find((c) => c.user?.login === 'github-actions[bot]' && c.body?.includes(MARKER)) ?? null;
     if (batch.length < 100) break;
   }
-  if (mine) await github(fetch, token, 'PATCH', `repos/${repo}/issues/comments/${mine.id}`, { body }, wait);
+  if (mine) await github(fetch, token, 'PATCH', `repos/${repo}/issues/comments/${mine.id}`, { body }, wait, true);
   else await github(fetch, token, 'POST', `repos/${repo}/issues/${number}/comments`, { body }, wait);
 }
 
@@ -687,6 +698,26 @@ async function selfTest() {
     f = seq([ok([]), bad(422)]);
     got = await upsertComment(f, 't', 'o/r', 5, 'b', wait).catch((e) => e);
     check('upsertComment: 422 — без повтору', got instanceof Error && f.calls.length === 2);
+    f = seq([bad(503), bad(503), bad(503), bad(503)]);
+    got = await upsertComment(f, 't', 'o/r', 5, 'b', wait).catch((e) => e);
+    check('upsertComment: тривалий 503 — три спроби операції, без вкладених повторів', got instanceof Error && f.calls.length === 3);
+    f = seq([
+      {
+        ok: true,
+        status: 200,
+        json: async () => {
+          throw new SyntaxError('bad json');
+        },
+      },
+      ok({ n: 3 }),
+    ]);
+    got = await github(f, 't', 'GET', 'x', undefined, wait).catch((e) => e);
+    check('github: зіпсований JSON відповіді — повтор', got.n === 3 && f.calls.length === 2);
+    f = async () => {
+      throw 'str';
+    };
+    got = await github(f, 't', 'POST', 'x', {}, wait).catch((e) => e);
+    check('github: кинуто не Error — помилка з retriable', got instanceof Error && got.retriable === true);
     // поломка повтору: без нього 503 на /pulls/ одразу дає «збій скрипта» — перевіряє наступний прохід
   }
   r = await pass({ stdout: good, exportJson: '{"outcome":"finished","usage":{},"cost_usd":0.1}', flaky: 2 });

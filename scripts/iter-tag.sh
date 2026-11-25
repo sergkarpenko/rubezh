@@ -77,9 +77,10 @@ summary() {
 # Назва PR кроку фази («п16.5 (Т.187): …») — друкує очікуваний тег iter-16.5; інакше нічого.
 # Альтернатива, а не набір у дужках: літера «п» — два байти, набір залежав би від локалі.
 step_hint() {
-    step="$(printf '%s\n' "$1" | grep -oE '(^|[^0-9A-Za-z.])п[0-9]+\.[0-9]+' | head -n 1 || true)"
+    step="$(printf '%s\n' "$1" | grep -oE '(^|[^0-9A-Za-z.])п[0-9]+\.[0-9]+([^0-9.]|$)' | head -n 1 || true)"
     [ -n "$step" ] || return 0
-    printf 'iter-%s\n' "${step##*п}"
+    step="${step##*п}"
+    printf 'iter-%s\n' "${step%%[!0-9.]*}"
 }
 
 preview() {
@@ -239,6 +240,8 @@ self_test() {
     expect 'hint: п без крапки' 0 '' step_hint 'п16 — план'
     expect 'hint: п після цифри' 0 '' step_hint 'v2п16.5'
     expect 'hint: п після латинської літери' 0 '' step_hint 'vп16.5'
+    expect 'hint: п після крапки' 0 '' step_hint 'v1.п16.5'
+    expect 'hint: три числа' 0 '' step_hint 'п16.5.3 — щось'
 
     # джоба check
     expect 'preview: без рядка' 0 '|створень 0' run_stub preview 'PR_BODY=опис'
