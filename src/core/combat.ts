@@ -88,8 +88,8 @@ export type GameEvent =
   | { type: 'evac_unit'; unitId: string }
   // п16.3 (ADR-0147 п. 11): дії ролей. «Точний постріл» — мітка перед звичайною
   // подією shot (режим aimed, шкода вже з множником), тож анімація і звук пострілу
-  // ті самі, що в прицільного.
-  | { type: 'dash'; unitId: string; ap: number }
+  // ті самі, що в прицільного; при вбивстві — precise_shot, death, shot (як у fireOnce).
+  | { type: 'dash'; unitId: string; bonus: number } // bonus — додані AP (не підсумок)
   | { type: 'precise_shot'; shooterId: string; targetId: string }
   | { type: 'field_aid'; unitId: string; targetId: string; healed: number };
 
@@ -298,7 +298,8 @@ export function createGame(opts: CreateGameOptions): GameState {
     evacZone: opts.evacZone?.map((c) => ({ ...c })), // П15.2: копія — зона не мутується боєм
     evacuated: [], // П15.2 (ADR-0075): евакуйовані цього бою
   };
-  if (opts.roles) state.roles = opts.roles; // п16.3: без ролей — стан як до п16.3
+  // п16.3: копія — бій змінює used, переданий об'єкт лишається як був; без ролей — стан як до п16.3
+  if (opts.roles) state.roles = Object.fromEntries(Object.entries(opts.roles).map(([id, r]) => [id, { ...r }]));
   for (const u of state.units) if (u.side === state.activeSide) u.ap = u.maxAp;
   return state;
 }
@@ -586,8 +587,9 @@ const ROLE_ACTION_NAMES: Record<BattleRole, string> = {
 const ROLE_AP_COST: Record<BattleRole, number> = { assault: 0, sniper: PRECISE_AP_COST, medic: FIELD_AID_AP_COST };
 
 // Чому дія ролі юніта недоступна без огляду цілі (null — доступна): немає ролі,
-// роль інша, вже використано, юніта немає на полі, бракує AP. Для плитки UI (п16.4) і бота; ціль
-// перевіряє сама дія. Не кидає — читає стан.
+// роль інша, вже використано, юніта немає на полі, загинув, не його хід, бракує AP.
+// Для плитки UI (п16.4) і бота; ціль перевіряє сама дія — команда без цілі
+// відмовляє рівно з цим текстом. Не кидає — читає стан.
 export function roleActionBlock(state: GameState, unitId: string, role: BattleRole): string | null {
   const slot = state.roles?.[unitId];
   if (!slot) return 'Немає ролі: дія ' + ROLE_ACTION_NAMES[role] + ' недоступна';
@@ -595,17 +597,19 @@ export function roleActionBlock(state: GameState, unitId: string, role: BattleRo
   if (slot.used) return ROLE_ACTION_NAMES[role] + ' вже використано в цьому бою';
   const u = state.units.find((x) => x.id === unitId);
   if (!u) return 'Оперативника немає на полі бою'; // евакуйований (ADR-0075)
+  if (!u.alive) return 'Оперативник загинув';
+  if (u.side !== state.activeSide) return 'Зараз хід демонів Розриву';
   if (u.ap < ROLE_AP_COST[role]) return 'Недостатньо очок дій: ' + ROLE_ACTION_NAMES[role] + ' — ' + ROLE_AP_COST[role] + ' AP';
   return null;
 }
 
-// Спільні перевірки дії ролі: активна сторона, роль, прапорець, AP. Порядок
+// Спільні перевірки дії ролі — roleActionBlock (роль, прапорець, поле, хід, AP)
+// до пошуку юніта: відмова — з тим самим текстом, що на плитці. Порядок
 // фіксований (детермінізм, ADR-0003); стан не змінюється до кінця перевірок.
-function requireRole(state: GameState, u: Unit, role: BattleRole): UnitRole {
-  requireActive(state, u);
-  const reason = roleActionBlock(state, u.id, role);
+function requireRole(state: GameState, unitId: string, role: BattleRole): { u: Unit; slot: UnitRole } {
+  const reason = roleActionBlock(state, unitId, role);
   if (reason !== null) throw new Error(reason);
-  return state.roles![u.id];
+  return { u: getUnit(state, unitId), slot: state.roles![unitId] };
 }
 
 export interface DashResult {
@@ -615,21 +619,20 @@ export interface DashResult {
 // «Ривок» штурмовика (ADR-0147 п. 3): +4 AP цього ходу, сам коштує 0 AP;
 // AP може перевищити максимум — наступний хід відновлює maxAp (endTurn).
 export function useDash(state: GameState, unitId: string): DashResult {
-  const u = getUnit(state, unitId);
-  const slot = requireRole(state, u, 'assault');
+  const { u, slot } = requireRole(state, unitId, 'assault');
   u.ap += DASH_AP_BONUS;
   slot.used = true;
-  state.log.push({ type: 'dash', unitId: u.id, ap: DASH_AP_BONUS });
+  state.log.push({ type: 'dash', unitId: u.id, bonus: DASH_AP_BONUS });
   return { ap: u.ap };
 }
 
 // «Точний постріл» снайпера (ADR-0147 п. 3, 11): 6 AP, один постріл з
 // модифікатором прицільного режиму (точність, дальність і лінія вогню — як у
-// aimed), шкода ×1,5 з округленням униз. Подія precise_shot — перед shot.
+// aimed), шкода ×1,5 з округленням униз. Подія precise_shot — перед shot
+// (при вбивстві — precise_shot, death, shot).
 export function preciseShot(state: GameState, shooterId: string, targetId: string): AttackResult {
-  const s = getUnit(state, shooterId);
+  const { u: s, slot } = requireRole(state, shooterId, 'sniper');
   const t = getUnit(state, targetId);
-  const slot = requireRole(state, s, 'sniper');
   assertCanFire(state, s, t, 'aimed');
   s.ap -= PRECISE_AP_COST;
   slot.used = true;
@@ -642,8 +645,7 @@ export function preciseShot(state: GameState, shooterId: string, targetId: strin
 // без гелю; ціль і сусідство — за правилом гелю (useMedkit): сам медик або
 // свій на відстані ≤1 (Чебишев), лише поранений.
 export function fieldAid(state: GameState, medicId: string, targetId: string): HealResult {
-  const u = getUnit(state, medicId);
-  const slot = requireRole(state, u, 'medic');
+  const { u, slot } = requireRole(state, medicId, 'medic');
   const t = getUnit(state, targetId);
   if (!t.alive) throw new Error('Ціль уже мертва');
   if (t.side !== u.side) throw new Error('Допомога можлива лише своїм');

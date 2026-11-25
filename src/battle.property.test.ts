@@ -38,7 +38,7 @@ import { aiStep } from './core/ai';
 import { botTurn } from './core/ai-bot';
 
 const RUN = { seed: 20261111, numRuns: 150 };
-const ROLES: BattleRole[] = ['assault', 'sniper', 'medic'];
+const ROLES: BattleRole[] = ['medic', 'sniper', 'assault'];
 const key = (p: Vec2): string => p.x + ',' + p.y;
 const DIRS: Vec2[] = [
   { x: 1, y: 0 },
@@ -51,7 +51,7 @@ const DIRS: Vec2[] = [
 
 // Бойовище: поле 5×5…9×9, стіни, 4–6 юнітів почергово двох сторін, у кожного
 // аптечка і граната; зона евакуації — стартові клітинки оперативників.
-// п16.3: оперативники мають ролі по черзі — штурмовик, снайпер, медик.
+// п16.3: оперативники мають ролі по черзі — медик, снайпер, штурмовик.
 const arenaArb = fc.record({
   w: fc.integer({ min: 5, max: 9 }),
   h: fc.integer({ min: 5, max: 9 }),
@@ -65,10 +65,14 @@ function build(a: Arena): GameState {
   const n = a.w * a.h;
   const at = (c: number): Vec2 => ({ x: c % a.w, y: Math.floor(c / a.w) });
   const taken = new Set<number>();
+  let first = 0;
   const units = a.spots.map((spot, i) => {
-    let c = spot % n;
+    // п16.3: другий оперативник — часто поруч із першим (медиком), щоб
+    // «Польова допомога» сусідові траплялась у згенерованих боях
+    let c = i === 2 && spot % 2 === 0 ? (first + 1) % n : spot % n;
     while (taken.has(c)) c = (c + 1) % n;
     taken.add(c);
+    if (i === 0) first = c;
     const side = i % 2 === 0 ? 'player' : 'alien';
     return makeUnit({ id: side[0] + i, side, pos: at(c), hp: 10 - (i % 3) });
   });
@@ -136,8 +140,12 @@ function broken(s: GameState, ids: string): string[] {
   for (const u of s.units) {
     if (!isInside(s.map, u.pos) || isBlocked(s.map, u.pos)) bad.push(u.id + ': поза полем або в стіні');
     if (u.hp < 0 || u.hp > u.maxHp || u.alive !== u.hp > 0) bad.push(u.id + ': hp ' + u.hp + ', alive ' + u.alive);
-    // п16.3: «Ривок» дає AP понад максимум — лише штурмовикові, що його використав
-    const dashed = s.roles?.[u.id]?.role === 'assault' && s.roles[u.id].used;
+    // п16.3: «Ривок» дає AP понад максимум — лише штурмовикові і лише в хід ривка
+    // (подія dash цього юніта після початку останнього ходу його сторони: AP відновлює
+    // лише endTurn на початку свого ходу, тож у хід демонів надлишок лишається)
+    const lastTurn = s.log.reduce((last, e, i) => (e.type === 'turn' && e.side === u.side ? i : last), -1);
+    // загиблий після ривка зберігає AP, з якими загинув
+    const dashed = s.log.some((e, i) => (i > lastTurn || !u.alive) && e.type === 'dash' && e.unitId === u.id);
     if (u.ap < 0 || u.ap > u.maxAp + (dashed ? DASH_AP_BONUS : 0)) bad.push(u.id + ': ap ' + u.ap);
     if (u.alive && cells.has(key(u.pos))) bad.push('двоє живих у клітинці ' + key(u.pos));
     if (u.alive) cells.add(key(u.pos));
@@ -201,7 +209,15 @@ function act(s: GameState, a: Act, check: boolean): void {
     else if (a.t === 'evac') evacuate(s, u.id);
     else if (a.t === 'dash') useDash(s, u.id);
     else if (a.t === 'precise') preciseShot(s, u.id, v.id);
-    else if (a.t === 'aid') fieldAid(s, u.id, a.v % 2 === 0 ? u.id : s.units[a.v % s.units.length].id);
+    else if (a.t === 'aid')
+      fieldAid(
+        s,
+        u.id,
+        pick(
+          s.units.filter((x) => x.alive && x.side === u.side),
+          a.v
+        ).id
+      );
     else endTurn(s);
   } catch (e) {
     if ((e as Error).constructor !== Error) throw e; // TypeError тощо — дефект, а не відмова

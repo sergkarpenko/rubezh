@@ -54,7 +54,7 @@ describe('п16.3: «Ривок» штурмовика', () => {
     expect(useDash(g, 's1')).toEqual({ ap: 14 });
     expect(g.units[0].ap).toBe(10 + DASH_AP_BONUS);
     expect(g.roles?.s1.used).toBe(true);
-    expect(g.log).toEqual([{ type: 'dash', unitId: 's1', ap: 4 }]);
+    expect(g.log).toEqual([{ type: 'dash', unitId: 's1', bonus: 4 }]);
   });
 
   it('з нулем AP теж працює; наступний хід — знову максимум', () => {
@@ -185,8 +185,14 @@ describe('п16.3: недоступна дія ролі — українська 
     expect(() => useDash(g, 's1')).toThrow('«Ривок» — дія ролі штурмовика');
     expect(() => fieldAid(g, 's1', 's2')).toThrow('«Польова допомога» — дія ролі медика');
     endTurn(g);
-    expect(() => preciseShot(g, 's1', 'a1')).toThrow('Зараз хід не сторони player');
+    expect(roleActionBlock(g, 's1', 'sniper')).toBe('Зараз хід демонів Розриву');
+    expect(() => preciseShot(g, 's1', 'a1')).toThrow('Зараз хід демонів Розриву');
     expect(g.roles?.s1.used).toBe(false);
+    endTurn(g);
+    g.units[0].alive = false;
+    g.units[0].hp = 0;
+    expect(roleActionBlock(g, 's1', 'sniper')).toBe('Оперативник загинув');
+    expect(() => preciseShot(g, 's1', 'a1')).toThrow('Оперативник загинув');
   });
 
   it('евакуйований і хід демонів: дія ролі недоступна', () => {
@@ -198,12 +204,20 @@ describe('п16.3: недоступна дія ролі — українська 
       units: [makeUnit({ id: 's1', side: 'player', pos: { x: 2, y: 2 } }), makeUnit({ id: 'a1', side: 'alien', pos: { x: 8, y: 2 } })],
     });
     endTurn(g);
-    expect(() => useDash(g, 's1')).toThrow('Зараз хід не сторони player');
+    expect(() => useDash(g, 's1')).toThrow('Зараз хід демонів Розриву');
     endTurn(g);
     evacuate(g, 's1');
     expect(roleActionBlock(g, 's1', 'assault')).toBe('Оперативника немає на полі бою');
-    expect(() => useDash(g, 's1')).toThrow('Невідомий юніт: s1');
+    expect(() => useDash(g, 's1')).toThrow('Оперативника немає на полі бою');
     expect(g.roles?.s1.used).toBe(false);
+  });
+
+  it("ролі в стані бою — копія: бій не змінює переданий об'єкт", () => {
+    const roles = { s1: slot('assault') };
+    const g = roleGame(roles);
+    useDash(g, 's1');
+    expect(roles.s1.used).toBe(false);
+    expect(g.roles?.s1.used).toBe(true);
   });
 
   it('бій без ролей — у стані немає поля roles (байт-у-байт як до п16.3)', () => {
