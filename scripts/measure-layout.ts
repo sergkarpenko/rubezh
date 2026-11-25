@@ -3,12 +3,15 @@
 // Поза npm test і test:e2e. Збірки піднімати окремо (docs/agents/ui.md, «Крок вигляду»):
 //   npx vite preview --port 4175 --strictPort --outDir /tmp/dist-main   (копія dist main)   і   npx vite preview --port 4176 --strictPort (гілка)
 // Запуск із кореня клону:
-//   E2E_CHROME=/шлях/до/chrome node scripts/run-ts.mjs scripts/measure-layout.ts <адреса> [dj] [--sizes 1366x768,390x844] > main.json
+//   E2E_CHROME=/шлях/до/chrome node scripts/run-ts.mjs scripts/measure-layout.ts <адреса> [inter] [--sizes 1366x768,390x844] > main.json
 //   diff main.json branch.json
-// dj — шрифт DejaVu Sans замість Inter (варіант, де ширшає текст). Стани: стартовий екран, геосцена (сід 42,
+// Шрифт — як у e2e: DejaVu Sans через e2e/fonts.conf (Т.175, scripts/launch-chrome.ts); inter — шрифт системи
+// без конфіга (у контейнері — Inter; варіант, де ширшає текст, міряти з обома). Колишній прапорець dj
+// (до Т.175: DejaVu стилем поверх сторінки) нічого не змінює — DejaVu тепер типово. Стани: стартовий екран, геосцена (сід 42,
 // вкладка «Вузол», зонд з кнопкою місії), розгорнутий журнал, бій. Число кнопок вкладок чи карток змінюється
 // навмисно лише тоді, коли крок їх міняє; решта різниці — розміри, які крок міняти не мав (ADR-0115).
-import { chromium, type Page } from '@playwright/test';
+import type { Page } from '@playwright/test';
+import { launchChrome, warnDj } from './launch-chrome';
 
 // під run-ts.mjs аргументи йдуть після шляху до скрипта; «--» пропускається
 const args = process.argv.slice(process.argv.findIndex((a) => a.endsWith('.ts')) + 1).filter((a) => a !== '--');
@@ -17,7 +20,7 @@ const sizesArg = sizesAt >= 0 ? args[sizesAt + 1] : undefined;
 const pos = args.filter((a, i) => !a.startsWith('--') && (sizesAt < 0 || i !== sizesAt + 1));
 const [url, font] = pos;
 if (!url) {
-  console.error('Використання: node scripts/run-ts.mjs scripts/measure-layout.ts <адреса> [dj] [--sizes WxH,…]');
+  console.error('Використання: node scripts/run-ts.mjs scripts/measure-layout.ts <адреса> [inter] [--sizes WxH,…]');
   process.exit(2);
 }
 const DEFAULT_SIZES = '1366x768,1024x768,390x844,320x568,844x390,568x320';
@@ -41,14 +44,14 @@ const rects = (p: Page, sel: string): Promise<string[]> =>
 const pageSize = (p: Page): Promise<string> =>
   p.evaluate(() => document.documentElement.scrollWidth + 'x' + document.documentElement.scrollHeight);
 
-const browser = await chromium.launch({ executablePath: process.env.E2E_CHROME });
+warnDj(args);
+const browser = await launchChrome({ inter: font === 'inter' });
 const out: Record<string, Record<string, string[] | string>> = {};
 for (const [w, h] of sizes) {
   const touch = w < 900;
   const ctx = await browser.newContext({ viewport: { width: w, height: h }, isMobile: touch, hasTouch: touch, deviceScaleFactor: 2 });
   const p = await ctx.newPage();
   await p.goto(url);
-  if (font === 'dj') await p.addStyleTag({ content: 'body, button { font-family: "DejaVu Sans" !important }' });
   const hc = p.locator('#btn-help-close');
   if (await hc.isVisible()) await hc.click();
   const k = w + 'x' + h;
