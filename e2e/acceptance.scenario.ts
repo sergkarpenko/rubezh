@@ -1827,6 +1827,79 @@ test('Т.121: тап по порожній клітинці під час ані
   expect(errors, 'помилки сторінки: ' + errors.join(' | ')).toEqual([]);
 });
 
+// Т.179 (кандидат 52, рішення власника 25.11.2026; ADR-0145): телефон пальцем. Гейт Т.143 на 844 × 390 тапає
+// мишею (canvas.click) у контексті без тачу — сторінка бачить мишу з наведенням. Тут — окремий контекст телефона
+// (hasTouch, isMobile, 844 × 390): тап — подіями дотику (locator.tap → touchstart / touchend і сумісні події
+// миші, які браузер шле після дотику), сторінка бачить «(hover: none)» і «(pointer: coarse)».
+// Перевірки: вибір бійця пальцем; перший тап по клітинці — лише прев'ю шляху (сумісний mousemove перед кліком
+// не робить перший тап ходом); другий тап — хід; смуга загону пальцем вибирає бійця.
+test.describe('Т.179: телефон пальцем (hasTouch, isMobile)', () => {
+  test.use({ hasTouch: true, isMobile: true, viewport: { width: 844, height: 390 } });
+
+  test('Т.179: тап пальцем на 844 × 390 — вибір бійця, тап-тап ходу, картка смуги загону', async ({ page }) => {
+    const errors = watchErrors(page);
+    const mirror = new CoreMirror(SEED, PRESET);
+    await page.goto('./');
+    const media = await page.evaluate(() => ({
+      touch: navigator.maxTouchPoints,
+      hoverNone: matchMedia('(hover: none)').matches,
+      coarse: matchMedia('(pointer: coarse)').matches,
+      width: window.innerWidth,
+    }));
+    expect(media, 'Т.179: сторінка бачить телефон із тачем, а не мишу').toEqual({
+      touch: expect.any(Number),
+      hoverNone: true,
+      coarse: true,
+      width: 844,
+    });
+    expect(media.touch, 'Т.179: navigator.maxTouchPoints').toBeGreaterThan(0);
+    const helpClose = page.locator('#btn-help-close');
+    if (await helpClose.isVisible()) await helpClose.tap();
+    await page.locator('#btn-start-new').tap();
+    await page.locator('#new-game-seed').fill(String(SEED));
+    await page.locator('#new-game-preset').selectOption(PRESET);
+    await page.locator('#btn-new-game-start').tap();
+    for (let i = 0; i < MAX_TICKS_TO_MISSION && mirror.targets().length === 0; i++) {
+      await page.locator('#btn-tick').tap();
+      mirror.tick();
+    }
+    expect(mirror.targets().length, 'на сіді ' + SEED + ' зонд не приземлився за дві доби').toBeGreaterThan(0);
+    mirror.launch(mirror.targets()[0]!.id);
+    await page.locator('#status-tab-base').tap();
+    await page.locator('#ufos button.mission').first().tap();
+    await expect(page.locator('#battle-panel')).toBeVisible();
+    await expect(page.locator('#bctx-turn')).toHaveText('хід 1 · загін');
+
+    const canvas = page.locator('#battle');
+    const fingerTap = async (cell: Vec2): Promise<void> => {
+      await canvas.scrollIntoViewIfNeeded();
+      const box = await canvas.boundingBox();
+      if (box === null) throw new Error('Канва бою не відображається');
+      await canvas.tap({
+        position: { x: ((cell.x + 0.5) * box.width) / MISSION_MAP_W, y: ((cell.y + 0.5) * box.height) / MISSION_MAP_H },
+      });
+    };
+    const unit = page.locator('#bsquad .sq-card.sel');
+    const info = page.locator('#binfo');
+    const [soldier, other] = mirror.squad();
+    await fingerTap(soldier!.pos);
+    await expect(unit, 'Т.179: тап пальцем по бійцю вибирає його').toHaveAttribute('aria-label', unitLine(soldier!));
+    const option = mirror.moveOption(soldier!);
+    await fingerTap(option.cell);
+    await expect(info, "Т.179: перший тап пальцем — прев'ю шляху, не хід").toContainText(
+      'Шлях: ' + option.cost + ' AP — повторний тап у ту саму клітинку — хід.'
+    );
+    await fingerTap(option.cell);
+    mirror.move(soldier!, option);
+    await expect(info, 'Т.179: другий тап пальцем — хід').toHaveText(/: рух\. AP \d+\/\d+\.$/);
+    await expect(unit, 'Т.179: після ходу AP бійця — як у дзеркалі').toHaveAttribute('aria-label', unitLine(soldier!));
+    // Т.130: картка смуги загону пальцем — вибір іншого бійця
+    await page.locator(`#bsquad .sq-card[data-unit="${other!.id}"]`).tap();
+    await expect(unit, 'Т.179: тап пальцем по картці смуги загону вибирає бійця').toHaveAttribute('aria-label', unitLine(other!));
+    expect(errors, 'помилки сторінки: ' + errors.join(' | ')).toEqual([]);
+  });
+});
+
 // Т.171 (рішення власника 24.11.2026, «А. DejaVu скрізь»; кандидат 118; ADR-0139): шрифт сторінки в e2e —
 // DejaVu Sans і в контейнері сесії, і в CI (e2e/fonts.conf через FONTCONFIG_FILE, playwright.e2e.config.ts);
 // без цього гейти ширини і висоти тексту локально міряли з Inter, а в CI — з DejaVu Sans.
