@@ -246,6 +246,21 @@ describe('аудит PR #523: стан панелі і прокрутка до �
     expect(spy).toHaveBeenCalledTimes(1);
   });
 
+  it('аудит PR #524: зонд, що сів на клітинку ангара, малюється поверх ангара', () => {
+    const { party, ufo } = flyingParty();
+    addFighter(party.intercept, party.geo, 'south');
+    ufo.pos = { x: 8, y: 7 }; // клітинка ангара «Південь»
+    ufo.status = 'приземлився';
+    const f = makeFixture(party);
+    f.panels.renderGeo();
+    ops.length = 0;
+    f.panels.renderGeo();
+    const hangar = ops.indexOf('arc(408,368,15,' + Math.PI + ',0)');
+    const probe = ops.findIndex((o) => o.startsWith('drawImage(') && o.includes(',' + (8 * 48 + 24 - 12) + ',' + (7 * 48 + 24 - 12) + ','));
+    expect(hangar).toBeGreaterThanOrEqual(0);
+    expect(probe).toBeGreaterThan(hangar);
+  });
+
   it('маркер мапи — і в погоні другого (крило в клітинці погоні; ангар «Південь» лишається)', () => {
     const { party, ufo } = flyingParty();
     const f = makeFixture(party);
@@ -378,6 +393,11 @@ describe('п19.4: «Регіони» і шар мапи', () => {
     expect(one.hangars).toEqual([]);
     addFighter(party.intercept, party.geo, 'east');
     expect(draws()).toEqual({ images: one.images, hangars: ['arc(648,224,15,' + Math.PI + ',0)'] }); // ангар «Схід» (13, 4)
+    party.intercept.fighters[1]!.status = 'ремонт';
+    party.intercept.fighters[1]!.repairTicksLeft = 4;
+    expect(draws()).toEqual({ images: one.images, hangars: ['arc(648,224,15,' + Math.PI + ',0)'] }); // у ремонті — теж «в ангарі», без крила
+    party.intercept.fighters[1]!.status = 'на базі';
+    delete party.intercept.fighters[1]!.repairTicksLeft;
     addFighter(party.intercept, party.geo, 'east');
     expect(draws().hangars).toHaveLength(1); // два в одному ангарі — один значок
     party.intercept.fighters[1]!.region = 'north';

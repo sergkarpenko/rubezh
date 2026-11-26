@@ -14,7 +14,8 @@
 синій океан — від'ємна, суша — додатна); клітинка 16 × 9 — суша, якщо суша займає ≥ 50 % її площі. Перевірки (помилка —
 вихід із кодом 1): клітинки вузла (8, 4), ангарів (2, 4), (13, 4), (8, 7) — суша; кожен
 регіон має сушу; зелений відблиск на значках (g - max(r, b) > 8 при альфі > 0) — немає.
-Матування і зменшення — з convert_units_t133.py (потрібен scipy). Запуск з кореня
+Матування і зменшення — з convert_units_t133.py (потрібен scipy); напівпрозоре всередині
+силуету значка — непрозоре поверх темної основи (solid_inside). Запуск з кореня
 репозиторію: python3 scripts/assets/convert_geo_t208.py [тека сирців]
 """
 
@@ -25,6 +26,7 @@ import sys
 
 import numpy as np
 from PIL import Image, ImageFilter
+from scipy import ndimage
 
 from convert_units_t133 import matte, resize, split_figures
 
@@ -43,6 +45,12 @@ ICON = 96
 ICON_MAX = 92  # поле 2 px з боків
 ICON_NAMES = ['scout', 'harvester', 'interceptor', 'node', 'hangar', 'gate']
 GREEN_MAX = 8
+# аудит PR #524: вир Брами і тінь у воротах ангара Gemini малює напівпрозорими до хромакею — після
+# прибирання зеленого крізь них видно мапу. Усередині силуету (на INNER px від краю) альфа — 255,
+# колір — поверх темної основи значка (Брама — фіолетова, решта — графітова); край лишається м'яким.
+INNER = 4
+BASE = {'gate': (42, 18, 66)}
+BASE_DEFAULT = (14, 18, 26)
 
 
 def otsu(v):
@@ -85,11 +93,23 @@ def world():
     return {'size': [MAP_W, MAP_H], 'crop': [x0, 0, x0 + cw, h], 'threshold': round(th, 1), 'layout': rows, 'landShare': share}, errs
 
 
+def solid_inside(fig, base):
+    a = fig[..., 3] / 255.0
+    inner = ndimage.binary_erosion(ndimage.binary_fill_holes(a > 0.06), iterations=INNER)
+    soft = inner & (a < 1.0)
+    out = fig.copy()
+    k = a[soft][:, None]
+    out[..., :3][soft] = fig[..., :3][soft] * k + np.array(base, np.float32) * (1 - k)
+    out[..., 3][soft] = 255.0
+    return out
+
+
 def icons():
     figs = split_figures(matte(SRC / 't208-icons.jpg'), parts=len(ICON_NAMES), grow=5)
     atlas = np.zeros((ICON, ICON * len(ICON_NAMES), 4), np.uint8)
     boxes, errs = {}, []
     for i, (name, fig) in enumerate(zip(ICON_NAMES, figs)):
+        fig = solid_inside(fig, BASE.get(name, BASE_DEFAULT))
         h, w = fig.shape[:2]
         s = resize(fig, ICON_MAX / max(h, w))
         sh, sw = s.shape[:2]

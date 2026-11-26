@@ -229,7 +229,7 @@ export function createPanels(deps: PanelsDeps): Panels {
 
     // П6.7 (ADR-0029): статичні спрайти геосцени — база і позначки НЛО (туман:
     // detectedUfos повертає лише виявлені — невиявлені в малювання не потрапляють).
-    // П14.5: вежа-радар з атласу тайлів (фолбек — піксельний спрайт ВУЗОЛ)
+    // п19.5: значок вузла з аркуша (фолбек — вежа-радар, далі піксельний спрайт ВУЗОЛ)
     drawGeoBaseSprite(ctx, { cx: b.x * GCELL + GCELL / 2, cy: b.y * GCELL + GCELL / 2, size: GCELL });
     // п18.5 (ADR-0157; рішення власника «А. Кодом»): Брама Розриву — портал у клітинці праворуч від вузла
     if (gateKeyDone(party) && party.campaign.status === 'триває') {
@@ -237,6 +237,18 @@ export function createPanels(deps: PanelsDeps): Panels {
       drawGatePortal(ctx, { cx: g.x * GCELL + GCELL / 2, cy: g.y * GCELL + GCELL / 2, size: GCELL, open: gateOpen(party) });
     }
 
+    // П7.5 (ADR-0032): маркер винищувача на геосцені — лише поза базою (на базі він у
+    // спрайті бази; погоня/бій — дельта-крило поруч із позначкою НЛО).
+    // п19.5 (ADR-0163): ангар регіону з перехоплювачем (крім «Півночі» — там ангар у вузлі) — значок
+    // на клітинці ангара; перехоплювач на базі чи в ремонті — «в ангарі» (як у вузлі), крило — лише в погоні й бою
+    // (позиція бою — pos; ангар — з hangarPos, а не pos: до першого вильоту pos може бути (0, 0), кандидат 196 г);
+    // ангари — до зондів: зонд, що сів на клітинку ангара (ціль посадки — будь-яка клітинка), видно поверх (аудит PR #524).
+    const hangars = new Set<string>(party.intercept.fighters.map((f) => f.region).filter((r) => r !== 'north'));
+    for (const r of REGION_IDS) {
+      if (!hangars.has(r)) continue;
+      const h = hangarPos(r, party.geo);
+      drawHangarSprite(ctx, { cx: h.x * GCELL + GCELL / 2, cy: h.y * GCELL + GCELL / 2 });
+    }
     for (const u of detectedUfos(party.geo)) {
       drawUfoSprite(ctx, {
         cx: u.pos.x * GCELL + GCELL / 2,
@@ -244,17 +256,6 @@ export function createPanels(deps: PanelsDeps): Panels {
         landed: u.status === 'приземлився',
         kind: u.kind,
       });
-    }
-    // П7.5 (ADR-0032): маркер винищувача на геосцені — лише поза базою (на базі він у
-    // спрайті бази; погоня/бій — дельта-крило поруч із позначкою НЛО).
-    // п19.5 (ADR-0163): ангар регіону з перехоплювачем (крім «Півночі» — там ангар у вузлі) — значок
-    // на клітинці ангара; перехоплювач на базі чи в ремонті — «в ангарі» (як у вузлі), крило — лише в погоні й бою
-    // (позиція бою — pos; ангар — з hangarPos, а не pos: до першого вильоту pos може бути (0, 0), кандидат 196 г).
-    const hangars = new Set<string>(party.intercept.fighters.map((f) => f.region).filter((r) => r !== 'north'));
-    for (const r of REGION_IDS) {
-      if (!hangars.has(r)) continue;
-      const h = hangarPos(r, party.geo);
-      drawHangarSprite(ctx, { cx: h.x * GCELL + GCELL / 2, cy: h.y * GCELL + GCELL / 2 });
     }
     for (const fgt of party.intercept.fighters) {
       if (fgt.status === 'погоня' || fgt.status === 'бій')

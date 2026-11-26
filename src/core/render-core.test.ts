@@ -84,6 +84,8 @@ import {
 import { makeUnit, type GameEvent, type Unit } from './combat';
 import { WORLD_H, WORLD_W, createGeoGame, type GeoEvent } from './geo';
 import { makeEnemy } from './enemies';
+import { HANGARS } from './intercept';
+import { regionOf } from './regions';
 
 const unit = (id: string, side: 'player' | 'alien', x: number, y: number): Unit => makeUnit({ id, side, pos: { x, y } });
 
@@ -518,11 +520,9 @@ describe('П14.4: тряска вибуху — амплітуда ×2 від п
 });
 
 describe('п19.5 (ADR-0163): розклад 9×16 ВИВЕДЕНО З КАРТИНИ «Живі береги» — константа, без geo.rng', () => {
-  // Розклад виведено скриптом scripts/geo-layout.py з assets-src/geo-map2.jpg
-  // (медіани яскравості клітинок 70×70 вікна «сюди», поріг 16.5;
-  // фідбек власника 2026-10-23 ×4: вказівка «сюди» — клітинка бази на
-  // яскравому мисі-«острові» південного узбережжя материка, медіана
-  // бази 35.6 — без відхилень). Байти фіксуються тут: L — суша, B — база.
+  // Розклад виведено конвертером scripts/assets/convert_geo_t208.py з картини «Живі береги»
+  // (ознака r + g - b розмитої картини, поріг Отсу, суша ≥ 50 % клітинки; рядки — у звіті
+  // scripts/assets/geo-t208-report.json, тест нижче звіряє). Байти фіксуються тут: L — суша, B — вузол.
   const MAP = [
     '.L.......LL..L..',
     '.L.L..LLLLL..LL.',
@@ -594,22 +594,14 @@ describe('п19.5 (ADR-0163): розклад 9×16 ВИВЕДЕНО З КАРТИ
   it('пропорції: суша 80/144 (55,6 %); дві маси клітинок — Захід зі Сходом через край (43) і Північ з Півднем (37)', () => {
     expect(landCount(layout)).toBe(80);
     // на сітці 16 × 9 протоки вужчі за клітинку: Захід і Схід — сусіди через край (ADR-0159 п. 9),
-    // Північ і Південь торкаються стовпцями 6 і 9 (на картині між ними протока)
+    // Північ і Південь торкаються стовпцем 9 — клітинки (9,4)–(9,6) (на картині між ними протока)
     expect(components(layout).sort((a, b) => b - a)).toEqual([43, 37]);
   });
 
   it('перевірка конвертера: вузол (8,4), Брама (9,4) і ангари (2,4), (13,4), (8,7) — суша; у кожному регіоні є суша', () => {
-    for (const [x, y] of [
-      [8, 4],
-      [9, 4],
-      [2, 4],
-      [13, 4],
-      [8, 7],
-    ] as const)
-      expect(geoIsLand(layout, x, y)).toBe(true);
-    const region = (x: number, y: number): string => (x <= 4 ? 'west' : x >= 12 ? 'east' : y <= 4 ? 'north' : 'south');
+    for (const p of [{ x: 8, y: 4 }, { x: 9, y: 4 }, ...Object.values(HANGARS)]) expect(geoIsLand(layout, p.x, p.y)).toBe(true);
     const withLand = new Set<string>();
-    for (let y = 0; y < 9; y++) for (let x = 0; x < 16; x++) if (geoIsLand(layout, x, y)) withLand.add(region(x, y));
+    for (let y = 0; y < 9; y++) for (let x = 0; x < 16; x++) if (geoIsLand(layout, x, y)) withLand.add(regionOf({ x, y }));
     expect([...withLand].sort()).toEqual(['east', 'north', 'south', 'west']);
   });
 

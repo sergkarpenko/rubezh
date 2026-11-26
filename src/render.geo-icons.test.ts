@@ -19,7 +19,8 @@ import {
   isGeoIconsReady,
   type MakeOffscreen,
 } from './render';
-import { GEO_ICON_CELL, GEO_ICON_ORDER, GEO_ICON_PX, type GeoIcon } from './core/render-core';
+import { GEO_ICON_CELL, GEO_ICON_ORDER, GEO_ICON_PX, GEO_LAYOUT, type GeoIcon } from './core/render-core';
+import reportRaw from '../scripts/assets/geo-t208-report.json?raw';
 
 type Call = { m: string; args: unknown[] };
 const iconsImg = { width: 576, height: 96 } as unknown as CanvasImageSource;
@@ -77,6 +78,18 @@ describe('п19.5 (ADR-0163): значки геосцени з аркуша Gemin
     expect(GEO_ICON_ORDER).toEqual(['scout', 'harvester', 'interceptor', 'node', 'hangar', 'gate']);
     expect(GEO_ICON_CELL).toBe(96);
     expect(GEO_ICON_PX).toEqual({ scout: 34, harvester: 40, interceptor: 34, node: 48, hangar: 36, gate: 46 });
+  });
+
+  it('константи — як у звіті конвертера (розклад і порядок значків перенесено вручну — аудит PR #524)', () => {
+    const report = JSON.parse(reportRaw) as {
+      map: { layout: string[]; size: number[] };
+      icons: { order: string[]; cell: number; size: number[] };
+    };
+    expect(GEO_LAYOUT).toEqual(report.map.layout);
+    expect(GEO_ICON_ORDER).toEqual(report.icons.order);
+    expect(GEO_ICON_CELL).toBe(report.icons.cell);
+    expect(report.icons.size).toEqual([GEO_ICON_CELL * GEO_ICON_ORDER.length, GEO_ICON_CELL]);
+    expect(report.map.size).toEqual([1120, 630]);
   });
 
   it('прапорець готовності: до onload — фолбек, після — аркуш; повторна ініціалізація скидає', () => {
