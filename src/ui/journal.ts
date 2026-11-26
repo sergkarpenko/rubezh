@@ -11,7 +11,7 @@ import { FIGHTER_MAX_HP, FIGHTER_REPAIR_COST } from '../core/intercept';
 import type { EconomyEvent } from '../core/economy';
 // П11.6 (ADR-0058): події науки і «Кузні» → журнал (категорія «База»).
 import { projectName, type ResearchEvent } from '../core/research';
-import { itemName, type WorkshopEvent } from '../core/workshop';
+import { equipKeyItem, itemName, type WorkshopEvent } from '../core/workshop';
 import { EVAC_AP_COST, type GameEvent, type ShotMode } from '../core/combat';
 import { claimHint, type Party } from '../core/save';
 import { el } from './dom';
@@ -340,6 +340,8 @@ export function researchEventText(e: ResearchEvent): { text: string; cls: string
       return { text: '⚑ Протокол розпочато: ' + projectName(e.id), cls: '' };
     case 'project_completed':
       return { text: '⚑ Протокол завершено: ' + projectName(e.id) + ' ✓', cls: 'win' };
+    case 'trophies':
+      return null; // п18.2: трофеї гравцеві показує UI п18.5 (рішення власника «А. Сховати до п18.5»)
   }
 }
 
@@ -360,11 +362,20 @@ export function workshopEventText(e: WorkshopEvent): { text: string; cls: string
       return { text: '⚑ Кузня: з ' + e.soldierId + ' знято «' + itemName(e.id) + '» → склад', cls: '' };
     case 'equipment_lost':
       return {
-        text: '✗ Витратники ' + e.soldierId + ' втрачено разом із оперативником (' + e.items.map(itemName).join(', ') + ')',
+        text:
+          '✗ Витратники ' +
+          e.soldierId +
+          ' втрачено разом із оперативником (' +
+          e.items.map((k) => itemName(equipKeyItem(k))).join(', ') +
+          ')',
         cls: 'lose',
       };
     case 'equipment_returned':
-      return { text: '⚑ Кузня: спорядження ' + e.soldierId + ' повернуто на склад (' + e.items.map(itemName).join(', ') + ')', cls: '' };
+      return {
+        text:
+          '⚑ Кузня: спорядження ' + e.soldierId + ' повернуто на склад (' + e.items.map((k) => itemName(equipKeyItem(k))).join(', ') + ')',
+        cls: '',
+      };
     case 'gun_module_installed':
       return { text: '⚑ Кузня: гарматний модуль встановлено на перехоплювач', cls: '' };
     case 'gun_module_removed':

@@ -172,7 +172,9 @@ function stepToward(pos: Vec2, target: Vec2): Vec2 {
 
 // Один тік геосцени. Порядок фаз фіксований (детермінізм):
 // час → спавн → рух/посадка/відліт → виявлення радаром.
-export function geoTick(state: GeoState): void {
+// п18.2 (ADR-0153 п. 12): радіус радара — параметром (шар застосунку бере radarRange(research));
+// типовий — RADAR_RANGE, тож траєкторія до «Пеленгу брами» байт-у-байт; geo.rng від радіуса не залежить.
+export function geoTick(state: GeoState, radar: number = RADAR_RANGE): void {
   state.minute += TICK_MINUTES;
   if (state.minute % 1440 === 0) {
     state.log.push({ type: 'day', day: geoDay(state), minute: state.minute });
@@ -229,18 +231,18 @@ export function geoTick(state: GeoState): void {
 
   // Фаза 3: виявлення радаром бази (виявлений НЛО лишається на звіті — трекінг).
   for (const ufo of state.ufos) {
-    if (!ufo.detected && chebyshevWrap(state.base, ufo.pos) <= RADAR_RANGE) {
+    if (!ufo.detected && chebyshevWrap(state.base, ufo.pos) <= radar) {
       ufo.detected = true;
       state.log.push({ type: 'ufo_detected', ufoId: ufo.id, pos: { ...ufo.pos }, minute: state.minute });
     }
   }
 }
 
-export function advanceTime(state: GeoState, ticks: number): void {
+export function advanceTime(state: GeoState, ticks: number, radar: number = RADAR_RANGE): void {
   if (!Number.isInteger(ticks) || ticks < 0) {
     throw new Error("Кількість тіків має бути невід'ємним цілим");
   }
-  for (let i = 0; i < ticks; i++) geoTick(state);
+  for (let i = 0; i < ticks; i++) geoTick(state, radar);
 }
 
 // НЛО, видимі гравцеві (туман стратегічного шару: лише виявлені радаром).

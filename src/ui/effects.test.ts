@@ -124,3 +124,18 @@ describe('T.39: plainProjectEffect — текст картки протокол�
     expect(plainProjectEffect('gun-module')).toBe('Перехоплювач завдає на ' + GUN_MODULE_DAMAGE + ' пошкодження більше за раунд');
   });
 });
+
+describe('п18.2 (ADR-0154, рішення власника «А. Повні»): ефекти ключових протоколів і заряду', () => {
+  it('тексти дослівно; обидві функції ефекту протоколу — однаково', () => {
+    const want = {
+      'rift-anatomy': 'Відкриває «Пробивний заряд» у «Кузні»',
+      'gate-bearing': 'Радар вузла — 6 клітинок замість 4',
+      'gate-key': 'Відкриває «Браму Розриву» і дві турелі бази',
+    } as const;
+    for (const [id, text] of Object.entries(want) as [keyof typeof want, string][]) {
+      expect(projectEffect(id)).toBe(text);
+      expect(plainProjectEffect(id)).toBe(text);
+    }
+    expect(itemEffect('breach-charge')).toBe('Атака по броньованій цілі — без броні (один раз)');
+  });
+});

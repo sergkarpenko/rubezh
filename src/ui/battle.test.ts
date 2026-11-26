@@ -269,6 +269,21 @@ describe('battle: флоу місії (запуск/закриття/завер�
     expect(f.ui.mission).toBeNull(); // кнопка повернення закрила бій
   });
 
+  it('п18.2 (ADR-0153 п. 9): перемога — трофеї за типом убитих; поразка — без трофеїв', () => {
+    const f = makeFixture();
+    f.battle.launch(firstTarget(f));
+    const aliens = f.ui.mission!.state.units.filter((u) => u.side === 'alien');
+    for (const u of aliens) u.alive = false;
+    f.battle.finish('перемога');
+    const t = f.party.research.trophies;
+    expect(t.demon + t.hound + t.golem + t.eye).toBe(aliens.length);
+    const g = makeFixture();
+    g.battle.launch(firstTarget(g));
+    for (const u of g.ui.mission!.state.units) if (u.side === 'alien') u.alive = false;
+    g.battle.finish('поразка');
+    expect(Object.values(g.party.research.trophies)).toEqual([0, 0, 0, 0]);
+  });
+
   it('Т.7: журнал втрат і поранених — рід за іменем, «тіків» узгоджено з числом', () => {
     // загін місії — перші боєготові ростеру: Іван, Олена, …; лікарня — 2 тіки на HP
     const run = (dead: string, wounded: string, lostHp: number): string[] => {

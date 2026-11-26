@@ -20,19 +20,23 @@
 
 import { spend, type EconomyState } from './economy';
 import { type DifficultyPreset, DEFAULT_PRESET, sciencePrice } from './campaign';
-import type { ProjectId, ResearchState } from './research';
+import { missingTrophies, spendTrophies, type KeyProjectId, type ProjectId, type ResearchState, type TrophyCost } from './research';
 import { HIT_CHANCE_CAP, type Unit, type UnitItems } from './combat';
 import type { InterceptState } from './intercept';
 
 // Предмети «Кузні» — завершені протоколи науки, крім «Розширення лабораторії».
 // П12.6 (ADR-0064): ключі англійські (стабільні, збігаються з ProjectId),
 // відображувані назви — поле name каталогу.
-export type ItemId = Exclude<ProjectId, 'lab-extension'>;
+// п18.2 (ADR-0153 п. 10–11): ключові протоколи предмета не виробляють; «Пробивний
+// заряд» має власний id і протокол, що його відкриває (`unlockedBy`).
+export type ItemId = Exclude<ProjectId, 'lab-extension' | KeyProjectId> | 'breach-charge';
 
 export interface WorkshopItemDef {
   name: string; // відображувана назва предмета (ADR-0064 — мапа перейменувань)
   cost: number; // кредити за замовлення (кандидат, П11.8)
   ticks: number; // тики геосцени на виготовлення (кандидат, П11.8)
+  unlockedBy?: ProjectId; // п18.2: протокол, що відкриває предмет (відсутній — протокол з тим самим id)
+  trophies?: TrophyCost; // п18.2: трофеї, що списуються при замовленні разом із кредитами
 }
 
 // Каталог «Кузні» (ADR-0058): формат кредити / тики.
@@ -42,9 +46,24 @@ export const WORKSHOP_CATALOG: Record<ItemId, WorkshopItemDef> = {
   optics: { name: 'Кібернетичне око', cost: 50, ticks: 20 },
   armor: { name: 'Композитна броня', cost: 60, ticks: 24 },
   'gun-module': { name: 'Гарматний модуль перехоплювача', cost: 80, ticks: 32 },
+  // п18.2 (ADR-0153 п. 11, ADR-0154; кандидати чисел — перемір на п18.6)
+  'breach-charge': { name: 'Пробивний заряд', cost: 50, ticks: 16, unlockedBy: 'rift-anatomy', trophies: { hound: 1 } },
 };
 
-export const ITEM_IDS = Object.keys(WORKSHOP_CATALOG) as ItemId[];
+// Предмети, які показують панелі «Кузні» і порада «Наступний крок». п18.2: «Пробивний
+// заряд» — у каталозі, але в панелях до UI п18.5 не показується (рішення власника, ADR-0154).
+export const ITEM_IDS: ItemId[] = ['medkit', 'grenade', 'optics', 'armor', 'gun-module'];
+
+// п18.2: чи відкрито виробництво предмета (завершено протокол unlockedBy або протокол з тим самим id).
+export function itemUnlocked(research: Pick<ResearchState, 'completed'>, id: ItemId): boolean {
+  const def = WORKSHOP_CATALOG[id];
+  return research.completed.includes(def?.unlockedBy ?? (id as ProjectId));
+}
+
+// п18.2: предмет за ключем запису екіпірування (ключ «charge» — «Пробивний заряд»).
+export function equipKeyItem(k: keyof SoldierEquipment): SoldierItemId {
+  return k === 'charge' ? 'breach-charge' : k;
+}
 
 // Відображувана назва предмета за ключем (журнал, панелі, throw-тексти;
 // невідомий ключ — як є).
@@ -85,6 +104,7 @@ export interface SoldierEquipment {
   optics: boolean; // «Кібернетичне око»
   medkit: boolean; // «Регенеративний гель»
   grenade: boolean; // «Імпульсна граната»
+  charge?: boolean; // п18.2: «Пробивний заряд» (витратник; поле лише за наявності — сейви без нього байт-у-байт)
 }
 
 function emptyEquipment(): SoldierEquipment {
@@ -101,7 +121,7 @@ export interface WorkshopState {
 // Порожній склад: усі предмети каталогу з нульовими лічильниками (мерж у сейві
 // лишає валідні ключі майбутніх предметів).
 export function emptyStore(): Record<ItemId, number> {
-  return { medkit: 0, grenade: 0, optics: 0, armor: 0, 'gun-module': 0 };
+  return { medkit: 0, grenade: 0, optics: 0, armor: 0, 'gun-module': 0, 'breach-charge': 0 };
 }
 
 export function createWorkshop(): WorkshopState {
@@ -123,10 +143,14 @@ export function orderItem(
 ): WorkshopOrder {
   const def = WORKSHOP_CATALOG[id];
   if (!def) throw new Error('Невідомий предмет: ' + id);
-  if (!research.completed.includes(id)) {
+  if (!itemUnlocked(research, id)) {
     throw new Error('Предмет ще не досліджено: ' + itemName(id));
   }
+  // п18.2 (EARS 3): трофеї — перевірка до оплати, списання разом із кредитами
+  const lack = missingTrophies(research.trophies, def.trophies);
+  if (lack !== undefined) throw new Error(lack);
   spend(econ, sciencePrice(def.cost, preset));
+  spendTrophies(research.trophies, def.trophies);
   const order: WorkshopOrder = { id, ticksLeft: def.ticks };
   workshop.queue.push(order);
   workshop.log.push({ type: 'order', id, ticks: def.ticks });
@@ -193,7 +217,9 @@ export function unequipItem(workshop: WorkshopState, soldier: Unit, id: ItemId):
   if (!eq || !eq[soldierId]) {
     throw new Error('Предмета немає на оперативникові: ' + itemName(id));
   }
-  eq[soldierId] = false;
+  if (soldierId === 'charge')
+    delete eq.charge; // п18.2: поле заряду — лише за наявності (аудит PR #513)
+  else eq[soldierId] = false;
   workshop.store[id] += 1;
   if (soldierId === 'armor') {
     soldier.maxHp -= ARMOR_MAX_HP_BONUS;
@@ -203,7 +229,7 @@ export function unequipItem(workshop: WorkshopState, soldier: Unit, id: ItemId):
     soldier.firingAccuracy -= OPTICS_ACCURACY_BONUS;
   }
   // порожній запис екіпірування не тримаємо (чистий стан у сейві)
-  if (!eq.armor && !eq.optics && !eq.medkit && !eq.grenade) {
+  if (isEmptyEquipment(eq)) {
     delete workshop.equipped[soldier.id];
   }
   workshop.log.push({ type: 'unequip', soldierId: soldier.id, id });
@@ -220,12 +246,17 @@ export function removeLostEquipment(workshop: WorkshopState, lost: Unit[]): void
     if (!eq) continue;
     const items = (Object.keys(eq) as (keyof SoldierEquipment)[]).filter((k) => eq[k]);
     const returned = items.filter((k): k is 'armor' | 'optics' => k === 'armor' || k === 'optics');
-    const gone = items.filter((k) => k === 'medkit' || k === 'grenade');
+    const gone = items.filter((k) => k === 'medkit' || k === 'grenade' || k === 'charge');
     delete workshop.equipped[soldier.id];
     for (const k of returned) workshop.store[k] += 1;
     if (returned.length > 0) workshop.log.push({ type: 'equipment_returned', soldierId: soldier.id, items: returned });
     if (gone.length > 0) workshop.log.push({ type: 'equipment_lost', soldierId: soldier.id, items: gone });
   }
+}
+
+// Порожній запис екіпірування (не тримаємо в сейві).
+function isEmptyEquipment(eq: SoldierEquipment): boolean {
+  return !eq.armor && !eq.optics && !eq.medkit && !eq.grenade && !eq.charge;
 }
 
 // Запис екіпірування солдата (створюється порожнім при першому зверненні).
@@ -273,7 +304,10 @@ export function deployConsumables(workshop: WorkshopState, squad: Unit[]): Recor
   const items: Record<string, UnitItems> = {};
   for (const soldier of squad) {
     const eq = workshop.equipped[soldier.id];
-    if (eq?.medkit || eq?.grenade) items[soldier.id] = { medkit: eq.medkit, grenade: eq.grenade };
+    if (eq?.medkit || eq?.grenade || eq?.charge) {
+      items[soldier.id] = { medkit: eq.medkit, grenade: eq.grenade };
+      if (eq.charge) items[soldier.id].charge = true; // п18.2: поле лише за наявності заряду
+    }
   }
   return items;
 }
@@ -289,13 +323,15 @@ export function settleConsumables(workshop: WorkshopState, survivors: Unit[], it
     if (!eq) continue;
     eq.medkit = items?.[soldier.id]?.medkit ?? false;
     eq.grenade = items?.[soldier.id]?.grenade ?? false;
-    if (!eq.armor && !eq.optics && !eq.medkit && !eq.grenade) delete workshop.equipped[soldier.id];
+    if (items?.[soldier.id]?.charge) eq.charge = true;
+    else delete eq.charge; // п18.2: витрачений заряд зникає
+    if (isEmptyEquipment(eq)) delete workshop.equipped[soldier.id];
   }
 }
 
 // Ключ запису екіпірування за предметом каталогу (гарматний модуль відсіюється
 // guard'ом у equipItem/unequipItem — звуження типу до SoldierItemId).
-function SoldierItemIdOf(id: SoldierItemId): keyof SoldierEquipment {
+export function SoldierItemIdOf(id: SoldierItemId): keyof SoldierEquipment {
   switch (id) {
     case 'armor':
       return 'armor';
@@ -305,5 +341,7 @@ function SoldierItemIdOf(id: SoldierItemId): keyof SoldierEquipment {
       return 'medkit';
     case 'grenade':
       return 'grenade';
+    case 'breach-charge':
+      return 'charge';
   }
 }

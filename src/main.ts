@@ -13,7 +13,7 @@ import { awaitingRole, type SoldierRole } from './core/career';
 import { roleDialogHtml } from './ui/roles';
 import { economyTick } from './core/economy';
 // П11.2 (ADR-0058): тік науки — після дотації того ж дня; без вчених — no-op.
-import { researchTick } from './core/research';
+import { radarRange, researchTick } from './core/research';
 // П11.3 (ADR-0058): тік цеху — разом із тіком геосцени; без замовлень — no-op.
 import { workshopTick } from './core/workshop';
 import { interceptTick, repairTick, type InterceptEvent } from './core/intercept';
@@ -534,7 +534,7 @@ function interceptAnims(e: InterceptEvent): Anim[] {
 function partyTick(): void {
   if (party === null || inAirCombat(party)) return;
   const p = party;
-  advanceTime(p.geo, 1);
+  advanceTime(p.geo, 1, radarRange(p.research)); // п18.2: радар 6 після «Пеленгу брами»
   economyTick(p.econ, p.geo, p.campaign.preset);
   // П11.2 (ADR-0058): зарплата і наукові точки — тим самим контуром доби,
   // одразу після дотації; без вчених — no-op (партії без науки не змінюються).

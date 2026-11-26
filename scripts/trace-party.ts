@@ -22,7 +22,7 @@ import { hospitalTick, isBankrupt, readySoldiers } from '../src/core/squad';
 import { FIGHTER_MAX_HP, interceptTick, repairTick } from '../src/core/intercept';
 import { VICTORY_DAY, campaignTick, type DifficultyPreset } from '../src/core/campaign';
 import { createParty } from '../src/core/save';
-import { researchTick } from '../src/core/research';
+import { radarRange, researchTick } from '../src/core/research';
 import { workshopTick } from '../src/core/workshop';
 import {
   DEFAULT_PARTY_POLICY,
@@ -93,7 +93,7 @@ function run(seed: number): Rec {
     const m1 = party.econ.money;
     interceptTick(party.intercept, party.geo);
     repairTick(party.intercept, party.geo);
-    advanceTime(party.geo, 1);
+    advanceTime(party.geo, 1, radarRange(party.research));
     economyTick(party.econ, party.geo, preset);
     const m2 = party.econ.money;
     researchTick(party.research, party.econ, party.geo, preset);
