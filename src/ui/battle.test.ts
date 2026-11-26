@@ -6,7 +6,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { advanceTime, missionTargets } from '../core/geo';
 import { createGame, makeUnit, moveUnit, type GameState, type Unit } from '../core/combat';
-import { makeEnemy } from '../core/enemies';
+import { enemyKind, enemyMix, kindsForThreat, makeEnemy } from '../core/enemies';
+import { missionSeed } from '../core/mission';
 import { createParty, type Party } from '../core/save';
 import { initPixelSprites, initUnitAtlas } from '../render';
 import { ALIEN_RING, RING_DY, RING_RX, fighterLook, makeDeathAnim, makeMoveAnim, makeTracerAnim } from '../core/render-core';
@@ -282,6 +283,18 @@ describe('battle: флоу місії (запуск/закриття/завер�
     for (const u of g.ui.mission!.state.units) if (u.side === 'alien') u.alive = false;
     g.battle.finish('поразка');
     expect(Object.values(g.party.research.trophies)).toEqual([0, 0, 0, 0]);
+  });
+
+  it('п18.3 (ADR-0153 п. 14): склад ворогів місії — за загрозою кампанії партії', () => {
+    for (const threat of [0, 30]) {
+      const f = makeFixture();
+      f.party.campaign.threat = threat;
+      const id = firstTarget(f);
+      const seed = missionSeed(f.party.geo, id);
+      f.battle.launch(id);
+      const kinds = f.ui.mission!.state.units.filter((u) => u.side === 'alien').map((u) => enemyKind(u));
+      expect(kinds).toEqual(enemyMix(kindsForThreat(threat), kinds.length, seed));
+    }
   });
 
   it('Т.7: журнал втрат і поранених — рід за іменем, «тіків» узгоджено з числом', () => {

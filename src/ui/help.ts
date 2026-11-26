@@ -10,7 +10,7 @@
 import { DAILY_ALLOWANCE, HIRE_PRICE, MISSION_BONUS } from '../core/economy';
 import { EVAC_AP_COST } from '../core/combat';
 import { FIGHTER_REPAIR_COST } from '../core/intercept';
-import { SCORE_PER_MISSION_WON, SCORE_PER_MONEY, SCORE_PER_UFO_SHOT_DOWN, SCORE_PER_VETERAN_ALIVE, VICTORY_DAY } from '../core/campaign';
+import { SCORE_PER_MISSION_WON, SCORE_PER_MONEY, SCORE_PER_UFO_SHOT_DOWN, SCORE_PER_VETERAN_ALIVE } from '../core/campaign';
 import { BASE_LAB_SLOTS, SCIENTIST_SALARY } from '../core/research';
 import { ENEMY_KINDS } from '../core/enemies';
 import { el } from './dom';
@@ -55,10 +55,9 @@ function helpHtml(): string {
     EVAC_AP_COST +
     ' AP, лише з синьої клітинки висадки. Якщо евакуювати всіх, хто лишився на полі, премії за місію немає; останнього бійця гра перепитає.</li>' +
     '</ul></div>' +
+    // п18.3 (рішення власника «А. Мінімум»): рядок «Вистояти 30 діб» прибрано — таймера немає;
+    // нові рядки мети кампанії (ланцюжок, загроза) — п18.5
     '<div><h3>Мета кампанії</h3><ul>' +
-    '<li>Вистояти <b>' +
-    VICTORY_DAY +
-    ' діб</b>: на межі 30-ї доби фіксується перемога і підсумковий рахунок.</li>' +
     '<li>Рахунок: ' +
     SCORE_PER_UFO_SHOT_DOWN +
     ' за збитий зонд Розриву · ' +
@@ -80,16 +79,17 @@ function helpHtml(): string {
     FIGHTER_REPAIR_COST +
     '.</li>' +
     '<li>Поразка — банкрутство: немає боєготових оперативників і кредитів на вербування.</li>' +
-    // п17.5 (ADR-0152; рішення власника «А. З добами»): доби і числа — з ENEMY_KINDS ядра; у стовпчику
+    // п17.5 (ADR-0152; рішення власника «А. З добами»): числа — з ENEMY_KINDS ядра; п18.3: поява — за
+    // загрозою (fromThreat), доби 6 / 12 / 18 — за середнім темпом загрози (ADR-0153 п. 14), текст — п18.5; у стовпчику
     // «Мета кампанії» — єдине місце з запасом висоти (гейт 1366 × 768, 736 px — виміряно з DejaVu Sans)
     '<li><b>Вороги</b>: з ' +
-    ENEMY_KINDS.hound.fromDay +
+    6 +
     '-ї доби гончак (кігті впритул), з ' +
-    ENEMY_KINDS.golem.fromDay +
+    12 +
     '-ї голем (броня ' +
     ENEMY_KINDS.golem.armor +
     '), з ' +
-    ENEMY_KINDS.eye.fromDay +
+    18 +
     '-ї око (промінь до ' +
     ENEMY_KINDS.eye.weapon.range +
     ' клітинок).</li>' +

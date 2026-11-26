@@ -1,5 +1,6 @@
 // src/core/enemies.test.ts
-// п17.2 (ADR-0149 п. 2–3, 8–12): типи ворогів, броня, режими зброї, склад місії за добою.
+// п17.2 (ADR-0149 п. 2–3, 8–12): типи ворогів, броня, режими зброї, склад місії за добою;
+// п18.3 (ADR-0153 п. 14): склад — за загрозою кампанії (kindsForThreat, пороги 8 / 17 / 27).
 
 import { describe, expect, it } from 'vitest';
 import {
@@ -30,7 +31,7 @@ import {
   HOUND_CLAWS,
   enemyKind,
   enemyMix,
-  kindsForDay,
+  kindsForThreat,
   makeEnemies,
   makeEnemy,
 } from './enemies';
@@ -58,11 +59,11 @@ describe('п17.2: довідник типів (ADR-0149 п. 2)', () => {
       accuracy: [0.5, 0.45, 0.4],
       weapon: ALIEN_CUTTER,
       armor: 0,
-      fromDay: 1,
+      fromThreat: 0,
     });
-    expect(ENEMY_KINDS.hound).toMatchObject({ name: 'Гончак', hp: 7, ap: 14, accuracy: [0.85], armor: 0, fromDay: 6 });
-    expect(ENEMY_KINDS.golem).toMatchObject({ name: 'Голем', hp: 16, ap: 8, accuracy: [0.4], armor: 2, fromDay: 12 });
-    expect(ENEMY_KINDS.eye).toMatchObject({ name: 'Око', hp: 8, ap: 10, accuracy: [0.65], armor: 0, fromDay: 18 });
+    expect(ENEMY_KINDS.hound).toMatchObject({ name: 'Гончак', hp: 7, ap: 14, accuracy: [0.85], armor: 0, fromThreat: 8 });
+    expect(ENEMY_KINDS.golem).toMatchObject({ name: 'Голем', hp: 16, ap: 8, accuracy: [0.4], armor: 2, fromThreat: 17 });
+    expect(ENEMY_KINDS.eye).toMatchObject({ name: 'Око', hp: 8, ap: 10, accuracy: [0.65], armor: 0, fromThreat: 27 });
     expect(HOUND_CLAWS).toMatchObject({ name: 'Кігті', damage: [3, 6], range: 1, only: ['snap'] });
     expect(HOUND_CLAWS.modes.snap).toEqual({ apCost: 3, accuracyMod: 1, shots: 1 });
     expect(GOLEM_CANNON).toMatchObject({ name: 'Гармата', damage: [3, 6], range: 8 });
@@ -118,45 +119,49 @@ describe('п17.2: довідник типів (ADR-0149 п. 2)', () => {
   });
 });
 
-describe('п17.2: склад місії за добою (ADR-0149 п. 3, 8, 12; EARS 1)', () => {
-  it('доступні типи: 1–5 — демон, з 6-ї — гончак, з 12-ї — голем, з 18-ї — око', () => {
-    expect(kindsForDay(1)).toEqual(['demon']);
-    expect(kindsForDay(5)).toEqual(['demon']);
-    expect(kindsForDay(6)).toEqual(['demon', 'hound']);
-    expect(kindsForDay(11)).toEqual(['demon', 'hound']);
-    expect(kindsForDay(12)).toEqual(['demon', 'hound', 'golem']);
-    expect(kindsForDay(18)).toEqual([...ENEMY_ORDER]);
+describe('п18.3: склад місії за загрозою (ADR-0153 п. 14, ADR-0149 п. 8, 12; EARS 5)', () => {
+  it('доступні типи: загроза < 8 — демон, з 8 — гончак, з 17 — голем, з 27 — око', () => {
+    expect(ENEMY_ORDER.map((k) => ENEMY_KINDS[k].fromThreat)).toEqual([0, 8, 17, 27]);
+    expect(kindsForThreat(0)).toEqual(['demon']);
+    expect(kindsForThreat(7)).toEqual(['demon']);
+    expect(kindsForThreat(8)).toEqual(['demon', 'hound']);
+    expect(kindsForThreat(16)).toEqual(['demon', 'hound']);
+    expect(kindsForThreat(17)).toEqual(['demon', 'hound', 'golem']);
+    expect(kindsForThreat(26)).toEqual(['demon', 'hound', 'golem']);
+    expect(kindsForThreat(27)).toEqual([...ENEMY_ORDER]);
+    expect(kindsForThreat(100)).toEqual([...ENEMY_ORDER]);
   });
 
-  it('доби 1–5 — лише демони; n ≤ 0 — порожньо', () => {
-    for (let day = 1; day <= 5; day++) expect(enemyMix(day, 3, 123)).toEqual(['demon', 'demon', 'demon']);
-    expect(enemyMix(20, 0, 1)).toEqual([]);
-    expect(enemyMix(20, 1, 1)).toEqual(['demon']);
+  it('лише демони — без витягання чисел; n ≤ 0 — порожньо', () => {
+    for (let t = 0; t < 8; t++) expect(enemyMix(kindsForThreat(t), 3, 123)).toEqual(['demon', 'demon', 'demon']);
+    expect(enemyMix(ENEMY_ORDER, 0, 1)).toEqual([]);
+    expect(enemyMix(ENEMY_ORDER, 1, 1)).toEqual(['demon']);
   });
 
   it('перший — демон; решта — з доступних; голем ≤ 1; детерміновано від сіду', () => {
     const seen = new Set<string>();
     for (let seed = 0; seed < 400; seed++) {
-      for (const day of [6, 12, 18, 30]) {
-        const mix = enemyMix(day, 3, seed);
-        expect(mix).toEqual(enemyMix(day, 3, seed));
+      for (const threat of [8, 17, 27, 60]) {
+        const avail = kindsForThreat(threat);
+        const mix = enemyMix(avail, 3, seed);
+        expect(mix).toEqual(enemyMix(avail, 3, seed));
         expect(mix[0]).toBe('demon');
-        expect(mix.every((k) => kindsForDay(day).includes(k))).toBe(true);
+        expect(mix.every((k) => avail.includes(k))).toBe(true);
         expect(mix.filter((k) => k === 'golem').length).toBeLessThanOrEqual(1);
-        seen.add(day + ':' + mix.slice(1).join(','));
+        seen.add(threat + ':' + mix.slice(1).join(','));
       }
     }
     // усі доступні типи справді трапляються (і повторний вибір голема перевибирається)
-    for (const k of ['demon', 'hound']) expect(seen.has('6:' + k + ',' + k)).toBe(true);
-    expect(seen.has('12:golem,hound') || seen.has('12:hound,golem')).toBe(true);
-    expect(seen.has('12:golem,golem')).toBe(false);
-    expect([...seen].some((s) => s.startsWith('18:') && s.includes('eye'))).toBe(true);
+    for (const k of ['demon', 'hound']) expect(seen.has('8:' + k + ',' + k)).toBe(true);
+    expect(seen.has('17:golem,hound') || seen.has('17:hound,golem')).toBe(true);
+    expect(seen.has('17:golem,golem')).toBe(false);
+    expect([...seen].some((s) => s.startsWith('27:') && s.includes('eye'))).toBe(true);
   });
 
   it('склад — окремий генератор mulberry32(seed ^ ENEMY_MIX_SALT)', () => {
     const r = mulberry32((77 ^ ENEMY_MIX_SALT) >>> 0);
-    const avail = kindsForDay(6);
-    expect(enemyMix(6, 3, 77)).toEqual(['demon', avail[Math.floor(r() * 2)], avail[Math.floor(r() * 2)]]);
+    const avail = kindsForThreat(8);
+    expect(enemyMix(avail, 3, 77)).toEqual(['demon', avail[Math.floor(r() * 2)], avail[Math.floor(r() * 2)]]);
   });
 });
 
@@ -168,31 +173,36 @@ function geoOnDay(day: number, kind: 'розвідник' | 'збирач' = 'з
   return g;
 }
 
-describe('п17.2: createMission за добою (EARS 1–2)', () => {
-  it('доба 1–5: лише демони, як до фази 17 (поля, імена, точність)', () => {
-    const m = createMission(geoOnDay(5), 'u1');
-    const aliens = m.state.units.filter((u) => u.side === 'alien');
-    expect(aliens.map((u) => u.name)).toEqual(['Демон 1', 'Демон 2', 'Демон 3']);
-    expect(aliens.map((u) => u.firingAccuracy)).toEqual([0.5, 0.45, 0.4]);
-    expect(aliens.every((u) => !('kind' in u) && !('armor' in u) && u.weapon === ALIEN_CUTTER)).toBe(true);
-    expect(m.briefing.aliens).toBe(3);
+describe('п18.3: createMission за загрозою (EARS 5)', () => {
+  it('загроза < 8 (і без поля threat): лише демони, як до фази 17 (поля, імена, точність) — доба не важить', () => {
+    for (const m of [
+      createMission(geoOnDay(5), 'u1'),
+      createMission(geoOnDay(25), 'u1'),
+      createMission(geoOnDay(25), 'u1', { threat: 7 }),
+    ]) {
+      const aliens = m.state.units.filter((u) => u.side === 'alien');
+      expect(aliens.map((u) => u.name)).toEqual(['Демон 1', 'Демон 2', 'Демон 3']);
+      expect(aliens.map((u) => u.firingAccuracy)).toEqual([0.5, 0.45, 0.4]);
+      expect(aliens.every((u) => !('kind' in u) && !('armor' in u) && u.weapon === ALIEN_CUTTER)).toBe(true);
+      expect(m.briefing.aliens).toBe(3);
+    }
   });
 
-  it('пізня доба: склад — enemyMix(доба, n, сід місії), бойовий RNG — як без складу', () => {
-    for (const day of [6, 12, 18, 25]) {
-      const g = geoOnDay(day);
-      const m = createMission(g, 'u1');
+  it('загроза 8+: склад — enemyMix(kindsForThreat(загроза), n, сід місії), бойовий RNG — як без складу', () => {
+    for (const threat of [8, 17, 27, 60]) {
+      const g = geoOnDay(3);
+      const m = createMission(g, 'u1', { threat });
       const kinds = m.state.units.filter((u) => u.side === 'alien').map((u) => enemyKind(u));
-      expect(kinds).toEqual(enemyMix(day, 3, missionSeed(g, 'u1')));
+      expect(kinds).toEqual(enemyMix(kindsForThreat(threat), 3, missionSeed(g, 'u1')));
       // бойовий RNG не зсунуто: перше число — як у mulberry32(сід місії)
       expect(m.state.rng()).toBe(mulberry32(missionSeed(g, 'u1'))());
     }
   });
 
-  it('на добах 6+ трапляються нові типи; ім’я — «<назва> <N>»', () => {
+  it('на загрозі 8+ трапляються нові типи; ім’я — «<назва> <N>»', () => {
     const names = new Set<string>();
-    for (let d = 6; d <= 30; d++) {
-      for (const u of createMission(geoOnDay(d), 'u1').state.units) if (u.side === 'alien') names.add(u.name);
+    for (let d = 1; d <= 25; d++) {
+      for (const u of createMission(geoOnDay(d), 'u1', { threat: 30 }).state.units) if (u.side === 'alien') names.add(u.name);
     }
     expect(names.has('Гончак 1')).toBe(true);
     expect([...names].some((n) => n.startsWith('Голем'))).toBe(true);

@@ -25,7 +25,7 @@ import { workshopTick } from './workshop';
 import { hospitalTick } from './squad';
 import { interceptTick, repairTick } from './intercept';
 import { campaignTick } from './campaign';
-import { deserializeParty, SAVE_VERSION, serializeParty, type Party } from './save';
+import { createParty, deserializeParty, migrateThreat, SAVE_VERSION, serializeParty, type Party } from './save';
 import { awaitingRole, BIOGRAPHIES, CALLSIGNS, rankOf } from './career';
 
 // Сейс-фікстура ≤0.3.0 (див. шапку; відображувані назви — ДО мапи ADR-0064).
@@ -204,7 +204,7 @@ describe('п16.2: сейв v1 мігрує у v2 (ADR-0147 п. 15, EARS 10)', ()
     const p = deserializeParty(v1With((soldiers) => void (soldiers[0].kills = 5)));
     const json = serializeParty(p, 'T');
     expect(JSON.parse(json).version).toBe(SAVE_VERSION);
-    expect(SAVE_VERSION).toBe(2);
+    expect(SAVE_VERSION).toBe(3); // п18.3: v3 — загроза
     const again = deserializeParty(json);
     expect(serializeParty(again, 'T')).toBe(json);
     expect(again.roster.soldiers[0].maxHp).toBe(12); // прирости не застосовуються вдруге
@@ -240,5 +240,66 @@ describe('п16.2: сейв v1 мігрує у v2 (ADR-0147 п. 15, EARS 10)', ()
     delete noCareers.state.roster.careers;
     expect(() => deserializeParty(JSON.stringify(noCareers))).toThrow(msg);
     expect(deserializeParty(bad((c) => (c.s1.role = 'sniper'))).roster.careers.s1.role).toBe('sniper');
+  });
+});
+
+// п18.3 (ADR-0153 п. 18; EARS 9): сейв v2 (і v1 через нього) мігрує у v3 — загроза з доби
+// й виграних місій, курсор — кінець журналу, «перемога» лишається перемогою.
+function v2Of(p: Party, edit: (c: Record<string, unknown>) => void = () => {}): string {
+  const data = JSON.parse(serializeParty(p, 'T')) as { version: number; state: { campaign: Record<string, unknown> } };
+  data.version = 2;
+  delete data.state.campaign.threat;
+  delete data.state.campaign.threatCursor;
+  delete data.state.campaign.defeatDay;
+  edit(data.state.campaign);
+  return JSON.stringify(data);
+}
+
+describe('п18.3: сейв v2 мігрує у v3 (ADR-0153 п. 18, EARS 9)', () => {
+  it('фікстура v1 (доба 4, без перемог): загроза 2 × 3 = 6, курсор — кінець журналу', () => {
+    const p = deserializeParty(FIXTURE);
+    expect(p.campaign).toMatchObject({ status: 'триває', threat: 6, threatCursor: p.geo.log.length, defeatDay: null });
+    expect(JSON.parse(serializeParty(p, 'T')).version).toBe(3);
+  });
+
+  it('v2: загроза = min(99, 2 × (доба − 1)) − виграні місії, не менше 0', () => {
+    const p = createParty(42);
+    p.geo.minute = 19 * 1440 + 30; // доба 20
+    for (let i = 0; i < 5; i++) p.geo.log.push({ type: 'mission_won', ufoId: 'w' + i, minute: i });
+    expect(deserializeParty(v2Of(p)).campaign.threat).toBe(38 - 5);
+    p.geo.minute = 2 * 1440; // доба 3: 4 − 5 → 0
+    expect(deserializeParty(v2Of(p)).campaign.threat).toBe(0);
+    p.geo.minute = 80 * 1440; // доба 81: 160 → межа 99 (не поразка на завантаженні)
+    const late = deserializeParty(v2Of(p));
+    expect(late.campaign.threat).toBe(99 - 5);
+    expect(late.campaign.status).toBe('триває');
+    expect(migrateThreat(late.geo)).toBe(94);
+  });
+
+  it('після міграції старі події загрозу не змінюють, нова доба — +2; сейв v3 — байт-у-байт', () => {
+    const p = deserializeParty(v2Of(createParty(42)));
+    expect(p.campaign.threat).toBe(0);
+    for (let i = 0; i < 48; i++) tickAll(p);
+    const days = p.geo.log.slice(0).filter((e) => e.type === 'day').length;
+    expect(days).toBe(1);
+    expect(p.campaign.threat).toBeGreaterThanOrEqual(2);
+    const json = serializeParty(p, 'T');
+    expect(serializeParty(deserializeParty(json), 'T')).toBe(json);
+  });
+
+  it('v2 з перемогою — перемога лишається, тік кампанії — no-op', () => {
+    const p = createParty(42);
+    p.geo.minute = 30 * 1440;
+    const won = deserializeParty(
+      v2Of(p, (c) => {
+        c.status = 'перемога';
+        c.victoryDay = 30;
+        c.score = { ufosShotDown: 0, missionsWon: 0, veteransAlive: 6, moneyLeft: 300, total: 375 };
+      })
+    );
+    expect(won.campaign).toMatchObject({ status: 'перемога', victoryDay: 30, threat: 60 });
+    const before = JSON.stringify(won.campaign);
+    for (let i = 0; i < 48; i++) tickAll(won);
+    expect(JSON.stringify(won.campaign)).toBe(before);
   });
 });

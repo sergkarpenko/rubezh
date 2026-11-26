@@ -540,7 +540,7 @@ describe('renderCampaign: чипи кампанії і екран перемог
     const f = makeFixture({ inBattle: () => true });
     f.panels.renderCampaign();
     expect(document.getElementById('campaign-status')!.textContent).toBe('кампанія: триває');
-    expect(document.getElementById('campaign-progress')!.textContent).toBe('Д1/30');
+    expect(document.getElementById('campaign-progress')!.textContent).toBe('Д1'); // п18.3: без «/30»
     expect(document.getElementById('campaign-progress')!.classList.contains('hidden')).toBe(true);
     expect(document.getElementById('campaign-victory')!.classList.contains('hidden')).toBe(true);
   });

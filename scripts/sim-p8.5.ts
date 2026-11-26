@@ -77,7 +77,12 @@ for (const preset of PRESETS) {
   console.log(`## Пресет «${preset}» (${rs.length} партій)\n`);
   console.log(`| Метрика | Значення |`);
   console.log(`| --- | --- |`);
-  console.log(`| Партій до 30 діб (перемога) | ${wins.length} (${round1((100 * wins.length) / rs.length)}%) |`);
+  console.log(`| Перемог | ${wins.length} (${round1((100 * wins.length) / rs.length)}%) |`);
+  // п18.3 (ADR-0155): поразка за загрозою — медіана доби
+  const defeats = rs.filter((r) => r.outcome === 'поразка');
+  console.log(
+    `| Поразок за загрозою | ${defeats.length} (${round1((100 * defeats.length) / rs.length)}%)${defeats.length ? `, медіана доби ${median(defeats.map((r) => r.endDay))}` : ''} |`
+  );
   console.log(
     `| Банкрутств | ${bankrupts.length} (${round1((100 * bankrupts.length) / rs.length)}%)${bankrupts.length ? `, медіана дня ${median(bankrupts.map((r) => r.endDay))}` : ''} |`
   );

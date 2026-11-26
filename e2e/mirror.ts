@@ -9,8 +9,8 @@
 // дефект зв'язування UI з ядром або порушений детермінізм.
 //
 // Лише ядро (src/core, ADR-0002): модулі src/ui тягнуть DOM і сюди не
-// імпортуються. Тік партії тут — геосцена і лікарня (advanceTime +
-// hospitalTick); решта контуру partyTick у main.ts (економіка, наука, цех,
+// імпортуються. Тік партії тут — геосцена, лікарня і загроза кампанії (advanceTime +
+// hospitalTick + campaignTick, п18.3); решта контуру partyTick у main.ts (економіка, наука, цех,
 // перехоплення) на них не впливає, поки сценарій цих дій не робить, і
 // сценарієм не звіряється.
 
@@ -29,7 +29,7 @@ import {
 } from '../src/core/combat';
 import { DemoSteps, aliensTurn } from '../src/core/ai-bot';
 import { awaitingRole, newCareer, RANK_NAMES, rankOf, type SoldierRole } from '../src/core/career';
-import type { DifficultyPreset } from '../src/core/campaign';
+import { campaignTick, type DifficultyPreset } from '../src/core/campaign';
 import { advanceTime, detectedUfos, geoClock, missionTargets, type Ufo } from '../src/core/geo';
 import { findPath, pathApCost, sideVisibleCells } from '../src/core/map';
 import { completeMission, createMission, missionOutcome, type Mission, type MissionOutcome } from '../src/core/mission';
@@ -85,8 +85,11 @@ export class CoreMirror {
 
   tick(ticks = 1): void {
     for (let i = 0; i < ticks; i++) {
+      if (this.party.campaign.status === 'поразка') return; // п18.3: на поразці сторінка зупиняє час (gameOver)
       advanceTime(this.party.geo, 1, radarRange(this.party.research));
       hospitalTick(this.party.roster);
+      // п18.3: загроза кампанії — склад ворогів місії (як кінець partyTick у main.ts)
+      campaignTick({ geo: this.party.geo, roster: this.party.roster, econ: this.party.econ }, this.party.campaign);
     }
   }
 
@@ -185,6 +188,7 @@ export class CoreMirror {
       squad,
       items: deployConsumables(this.party.workshop, squad),
       ...(roles !== null ? { roles } : {}),
+      threat: this.party.campaign.threat, // п18.3: як launch у src/ui/battle.ts
     });
     return this.mission;
   }

@@ -1,6 +1,6 @@
 // src/core/party-bot.ts — бот-гравець наскрізного циклу партії (П8.5).
-// Оркеструє ПОВНУ партію «Рубіжа» від createParty(seed, preset) до перемоги на
-// межі 30-ї доби (ADR-0033) або банкрутства (ADR-0021): тіки геоцени →
+// Оркеструє ПОВНУ партію «Рубіжа» від createParty(seed, preset) до поразки за
+// загрозою (п18.3, ADR-0155), перемоги або банкрутства (ADR-0021): тіки геоцени →
 // перехоплення НЛО → тактичні місії → найм/лікування/ремонт.
 //
 // ADR-0002: чисте ядро без DOM/Canvas — лише публічне API наявних модулів
@@ -41,15 +41,7 @@ import { FIGHTER_MAX_HP, FIGHTER_REPAIR_COST, interceptRound, interceptTick, rep
 import { BALANCED_POLICY, type InterceptPolicy } from './intercept-bot';
 import { autoBattle, type EvacPolicy } from './ai-bot';
 import { completeMission, createMission } from './mission';
-import {
-  DEFAULT_PRESET,
-  sciencePrice,
-  VICTORY_DAY,
-  campaignScore,
-  campaignTick,
-  type CampaignScore,
-  type DifficultyPreset,
-} from './campaign';
+import { DEFAULT_PRESET, sciencePrice, campaignScore, campaignTick, type CampaignScore, type DifficultyPreset } from './campaign';
 import { createParty, type Party } from './save';
 // П11.8: наука (research.ts) і цех (workshop.ts) — публічне API ядра, ядро не змінюється.
 import {
@@ -132,7 +124,12 @@ export const SCIENCE_POLICY: PartyBotPolicy = {
   fireScientistsWhenDone: true,
 };
 
-export type PartyOutcome = 'триває' | 'перемога' | 'банкрутство';
+export type PartyOutcome = 'триває' | 'перемога' | 'банкрутство' | 'поразка'; // п18.3: «поразка» — загроза 100
+
+// п18.3 (ADR-0153 п. 15, ADR-0155): типовий горизонт simulateParty замість VICTORY_DAY —
+// партія без перемоги триває до поразки за загрозою (≈ 64-та доба на «нормі» за темпом п18.1);
+// горизонт — запобіжник, якщо загроза не досягла 100.
+export const PARTY_HORIZON_DAYS = 120;
 
 // Метрики однієї зіграної партії (П8.5: % до 30 діб, банкрутства/поранення/
 // ремонти, крива балансу). Криві — знімки наприкінці кожної завершеної доби.
@@ -141,7 +138,7 @@ export interface PartySimResult {
   preset: DifficultyPreset;
   policy: string;
   outcome: PartyOutcome;
-  endDay: number; // перемога = 30; банкрутство = доба настання; «триває» = завершені доби
+  endDay: number; // перемога, поразка, банкрутство — доба настання; «триває» = завершені доби
   ticks: number; // виконаних тіків геосцени
   score: CampaignScore; // підсумковий рахунок (похідні метрики, campaign.ts)
   missionsLaunched: number;
@@ -178,7 +175,7 @@ export interface PartySimResult {
 
 export interface SimulatePartyOptions {
   policy?: PartyBotPolicy;
-  maxDays?: number; // горизонт симуляції (дефолт VICTORY_DAY — повна партія)
+  maxDays?: number; // горизонт симуляції (дефолт PARTY_HORIZON_DAYS — до кінця партії)
 }
 
 // Перший виявлений НЛО у повітрі — ціль запуску (дзеркало intercept-bot.ts).
@@ -357,6 +354,7 @@ export interface MissionStepInfo {
 export function partyBotMissionStep(party: Party, policy: PartyBotPolicy): MissionStepInfo {
   const info: MissionStepInfo = { launched: false, outcome: null, lost: 0, wounded: 0, evacuated: 0 };
   if (!policy.missions) return info;
+  if (party.campaign.status !== 'триває') return info; // п18.3: кінець партії — місій немає (gameOver у main.ts)
   if (readySoldiers(party.roster).length < policy.missionSquadSize) return info;
   // Т.22 (ADR-0089): запобіжник останнього загону — без грошей на найм
   // останні боєготові в бій не йдуть (розгром був би банкрутством).
@@ -371,6 +369,7 @@ export function partyBotMissionStep(party: Party, policy: PartyBotPolicy): Missi
     squad,
     ...(hasItems ? { items: consumables } : {}),
     ...(roles ? { roles } : {}),
+    threat: party.campaign.threat, // п18.3 (ADR-0153 п. 14): склад ворогів за загрозою
   });
   const battle = autoBattle(mission.state, undefined, policy.evac); // ліміт півходів autoBattle — рідкісний тупик
   // Т.76: «евакуйовано» — НЛО лишається, премії немає (completeMission); тупик — поразка, як і раніше.
@@ -395,13 +394,13 @@ export function partyBotMissionStep(party: Party, policy: PartyBotPolicy): Missi
 
 // П8.5: зіграти повну партію бот-гравцем і зібрати метрики. Порядок фаз тіка —
 // partyTick (main.ts) + рішення гравця між тіками; перехоплення — порядок
-// simulateInterceptCampaign (intercept-bot.ts). Завершення: перемога на межі
-// 30-ї доби (campaignTick), банкрутство (isBankrupt) або горизонт maxDays
+// simulateInterceptCampaign (intercept-bot.ts). Завершення (п18.3): поразка за загрозою
+// чи перемога (campaignTick), банкрутство (isBankrupt) або горизонт maxDays
 // (для коротких смоук-симуляцій). Детермінізм (ADR-0003): без власного RNG,
 // сід + пресет + політика = байт-у-байт той самий результат.
 export function simulateParty(seed: number, preset: DifficultyPreset = DEFAULT_PRESET, opts: SimulatePartyOptions = {}): PartySimResult {
   const policy = opts.policy ?? DEFAULT_PARTY_POLICY;
-  const maxDays = opts.maxDays ?? VICTORY_DAY;
+  const maxDays = opts.maxDays ?? PARTY_HORIZON_DAYS;
   const party = createParty(seed, preset);
   const res: PartySimResult = {
     seed,
@@ -471,6 +470,9 @@ export function simulateParty(seed: number, preset: DifficultyPreset = DEFAULT_P
     researchTick(party.research, party.econ, party.geo, party.campaign.preset);
     workshopTick(party.workshop);
     hospitalTick(party.roster);
+    // п18.3 (аудит PR #514): загроза — наприкінці тіку, до рішень гравця, як partyTick у main.ts:
+    // склад місії цього тіку бачить події доби й відльотів цього тіку; поразка — місій немає.
+    campaignTick({ geo: party.geo, roster: party.roster, econ: party.econ }, party.campaign);
 
     // Фаза 3: найм (перед місіями — загін має бути повним).
     res.hiredTotal += partyBotHireStep(party, policy);
@@ -542,16 +544,16 @@ export function simulateParty(seed: number, preset: DifficultyPreset = DEFAULT_P
       break;
     }
 
-    // Перемога на межі 30-ї доби (ADR-0033; no-op до межі й після).
+    // п18.3: загроза кампанії — поразка на 100 (перемога — фінальна місія, п18.4); події місії
+    // цього тіку враховує вже цей виклик (у main.ts — наступний partyTick; послідовність загрози та сама).
     campaignTick({ geo: party.geo, roster: party.roster, econ: party.econ }, party.campaign);
-    if (party.campaign.status === 'перемога') {
-      res.outcome = 'перемога';
+    if (party.campaign.status !== 'триває') {
+      res.outcome = party.campaign.status;
       break;
     }
   }
 
-  if (res.outcome === 'перемога') res.endDay = VICTORY_DAY;
-  else if (res.outcome === 'банкрутство')
+  if (res.outcome === 'перемога' || res.outcome === 'поразка' || res.outcome === 'банкрутство')
     res.endDay = geoDay(party.geo); // доба настання
   else res.endDay = res.moneyByDay.length; // «триває» = завершені доби горизонту
   // П11.8: витрати на найм — за фактом найнятих × ціна за пресетом (детерміновано;
