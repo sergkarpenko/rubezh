@@ -94,7 +94,8 @@ def main():
         report[name] = info
     atlas[atlas[..., 3] == 0] = 0
     Image.fromarray(atlas, 'RGBA').save(OUT, optimize=True)
-    REPORT.write_text(json.dumps(report, ensure_ascii=False, indent=1) + '\n')
+    # тип — рядком (рамки кадрів — короткі списки; багаторядковий звіт роздував би диф)
+    REPORT.write_text('{\n' + ',\n'.join(' ' + json.dumps(k) + ': ' + json.dumps(v, ensure_ascii=False) for k, v in report.items()) + '\n}\n')
     print(json.dumps({k: {'muzzle': v['muzzle'], 'walkIoU': v['walkIoU'], 'scale': v['scale']} for k, v in report.items()}, ensure_ascii=False))
 
 
