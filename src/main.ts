@@ -51,7 +51,7 @@ import { cellFromPoint, createInput } from './ui/input';
 // П6.8 (ADR-0029): анімаційний рушій — черга + rAF лише під час активних анімацій.
 // пR.3 (ADR-0038): рушій і фабрики анімацій — чиста логіка src/core/render-core.ts;
 // фабрика offscreen-канвасів — реєструється в шарі відображення (src/render.ts).
-import { initPixelSprites, initGeoMap, initGeoTower, initMetroMap, initMetroTiles, initUnitAtlas } from './render';
+import { initPixelSprites, initGeoIcons, initGeoMap, initGeoTower, initMetroMap, initMetroTiles, initUnitAtlas } from './render';
 import { AnimEngine, calmAnim, geoTrailPoints, makeGeoScanAnim, makeGeoTrailAnim, makeTracerAnim, type Anim } from './core/render-core';
 // П5.3 (ADR-0026): партія і слоти збереження — із чистого ядра save.ts.
 // П12.2 (ADR-0065): serializeParty — ще й контрольна точка «незбережених
@@ -114,8 +114,8 @@ initMetroTiles((url, onLoad) => {
   probe.src = url;
 });
 
-// Позафазна лінія «візуальні порівняння» (кандидат А «нічний супутник»):
-// фон геосцени — цілісна карта світу geo-map.webp та спрайт бази-радара —
+// Позафазна лінія «візуальні порівняння» (з п19.5 — картина «Живі береги», ADR-0163):
+// фон геосцени — цілісна карта світу geo-map.webp та спрайт бази-радара (фолбек значка вузла) —
 // той самий патерн лінивого завантаження; фолбек — розклад GEO_LAYOUT
 // двома тонами (тести від ассета не залежать, сейви не зачіпаються — ADR-0026).
 initGeoMap((url, onLoad) => {
@@ -126,6 +126,14 @@ initGeoMap((url, onLoad) => {
   probe.src = url;
 });
 initGeoTower((url, onLoad) => {
+  const probe = new Image();
+  probe.onload = () => {
+    onLoad(probe);
+  };
+  probe.src = url;
+});
+// п19.5 (ADR-0163): аркуш значків геосцени — той самий патерн; без нього — значки кодом.
+initGeoIcons((url, onLoad) => {
   const probe = new Image();
   probe.onload = () => {
     onLoad(probe);

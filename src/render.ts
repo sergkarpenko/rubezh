@@ -43,6 +43,9 @@ import {
   GEO_CELL_A,
   GEO_CELL_B,
   GEO_GRID_COLOR,
+  GEO_ICON_CELL,
+  GEO_ICON_ORDER,
+  GEO_ICON_PX,
   GRID_COLOR,
   NIGHT_BG,
   animT,
@@ -56,6 +59,7 @@ import {
   visibleKeys,
   wallQuads,
   type Anim,
+  type GeoIcon,
   type TerrainCell,
 } from './core/render-core';
 // П14.5: розмір світу для замикання скан-зони по X (куля; як RADAR_RANGE у geo.ts).
@@ -85,6 +89,7 @@ import metroBgUrl from '../assets/metro-bg.webp';
 import metroTilesUrl from '../assets/metro-tiles.png';
 import geoMapUrl from '../assets/geo-map.webp';
 import radarTowerUrl from '../assets/radar-tower.png';
+import geoIconsUrl from '../assets/geo-icons.png';
 
 const SELECT_RING = '#9adfff'; // П12.7: рамка вибору — гама ціану «Рубіжу» (ADR-0064)
 const UFO_SOFT_ALPHA = 0.85;
@@ -342,25 +347,17 @@ export function isMetroTerrainReady(): boolean {
   return metroBgImg !== null && metroTilesImg !== null;
 }
 
-// --- Позафазна лінія «візуальні порівняння» (кандидат А «нічний супутник»,
-// Work-сесія 2026-10-21): геосцена — ОДНА цілісна картина світу ---
-// Фон — assets/geo-map.webp (1120×630, 16:9 — вікно сирця geo-map2.jpg
-// x 0..1024, y 9..639 (повна ширина, 82% висоти — увесь материк з
-// вогнями) + безшовні паддінги тоном темної рамки сирця: захід 68px,
-// схід 28px; фідбек власника 2026-10-23 ×4, вказівка «сюди»: клітинка
-// бази (8,4) — на ЯСКРАВОМУ мисі-«острові» південного узбережжя
-// материка (сирець x 480..576, y 288..352); вежа по центру, промінь
-// з вежі): малюється cover на всю канву геосцени
-// (1120/768 = 630/432 — точний 16:9, без швів); розклад суші
-// GEO_LAYOUT (render-core) ВИВЕДЕНО з цієї ж картини (медіани
-// клітинок 70×70, поріг 16.5 — скрипт scripts/geo-layout.py), тож
-// розклад збігається з картиною. Атлас geo-tiles.png і тайл узбережжя
-// більше не використовуються; вогні міст намальовані на самій карті
-// (оверлей вимкнено). Спрайт бази — вежа-радар assets/radar-tower.png
-// (flood-fill альфа по чорному тлу сирця, 96×95 — 2× клітинки), по
-// центру клітинки бази. Фолбек без ассетів — розклад двома тонами
-// (суша/океан; поведінка не залежить від ассета, тести від ассета не
-// залежать, сейви не зачіпаються — ADR-0026).
+// --- Геосцена — ОДНА цілісна картина світу (позафазна лінія «візуальні порівняння», 2026-10-21;
+// з п19.5, ADR-0163, — картина «Живі береги») ---
+// Фон — assets/geo-map.webp (1120×630, 16:9; аркуш Gemini п19.5 — чотири материки на місцях
+// регіонів REGION_OF, конвертер scripts/assets/convert_geo_t208.py): малюється cover на всю
+// канву геосцени (1120/768 = 630/432 — точний 16:9, без швів); розклад суші GEO_LAYOUT
+// (render-core) ВИВЕДЕНО тим самим конвертером з цієї ж картини (ознака r + g - b, поріг Отсу),
+// тож розклад збігається з картиною. Вогні міст намальовані на самій карті (оверлей вимкнено).
+// Значок вузла — з аркуша значків (initGeoIcons нижче); без аркуша — вежа-радар
+// assets/radar-tower.png (flood-fill альфа по чорному тлу сирця, 96×95 — 2× клітинки), по
+// центру клітинки бази. Фолбек без ассетів — розклад двома тонами (суша/океан; поведінка не
+// залежить від ассета, тести від ассета не залежать, сейви не зачіпаються — ADR-0026).
 // Ліниве завантаження — той самий патерн, що initUnitAtlas (ADR-0072).
 export type LoadGeoAsset = (url: string, onLoad: (img: CanvasImageSource) => void) => void;
 let geoMapImg: CanvasImageSource | null = null;
@@ -397,6 +394,31 @@ export function isGeoMapReady(): boolean {
 
 export function isGeoTowerReady(): boolean {
   return geoTowerImg !== null;
+}
+
+// п19.5 (ADR-0163): аркуш значків геосцени (assets/geo-icons.png, шість клітинок 96 × 96 —
+// зонд-розвідник, зонд-збирач, перехоплювач, вузол, ангар, Брама) — ліниве завантаження, як карта;
+// без аркуша — чинні значки кодом (ADR-0072).
+let geoIconsImg: CanvasImageSource | null = null;
+
+export function initGeoIcons(load: LoadGeoAsset): void {
+  geoIconsImg = null;
+  load(geoIconsUrl, (img) => {
+    geoIconsImg = img;
+  });
+}
+
+export function isGeoIconsReady(): boolean {
+  return geoIconsImg !== null;
+}
+
+// Значок аркуша по центру (cx, cy), сторона side (типово — GEO_ICON_PX); false — аркуша немає.
+function drawGeoIcon(ctx: CanvasRenderingContext2D, icon: GeoIcon, cx: number, cy: number, side: number = GEO_ICON_PX[icon]): boolean {
+  if (geoIconsImg === null) return false;
+  const sx = GEO_ICON_ORDER.indexOf(icon) * GEO_ICON_CELL;
+  ctx.imageSmoothingEnabled = true; // мальований значок, масштаб 96 → 34–48 не цілий
+  ctx.drawImage(geoIconsImg, sx, 0, GEO_ICON_CELL, GEO_ICON_CELL, Math.round(cx - side / 2), Math.round(cy - side / 2), side, side);
+  return true;
 }
 
 // Кадр з атласа: 96 × 96 → UNIT_DRAW × UNIT_DRAW (Т.132, ADR-0121), ноги на UNIT_FEET_DY
@@ -647,10 +669,11 @@ export function drawBaseSprite(ctx: CanvasRenderingContext2D, b: BaseSprite): vo
 // увімкнене (фото, не піксель-арт). Фідбек власника 2026-10-23: вежа —
 // строго по ЦЕНТРУ клітинки бази (звідки виходить промінь/розгортка
 // радара), а під клітинкою в скорегованій картині — острів. Підпис
-// «ВУЗОЛ» прибрано (фідбек власника 2026-10-23). Фолбек без ассета —
-// піксельний спрайт ADR-0031 (drawBaseSprite); тести від ассета не
-// залежать.
+// «ВУЗОЛ» прибрано (фідбек власника 2026-10-23). З п19.5 (ADR-0163) першим іде
+// значок вузла з аркуша, вежа — фолбек без аркуша; без обох — піксельний
+// спрайт ADR-0031 (drawBaseSprite); тести від ассета не залежать.
 export function drawGeoBaseSprite(ctx: CanvasRenderingContext2D, b: BaseSprite): void {
+  if (drawGeoIcon(ctx, 'node', b.cx, b.cy, b.size)) return; // п19.5: значок вузла з аркуша
   if (geoTowerImg === null) {
     drawBaseSprite(ctx, b);
     return;
@@ -669,6 +692,10 @@ export const GATE_COLOR = '#c45cff';
 export function drawGatePortal(ctx: CanvasRenderingContext2D, g: { cx: number; cy: number; size: number; open: boolean }): void {
   const r = g.size * 0.34;
   ctx.globalAlpha = g.open ? 1 : 0.45;
+  if (drawGeoIcon(ctx, 'gate', g.cx, g.cy)) {
+    ctx.globalAlpha = 1; // п19.5: значок Брами з аркуша, приглушення — те саме
+    return;
+  }
   ctx.fillStyle = 'rgba(196,92,255,0.18)';
   ctx.beginPath();
   ctx.ellipse(g.cx, g.cy, r, r * 1.15, 0, 0, Math.PI * 2);
@@ -689,14 +716,51 @@ export function drawGatePortal(ctx: CanvasRenderingContext2D, g: { cx: number; c
 }
 
 export function drawFighterSprite(ctx: CanvasRenderingContext2D, f: FighterSprite): void {
+  if (drawGeoIcon(ctx, 'interceptor', f.cx, f.cy)) return; // п19.5: значок перехоплювача з аркуша
   drawPixelSprite(ctx, FIGHTER_SPRITE, f.cx, f.cy, SPRITE_SCALE);
 }
 
+// п19.5: приземлений зонд зі значком — кільце посадки під ним і приглушений значок.
+export const UFO_LANDED_RING = 'rgba(255,46,136,0.75)';
+export const UFO_LANDED_ALPHA = 0.8;
+
 export function drawUfoSprite(ctx: CanvasRenderingContext2D, u: UfoSprite): void {
+  if (geoIconsImg !== null) {
+    if (u.landed) {
+      ctx.strokeStyle = UFO_LANDED_RING;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.ellipse(u.cx, u.cy + 10, 16, 6, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.lineWidth = 1;
+      ctx.globalAlpha = UFO_LANDED_ALPHA;
+    }
+    drawGeoIcon(ctx, u.kind === 'розвідник' ? 'scout' : 'harvester', u.cx, u.cy);
+    ctx.globalAlpha = 1;
+    return;
+  }
   ctx.globalAlpha = UFO_SOFT_ALPHA;
   const def = u.landed ? UFO_LANDED_SPRITE : u.kind === 'розвідник' ? UFO_SCOUT_SPRITE : UFO_HARVESTER_SPRITE;
   drawPixelSprite(ctx, def, u.cx, u.cy, SPRITE_SCALE); // П13.5: 12×12 → 24px у клітинці GCELL 44
   ctx.globalAlpha = 1;
+}
+
+// п19.5 (ADR-0163): ангар регіону, де стоїть перехоплювач, — значок з аркуша; без аркуша — кодом:
+// темне півкругле склепіння з ціановою смугою над воротами.
+export const HANGAR_FILL = '#1c2633';
+const HANGAR_LIGHT = '#00e5ff';
+export function drawHangarSprite(ctx: CanvasRenderingContext2D, h: { cx: number; cy: number }): void {
+  if (drawGeoIcon(ctx, 'hangar', h.cx, h.cy)) return;
+  ctx.fillStyle = HANGAR_FILL;
+  ctx.beginPath();
+  ctx.arc(h.cx, h.cy + 8, 15, Math.PI, 0);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(154,223,255,0.55)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  ctx.fillStyle = HANGAR_LIGHT;
+  ctx.fillRect(Math.round(h.cx - 7), Math.round(h.cy + 1), 14, 2);
 }
 
 // --- П6.13: нічна палітра бойовища — терен, сітка, м'який край туману ---
@@ -830,11 +894,10 @@ export function drawNightTerrain(
   }
 }
 
-// --- Позафазна лінія «візуальні порівняння» (кандидат А «нічний супутник»):
-// терен геосцени — ОДНА цілісна картина світу ---
-// Фон — geo-map.webp cover на всю канву (ассет 1120×630 — вікно сирця
-// 16:9 з безшовними паддінгами, 1120/768 = 630/432 — точне вписування
-// без швів; згладжування увімкнене — фото, не піксель-арт). Розклад суші GEO_LAYOUT
+// --- Терен геосцени — ОДНА цілісна картина світу (позафазна лінія «візуальні порівняння»;
+// з п19.5 — картина «Живі береги», ADR-0163) ---
+// Фон — geo-map.webp cover на всю канву (ассет 1120×630, 16:9, 1120/768 = 630/432 — точне
+// вписування без швів; згладжування увімкнене — мальована картина, не піксель-арт). Розклад суші GEO_LAYOUT
 // виведено з цієї ж картини (render-core; константа — не залежить ні від
 // сіда партії, ні в рантаймі від ассета). Фолбек !loaded — ТОЙ САМИЙ
 // розклад двома тонами: суша GEO_CELL_B, океан GEO_CELL_A (мапа читається

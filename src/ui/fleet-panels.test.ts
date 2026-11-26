@@ -246,7 +246,22 @@ describe('аудит PR #523: стан панелі і прокрутка до �
     expect(spy).toHaveBeenCalledTimes(1);
   });
 
-  it('маркер мапи — і в погоні другого (крило в клітинці погоні, а не в ангарі)', () => {
+  it('аудит PR #524: зонд, що сів на клітинку ангара, малюється поверх ангара', () => {
+    const { party, ufo } = flyingParty();
+    addFighter(party.intercept, party.geo, 'south');
+    ufo.pos = { x: 8, y: 7 }; // клітинка ангара «Південь»
+    ufo.status = 'приземлився';
+    const f = makeFixture(party);
+    f.panels.renderGeo();
+    ops.length = 0;
+    f.panels.renderGeo();
+    const hangar = ops.indexOf('arc(408,368,15,' + Math.PI + ',0)');
+    const probe = ops.findIndex((o) => o.startsWith('drawImage(') && o.includes(',' + (8 * 48 + 24 - 12) + ',' + (7 * 48 + 24 - 12) + ','));
+    expect(hangar).toBeGreaterThanOrEqual(0);
+    expect(probe).toBeGreaterThan(hangar);
+  });
+
+  it('маркер мапи — і в погоні другого (крило в клітинці погоні; ангар «Південь» лишається)', () => {
     const { party, ufo } = flyingParty();
     const f = makeFixture(party);
     const wings = (): string[] => {
@@ -255,14 +270,17 @@ describe('аудит PR #523: стан панелі і прокрутка до �
       f.panels.renderGeo();
       return ops.filter((o) => o.startsWith('drawImage('));
     };
+    const hangars = (): string[] => ops.filter((o) => o.startsWith('arc(')); // ангар кодом — склепіння (без аркуша значків)
     const base = wings().length;
     addFighter(party.intercept, party.geo, 'south');
-    expect(wings().length).toBe(base + 1);
+    expect(wings().length).toBe(base); // п19.5: на базі — «в ангарі», крила немає
+    expect(hangars()).toEqual(['arc(408,368,15,' + Math.PI + ',0)']); // ангар «Південь» (8, 7)
     startIntercept(party.intercept, party.geo, ufo.id, 2);
     party.intercept.fighters[1]!.pos = { x: 3, y: 3 };
     const chase = wings();
     expect(chase.length).toBe(base + 1);
     expect(chase.some((o) => o.includes(',' + (3 * 48 + 24 - 12) + ','))).toBe(true); // центр клітинки (3, 3), спрайт 24 px
+    expect(hangars()).toHaveLength(1); // ангар на місці й під час погоні
   });
 });
 
@@ -362,20 +380,29 @@ describe('п19.4: «Регіони» і шар мапи', () => {
     for (let y = 0; y < 9; y++) expect(ops).toContain('moveTo(240,' + y * 48 + ')');
   });
 
-  it('renderGeo: перехоплювач в ангарі не «Північ» — крило на клітинці ангара; у вузлі — ні', () => {
+  it('renderGeo (п19.5): перехоплювач в ангарі не «Північ» — значок ангара на його клітинці, крила немає; у вузлі — ні того, ні того', () => {
     const party = createParty(42);
     const f = makeFixture(party);
-    const draws = (): number => {
+    const draws = (): { images: number; hangars: string[] } => {
       f.panels.renderGeo(); // перший кадр гріє кеш спрайтів — рахуємо другий
       ops.length = 0;
       f.panels.renderGeo();
-      return ops.filter((o) => o.startsWith('drawImage(')).length;
+      return { images: ops.filter((o) => o.startsWith('drawImage(')).length, hangars: ops.filter((o) => o.startsWith('arc(')) };
     };
     const one = draws();
+    expect(one.hangars).toEqual([]);
     addFighter(party.intercept, party.geo, 'east');
-    expect(draws()).toBe(one + 1); // крило на клітинці ангара «Схід»
+    expect(draws()).toEqual({ images: one.images, hangars: ['arc(648,224,15,' + Math.PI + ',0)'] }); // ангар «Схід» (13, 4)
+    party.intercept.fighters[1]!.status = 'ремонт';
+    party.intercept.fighters[1]!.repairTicksLeft = 4;
+    expect(draws()).toEqual({ images: one.images, hangars: ['arc(648,224,15,' + Math.PI + ',0)'] }); // у ремонті — теж «в ангарі», без крила
+    party.intercept.fighters[1]!.status = 'на базі';
+    delete party.intercept.fighters[1]!.repairTicksLeft;
+    addFighter(party.intercept, party.geo, 'east');
+    expect(draws().hangars).toHaveLength(1); // два в одному ангарі — один значок
     party.intercept.fighters[1]!.region = 'north';
-    expect(draws()).toBe(one); // в ангарі вузла — у спрайті вузла
+    party.intercept.fighters[2]!.region = 'north';
+    expect(draws()).toEqual(one); // в ангарі вузла — у спрайті вузла
   });
 });
 
