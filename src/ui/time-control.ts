@@ -50,7 +50,9 @@ export function stopEvents(party: Party, before: TickSnapshot): StopEvent[] {
     else if (e.type === 'base_assault' || e.type === 'assault_lost') out.push('assault');
   }
   if (party.research.log.slice(before.researchLog).some((e) => e.type === 'project_completed')) out.push('project_completed');
-  if (party.workshop.log.slice(before.workshopLog).some((e) => e.type === 'produced')) out.push('produced');
+  // п19.6 (рішення власника «А. Додати тут»): готовий перехоплювач — та сама зупинка «Кузні», що й предмет
+  const forge = party.workshop.log.slice(before.workshopLog);
+  if (forge.some((e) => e.type === 'produced' || e.type === 'interceptor_produced')) out.push('produced');
   const inRoster = new Set(party.roster.soldiers.map((s) => s.id));
   if (before.hospital.some((id) => party.roster.hospital[id] === undefined && inRoster.has(id))) out.push('recovered');
   return out;

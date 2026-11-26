@@ -91,6 +91,17 @@ describe('Т.43: події зупинки (stopEvents)', () => {
     expect(eventsAfter('died_in_hospital')).toEqual([]);
   });
 
+  it('п19.6: готовий перехоплювач — зупинка «Кузні» (produced), замовлення — ні', () => {
+    const p = createParty(42);
+    const before = takeSnapshot(p);
+    p.workshop.log.push({ type: 'interceptor_order', region: 'east', ticks: 48 });
+    expect(stopEvents(p, before)).toEqual([]);
+    p.workshop.log.push({ type: 'interceptor_produced', fighter: 2, region: 'east' });
+    expect(stopEvents(p, before)).toEqual(['produced']);
+    expect(shouldStop('event', ['produced'])).toBe(true);
+    expect(shouldStop('day', ['produced'])).toBe(false);
+  });
+
   it('події до відбитка не рахуються', () => {
     const p = createParty(42);
     TICKS.ufo_detected(p);
