@@ -22,7 +22,7 @@ import { spend, type EconomyState } from './economy';
 import { type DifficultyPreset, DEFAULT_PRESET, sciencePrice } from './campaign';
 import { missingTrophies, spendTrophies, type KeyProjectId, type ProjectId, type ResearchState, type TrophyCost } from './research';
 import { HIT_CHANCE_CAP, type Unit, type UnitItems } from './combat';
-import { addFighter, fighterById, MAX_FIGHTERS, type InterceptState } from './intercept';
+import { addFighter, baseWhere, fighterById, MAX_FIGHTERS, type InterceptState } from './intercept';
 import type { GeoState } from './geo';
 import type { RegionId } from './regions';
 
@@ -208,12 +208,16 @@ export function orderInterceptor(
 export function workshopTick(workshop: WorkshopState, intercept?: InterceptState, geo?: GeoState): void {
   const active = workshop.queue[0];
   if (!active) return;
+  // аудит PR #522: перевірка до зміни стану — помилка не губить замовлення
+  if (active.ticksLeft <= 1 && active.id === 'interceptor') {
+    if (!intercept || !geo) throw new Error('workshopTick: для перехоплювача потрібні стан перехоплення і геосцена');
+    if (intercept.fighters.length >= MAX_FIGHTERS) throw new Error('Перехоплювачів уже ' + MAX_FIGHTERS + ': більше не буває');
+  }
   active.ticksLeft -= 1;
   if (active.ticksLeft <= 0) {
     if (active.id === 'interceptor') {
-      if (!intercept || !geo) throw new Error('workshopTick: для перехоплювача потрібні стан перехоплення і геосцена');
       workshop.queue.shift();
-      const f = addFighter(intercept, geo, active.region!);
+      const f = addFighter(intercept!, geo!, active.region!);
       workshop.log.push({ type: 'interceptor_produced', fighter: f.id, region: f.region });
       return;
     }
@@ -328,7 +332,7 @@ function moduleTag(intercept: InterceptState, id: number): { fighter?: number } 
 export function installGunModule(workshop: WorkshopState, intercept: InterceptState, fighterId?: number): void {
   const f = fighterById(intercept, fighterId);
   if (f.status !== 'на базі') {
-    throw new Error('Модуль встановлюється лише у вузлі «Рубіж»: перехоплювач у польоті');
+    throw new Error('Модуль встановлюється лише ' + baseWhere(f) + ': перехоплювач у польоті');
   }
   if (f.gunModule) {
     throw new Error('Гарматний модуль перехоплювача уже встановлено');
@@ -344,7 +348,7 @@ export function installGunModule(workshop: WorkshopState, intercept: InterceptSt
 export function removeGunModule(workshop: WorkshopState, intercept: InterceptState, fighterId?: number): void {
   const f = fighterById(intercept, fighterId);
   if (f.status !== 'на базі') {
-    throw new Error('Модуль знімається лише у вузлі «Рубіж»: перехоплювач у польоті');
+    throw new Error('Модуль знімається лише ' + baseWhere(f) + ': перехоплювач у польоті');
   }
   if (!f.gunModule) {
     throw new Error('Гарматний модуль перехоплювача не встановлено');

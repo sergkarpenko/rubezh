@@ -77,8 +77,16 @@ describe('п19.3: ангари і перший перехоплювач', () => 
 
   it('без купівлі — у журналах партії бота немає позначок перехоплювача, повернення — у вузол', () => {
     // EARS 5: байт-у-байт як у v0.10.0 — поле fighter/region з'являється лише з двома перехоплювачами
-    const r = simulateParty(42, 'норма', { maxDays: 20 });
+    let tagged = 0;
+    const r = simulateParty(42, 'норма', {
+      maxDays: 20,
+      onTick: (party) => {
+        tagged += party.intercept.log.filter((e) => 'fighter' in e || 'region' in e).length;
+        tagged += party.workshop.log.filter((e) => 'fighter' in e).length;
+      },
+    });
     expect(r.launches).toBeGreaterThan(0);
+    expect(tagged).toBe(0);
     const p = createParty(42);
     const geo = p.geo;
     const ic = p.intercept;
@@ -144,6 +152,7 @@ describe('п19.3: купівля в «Кузні» (EARS 5)', () => {
     const w = createWorkshop();
     w.queue.push({ id: 'interceptor', ticksLeft: 1, region: 'east' });
     expect(() => workshopTick(w)).toThrow('потрібні');
+    expect(w.queue).toEqual([{ id: 'interceptor', ticksLeft: 1, region: 'east' }]); // аудит PR #522: не губиться
   });
 
   it('addFighter понад три — відмова', () => {
@@ -223,6 +232,7 @@ describe('п19.3: погоня обраним перехоплювачем (EARS
     ic.rng = () => 0; // влучають обидва, урон — мінімальний
     startIntercept(ic, geo, 'u1', 2);
     interceptTick(ic, geo);
+    expect(() => installGunModule(w, ic, 2)).toThrow('лише в ангарі «Схід»: перехоплювач у польоті'); // аудит PR #522
     interceptRound(ic, geo, 'впритул');
     const round = ic.log.find((e) => e.type === 'intercept_round');
     expect(round).toMatchObject({ fighterDamage: 4, ufoDamage: 1, fighter: 2 }); // 2 + модуль 2
@@ -280,6 +290,8 @@ describe('п19.3: перепризначення (EARS 6)', () => {
     expect(ic.log.at(-1)).toMatchObject({ type: 'intercept_start' });
     expect(ic.fighters[0].pos).toEqual(HANGARS.south);
     expect(() => assignFighter(ic, geo, 1, 'east')).toThrow('лише перехоплювач на базі');
+    expect(() => startIntercept(ic, geo, 'u1')).toThrow('не в ангарі «Південь»'); // аудит PR #522
+    expect(() => startRepair(ic, geo, createEconomy())).toThrow('лише в ангарі «Південь»');
     ic.fighters[0].status = 'ремонт';
     expect(() => assignFighter(ic, geo, 1, 'east')).toThrow('лише перехоплювач на базі');
   });
@@ -364,6 +376,23 @@ describe('п19.3: сейв v4 з переліком перехоплювачів
       ['HP понад макс.', (s) => (s.state.intercept.fighters[1].hp = 5), 'перехоплення'],
       ['двоє в бою', (s) => s.state.intercept.fighters.forEach((f: { status: string }) => (f.status = 'бій')), 'перехоплення'],
       ['не перелік', (s) => (s.state.intercept.fighters = { 0: 1 }), 'перехоплення'],
+      ['id понад 3', (s) => (s.state.intercept.fighters[1].id = 5), 'перехоплення'],
+      [
+        'двоє на один зонд',
+        (s) =>
+          s.state.intercept.fighters.forEach((f: { status: string; targetId: string }) => ((f.status = 'погоня'), (f.targetId = 'ufo1'))),
+        'перехоплення',
+      ],
+      ['бій без активного зонда', (s) => (s.state.intercept.fighters[1].status = 'бій'), 'перехоплення'],
+      ['активний зонд без бою', (s) => (s.state.intercept.activeUfoId = 'ufo1'), 'перехоплення'],
+      ['клітинка поза світом', (s) => (s.state.intercept.fighters[1].pos = { x: 16, y: 0 }), 'перехоплення'],
+      ['ремонт без лічильника', (s) => (s.state.intercept.fighters[1].status = 'ремонт'), 'перехоплення'],
+      [
+        'лічильник рядком',
+        (s) => Object.assign(s.state.intercept.fighters[1], { status: 'ремонт', repairTicksLeft: 'багато' }),
+        'перехоплення',
+      ],
+      ['лічильник без ремонту', (s) => (s.state.intercept.fighters[1].repairTicksLeft = 3), 'перехоплення'],
       ['замовлення без регіону', (s) => delete s.state.workshop.queue[0].region, 'Кузня'],
       ['понад три з замовленими', (s) => s.state.workshop.queue.push({ ...s.state.workshop.queue[0] }), 'Кузня'],
       ['замовлення у v3', (s) => (s.version = 3), 'Кузня'],

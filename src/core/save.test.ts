@@ -671,7 +671,7 @@ describe('save: Т.12 — кожне поле сейву перевіряєть�
   it('round-trip стану не за замовчуванням: лікарня, погоня винищувача, НЛО в бою, рахунок кампанії', () => {
     const p = createParty(42);
     p.roster.hospital = { s2: 5 };
-    p.intercept.fighters[0] = { ...p.intercept.fighters[0], pos: { x: 3, y: 2 }, status: 'погоня', targetId: 'ufo1' };
+    p.intercept.fighters[0] = { ...p.intercept.fighters[0], pos: { x: 3, y: 2 }, status: 'бій', targetId: 'ufo1' }; // аудит PR #522: «бій» ⇔ активний зонд
     p.intercept.ufoHp = { ufo1: 2 };
     p.intercept.activeUfoId = 'ufo1';
     p.intercept.round = 2;

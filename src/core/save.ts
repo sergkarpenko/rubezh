@@ -15,13 +15,14 @@
 // новою версією + міграцією на вході.
 
 import { mulberry32, type StatefulRng, type Unit, type Vec2 } from './combat';
-import { createGeoGame, geoDay, type GeoEvent, type GeoState, type Ufo } from './geo';
+import { WORLD_H, WORLD_W, createGeoGame, geoDay, type GeoEvent, type GeoState, type Ufo } from './geo';
 import { createRoster, type Roster } from './squad';
 import { applyRankBonus, newCareer, rankOf, type SoldierCareer, type SoldierRole } from './career';
 import { createEconomy, type EconomyEvent, type EconomyState } from './economy';
 import {
   createIntercept,
   FIGHTER_MAX_HP,
+  FIGHTER_REPAIR_TICKS,
   interceptRngState,
   MAX_FIGHTERS,
   type Fighter,
@@ -526,7 +527,11 @@ function parseSave(json: string): SaveData {
     icsv !== undefined &&
     (icsv === null ||
       !Number.isInteger(icsv.rngState) ||
-      (icsv.fighters !== undefined ? !validFighters(icsv.fighters) : icsv.fighter === null || typeof icsv.fighter !== 'object'))
+      (icsv.fighters !== undefined
+        ? !validFighters(icsv.fighters) ||
+          // аудит PR #522: «бій» у переліку ⇔ активний зонд бою
+          (data.version === SAVE_VERSION && icsv.fighters.some((f) => f.status === 'бій') !== (icsv.activeUfoId != null))
+        : icsv.fighter === null || typeof icsv.fighter !== 'object'))
   ) {
     fail('Пошкоджені дані збереження: перехоплення');
   }
@@ -626,12 +631,19 @@ function validFighters(list: unknown): boolean {
   if (!Array.isArray(list) || list.length < 1 || list.length > MAX_FIGHTERS) return false;
   let prev = 0;
   for (const f of list as Fighter[]) {
-    if (f === null || typeof f !== 'object' || !Number.isInteger(f.id) || f.id <= prev) return false;
+    if (f === null || typeof f !== 'object' || !Number.isInteger(f.id) || f.id <= prev || f.id > MAX_FIGHTERS) return false;
     if (!(REGION_IDS as readonly string[]).includes(f.region) || !FIGHTER_STATUSES.includes(f.status)) return false;
     if (!Number.isInteger(f.hp) || f.hp < 0 || f.hp > FIGHTER_MAX_HP || f.pos === null || typeof f.pos !== 'object') return false;
+    // аудит Vibe PR #522: клітинка — цілі в межах світу; лічильник ремонту — лише в ремонті, 1..16
+    if (!Number.isInteger(f.pos.x) || !Number.isInteger(f.pos.y) || f.pos.x < 0 || f.pos.y < 0 || f.pos.x >= WORLD_W || f.pos.y >= WORLD_H)
+      return false;
+    const left = f.repairTicksLeft;
+    if (f.status === 'ремонт' ? !Number.isInteger(left) || left! < 1 || left! > FIGHTER_REPAIR_TICKS : left !== undefined) return false;
     prev = f.id;
   }
-  return (list as Fighter[]).filter((f) => f.status === 'бій').length <= 1;
+  // аудит PR #522: на один зонд — один перехоплювач
+  const chased = (list as Fighter[]).filter((f) => f.targetId != null).map((f) => f.targetId);
+  return (list as Fighter[]).filter((f) => f.status === 'бій').length <= 1 && new Set(chased).size === chased.length;
 }
 
 // п19.3: замовлення перехоплювача в черзі «Кузні» — з відомим регіоном (лише v4), а перехоплювачів

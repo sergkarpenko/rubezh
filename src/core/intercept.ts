@@ -21,7 +21,7 @@ import { creditShotDownBonus, hirePrice, spend, type EconomyState } from './econ
 import { WORLD_W, chebyshevWrap, type GeoEvent, type GeoState } from './geo';
 import { DEFAULT_PRESET, type DifficultyPreset } from './campaign';
 import { readySoldiers, type Roster } from './squad';
-import type { RegionId } from './regions';
+import { REGION_NAMES, type RegionId } from './regions';
 
 export const FIGHTER_MAX_HP = 4; // MVP: один винищувач, без озброєння/досліджень
 export const FIGHTER_STEPS_PER_TICK = 2; // до 2 клітин за тік — швидший за будь-який НЛО (1 кл./тік)
@@ -63,6 +63,12 @@ export const HANGARS: Record<RegionId, Vec2> = {
   east: { x: 13, y: 4 },
   south: { x: 8, y: 7 },
 };
+
+// п19.3 (аудит PR #522): де стоїть перехоплювач — для текстів відмов: «Північ» — «у вузлі «Рубіж»»
+// (як до п19.3), решта — «в ангарі «Схід»».
+export function baseWhere(f: Pick<Fighter, 'region'>): string {
+  return f.region === 'north' ? 'у вузлі «Рубіж»' : 'в ангарі «' + REGION_NAMES[f.region] + '»';
+}
 
 // Клітинка ангара регіону: «Північ» — вузол «Рубіж» (geo.base), решта — HANGARS.
 export function hangarPos(region: RegionId, geo: GeoState): Vec2 {
@@ -217,7 +223,7 @@ function markShotDown(geo: GeoState, ufoId: string): void {
 export function startIntercept(state: InterceptState, geo: GeoState, ufoId: string, fighterId?: number): void {
   const f = fighterById(state, fighterId);
   if (f.status !== 'на базі') {
-    throw new Error('Перехоплювач не у вузлі «Рубіж»: перехоплення неможливе');
+    throw new Error('Перехоплювач не ' + baseWhere(f) + ': перехоплення неможливе');
   }
   if (f.hp < FIGHTER_MAX_HP) {
     throw new Error('Перехоплювач пошкоджений: спочатку ремонт');
@@ -419,7 +425,7 @@ function returnToBase(state: InterceptState, geo: GeoState, f: Fighter): void {
 export function startRepair(state: InterceptState, geo: GeoState, econ: EconomyState, fighterId?: number): void {
   const f = fighterById(state, fighterId);
   if (f.status !== 'на базі') {
-    throw new Error('Ремонт можливий лише у вузлі «Рубіж»');
+    throw new Error('Ремонт можливий лише ' + baseWhere(f));
   }
   if (f.hp >= FIGHTER_MAX_HP) {
     throw new Error('Перехоплювач не потребує ремонту');

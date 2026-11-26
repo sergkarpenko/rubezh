@@ -263,11 +263,20 @@ function apply(p: Party, c: Cmd): Party {
       const f = pick(intercept.fighters, intercept.fighters, c.n)!;
       const free = (): Ufo[] => flying().filter((u) => !intercept.fighters.some((x) => x.targetId === u.id));
       const hunt = c.n % 4 !== 3 && f.status === 'на базі' && f.hp === FIGHTER_MAX_HP;
-      if (hunt) ticks(96, () => free().length > 0);
+      // п19.3 (аудит PR #522): за c.i % 3 === 2 і вільного другого — чекати двох зондів і підняти обидва
+      const g = intercept.fighters.find((x) => x !== f && x.status === 'на базі' && x.hp === FIGHTER_MAX_HP);
+      const pair = hunt && c.i % 3 === 2 && g !== undefined;
+      if (hunt) ticks(96, () => free().length > (pair ? 1 : 0));
       if (hunt && free().length === 0) return;
+      const second = pair ? free()[1] : undefined;
       startIntercept(intercept, geo, (hunt ? free()[0] : pick(flying(), geo.ufos))?.id ?? '', f.id);
-      if (hunt) ticks(12, () => f.status !== 'погоня');
-      for (let k = c.n % 6; hunt && k > 0 && f.status === 'бій'; k--) round(CHOICES[c.i % 3]);
+      if (second && g) {
+        startIntercept(intercept, geo, second.id, g.id);
+        ticks(6); // обидва в повітрі: бій одного — погоня другого чекає
+      }
+      // за c.i % 3 === 2 погоня лишається в повітрі — наступні команди йдуть під час неї
+      if (hunt && c.i % 3 !== 2) ticks(12, () => f.status !== 'погоня');
+      for (let k = c.n % 6; hunt && c.i % 3 !== 2 && k > 0 && f.status === 'бій'; k--) round(CHOICES[c.i % 3]);
     },
     round: () => round(CHOICES[c.i % CHOICES.length]),
     repair: () => startRepair(intercept, geo, econ, pick(intercept.fighters, intercept.fighters, c.n)!.id),
