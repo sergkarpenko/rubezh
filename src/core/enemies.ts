@@ -79,7 +79,7 @@ export function enemyKind(u: Pick<Unit, 'kind'>): EnemyKind {
 }
 
 // п18.3 (ADR-0153 п. 14): типи, доступні на цій загрозі (пороги-кандидати 8 / 17 / 27,
-// за темпом ≈ 1,6 на добу — ≈ 6 / 12 / 18-та доба, як ADR-0149 п. 3; перемір — п18.6).
+// за темпом ≈ 1,6 на добу — ≈ 6 / 12 / 18-та доба, як ADR-0149 п. 3; перемір п18.6 — без змін, ADR-0158).
 export function kindsForThreat(threat: number): EnemyKind[] {
   return ENEMY_ORDER.filter((k) => ENEMY_KINDS[k].fromThreat <= threat);
 }

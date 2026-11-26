@@ -26,6 +26,7 @@ import {
   partyBotMissionStep,
   partyBotScienceStep,
   partyBotGateStep,
+  partyBotAssaultStep,
   PARTY_HORIZON_DAYS,
   simulateParty,
   type PartyBotPolicy,
@@ -118,7 +119,7 @@ describe('П8.5: оркестратор — повна партія (фіксо�
     // втрати 37 → 15, поранених 25 → 22, найм 36 → 13, залишок 4210, ветеранів 4, тотал 4553.
     // п18.3 (ADR-0153 п. 13–15): склад ворогів за загрозою і партія до поразки (56 діб замість 30) —
     // місій 23 → 58, поразок 1 → 10, втрати 15 → 57, поранених 22 → 48, найм 13 → 54, залишок 5385,
-    // ветеранів 3, тотал 8696; баланс — probe п18.6.
+    // ветеранів 3, тотал 8696; бот без політики кампанії (п18.6 — CAMPAIGN_POLICY, ADR-0158).
     // п18.4 (ADR-0156): три штурми бази (один програно: +10 загрози, −30 % кредитів) — поразка на 44-й добі:
     // місій 58 → 40, поразок 10 → 6, втрати 57 → 41, поранених 48 → 38, найм 54 → 40, залишок 3210, тотал 6153.
     expect(r.score).toEqual({ ufosShotDown: 0, missionsWon: 34, veteransAlive: 5, moneyLeft: 3210, total: 6153 });
@@ -131,7 +132,7 @@ describe('П8.5: оркестратор — повна партія (фіксо�
     expect(r.hireSpent).toBe(40 * hirePrice('норма')); // П11.8: hirePrice «норми» = 100
     expect(r.assaults).toBe(3);
     expect(r.assaultsLost).toBe(1);
-    expect(r.gateAttempts).toBe(0); // до п18.6 бот «Ключа брами» не досліджує
+    expect(r.gateAttempts).toBe(0); // DEFAULT «Ключа брами» не досліджує (CAMPAIGN_POLICY — п18.6)
   });
 
   // Т.22 (ADR-0089): чинний бот не банкрутує — останній загін без грошей на найм
@@ -595,6 +596,19 @@ describe('п18.6: політика кампанії (CAMPAIGN_POLICY)', () => {
       return n;
     };
     expect([wins('gate'), wins(undefined)]).toEqual([2, 0]);
+  });
+
+  it("дозор 'gate' у штурмі бази не діє (байт-у-байт як без дозору); 'all' — діє (аудит PR #517)", () => {
+    const run = (hold: PartyBotPolicy['hold'], k: number) => {
+      const p = createParty(42, 'норма');
+      p.campaign.assaultPending = true;
+      p.geo.minute += k * 7;
+      const info = partyBotAssaultStep(p, { ...DEFAULT_PARTY_POLICY, hold });
+      return JSON.stringify([info, p.roster, p.econ.money]);
+    };
+    const ks = Array.from({ length: 10 }, (_, k) => k);
+    expect(ks.map((k) => run('gate', k))).toEqual(ks.map((k) => run(undefined, k)));
+    expect(ks.map((k) => run('all', k))).not.toEqual(ks.map((k) => run(undefined, k)));
   });
 
   it('фінал без gateMinRanked — одразу, як до п18.6, навіть із рекрутами', () => {

@@ -17,7 +17,7 @@ import { geoDay, type GeoEvent, type GeoState } from './geo';
 import type { Roster } from './squad';
 import type { EconomyState } from './economy';
 
-// п18.3 (ADR-0153 п. 13): числа шкали загрози — кандидати, перемір — probe п18.6.
+// п18.3 (ADR-0153 п. 13): числа шкали загрози — перемір probe п18.6 без змін (ADR-0158).
 export const THREAT_MAX = 100; // загроза 100 — поразка партії
 export const THREAT_PER_DAY = 2; // за кожну завершену добу (подія 'day')
 export const THREAT_UFO_LEFT_DETECTED = 6; // виявлений зонд відлетів без бою

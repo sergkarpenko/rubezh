@@ -46,7 +46,7 @@ export const WORKSHOP_CATALOG: Record<ItemId, WorkshopItemDef> = {
   optics: { name: 'Кібернетичне око', cost: 50, ticks: 20 },
   armor: { name: 'Композитна броня', cost: 60, ticks: 24 },
   'gun-module': { name: 'Гарматний модуль перехоплювача', cost: 80, ticks: 32 },
-  // п18.2 (ADR-0153 п. 11, ADR-0154; кандидати чисел — перемір на п18.6)
+  // п18.2 (ADR-0153 п. 11, ADR-0154; числа — перемір п18.6 без змін, ADR-0158)
   'breach-charge': { name: 'Пробивний заряд', cost: 50, ticks: 16, unlockedBy: 'rift-anatomy', trophies: { hound: 1 } },
 };
 
