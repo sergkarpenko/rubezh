@@ -101,6 +101,16 @@ describe('п19.2: зміна довіри від подій журналу (ADR-
     expect(trustDelta(shot, shot.length - 1)).toEqual({ region: 'south', delta: 10, reason: 'mission_won' });
   });
 
+  it('самі події програної місії, евакуації і збиття — без змін (аудит PR #521)', () => {
+    const log: GeoEvent[] = [
+      ...probe('u1', { x: 8, y: 2 }, true),
+      { type: 'mission_lost', ufoId: 'u1', minute: 100 },
+      { type: 'mission_evacuated', ufoId: 'u1', minute: 110 },
+      { type: 'ufo_shot_down', ufoId: 'u1', pos: { x: 8, y: 2 }, minute: 120 },
+    ];
+    for (let i = log.length - 3; i < log.length; i++) expect(trustDelta(log, i)).toBeNull();
+  });
+
   it('інші події і зонд без позиції в журналі — без змін', () => {
     const log: GeoEvent[] = [{ type: 'day', day: 1, minute: 1440 }, left('ghost'), won('ghost')];
     expect([0, 1, 2].map((i) => trustDelta(log, i))).toEqual([null, null, null]);

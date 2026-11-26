@@ -30,8 +30,8 @@ function regionAtCell(x: number, y: number): RegionId {
 }
 
 // Розклад 16 × 9 — REGION_OF[y][x] (ADR-0159 п. 9). Розміри — власні числа, а не WORLD_W / WORLD_H:
-// geo.ts і regions.ts імпортують одне одного, і під час обчислення модуля константи geo.ts можуть
-// бути ще не задані (тест звіряє розміри з geo.ts).
+// цикл імпортів regions.ts → geo.ts → campaign.ts → regions.ts — коли точка входу geo.ts, regions.ts
+// обчислюється раніше за константи geo.ts (тест звіряє розміри з geo.ts).
 export const REGION_GRID_W = 16;
 export const REGION_GRID_H = 9;
 export const REGION_OF: readonly (readonly RegionId[])[] = Array.from({ length: REGION_GRID_H }, (_, y) =>

@@ -688,6 +688,7 @@ describeScenario('критичний флоу економіки: найм → �
     expect($('money').textContent).toBe('382');
     expect($('log').textContent).toContain('Дотація за добу 1: +72');
     expect($('log').textContent).toContain(': зонд відлетів без бою');
+    expect($('econ-rates').textContent).toContain('· дотація 72/добу'); // рядок ставок — з поточної Σ довір (аудит PR #521)
   });
 });
 
