@@ -45,11 +45,17 @@ def build_row(path, name):
     fx = [feet_x(s) for s in small]
     lo = max(fx)
     hi = max(s.shape[1] - f for s, f in zip(small, fx))
-    anchor = round(min(max(48, lo + 1), FR - 1 - hi)) if lo + hi + 2 <= FR else round(lo + 1)
+    # спільний якір ступнів; якщо кадри разом не вміщуються в 96 (чотирилапий гончак: ступні
+    # передніх і задніх лап у різних кінцях фігури) — кожен кадр по центру мас, з полем 1 px (аудит PR #510)
+    centred = lo + hi + 2 > FR
+    anchor = round(min(max(48, lo + 1), FR - 1 - hi)) if not centred else FR // 2
     frames = []
     for s, f in zip(small, fx):
         fr = np.zeros((FR, FR, 4), np.uint8)
-        x = min(max(int(round(anchor - f)), 0), FR - s.shape[1])
+        if centred:
+            a = s[..., 3].astype(np.float32)
+            f = float((a.sum(axis=0) * np.arange(s.shape[1])).sum() / a.sum())
+        x = min(max(int(round(anchor - f)), 1), FR - 1 - s.shape[1])
         h = min(s.shape[0], BOTTOM)
         fr[BOTTOM - h : BOTTOM, x : x + s.shape[1]] = s[s.shape[0] - h :]
         frames.append(fr)
@@ -71,7 +77,7 @@ def build_row(path, name):
     iou = walk_iou(frames)
     if max(iou) > iou_max:
         raise SystemExit(f'{path.name}: кадри кроку надто схожі (збіг масок {iou} > {iou_max}) — перегенерувати аркуш')
-    info = {'scale': round(scale, 4), 'deathScale': round(dscale, 4), 'anchorX': anchor, 'bbox': bbox, 'muzzle': muzzle, 'walkIoU': iou}
+    info = {'scale': round(scale, 4), 'deathScale': round(dscale, 4), 'anchorX': anchor, 'centred': centred, 'bbox': bbox, 'muzzle': muzzle, 'walkIoU': iou}
     if weapon_check:
         weapon = [weapon_px(f, 'demon') for f in frames]
         if min(weapon[1:4]) < 0.5 * weapon[0]:

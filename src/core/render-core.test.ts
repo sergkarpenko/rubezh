@@ -1590,6 +1590,12 @@ describe('п17.5: тип ворога в анімаціях, удар гонча
     expect('enemyKind' in p || 'melee' in p).toBe(false); // стрілець-боєць — без типу
   });
 
+  it('трасер ока з туману — теж з типом (гілка `fog`)', () => {
+    const eye = makeEnemy('eye', 'a1', 0, { x: 2, y: 17 }); // 15 клітинок від цілі — далі огляду 12
+    const [t] = animsFromEvents([shot('a1', 's1')], [s1, eye], new Set(['2,2', '2,3']));
+    expect(t).toMatchObject({ kind: 'tracer', fog: true, enemyKind: 'eye' });
+  });
+
   it('смерть ока — з типом; демона — без поля', () => {
     const eye = makeEnemy('eye', 'a1', 0, { x: 5, y: 5 });
     const demon = makeEnemy('demon', 'a2', 0, { x: 6, y: 5 });

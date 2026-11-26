@@ -6,8 +6,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { advanceTime, missionTargets } from '../core/geo';
 import { createGame, makeUnit, moveUnit, type GameState, type Unit } from '../core/combat';
+import { makeEnemy } from '../core/enemies';
 import { createParty, type Party } from '../core/save';
-import { initPixelSprites } from '../render';
+import { initPixelSprites, initUnitAtlas } from '../render';
 import { ALIEN_RING, RING_DY, RING_RX, fighterLook, makeDeathAnim, makeMoveAnim, makeTracerAnim } from '../core/render-core';
 import { createBattleUI, validFireTargets, validHealTargets, type BattleDeps, type BattleUIState } from './battle';
 import { createToolbar } from './toolbar';
@@ -689,6 +690,65 @@ describe('Фікс П14.8 (фідбек валідації): смерть у ч�
 
   // п17.3 (ADR-0150, аудит PR #508): трасер з туману (`fog`) починається в першій видимій клітинці —
   // демон, що там стоїть, не стрілець: без пози «вогонь» і дула, лінія — від центру клітинки
+  // п17.5 (ADR-0152; аудит PR #510): тип ворога доходить до атласа зі сторінки бою — статичний
+  // прохід і очікувана смерть (ряд), удар гончака без віддачі, підказка дула за типом стрільця.
+  describe('п17.5: тип ворога на полі бою (атлас завантажено)', () => {
+    const atlas = { width: 480, height: 480, toString: () => 'ATLAS' } as unknown as CanvasImageSource;
+    beforeEach(() => initUnitAtlas((_u, onLoad) => onLoad(atlas)));
+    const restore = (): void => initUnitAtlas(() => undefined); // далі — знову фолбек-матриці
+    const atlasOps = (ops: string[]): string[] => ops.filter((o) => o.startsWith('drawImage(ATLAS,'));
+    const sy = (o: string): number => Number(o.split(',')[2]);
+
+    it('статичний голем — ряд 3; око з невідтвореною смертю — кадр смерті ряду 4', () => {
+      const f = makeFixture();
+      f.battle.launch(firstTarget(f));
+      const golem = makeEnemy('golem', 'a1', 0, { x: 6, y: 2 });
+      const eye = makeEnemy('eye', 'a2', 0, { x: 6, y: 4 });
+      eye.alive = false;
+      f.ui.mission!.state = createGame({
+        map: { width: 20, height: 20, blocked: new Set<string>() },
+        units: [makeUnit({ id: 's1', side: 'player', name: 'Гарт', pos: { x: 2, y: 2 }, hp: 10, maxHp: 10 }), golem, eye],
+      });
+      const tracer = makeTracerAnim('player', { x: 2, y: 2 }, { x: 6, y: 2 }, false);
+      f.deps.anim.active = () => tracer;
+      f.deps.anim.queued = () => [tracer, makeDeathAnim(eye)];
+      const ops = atlasOps(withRecCtx(() => f.battle.renderBattle()));
+      restore();
+      expect(ops.map(sy).sort()).toEqual([0, 288, 384]); // боєць, голем, око
+    });
+
+    it('удар гончака — поза «вогонь» без віддачі; трасер голема — від якоря дула голема', () => {
+      const f = makeFixture();
+      f.battle.launch(firstTarget(f));
+      const hound = makeEnemy('hound', 'a1', 0, { x: 3, y: 2 });
+      const golem = makeEnemy('golem', 'a2', 0, { x: 5, y: 5 });
+      f.ui.mission!.state = createGame({
+        map: { width: 20, height: 20, blocked: new Set<string>() },
+        units: [makeUnit({ id: 's1', side: 'player', name: 'Гарт', pos: { x: 2, y: 2 }, hp: 10, maxHp: 10 }), hound, golem],
+      });
+      const claw = makeTracerAnim('alien', { x: 3, y: 2 }, { x: 2, y: 2 }, true);
+      claw.enemyKind = 'hound';
+      claw.melee = true;
+      claw.start = 0;
+      f.deps.anim.now = 10; // перша чверть польоту — у пострілу віддача 3 px
+      f.deps.anim.active = () => claw;
+      f.deps.anim.queued = () => [claw];
+      const ops = atlasOps(withRecCtx(() => f.battle.renderBattle()));
+      // гончак (3,2) у кадрі «вогонь» (колонка 3, ряд 2): x = 3·48 + 24 − 34 = 134, без зсуву віддачі
+      expect(ops.find((o) => sy(o) === 192)).toMatch(/^drawImage\(ATLAS,288,192,96,96,134,/);
+      const shot = makeTracerAnim('alien', { x: 5, y: 5 }, { x: 3, y: 5 }, false);
+      shot.enemyKind = 'golem';
+      shot.start = 0;
+      f.deps.anim.now = 0;
+      f.deps.anim.active = () => shot;
+      f.deps.anim.queued = () => [shot];
+      const ops2 = withRecCtx(() => f.battle.renderBattle());
+      restore();
+      // якір голема (7, 46): (264 − 34) + round(7 · 68 / 96) = 235, (264 − 47) + round(46 · 68 / 96) = 250
+      expect(ops2).toContain('moveTo(235,250)');
+    });
+  });
+
   it('трасер з туману: юніт у клітинці from — не стрілець, старт від центру', () => {
     const f = makeFixture();
     f.battle.launch(firstTarget(f));
