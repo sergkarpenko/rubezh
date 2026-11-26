@@ -20,6 +20,7 @@ import { advanceTime, geoDay } from '../src/core/geo';
 import { economyTick, hirePrice } from '../src/core/economy';
 import { hospitalTick, isBankrupt, readySoldiers } from '../src/core/squad';
 import { FIGHTER_MAX_HP, interceptTick, repairTick } from '../src/core/intercept';
+import { totalTrust } from '../src/core/regions';
 import { campaignTick, type DifficultyPreset } from '../src/core/campaign';
 import { createParty } from '../src/core/save';
 import { radarRange, researchTick } from '../src/core/research';
@@ -98,7 +99,7 @@ function run(seed: number): Rec {
     interceptTick(party.intercept, party.geo);
     repairTick(party.intercept, party.geo);
     advanceTime(party.geo, 1, radarRange(party.research));
-    economyTick(party.econ, party.geo, preset);
+    economyTick(party.econ, party.geo, preset, totalTrust(party.campaign.regions)); // п19.2: дотація з довір
     const m2 = party.econ.money;
     researchTick(party.research, party.econ, party.geo, preset);
     const m3 = party.econ.money;

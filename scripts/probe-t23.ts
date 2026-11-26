@@ -42,6 +42,7 @@ import { advanceTime, geoDay, missionTargets } from '../src/core/geo';
 import { economyTick, hirePrice } from '../src/core/economy';
 import { hospitalTick, isBankrupt, missionRisksBankruptcy, readySoldiers } from '../src/core/squad';
 import { interceptTick, repairTick } from '../src/core/intercept';
+import { totalTrust } from '../src/core/regions';
 import { sciencePrice, campaignScore, campaignTick, type DifficultyPreset } from '../src/core/campaign';
 import { createParty } from '../src/core/save';
 import { PROJECT_CATALOG, fireScientist, radarRange, researchTick, type ProjectId } from '../src/core/research';
@@ -246,7 +247,7 @@ function run(name: string, v: Variant, preset: DifficultyPreset, seed: number): 
     interceptTick(party.intercept, party.geo);
     repairTick(party.intercept, party.geo);
     advanceTime(party.geo, 1, radarRange(party.research));
-    economyTick(party.econ, party.geo, preset);
+    economyTick(party.econ, party.geo, preset, totalTrust(party.campaign.regions)); // п19.2: дотація з довір
     const m0 = party.econ.money;
     researchTick(party.research, party.econ, party.geo, preset);
     rec.spentSalary += m0 - party.econ.money;

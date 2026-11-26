@@ -7,9 +7,10 @@
 // партія продовжує траєкторію оригіналу байт-у-байт.
 // ADR-0026: активна місія не зберігається (кнопки активні лише на геосцені);
 // метадані слоту — похідні від збереженого стану.
-// Формат: { version: 3, seed, savedAt, state } (п16.2, ADR-0147 п. 15: v2 —
+// Формат: { version: 4, seed, savedAt, state } (п16.2, ADR-0147 п. 15: v2 —
 // кар'єри оперативників roster.careers; сейв v1 мігрує на вході, migrateCareers;
-// п18.3, ADR-0153 п. 18: v3 — загроза кампанії, сейви v1 і v2 мігрують, migrateThreat). Невідома версія або пошкоджений
+// п18.3, ADR-0153 п. 18: v3 — загроза кампанії, сейви v1 і v2 мігрують, migrateThreat;
+// п19.2, ADR-0159 п. 14: v4 — довіра регіонів, сейви v1–v3 мігрують з довірою 100). Невідома версія або пошкоджений
 // JSON — throw з українським текстом, без часткового стану. Зміни схеми —
 // новою версією + міграцією на вході.
 
@@ -21,6 +22,7 @@ import { createEconomy, type EconomyEvent, type EconomyState } from './economy';
 import { createIntercept, interceptRngState, type Fighter, type InterceptEvent, type InterceptState } from './intercept';
 import { createCampaign, DEFAULT_PRESET, THREAT_MAX, ASSAULT_THRESHOLDS, type CampaignState, type DifficultyPreset } from './campaign';
 import { ENEMY_ORDER } from './enemies';
+import { createRegions, REGION_IDS, TRUST_MAX, type Regions } from './regions';
 import {
   createResearch,
   emptyTrophies,
@@ -40,7 +42,9 @@ import {
   type WorkshopState,
 } from './workshop';
 
-export const SAVE_VERSION = 3;
+export const SAVE_VERSION = 4;
+// п19.2 (ADR-0159 п. 14): сейв v3 (Фаза 18) вантажиться з довірою 100 в усіх регіонах.
+export const SAVE_VERSION_V3 = 3;
 // п18.3 (ADR-0153 п. 18): сейв v2 (Фази 16–17) вантажиться з міграцією загрози.
 export const SAVE_VERSION_V2 = 2;
 // п16.2 (ADR-0147 п. 15): сейв v1 (до Фази 16) вантажиться з міграцією кар'єр.
@@ -245,6 +249,45 @@ interface CampaignSave {
   assaults?: number;
   assaultPending?: boolean;
   gateReadyAt?: number;
+  // п19.2 (ADR-0159 п. 14): у v4 — обов'язкові; у v1–v3 їх немає (migratedRegions)
+  regions?: Regions;
+  trustCursor?: number;
+}
+
+// Загроза кампанії — у сейвах з v3 (п18.3).
+function hasThreat(version: number): boolean {
+  return version === SAVE_VERSION || version === SAVE_VERSION_V3;
+}
+
+// п19.2 (ADR-0159 п. 14): довіра сейва v1–v3 — 100 скрізь; курсор — кінець журналу, щоб
+// відльоти зі старого журналу не знімали довіру заднім числом.
+function migratedRegions(geo: GeoState): Pick<CampaignState, 'regions' | 'trustCursor'> {
+  return { regions: createRegions(), trustCursor: geo.log.length };
+}
+
+// п19.2: регіони сейва v4 — рівно чотири, довіра ціла 0–100, «вийшов» ⇔ довіра 0.
+function validRegions(r: unknown): boolean {
+  if (r === null || typeof r !== 'object' || Array.isArray(r)) return false;
+  const keys = Object.keys(r);
+  if (keys.length !== REGION_IDS.length || !REGION_IDS.every((id) => keys.includes(id))) return false;
+  return REGION_IDS.every((id) => {
+    const x = (r as Record<string, unknown>)[id] as { trust?: unknown; out?: unknown } | null;
+    return (
+      x !== null &&
+      typeof x === 'object' &&
+      Number.isInteger(x.trust) &&
+      (x.trust as number) >= 0 &&
+      (x.trust as number) <= TRUST_MAX &&
+      typeof x.out === 'boolean' &&
+      x.out === (x.trust === 0)
+    );
+  });
+}
+
+function copyRegions(r: Regions): Regions {
+  const out = createRegions();
+  for (const id of REGION_IDS) out[id] = { trust: r[id].trust, out: r[id].out };
+  return out;
 }
 
 // п18.3 (ADR-0153 п. 18): кампанія v1 / v2 → v3. п18.4 (аудит PR #515): пороги штурму, які
@@ -371,6 +414,8 @@ export function serializeParty(party: Party, savedAt: string = ''): string {
         threat: party.campaign.threat,
         threatCursor: party.campaign.threatCursor,
         ...campaignBattleFields(party.campaign), // п18.4: лише задані поля
+        regions: copyRegions(party.campaign.regions), // п19.2 (ADR-0159 п. 14)
+        trustCursor: party.campaign.trustCursor,
       },
       hints: { ...party.hints },
       research: {
@@ -411,7 +456,12 @@ function parseSave(json: string): SaveData {
   if (data === null || typeof data !== 'object' || Array.isArray(data)) {
     fail('Пошкоджені дані збереження: очікувався об’єкт');
   }
-  if (data.version !== SAVE_VERSION && data.version !== SAVE_VERSION_V2 && data.version !== SAVE_VERSION_V1) {
+  if (
+    data.version !== SAVE_VERSION &&
+    data.version !== SAVE_VERSION_V3 &&
+    data.version !== SAVE_VERSION_V2 &&
+    data.version !== SAVE_VERSION_V1
+  ) {
     fail('Невідома версія збереження: ' + String(data.version) + ' (очікується ' + SAVE_VERSION + ')');
   }
   if (!Number.isInteger(data.seed)) {
@@ -470,14 +520,14 @@ function parseSave(json: string): SaveData {
   if (ccsv === null || (ccsv !== undefined && typeof ccsv !== 'object')) fail('Пошкоджені дані збереження: кампанія'); // аудит PR #514
   if (
     ccsv !== undefined &&
-    ((ccsv.status !== 'триває' && ccsv.status !== 'перемога' && (ccsv.status !== 'поразка' || data.version !== SAVE_VERSION)) ||
+    ((ccsv.status !== 'триває' && ccsv.status !== 'перемога' && (ccsv.status !== 'поразка' || !hasThreat(data.version))) ||
       (ccsv.preset !== 'легкий' && ccsv.preset !== 'норма' && ccsv.preset !== 'складний'))
   ) {
     fail('Пошкоджені дані збереження: кампанія');
   }
-  // п18.3 (ADR-0153 п. 18): у v3 кампанія обов'язкова, загроза 0–100, курсор — у межах журналу геоцени.
+  // п18.3 (ADR-0153 п. 18): з v3 кампанія обов'язкова, загроза 0–100, курсор — у межах журналу геоцени.
   if (
-    data.version === SAVE_VERSION &&
+    hasThreat(data.version) &&
     (ccsv === undefined ||
       !Number.isInteger(ccsv.threat) ||
       (ccsv.threat as number) < 0 ||
@@ -501,10 +551,21 @@ function parseSave(json: string): SaveData {
       (ccsv.assaultPending !== undefined && typeof ccsv.assaultPending !== 'boolean') ||
       (ccsv.assaultPending === true && (ccsv.assaults ?? 0) === 0) ||
       (ccsv.gateReadyAt !== undefined && (!Number.isInteger(ccsv.gateReadyAt) || ccsv.gateReadyAt < 0)) ||
-      (data.version !== SAVE_VERSION &&
-        (ccsv.assaults !== undefined || ccsv.assaultPending !== undefined || ccsv.gateReadyAt !== undefined)))
+      (!hasThreat(data.version) && (ccsv.assaults !== undefined || ccsv.assaultPending !== undefined || ccsv.gateReadyAt !== undefined)))
   ) {
     fail('Пошкоджені дані збереження: штурми і брама');
+  }
+  // п19.2 (ADR-0159 п. 14): у v4 — регіони і курсор довіри в межах журналу; у v1–v3 поля
+  // не читаються (міграція — довіра 100), як поля загрози у v1 / v2 (прецедент п18.3).
+  if (
+    data.version === SAVE_VERSION &&
+    ccsv !== undefined &&
+    (!validRegions(ccsv.regions) ||
+      !Number.isInteger(ccsv.trustCursor) ||
+      (ccsv.trustCursor as number) < 0 ||
+      (ccsv.trustCursor as number) > st.geo.log.length)
+  ) {
+    fail('Пошкоджені дані збереження: регіони');
   }
   // П9.2: поле hints опційне (старі сейви) — але якщо є, має бути об'єктом.
   if (data.state.hints !== undefined && (typeof data.state.hints !== 'object' || data.state.hints === null)) {
@@ -606,8 +667,8 @@ export function deserializeParty(json: string): Party {
       preset: cc.preset,
       score: cc.score ? { ...cc.score } : null,
       victoryDay: cc.victoryDay,
-      // п18.3 (ADR-0153 п. 18): v3 — копія; v1 / v2 — загроза з доби й виграних місій
-      ...(data.version === SAVE_VERSION
+      // п18.3 (ADR-0153 п. 18): v3–v4 — копія; v1 / v2 — загроза з доби й виграних місій
+      ...(hasThreat(data.version)
         ? {
             defeatDay: cc.defeatDay ?? null,
             threat: cc.threat as number,
@@ -615,6 +676,10 @@ export function deserializeParty(json: string): Party {
             ...campaignBattleFields(cc),
           }
         : migratedCampaign(geo)),
+      // п19.2 (ADR-0159 п. 14): v4 — копія; v1–v3 — довіра 100, курсор — кінець журналу
+      ...(data.version === SAVE_VERSION
+        ? { regions: copyRegions(cc.regions as Regions), trustCursor: cc.trustCursor as number }
+        : migratedRegions(geo)),
     },
     // П9.2: відсутнє поле hints (старі сейви) = усі підказки ще не показано.
     hints: { ...defaultHints(), ...(data.state.hints ?? {}) },

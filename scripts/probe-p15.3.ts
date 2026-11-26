@@ -26,6 +26,7 @@ import { applyMissionResult, hospitalTick, isBankrupt, missionSquad, readySoldie
 import { interceptTick, repairTick } from '../src/core/intercept';
 import { awardTrophies, radarRange, researchTick } from '../src/core/research';
 import { deployConsumables, removeLostEquipment, settleConsumables, workshopTick } from '../src/core/workshop';
+import { totalTrust } from '../src/core/regions';
 import { campaignTick, type DifficultyPreset } from '../src/core/campaign';
 import { autoBattle } from '../src/core/ai-bot';
 import { completeMission, createMission } from '../src/core/mission';
@@ -79,7 +80,7 @@ function replay(seed: number, preset: DifficultyPreset): { save: string; evacUni
     interceptTick(party.intercept, party.geo);
     repairTick(party.intercept, party.geo);
     advanceTime(party.geo, 1, radarRange(party.research));
-    economyTick(party.econ, party.geo, party.campaign.preset);
+    economyTick(party.econ, party.geo, party.campaign.preset, totalTrust(party.campaign.regions)); // п19.2: дотація з довір
     researchTick(party.research, party.econ, party.geo, party.campaign.preset);
     workshopTick(party.workshop);
     hospitalTick(party.roster);

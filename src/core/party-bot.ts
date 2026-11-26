@@ -26,6 +26,7 @@
 
 import { TICK_MINUTES, advanceTime, chebyshevWrap, geoDay, missionTargets, type GeoState, type Ufo } from './geo';
 import { creditMissionBonus, economyTick, hirePrice } from './economy';
+import { totalTrust } from './regions';
 import {
   applyMissionResult,
   assignBotRoles,
@@ -592,7 +593,7 @@ export function simulateParty(seed: number, preset: DifficultyPreset = DEFAULT_P
     // П11.8: researchTick/workshopTick додано дзеркально partyTick — без
     // вчених і замовлень no-op (критерій П11.8.2).
     advanceTime(party.geo, 1, radarRange(party.research)); // п18.2 (ADR-0153 п. 12)
-    economyTick(party.econ, party.geo, party.campaign.preset);
+    economyTick(party.econ, party.geo, party.campaign.preset, totalTrust(party.campaign.regions)); // п19.2
     researchTick(party.research, party.econ, party.geo, party.campaign.preset);
     workshopTick(party.workshop);
     hospitalTick(party.roster);

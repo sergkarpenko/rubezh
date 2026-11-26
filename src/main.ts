@@ -13,6 +13,7 @@ import { completeAssault } from './core/assault';
 import { awaitingRole, type SoldierRole } from './core/career';
 import { roleDialogHtml } from './ui/roles';
 import { economyTick } from './core/economy';
+import { totalTrust } from './core/regions';
 // П11.2 (ADR-0058): тік науки — після дотації того ж дня; без вчених — no-op.
 import { radarRange, researchTick } from './core/research';
 // П11.3 (ADR-0058): тік цеху — разом із тіком геосцени; без замовлень — no-op.
@@ -541,7 +542,7 @@ function partyTick(): void {
   const p = party;
   if (startPendingAssault(p)) return; // п18.4: штурм, що чекає бою (сейв), — бій замість тіку
   advanceTime(p.geo, 1, radarRange(p.research)); // п18.2: радар 6 після «Пеленгу брами»
-  economyTick(p.econ, p.geo, p.campaign.preset);
+  economyTick(p.econ, p.geo, p.campaign.preset, totalTrust(p.campaign.regions)); // п19.2: дотація з довір регіонів
   // П11.2 (ADR-0058): зарплата і наукові точки — тим самим контуром доби,
   // одразу після дотації; без вчених — no-op (партії без науки не змінюються).
   researchTick(p.research, p.econ, p.geo, p.campaign.preset);

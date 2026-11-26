@@ -5,6 +5,7 @@
 // кеп 80, фільтри) і seen-трекінг прочитаних подів (drain*). Стан
 // застосунку (party/mission) модуль знає лише через Deps-інтерфейс.
 
+import { REGION_NAMES } from '../core/regions';
 import type { GeoEvent } from '../core/geo';
 import { missionTargets } from '../core/geo';
 import { FIGHTER_MAX_HP, FIGHTER_REPAIR_COST } from '../core/intercept';
@@ -320,6 +321,13 @@ export function geoEventText(e: GeoEvent, knownDetected: ReadonlySet<string>): {
       return { text: 'Брама Розриву встояла ✗ — загроза +10, повтор через добу', cls: 'lose' };
     case 'campaign_victory':
       return { text: '★ Браму Розриву закрито — перемога (рахунок ' + e.score + ')', cls: 'win' };
+    // п19.2 (ADR-0159 п. 11; рішення власника «А. Обидва напрями, і невиявлені», «А. …вийшов…»)
+    case 'region_trust':
+      return e.delta < 0
+        ? { text: '▼ Довіра «' + REGION_NAMES[e.region] + '» −' + -e.delta + ' → ' + e.trust + ': зонд відлетів без бою', cls: 'lose' }
+        : { text: '▲ Довіра «' + REGION_NAMES[e.region] + '» +' + e.delta + ' → ' + e.trust + ': місію зачищено', cls: 'win' };
+    case 'region_out':
+      return { text: '✗ Регіон «' + REGION_NAMES[e.region] + '» вийшов — його частки дотації більше немає', cls: 'lose' };
     default:
       return null; // ufo_spawned / ufo_move — приховано туманом
   }

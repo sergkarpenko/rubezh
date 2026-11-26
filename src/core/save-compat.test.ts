@@ -112,7 +112,9 @@ describe('П12.6: продовження сіда 42 — види подій і 
     // послідовність видів подій геосцени — байт-у-байт golden (код до серії)
     // WORLD_H 9 (фідбек П14.8): траєкторії НЛО у вищому світі — на один
     // ufo_move менше до приземлення в обох серіях; rng/гроші — ті самі.
-    expect(kinds(p.geo.log.slice(before.geo))).toEqual([
+    // п19.2: події довіри регіонів пише campaignTick поверх траєкторії — golden без них, окремо нижче
+    const added = p.geo.log.slice(before.geo);
+    expect(kinds(added.filter((e) => e.type !== 'region_trust' && e.type !== 'region_out'))).toEqual([
       'day',
       'ufo_spawned',
       'ufo_move',
@@ -148,6 +150,34 @@ describe('П12.6: продовження сіда 42 — види подій і 
       'ufo_landed',
       'ufo_left',
     ]);
+    expect(added.filter((e) => e.type === 'region_trust' || e.type === 'region_out')).toMatchInlineSnapshot(`
+      [
+        {
+          "delta": -30,
+          "minute": 6150,
+          "reason": "ufo_left",
+          "region": "east",
+          "trust": 70,
+          "type": "region_trust",
+        },
+        {
+          "delta": -15,
+          "minute": 7020,
+          "reason": "ufo_left",
+          "region": "east",
+          "trust": 55,
+          "type": "region_trust",
+        },
+        {
+          "delta": -30,
+          "minute": 7950,
+          "reason": "ufo_left",
+          "region": "east",
+          "trust": 25,
+          "type": "region_trust",
+        },
+      ]
+    `);
     expect(kinds(p.econ.log.slice(before.econ))).toEqual(['allowance', 'spend', 'allowance', 'spend']);
     expect(kinds(p.research.log.slice(before.research))).toEqual(['salary', 'points', 'salary', 'points']);
     expect(kinds(p.workshop.log.slice(before.workshop))).toEqual(['produced']);
@@ -204,7 +234,7 @@ describe('п16.2: сейв v1 мігрує у v2 (ADR-0147 п. 15, EARS 10)', ()
     const p = deserializeParty(v1With((soldiers) => void (soldiers[0].kills = 5)));
     const json = serializeParty(p, 'T');
     expect(JSON.parse(json).version).toBe(SAVE_VERSION);
-    expect(SAVE_VERSION).toBe(3); // п18.3: v3 — загроза
+    expect(SAVE_VERSION).toBe(4); // п18.3: v3 — загроза; п19.2: v4 — довіра регіонів
     const again = deserializeParty(json);
     expect(serializeParty(again, 'T')).toBe(json);
     expect(again.roster.soldiers[0].maxHp).toBe(12); // прирости не застосовуються вдруге
@@ -259,7 +289,7 @@ describe('п18.3: сейв v2 мігрує у v3 (ADR-0153 п. 18, EARS 9)', () 
   it('фікстура v1 (доба 4, без перемог): загроза 2 × 3 = 6, курсор — кінець журналу', () => {
     const p = deserializeParty(FIXTURE);
     expect(p.campaign).toMatchObject({ status: 'триває', threat: 6, threatCursor: p.geo.log.length, defeatDay: null });
-    expect(JSON.parse(serializeParty(p, 'T')).version).toBe(3);
+    expect(JSON.parse(serializeParty(p, 'T')).version).toBe(SAVE_VERSION);
   });
 
   it('v2: загроза = min(99, 2 × (доба − 1)) − виграні місії, не менше 0', () => {

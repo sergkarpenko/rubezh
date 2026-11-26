@@ -122,7 +122,9 @@ describe('П8.5: оркестратор — повна партія (фіксо�
     // ветеранів 3, тотал 8696; бот без політики кампанії (п18.6 — CAMPAIGN_POLICY, ADR-0158).
     // п18.4 (ADR-0156): три штурми бази (один програно: +10 загрози, −30 % кредитів) — поразка на 44-й добі:
     // місій 58 → 40, поразок 10 → 6, втрати 57 → 41, поранених 48 → 38, найм 54 → 40, залишок 3210, тотал 6153.
-    expect(r.score).toEqual({ ufosShotDown: 0, missionsWon: 34, veteransAlive: 5, moneyLeft: 3210, total: 6153 });
+    // п19.2 (ADR-0159 п. 11–12): відльоти без бою знижують довіру регіонів — дотація менша, залишок 2819, тотал 6055;
+    // траєкторія місій і боїв — та сама.
+    expect(r.score).toEqual({ ufosShotDown: 0, missionsWon: 34, veteransAlive: 5, moneyLeft: 2819, total: 6055 });
     expect(r.missionsLaunched).toBe(40);
     expect(r.missionsWon).toBe(34);
     expect(r.missionsLost).toBe(6);
@@ -344,6 +346,8 @@ describe('П11.8: політика науки — повний флоу (фік�
     // два і більше звільнень — сіди 54 і 94), поразка на 15-й добі.
     // п18.4 (ADR-0156): програний штурм бази (−30 % кредитів) доводить бідну партію сіду 54 до
     // банкрутства на 11-й добі — два дні невиплати, два звільнення (скан 40–140: два і більше — лише 54).
+    // п19.2 (ADR-0159 п. 12): дотація з довір регіонів менша — спіраль на більшості сідів; на 54 штат уже
+    // не доходить до 8 — сід 56 (скан 40–140): два дні невиплати, чотири звільнення, штат 8, на кінці 7.
     const heavy: PartyBotPolicy = {
       ...SCIENCE_POLICY,
       name: 'sci-heavy',
@@ -351,14 +355,14 @@ describe('П11.8: політика науки — повний флоу (фік�
       projects: ['medkit', 'optics', 'armor', 'gun-module', 'grenade', 'lab-extension'],
       fireScientistsWhenDone: false,
     };
-    const r = simulateParty(54, 'норма', { policy: heavy });
+    const r = simulateParty(56, 'норма', { policy: heavy });
     expect(r.outcome).toBe('банкрутство');
     expect(r.assaultsLost).toBe(1);
     expect(r.salaryShortfallDays).toBe(2);
-    expect(r.scientistsFired).toBe(2);
+    expect(r.scientistsFired).toBe(4);
     // штат 8, звільнених наймають знову — метрики бачать спіраль (і звільнення, і повний штат)
     expect(Math.max(...r.scientistsByDay)).toBe(8);
-    expect(r.scientistsByDay[r.scientistsByDay.length - 1]).toBe(8);
+    expect(r.scientistsByDay[r.scientistsByDay.length - 1]).toBe(7);
   });
 });
 
