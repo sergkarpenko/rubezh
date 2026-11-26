@@ -472,7 +472,7 @@ test('сценарій приймання ADR-0030: партія → місія 
     await expectIcons(page, '#status section.panel:not(.hidden) h2 svg.h-icon', 16, 2, 'y');
     await expectIcons(page, '#btn-hire svg.btn-icon', 16, 1, 'y');
     await page.locator('#status-tab-base').click();
-    await expectIcons(page, '#status section.panel:not(.hidden) h2 svg.h-icon', 16, 4, 'y');
+    await expectIcons(page, '#status section.panel:not(.hidden) h2 svg.h-icon', 16, 5, 'y'); // п18.5: + «Мета кампанії»
     await expectIcons(page, '#btn-hire-scientist svg.btn-icon', 16, 1, 'y');
     // заголовок «Сенсорна сітка» з іконкою — в один рядок (рішення власника Т.128; від шрифту — запас ≈ 100 px)
     expect(
@@ -529,7 +529,7 @@ test('сценарій приймання ADR-0030: партія → місія 
   await test.step('T.39: панель «Дослідження», крок «3. Видати», довідка на 1366 × 768', async () => {
     await page.locator('#status-tab-base').click();
     const cards = page.locator('#research .sci-card');
-    await expect(cards).toHaveCount(6);
+    await expect(cards).toHaveCount(9); // п18.5 (ADR-0157): + три ключові протоколи
     const armor = cards.first();
     await expect(armor.locator('.sci-name')).toHaveText('Композитна броня');
     await expect(armor.locator('.sci-badge')).toHaveText('потрібен техномант'); // техномантів 0, кредитів вистачає
@@ -538,7 +538,7 @@ test('сценарій приймання ADR-0030: партія → місія 
     // Т.100: картки з невиконаною передумовою згорнуті до кнопки-назви з плашкою; панель на новій партії
     // вікно сценарію тут 1440 × 900 (колонка тієї ж ширини): локально 1048 px, як на 1366 × 768 (до кроку 1516;
     // docs/reports/t100/measure.mjs); межа з запасом на шрифти CI
-    await expect(page.locator('#research .sci-card.folded')).toHaveCount(2);
+    await expect(page.locator('#research .sci-card.folded')).toHaveCount(5); // п18.5: + три ключові (без трофеїв — згорнуті)
     // у згорнутій картці — лише кнопка-назва; тап показує рядок ефекту
     await expect(page.locator('#research .sci-card.folded button:not(.sci-toggle)')).toHaveCount(0);
     await page.locator('#btn-sci-eff-grenade').click();
@@ -548,7 +548,14 @@ test('сценарій приймання ADR-0030: партія → місія 
     const researchH = await page.evaluate(() =>
       Math.round(document.getElementById('research')!.closest('section')!.getBoundingClientRect().height)
     );
-    expect(researchH, 'висота панелі «Дослідження»').toBeLessThanOrEqual(1150); // варіант Б без А — 1193
+    // п18.5 (ADR-0157): блок ключових протоколів (заголовок і три згорнуті картки) міряється окремо —
+    // гейт Т.100 стоїть на частині до нього; блок на новій партії — локально ≈ 290 px
+    const keyH = await page.evaluate(() => {
+      const head = document.querySelector('#research .sci-key-head')!.getBoundingClientRect();
+      return Math.round(document.getElementById('research')!.closest('section')!.getBoundingClientRect().bottom - head.top);
+    });
+    expect(researchH - keyH, 'висота панелі «Дослідження» без ключових протоколів').toBeLessThanOrEqual(1150); // варіант Б без А — 1193
+    expect(keyH, 'висота блоку ключових протоколів').toBeLessThanOrEqual(340);
     await expect(armor.locator('#btn-start-0')).toHaveText('Дослідити — 96 кр.');
     await expect(page.locator('#btn-hire-scientist')).toHaveText('Вербувати техноманта (100)'); // Т.128
     // смуга кроків: три кнопки; «3. Видати» перемикає вкладку на «Загін»

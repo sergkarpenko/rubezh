@@ -22,11 +22,13 @@
 
 import {
   HIRE_SCIENTIST_PRICE,
+  KEY_PROJECTS,
   PROJECTS,
   PROJECT_CATALOG,
   SCIENTIST_SALARY,
   hireScientist,
   fireScientist,
+  missingTrophies,
   projectName,
   startProject,
   type ProjectDef,
@@ -40,6 +42,14 @@ import { el, setWhy } from './dom';
 import { setIconText } from './icons';
 import type { LogCat } from './journal';
 import { daysText, ticksText } from './text';
+import { ENEMY_KINDS, ENEMY_ORDER } from '../core/enemies';
+
+// п18.5 (ADR-0157): ціна ключового протоколу в трофеях — «демон 6, гончак 3» (порядок типів ядра).
+export function trophyCostText(def: ProjectDef): string {
+  return ENEMY_ORDER.filter((k) => (def.trophies?.[k] ?? 0) > 0)
+    .map((k) => ENEMY_KINDS[k].name.toLowerCase() + ' ' + def.trophies?.[k])
+    .join(', ');
+}
 
 // Залежності від шару застосунку (main.ts): читання стану і дії панелі.
 // Панель не знає, як саме стан зберігається у застосунку.
@@ -73,6 +83,8 @@ export function createResearchPanel(deps: ResearchPanelDeps): ResearchPanel {
     if (r.active.some((p) => p.id === def.id)) return 'у роботі';
     // Т.100: невиконана передумова — картка згорнута без кнопки старту, причину показує плашка «після «…»»
     if (r.active.length >= r.slots) return 'немає вільного слота (' + r.active.length + '/' + r.slots + ')';
+    const lack = missingTrophies(r.trophies, def.trophies); // п18.5: ключові протоколи — трофеї на вході
+    if (lack !== undefined) return lack;
     const price = sciencePrice(def.cost, party.campaign.preset);
     if (party.econ.money < price) return 'недостатньо кредитів (ціна ' + price + ')';
     return null;
@@ -86,6 +98,7 @@ export function createResearchPanel(deps: ResearchPanelDeps): ResearchPanel {
     if (def.prerequisite !== undefined && !r.completed.includes(def.prerequisite))
       return { text: 'після «' + projectName(def.prerequisite) + '»', cls: 'lock' };
     if (r.active.length >= r.slots) return { text: 'немає вільного слота', cls: 'lock' };
+    if (missingTrophies(r.trophies, def.trophies) !== undefined) return { text: 'бракує трофеїв', cls: 'lock' }; // п18.5
     if (party.econ.money < sciencePrice(def.cost, party.campaign.preset)) return { text: 'бракує кредитів', cls: 'lock' };
     if (r.scientists.length === 0) return { text: 'потрібен техномант', cls: 'lock' };
     return { text: 'доступний', cls: '' };
@@ -203,8 +216,16 @@ export function createResearchPanel(deps: ResearchPanelDeps): ResearchPanel {
     // «Замовити в «Кузні»»). Назви — з каталогу (П12.6, ADR-0064).
     const catalog = document.createElement('div');
     const ref = party.roster.soldiers[0];
-    for (let i = 0; i < PROJECTS.length; i++) {
-      const def = PROJECTS[i];
+    // п18.5 (ADR-0157): після звичайних — три ключові протоколи ланцюжка до Брами Розриву (до п18.5 сховано)
+    const all = [...PROJECTS, ...KEY_PROJECTS];
+    for (let i = 0; i < all.length; i++) {
+      const def = all[i];
+      if (i === PROJECTS.length) {
+        const sep = document.createElement('div');
+        sep.className = 'sci-row sci-key-head';
+        sep.innerHTML = '<b>Ключові протоколи</b> — шлях до Брами Розриву, потрібні трофеї';
+        catalog.appendChild(sep);
+      }
       const active = r.active.find((p) => p.id === def.id);
       const done = r.completed.includes(def.id);
       const card = document.createElement('div');
@@ -223,10 +244,13 @@ export function createResearchPanel(deps: ResearchPanelDeps): ResearchPanel {
       const effText = plainProjectEffect(def.id, ref);
       // Т.100: невиконана передумова — картка згорнута до назви з плашкою «після «…»»
       // (ціна і кнопка з'являться, коли передумову завершено)
-      const folded = !done && !active && def.prerequisite !== undefined && !r.completed.includes(def.prerequisite);
+      // п18.5 (ADR-0157): ключовий протокол без трофеїв — так само згорнутий (плашка «бракує трофеїв»);
+      // у рядку ефекту за кнопкою-назвою — і ціна в трофеях
+      const lacksTrophies = def.trophies !== undefined && missingTrophies(r.trophies, def.trophies) !== undefined;
+      const folded = !done && !active && ((def.prerequisite !== undefined && !r.completed.includes(def.prerequisite)) || lacksTrophies);
       const eff = document.createElement('div');
       eff.className = 'sci-eff';
-      eff.textContent = effText;
+      eff.textContent = folded && def.trophies !== undefined ? effText + ' · трофеї: ' + trophyCostText(def) : effText;
       if (folded || done) {
         // Т.100: рядок ефекту — за кнопкою-назвою; працює й у бою (лише вигляд панелі)
         const open = shown.has(def.id);
@@ -257,7 +281,8 @@ export function createResearchPanel(deps: ResearchPanelDeps): ResearchPanel {
         // T.39: завершений протокол-предмет (усі, крім «Розширення лабораторії»):
         // кнопка «Замовити в «Кузні»» — та сама умова активності і той самий title,
         // що й btn-order-<id> у «Кузні» (orderItem, спільний хелпер workshop-panel)
-        if (def.id !== 'lab-extension') {
+        if (Object.prototype.hasOwnProperty.call(WORKSHOP_CATALOG, def.id)) {
+          // п18.5: «Розширення лабораторії» і ключові протоколи предмета не дають — лише плашка
           const itemId = def.id as ItemId;
           const price = sciencePrice(WORKSHOP_CATALOG[itemId].cost, preset);
           const forge = document.createElement('button');
@@ -328,6 +353,13 @@ export function createResearchPanel(deps: ResearchPanelDeps): ResearchPanel {
         tRow.className = 'sci-row';
         tRow.textContent = timeTextNotStarted(def.points, scientists);
         card.append(tRow);
+        if (def.trophies !== undefined) {
+          // п18.5: трофеї на вході — «Трофеї: демон 6, гончак 3» (списуються разом із кредитами)
+          const trRow = document.createElement('div');
+          trRow.className = 'sci-row';
+          trRow.textContent = 'Трофеї: ' + trophyCostText(def);
+          card.append(trRow);
+        }
         const start = document.createElement('button');
         start.id = 'btn-start-' + i;
         start.className = 'research wide'; // не 'mission': той клас — семантика запуску місії

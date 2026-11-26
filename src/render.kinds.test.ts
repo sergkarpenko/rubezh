@@ -8,7 +8,10 @@ import {
   ATLAS_ROW,
   MUZZLE_ANCHOR,
   drawAnimFrame,
+  drawGatePortal,
+  drawUnitSprite,
   initPixelSprites,
+  turretMuzzle,
   initUnitAtlas,
   muzzlePoint,
   type MakeOffscreen,
@@ -128,5 +131,76 @@ describe('п17.5: тип ворога в кадрах анімаційного �
     const hit = makeTracerAnim('alien', { x: 5, y: 5 }, { x: 4, y: 5 }, true);
     hit.melee = true;
     expect(frame(hit, 1).sets.find((s) => s.p === 'globalAlpha')?.v).toBe(1);
+  });
+});
+
+// п18.5 (ADR-0157; рішення власника «А. Кодом»): турель — силует кодом, ствол до точки дула; Брама — портал.
+describe('п18.5: турель і портал Брами', () => {
+  const view = (over: object) => ({
+    side: 'player' as const,
+    cx: 100,
+    cy: 100,
+    r: 8,
+    hp: 12,
+    maxHp: 12,
+    selected: false,
+    overwatch: false,
+    ring: '#9aa1ab',
+    turret: true,
+    ...over,
+  });
+
+  it('турель — без кадру атласа; ствол закінчується в точці дула турелі (і дзеркально), нижче плашки HP', () => {
+    for (const flip of [false, true]) {
+      const r = ctxRec();
+      drawUnitSprite(r.ctx, view({ flip }));
+      expect(atlasRows(r.calls)).toEqual([]);
+      const m = turretMuzzle(flip, 100, 100, 0);
+      expect(m).toEqual({ x: flip ? 79 : 121, y: 96 });
+      expect(m.y).toBeGreaterThan(100 - 12); // плашка HP — до cy − 12
+      expect(r.calls.some((c) => c.m === 'lineTo' && c.args[0] === m.x && c.args[1] === m.y)).toBe(true);
+      expect(r.calls.filter((c) => c.m === 'arc').length).toBe(2); // башта і сенсор
+    }
+  });
+
+  it('загибла турель — лише основа, без ствола і башти; без turret — кадр атласа', () => {
+    const r = ctxRec();
+    drawUnitSprite(r.ctx, view({ hp: 0 }));
+    expect(r.calls.filter((c) => c.m === 'arc')).toEqual([]);
+    const s = ctxRec();
+    drawUnitSprite(s.ctx, view({ turret: undefined }));
+    expect(atlasRows(s.calls)).toEqual([0]);
+  });
+
+  it('трасер турелі — з кінчика ствола (MuzzleHint.turret), з віддачею назад', () => {
+    const tr = makeTracerAnim('player', { x: 2, y: 2 }, { x: 8, y: 2 }, true);
+    const r = frame(tr, 1, { side: 'player', flip: false, turret: true });
+    const start = r.calls.find((c) => c.m === 'moveTo')!;
+    expect(start.args[1]).toBe(2 * 48 + 24 - 4);
+    expect(start.args[0] as number).toBeGreaterThan(2 * 48 + 24 + 15);
+  });
+
+  it('загибель турелі — розчиняється силуетом кодом, без кадру оперативника (аудит PR #516)', () => {
+    const t = { id: 't1', side: 'player', pos: { x: 3, y: 1 }, maxHp: 12, turret: true } as Parameters<typeof makeDeathAnim>[0];
+    const d = makeDeathAnim(t);
+    expect(d.turret).toBe(true);
+    for (const calm of [false, true]) {
+      const r = frame({ ...d, calm }, DEATH_MS / 2);
+      expect(atlasRows(r.calls)).toEqual([]);
+    }
+    const s = makeDeathAnim({ ...t, id: 's1', turret: undefined });
+    expect('turret' in s).toBe(false);
+    expect(atlasRows(frame(s, DEATH_MS / 2).calls)).toEqual([0]);
+  });
+
+  it('портал: два еліпси і шість іскор; закритий — приглушений', () => {
+    const r = ctxRec();
+    drawGatePortal(r.ctx, { cx: 456, cy: 216, size: 48, open: true });
+    expect(r.calls.filter((c) => c.m === 'ellipse').length).toBe(2);
+    expect(r.calls.filter((c) => c.m === 'fillRect').length).toBe(6);
+    expect(r.sets.find((x) => x.p === 'globalAlpha')!.v).toBe(1);
+    const c = ctxRec();
+    drawGatePortal(c.ctx, { cx: 456, cy: 216, size: 48, open: false });
+    expect(c.sets.find((x) => x.p === 'globalAlpha')!.v).toBe(0.45);
   });
 });

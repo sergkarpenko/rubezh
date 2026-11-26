@@ -715,3 +715,28 @@ describe('Т.143 (ADR-0124): системне «менше руху» — гей
     expect(h2.scheduled()).toBe(0);
   });
 });
+
+// п18.5 (ADR-0157): радар 6 — розгортка-еліпс (горизонталь ширша); пульс відкритої Брами.
+describe('п18.5: розгортка радара 6 і пульс Брами', () => {
+  it('range 4 і без поля — те саме коло (arc); range 6 — ellipse з rx 312 і ry, як у кола', () => {
+    const a = mockCtx();
+    paintGeoAmbient(a.ctx, { ...geoScene({ x: 8, y: 4 }), range: 4 }, 1000);
+    const b = mockCtx();
+    paintGeoAmbient(b.ctx, geoScene({ x: 8, y: 4 }), 1000);
+    expect(a.ops).toEqual(b.ops);
+    const w = mockCtx();
+    paintGeoAmbient(w.ctx, { ...geoScene({ x: 8, y: 4 }), range: 6 }, 1000);
+    expect(w.ops.filter((o) => o.startsWith('arc'))).toEqual([]);
+    const ell = w.ops.find((o) => o.startsWith('ellipse('))!;
+    expect(ell.startsWith('ellipse(408,216,312,168,0,')).toBe(true); // ch 384: ry = 384 − 216
+  });
+
+  it('gate — кільце, що розходиться за 2 с (радіус від t, без RNG)', () => {
+    const r0 = mockCtx();
+    paintGeoAmbient(r0.ctx, { ...geoScene({ x: 8, y: 4 }), gate: { x: 9, y: 4 } }, 0);
+    expect(r0.ops).toContain('arc(456,216,' + 48 * 0.3 + ',0,' + Math.PI * 2 + ')');
+    const r1 = mockCtx();
+    paintGeoAmbient(r1.ctx, { ...geoScene({ x: 8, y: 4 }), gate: { x: 9, y: 4 } }, 1000);
+    expect(r1.ops).toContain('arc(456,216,' + 48 * (0.3 + 0.35 * 0.5) + ',0,' + Math.PI * 2 + ')');
+  });
+});

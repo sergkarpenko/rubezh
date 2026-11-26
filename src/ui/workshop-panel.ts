@@ -10,6 +10,11 @@
 
 import { ITEM_IDS, WORKSHOP_CATALOG, itemName, itemUnlocked, orderItem, type ItemId } from '../core/workshop';
 import { sciencePrice } from '../core/campaign';
+import { missingTrophies } from '../core/research';
+
+// п18.5 (ADR-0157): «Пробивний заряд» (після «Анатомії Розриву») — у панелі поруч із чинними предметами
+// (ITEM_IDS ядра лишається п'ятьма предметами: на нього спираються бот і скрипти вимірів).
+export const WORKSHOP_UI_ITEMS: readonly ItemId[] = [...ITEM_IDS, 'breach-charge'];
 import type { Party } from '../core/save';
 import { itemEffect } from './effects';
 import { el, setWhy } from './dom';
@@ -43,12 +48,15 @@ export function orderButtonState(party: Party, id: ItemId, busy: boolean): Order
   const def = WORKSHOP_CATALOG[id];
   const price = sciencePrice(def.cost, party.campaign.preset);
   const notResearched = !itemUnlocked(party.research, id);
+  const lack = missingTrophies(party.research.trophies, def.trophies); // п18.5: заряд — трофей гончака
   const title = notResearched
     ? 'Ще не досліджено'
-    : party.econ.money < price
-      ? 'Недостатньо кредитів (ціна ' + price + ')'
-      : 'Замовити в «Кузні» (−' + price + ', готовність через ' + ticksText(def.ticks) + ')';
-  const blocked = notResearched || party.econ.money < price;
+    : lack !== undefined
+      ? lack
+      : party.econ.money < price
+        ? 'Недостатньо кредитів (ціна ' + price + ')'
+        : 'Замовити в «Кузні» (−' + price + ', готовність через ' + ticksText(def.ticks) + ')';
+  const blocked = notResearched || lack !== undefined || party.econ.money < price;
   return { disabled: busy || blocked, title, why: blocked ? title : null };
 }
 
@@ -77,7 +85,9 @@ export function createWorkshopPanel(deps: WorkshopPanelDeps): WorkshopPanel {
     const store = document.createElement('div');
     store.className = 'meta';
     store.style.marginBottom = '6px';
-    store.textContent = 'Склад: ' + ITEM_IDS.map((id) => itemName(id) + ' ' + w.store[id]).join(' · ');
+    // аудит PR #516: заряд у рядку складу — після «Анатомії Розриву» або коли він є на складі
+    const shownItems = WORKSHOP_UI_ITEMS.filter((id) => id !== 'breach-charge' || itemUnlocked(party.research, id) || w.store[id] > 0);
+    store.textContent = 'Склад: ' + shownItems.map((id) => itemName(id) + ' ' + w.store[id]).join(' · ');
     box.appendChild(store);
 
     // каталог: замовлення — лише досліджені предмети (гейт завершеного
@@ -86,7 +96,7 @@ export function createWorkshopPanel(deps: WorkshopPanelDeps): WorkshopPanel {
     // каталогів, хелпер effects.ts; «зараз → стане» — від першого оперативника)
     const catalog = document.createElement('div');
     const ref = party.roster.soldiers[0];
-    for (const id of ITEM_IDS) {
+    for (const id of WORKSHOP_UI_ITEMS) {
       const def = WORKSHOP_CATALOG[id];
       const row = document.createElement('div');
       row.className = 'ufo';

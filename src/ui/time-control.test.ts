@@ -33,6 +33,8 @@ const TICKS: Record<StopEvent | 'landed_hidden' | 'nothing' | 'died_in_hospital'
     delete p.roster.hospital[p.roster.soldiers[0].id];
   },
   repair_done: (p) => void p.geo.log.push({ type: 'fighter_repair_done', minute: 0 }),
+  // п18.5 (ADR-0157): штурм вузла (бій почнеться) і програний штурм без боєготових — одна подія «assault»
+  assault: (p) => void p.geo.log.push({ type: 'base_assault', threshold: 60, minute: 0 }),
   nothing: (p) => void p.geo.log.push({ type: 'day', day: 2, minute: 0 }),
   // поранений зник із лікарні, бо його прибрали з ростеру, — це не одужання
   died_in_hospital: (p) => {
@@ -73,6 +75,13 @@ describe('Т.43: події зупинки (stopEvents)', () => {
     expect(eventsAfter(kind)).toEqual([kind]);
   });
 
+  it('п18.5: програний штурм без бою (assault_lost) — та сама подія «assault»', () => {
+    const p = createParty(42);
+    const before = takeSnapshot(p);
+    p.geo.log.push({ type: 'assault_lost', money: 90, minute: 0 });
+    expect(stopEvents(p, before)).toEqual(['assault']);
+  });
+
   it('приземлення невиявленого зонда — не подія (туман)', () => {
     expect(eventsAfter('landed_hidden')).toEqual([]);
   });
@@ -91,11 +100,14 @@ describe('Т.43: події зупинки (stopEvents)', () => {
 });
 
 describe('Т.43: правило режиму (shouldStop)', () => {
-  it('«До події» зупиняється на кожній із шести подій, «+1 доба» — лише на двох подіях зондів', () => {
+  it('«До події» зупиняється на кожній із шести подій Т.43 і на штурмі, «+1 доба» — на двох подіях зондів і штурмі (п18.5)', () => {
     for (const kind of SIX) {
       expect(shouldStop('event', [kind])).toBe(true);
       expect(shouldStop('day', [kind])).toBe(kind === 'ufo_detected' || kind === 'ufo_landed');
     }
+    // п18.5 (рішення власника «А. Два вікна + зупинка»): штурм вузла зупиняє обидві кнопки
+    expect(shouldStop('event', ['assault'])).toBe(true);
+    expect(shouldStop('day', ['assault'])).toBe(true);
     expect(shouldStop('event', [])).toBe(false);
     expect(shouldStop('day', [])).toBe(false);
   });
@@ -112,6 +124,11 @@ describe('Т.43: прогін часу (runTime)', () => {
     for (const kind of ['project_completed', 'produced', 'recovered', 'repair_done'] as const) {
       expect(run('day', kind, 7)).toBe(48);
     }
+  });
+
+  it('п18.5: «До події» і «+1 доба» зупиняються на штурмі вузла', () => {
+    expect(run('event', 'assault', 9)).toBe(9);
+    expect(run('day', 'assault', 9)).toBe(9);
   });
 
   it('без подій — рівно 48 тіків (1 доба) в обох режимах', () => {

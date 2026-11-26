@@ -10,12 +10,14 @@ import type { Party } from '../core/save';
 // Найдовший прогін однієї кнопки: 1 доба = 48 тіків по 30 хв.
 export const MAX_RUN_TICKS = 48;
 
-// «event» — кнопка «До події» (усі шість подій); «day» — «+1 доба» (лише зонди).
+// «event» — кнопка «До події» (усі сім подій); «day» — «+1 доба» (зонди і штурм вузла, п18.5).
 export type RunMode = 'event' | 'day';
 
-export type StopEvent = 'ufo_detected' | 'ufo_landed' | 'project_completed' | 'produced' | 'recovered' | 'repair_done';
+export type StopEvent = 'ufo_detected' | 'ufo_landed' | 'project_completed' | 'produced' | 'recovered' | 'repair_done' | 'assault';
 
-const DAY_STOPS: ReadonlySet<StopEvent> = new Set<StopEvent>(['ufo_detected', 'ufo_landed']);
+// п18.5 (ADR-0157; рішення власника «А. Два вікна + зупинка»): штурм вузла і програний штурм
+// (без боєготових бою немає — лише рядок журналу) зупиняють обидві кнопки.
+const DAY_STOPS: ReadonlySet<StopEvent> = new Set<StopEvent>(['ufo_detected', 'ufo_landed', 'assault']);
 
 // Відбиток стану перед тіком: довжини журналів і перелік поранених.
 export interface TickSnapshot {
@@ -45,6 +47,7 @@ export function stopEvents(party: Party, before: TickSnapshot): StopEvent[] {
     else if (e.type === 'ufo_landed') {
       if (party.geo.ufos.some((u) => u.id === e.ufoId && u.detected)) out.push('ufo_landed');
     } else if (e.type === 'fighter_repair_done') out.push('repair_done');
+    else if (e.type === 'base_assault' || e.type === 'assault_lost') out.push('assault');
   }
   if (party.research.log.slice(before.researchLog).some((e) => e.type === 'project_completed')) out.push('project_completed');
   if (party.workshop.log.slice(before.workshopLog).some((e) => e.type === 'produced')) out.push('produced');

@@ -13,6 +13,7 @@ import type { EconomyEvent } from '../core/economy';
 import { projectName, type ResearchEvent } from '../core/research';
 import { equipKeyItem, itemName, type WorkshopEvent } from '../core/workshop';
 import { EVAC_AP_COST, type GameEvent, type ShotMode } from '../core/combat';
+import { ENEMY_KINDS, ENEMY_ORDER } from '../core/enemies';
 import { claimHint, type Party } from '../core/save';
 import { el } from './dom';
 import { byGender, plural, ticksText } from './text';
@@ -247,6 +248,9 @@ export function battleEventText(
   // п16.4 (ADR-0147, рішення власника «А»): дії ролей; «Точний постріл» — мітка перед звичайним рядком пострілу
   if (e.type === 'dash') return { text: '» ' + name(e.unitId) + ': «Ривок» +' + e.bonus + ' AP', cls: '' };
   if (e.type === 'precise_shot') return { text: '◎ ' + name(e.shooterId) + ': «Точний постріл»', cls: '' };
+  // п18.5 (ADR-0157; кандидат 181 а): витрачений «Пробивний заряд» — мітка перед рядком пострілу
+  if (e.type === 'charge')
+    return { text: '⚡ ' + name(e.shooterId) + ': «Пробивний заряд» — броню пробито (' + name(e.targetId) + ')', cls: '' };
   if (e.type === 'field_aid') {
     return { text: '✚ ' + name(e.unitId) + ': «Польова допомога» → ' + name(e.targetId) + ' +' + e.healed + ' HP', cls: 'win' };
   }
@@ -357,8 +361,11 @@ export function researchEventText(e: ResearchEvent): { text: string; cls: string
       return { text: '⚑ Протокол розпочато: ' + projectName(e.id), cls: '' };
     case 'project_completed':
       return { text: '⚑ Протокол завершено: ' + projectName(e.id) + ' ✓', cls: 'win' };
-    case 'trophies':
-      return null; // п18.2: трофеї гравцеві показує UI п18.5 (рішення власника «А. Сховати до п18.5»)
+    case 'trophies': {
+      // п18.5 (ADR-0157): трофеї виграної місії — типи порядком ENEMY_ORDER, назви з ядра
+      const parts = ENEMY_ORDER.filter((k) => (e.gained[k] ?? 0) > 0).map((k) => ENEMY_KINDS[k].name.toLowerCase() + ' +' + e.gained[k]);
+      return { text: '⚑ Трофеї: ' + parts.join(', '), cls: 'win' };
+    }
   }
 }
 

@@ -338,6 +338,7 @@ export interface DeathAnim extends CalmFlag {
   at: Vec2;
   hpMax: number; // П14.4: показник життя загиблого — порожня смуга (hp 0)
   enemyKind?: EnemyKind; // п17.5: тип загиблого ворога — ряд атласа (без поля — демон)
+  turret?: boolean; // п18.5 (ADR-0157, аудит PR #516): загибла турель — силует кодом, не кадр оперативника
   dur: number;
   start: number | null;
 }
@@ -430,6 +431,7 @@ export function makeTracerAnim(side: Side, from: Vec2, to: Vec2, hit: boolean): 
 export function makeDeathAnim(u: Unit): DeathAnim {
   const a: DeathAnim = { kind: 'death', unitId: u.id, side: u.side, at: { ...u.pos }, hpMax: u.maxHp, dur: DEATH_MS, start: null };
   if (u.kind !== undefined) a.enemyKind = u.kind; // п17.5: демон — без поля, як раніше
+  if (u.turret === true) a.turret = true; // п18.5: поле лише для турелі
   return a;
 }
 export function makeOwFlashAnim(u: Unit): OwFlashAnim {
@@ -831,8 +833,8 @@ export interface FighterLook {
   shape: number; // 0..HELMET_SHAPES-1
 }
 
-// п18.4 (ADR-0156, рішення власника «А. Мінімум»): турель бази (id 't1', 't2') до п18.5 —
-// кадр оперативника з сірим кільцем; сірий не збігається з кольорами бійців і типів ворогів.
+// п18.4 (ADR-0156): турель бази (id 't1', 't2') — сіре кільце; сірий не збігається з кольорами
+// бійців і типів ворогів. п18.5 (ADR-0157): силует турелі — кодом (drawTurretSprite у render.ts).
 export const TURRET_RING = '#9aa1ab';
 
 export function fighterLook(id: string): FighterLook {

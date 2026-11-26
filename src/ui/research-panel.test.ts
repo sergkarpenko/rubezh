@@ -119,12 +119,12 @@ describe('T.39: смуга кроків «1. Дослідити → 2. Виго�
 });
 
 describe('ResearchPanel: каталог проєктів (картки T.39)', () => {
-  it('усі 6 проєктів каталогу — картки; кнопки старту — у 4 без передумови (Т.100: 2 згорнуті); назви з каталогу', () => {
+  it('усі 6 проєктів каталогу і 3 ключові (п18.5) — картки; кнопки старту — у 4 (5 згорнуті: передумова чи трофеї); назви з каталогу', () => {
     const panel = createResearchPanel(makeDeps());
     panel.render();
-    expect(document.querySelectorAll('#research .sci-card')).toHaveLength(6);
+    expect(document.querySelectorAll('#research .sci-card')).toHaveLength(9);
     expect(document.querySelectorAll<HTMLButtonElement>('[id^="btn-start-"]')).toHaveLength(4);
-    expect(document.querySelectorAll('#research .sci-card.folded')).toHaveLength(2);
+    expect(document.querySelectorAll('#research .sci-card.folded')).toHaveLength(5);
     expect(el('research').textContent).toContain('Композитна броня');
     expect(el('research').textContent).toContain('Імпульсна граната');
     expect(el('research').textContent).toContain('Гарматний модуль перехоплювача');
@@ -538,5 +538,54 @@ describe('Т.43: причини під неактивними кнопками �
     createResearchPanel(makeDeps({ inBattle: () => true })).render();
     expect(btn('btn-forge-armor').disabled).toBe(true);
     expect(why(btn('btn-forge-armor'))).toBeNull();
+  });
+});
+
+// п18.5 (ADR-0157): ключові протоколи ланцюжка до Брами — у панелі після звичайних, трофеї на вході.
+describe('п18.5: ключові протоколи в панелі «Дослідження»', () => {
+  it('заголовок блоку; без трофеїв «Анатомія Розриву» згорнута — плашка, ефект із ціною в трофеях за кнопкою-назвою', () => {
+    party.research.scientists.push({ id: 'в1', name: 'Зінаїда' });
+    const panel = createResearchPanel(makeDeps());
+    panel.render();
+    expect(el('research').textContent).toContain('Ключові протоколи — шлях до Брами Розриву, потрібні трофеї');
+    const c = card('Анатомія Розриву');
+    expect(c.classList.contains('folded')).toBe(true);
+    expect(c.querySelector('.sci-badge')!.textContent).toBe('бракує трофеїв');
+    expect(c.querySelector('[id^="btn-start-"]')).toBeNull();
+    el('btn-sci-eff-rift-anatomy').click();
+    expect(card('Анатомія Розриву').querySelector('.sci-eff')!.textContent).toBe(
+      'Відкриває «Пробивний заряд» у «Кузні» · трофеї: демон 6, гончак 3'
+    );
+    expect(card('Пеленг брами').querySelector('.sci-badge')!.textContent).toBe('після «Анатомія Розриву»');
+    expect(card('Ключ брами').classList.contains('folded')).toBe(true);
+  });
+
+  it('трофеїв частково — картка згорнута; причина старту з ядра (missingTrophies) — і на розгорнутій із трофеями', () => {
+    party.research.scientists.push({ id: 'в1', name: 'Зінаїда' });
+    party.research.trophies = { demon: 6, hound: 3, golem: 0, eye: 0 };
+    createResearchPanel(makeDeps()).render();
+    const c = card('Анатомія Розриву');
+    expect(c.classList.contains('folded')).toBe(false);
+    expect(c.textContent).toContain('Трофеї: демон 6, гончак 3');
+    expect(el<HTMLButtonElement>('btn-start-' + PROJECTS.length).title).toBe('Почати протокол (−120)');
+  });
+
+  it('трофеїв досить — старт списує кредити й трофеї; завершений ключовий — без кнопки «Кузні»', () => {
+    party.research.scientists.push({ id: 'в1', name: 'Зінаїда' });
+    party.research.trophies = { demon: 7, hound: 3, golem: 0, eye: 0 };
+    const deps = makeDeps();
+    createResearchPanel(deps).render();
+    const start = el<HTMLButtonElement>('btn-start-' + PROJECTS.length);
+    expect(start.disabled).toBe(false);
+    const money = party.econ.money;
+    start.click();
+    expect(party.research.active.map((a) => a.id)).toEqual(['rift-anatomy']);
+    expect(party.research.trophies).toEqual({ demon: 1, hound: 0, golem: 0, eye: 0 });
+    expect(party.econ.money).toBe(money - sciencePrice(120, party.campaign.preset));
+    party.research.active = [];
+    party.research.completed.push('rift-anatomy');
+    createResearchPanel(deps).render();
+    expect(card('Анатомія Розриву').querySelector('button[id^="btn-forge-"]')).toBeNull();
+    expect(card('Анатомія Розриву').querySelector('.sci-badge')!.textContent).toBe('завершено');
   });
 });

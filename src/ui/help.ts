@@ -10,8 +10,19 @@
 import { DAILY_ALLOWANCE, HIRE_PRICE, MISSION_BONUS } from '../core/economy';
 import { EVAC_AP_COST } from '../core/combat';
 import { FIGHTER_REPAIR_COST } from '../core/intercept';
-import { SCORE_PER_MISSION_WON, SCORE_PER_MONEY, SCORE_PER_UFO_SHOT_DOWN, SCORE_PER_VETERAN_ALIVE } from '../core/campaign';
-import { BASE_LAB_SLOTS, SCIENTIST_SALARY } from '../core/research';
+import {
+  ASSAULT_THRESHOLDS,
+  SCORE_PER_MISSION_WON,
+  SCORE_PER_MONEY,
+  SCORE_PER_UFO_SHOT_DOWN,
+  SCORE_PER_VETERAN_ALIVE,
+  THREAT_MAX,
+  THREAT_MISSION_WON,
+  THREAT_PER_DAY,
+  THREAT_UFO_LEFT_DETECTED,
+  THREAT_UFO_LEFT_UNDETECTED,
+} from '../core/campaign';
+import { BASE_LAB_SLOTS, KEY_PROJECTS, SCIENTIST_SALARY } from '../core/research';
 import { ENEMY_KINDS } from '../core/enemies';
 import { el } from './dom';
 
@@ -55,18 +66,43 @@ function helpHtml(): string {
     EVAC_AP_COST +
     ' AP, лише з синьої клітинки висадки. Якщо евакуювати всіх, хто лишився на полі, премії за місію немає; останнього бійця гра перепитає.</li>' +
     '</ul></div>' +
-    // п18.3 (рішення власника «А. Мінімум»): рядок «Вистояти 30 діб» прибрано — таймера немає;
-    // нові рядки мети кампанії (ланцюжок, загроза) — п18.5
+    // п18.5 (ADR-0157; рішення власника «А. Повні»): ланцюжок до Брами, загроза з числами, поразка, вороги
+    // за загрозою; числа й назви — з констант ядра (урок П9.1); «Рахунок» — коротший рядок (висота 1366 × 768)
     '<div><h3>Мета кампанії</h3><ul>' +
-    '<li>Рахунок: ' +
-    SCORE_PER_UFO_SHOT_DOWN +
-    ' за збитий зонд Розриву · ' +
-    SCORE_PER_MISSION_WON +
-    ' за переможну місію · ' +
-    SCORE_PER_VETERAN_ALIVE +
-    ' за живого оперативника · ' +
-    SCORE_PER_MONEY +
-    ' за кожен кредит на фініші.</li>' +
+    '<li><b>Перемога</b> — виграти фінальну місію «Брама Розриву». Її відкривають протоколи ' +
+    KEY_PROJECTS.map((p) => '«' + p.name + '»').join(' → ') +
+    '; їм потрібні трофеї — по одному за ворога, вбитого у виграній місії.</li>' +
+    '<li><b>Загроза</b> 0–' +
+    THREAT_MAX +
+    ': +' +
+    THREAT_PER_DAY +
+    ' за добу, +' +
+    THREAT_UFO_LEFT_DETECTED +
+    ' за виявлений зонд, що відлетів без бою (+' +
+    THREAT_UFO_LEFT_UNDETECTED +
+    ' — невиявлений), −' +
+    -THREAT_MISSION_WON +
+    ' за виграну місію. На ' +
+    ASSAULT_THRESHOLDS.slice(0, -1).join(', ') +
+    ' і ' +
+    ASSAULT_THRESHOLDS[ASSAULT_THRESHOLDS.length - 1] +
+    ' демони штурмують вузол; на ' +
+    THREAT_MAX +
+    ' — поразка.</li>' +
+    '<li><b>Поразка</b> — загроза ' +
+    THREAT_MAX +
+    ' або банкрутство (немає боєготових і кредитів на вербування).</li>' +
+    '<li><b>Вороги</b>: із загрози ' +
+    ENEMY_KINDS.hound.fromThreat +
+    ' гончак (кігті впритул), з ' +
+    ENEMY_KINDS.golem.fromThreat +
+    ' голем (броня ' +
+    ENEMY_KINDS.golem.armor +
+    '), з ' +
+    ENEMY_KINDS.eye.fromThreat +
+    ' око (промінь до ' +
+    ENEMY_KINDS.eye.weapon.range +
+    ').</li>' +
     '<li>Кредити: дотація ' +
     DAILY_ALLOWANCE +
     '/добу · премії за місію ' +
@@ -78,25 +114,19 @@ function helpHtml(): string {
     ' · ремонт перехоплювача ' +
     FIGHTER_REPAIR_COST +
     '.</li>' +
-    '<li>Поразка — банкрутство: немає боєготових оперативників і кредитів на вербування.</li>' +
-    // п17.5 (ADR-0152; рішення власника «А. З добами»): числа — з ENEMY_KINDS ядра; п18.3: поява — за
-    // загрозою (fromThreat), доби 6 / 12 / 18 — за середнім темпом загрози (ADR-0153 п. 14), текст — п18.5; у стовпчику
-    // «Мета кампанії» — єдине місце з запасом висоти (гейт 1366 × 768, 736 px — виміряно з DejaVu Sans)
-    '<li><b>Вороги</b>: з ' +
-    6 +
-    '-ї доби гончак (кігті впритул), з ' +
-    12 +
-    '-ї голем (броня ' +
-    ENEMY_KINDS.golem.armor +
-    '), з ' +
-    18 +
-    '-ї око (промінь до ' +
-    ENEMY_KINDS.eye.weapon.range +
-    ' клітинок).</li>' +
+    '<li>Рахунок: ' +
+    SCORE_PER_UFO_SHOT_DOWN +
+    ' за зонд · ' +
+    SCORE_PER_MISSION_WON +
+    ' за місію · ' +
+    SCORE_PER_VETERAN_ALIVE +
+    ' за живого · ' +
+    String(SCORE_PER_MONEY).replace('.', ',') +
+    ' за кредит.</li>' +
     '</ul></div>' +
     '<div><h3>Керування</h3><ul>' +
     // Т.43: «До події» і зупинки «+1 доба» одним пунктом — довідка має вміщатись у 1366 × 768 (гейт e2e)
-    '<li>Час: «+1 тік (30 хв)» (T), «До події» (пробіл) і «+1 доба» (D) — сенсорна сітка шукає зонди лише під час руху часу. «До події» стає на першій події (зонд, протокол, «Кузня», одужання, ремонт), «+1 доба» — коли зонд виявлено або він приземлився.</li>' +
+    '<li>Час: «+1 тік (30 хв)» (T), «До події» (пробіл) і «+1 доба» (D) — сенсорна сітка шукає зонди лише під час руху часу. «До події» стає на першій події (зонд, протокол, «Кузня», одужання, ремонт, штурм), «+1 доба» — коли зонд виявлено чи приземлився або почався штурм.</li>' +
     // Т.130: рядок «Q — наступний боєць» додав рядок довідки зі шрифтом CI (757 > 736 px) — прибрано «мишка і дотик працюють однаково»
     // Т.131: «тап по демону — меню пострілів» — коротшим текстом рядка, без нового рядка довідки (висота з DejaVu — на межі гейта)
     '<li>Бій: дії — плитки тулбара збоку; тап по клітинці — прев’ю ходу, повторний тап — хід; тап по демону — меню пострілів.</li>' +

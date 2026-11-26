@@ -12,7 +12,7 @@ import { ARMOR_MAX_HP_BONUS, OPTICS_ACCURACY_BONUS } from '../core/workshop';
 import { GRENADE_DAMAGE, GRENADE_RANGE, HEAL_AMOUNT, HIT_CHANCE_CAP } from '../core/combat';
 import { initPixelSprites } from '../render';
 import { fighterLook } from '../core/render-core';
-import { createPanels, gunModuleReady, hpColor, inAirCombat, readyToIssue, type PanelsDeps } from './panels';
+import { createPanels, gateCell, gunModuleReady, hpColor, inAirCombat, readyToIssue, type PanelsDeps } from './panels';
 
 // Піксельний рушій (ADR-0031): тестовий мок фабрики offscreen-канвасів —
 // той самий патерн, що й у main.ui.test.ts (jsdom без пакета canvas).
@@ -31,7 +31,8 @@ function setupDom(): void {
   // Мінімальна розмітка index.html: топбар, геосцена, ictx, колонка стану, перемога.
   document.body.innerHTML = `
     <span id="clock">—</span>
-    <span id="campaign-status">—</span>
+    <span id="threat">—</span>
+    <div id="campaign-goal"></div>
     <span id="campaign-progress">—</span>
     <span id="money">—</span>
     <span id="ready">—</span>
@@ -52,7 +53,8 @@ function setupDom(): void {
     <div id="fighter"></div>
     <span id="money-card">—</span>
     <div id="roster"></div>
-    <section id="campaign-victory" class="hidden"><span id="campaign-score">—</span></section>`;
+    <section id="campaign-victory" class="hidden"><p id="campaign-victory-text"></p><span id="campaign-score">—</span><div id="campaign-score-lines"></div></section>
+    <section id="campaign-defeat" class="hidden"><p id="campaign-defeat-text"></p><span id="campaign-defeat-score">—</span><div id="campaign-defeat-lines"></div></section>`;
   const proto = HTMLCanvasElement.prototype as unknown as { getContext: () => CanvasRenderingContext2D };
   proto.getContext = () => noopCtx;
 }
@@ -590,7 +592,7 @@ describe('renderCampaign: чипи кампанії і екран перемог
   it('чипи статусу і доби; у бою прогрес приховано', () => {
     const f = makeFixture({ inBattle: () => true });
     f.panels.renderCampaign();
-    expect(document.getElementById('campaign-status')!.textContent).toBe('кампанія: триває');
+    expect(document.getElementById('threat-num')!.textContent).toBe('0'); // п18.5: чип загрози замість «кампанія: …»
     expect(document.getElementById('campaign-progress')!.textContent).toBe('Д1'); // п18.3: без «/30»
     expect(document.getElementById('campaign-progress')!.classList.contains('hidden')).toBe(true);
     expect(document.getElementById('campaign-victory')!.classList.contains('hidden')).toBe(true);
@@ -602,7 +604,7 @@ describe('renderCampaign: чипи кампанії і екран перемог
     f.party.campaign.score = { ufosShotDown: 0, missionsWon: 0, veteransAlive: 0, moneyLeft: 0, total: 1234 };
     f.panels.renderCampaign();
     expect(document.getElementById('campaign-victory')!.classList.contains('hidden')).toBe(false);
-    expect(document.getElementById('campaign-score')!.textContent).toBe('1234');
+    expect(document.getElementById('campaign-score')!.textContent).toBe('1\u00a0234'); // п18.5: пробіл розрядів
   });
 
   // П8.3a: endless (рішення власника 2026-10-15) — «Грати далі» ховає екран
@@ -611,9 +613,9 @@ describe('renderCampaign: чипи кампанії і екран перемог
     f.party.campaign.status = 'перемога';
     f.party.campaign.score = { ufosShotDown: 0, missionsWon: 0, veteransAlive: 0, moneyLeft: 0, total: 1234 };
     f.panels.renderCampaign();
-    expect(document.getElementById('campaign-status')!.textContent).toBe('кампанія: перемога');
+    expect(document.getElementById('campaign-goal')!.textContent).toContain('Браму Розриву зачинено'); // п18.5
     expect(document.getElementById('campaign-victory')!.classList.contains('hidden')).toBe(true);
-    expect(document.getElementById('campaign-score')!.textContent).toBe('1234');
+    expect(document.getElementById('campaign-score')!.textContent).toBe('1\u00a0234'); // п18.5: пробіл розрядів
   });
 });
 
@@ -1024,5 +1026,88 @@ describe('issue #385: hirePrice(preset) у попередженнях — пре
     f.party.econ.money = money;
     f.panels.renderRoster();
     expect(document.getElementById('roster')!.textContent).toContain(expected);
+  });
+});
+
+// п18.5 (ADR-0157; рішення власника «А. Кодом»): рамка радара 6, портал Брами, «Пробивний заряд» у ростері.
+describe('п18.5: радар 6, Брама на геосцені, заряд у ростері', () => {
+  function recordGeo(): string[] {
+    const ops: string[] = [];
+    const rec = new Proxy(
+      {},
+      {
+        get: (_t, p) => (p === 'canvas' ? undefined : (...a: unknown[]) => void ops.push(String(p) + '(' + a.join(',') + ')')),
+        set: () => true,
+      }
+    ) as unknown as CanvasRenderingContext2D;
+    (document.getElementById('geo') as HTMLCanvasElement).getContext = (() => rec) as never;
+    return ops;
+  }
+
+  it('рамка сенсорної сітки: 4 — як до п18.5; після «Пеленгу брами» — 6, по вертикалі в межах канви', () => {
+    const f = makeFixture();
+    let ops = recordGeo();
+    f.panels.renderGeo();
+    expect(ops).toContain('strokeRect(192,0,432,432)');
+    f.party.research.completed.push('gate-bearing');
+    ops = recordGeo();
+    f.panels.renderGeo();
+    expect(ops).toContain('strokeRect(96,0,624,432)');
+    expect(vi.mocked(f.deps.ambient.paintGeo).mock.calls.at(-1)![1]).toMatchObject({ range: 6 });
+  });
+
+  it('Брама: після «Ключа брами» — портал у клітинці праворуч від вузла і пульс ambient; до нього — нічого', () => {
+    const f = makeFixture();
+    expect(gateCell(f.party)).toEqual({ x: 9, y: 4 });
+    let ops = recordGeo();
+    f.panels.renderGeo();
+    expect(ops.some((o) => o.startsWith('ellipse(456,216'))).toBe(false);
+    expect(vi.mocked(f.deps.ambient.paintGeo).mock.calls.at(-1)![1].gate).toBeUndefined();
+    f.party.research.completed.push('rift-anatomy', 'gate-bearing', 'gate-key');
+    ops = recordGeo();
+    f.panels.renderGeo();
+    expect(ops.some((o) => o.startsWith('ellipse(456,216'))).toBe(true);
+    expect(vi.mocked(f.deps.ambient.paintGeo).mock.calls.at(-1)![1].gate).toEqual({ x: 9, y: 4 });
+    // пауза після поразки фіналу: портал приглушений, пульсу немає
+    f.party.campaign.gateReadyAt = f.party.geo.minute + 60;
+    ops = recordGeo();
+    f.panels.renderGeo();
+    expect(ops.some((o) => o.startsWith('ellipse(456,216'))).toBe(true);
+    expect(vi.mocked(f.deps.ambient.paintGeo).mock.calls.at(-1)![1].gate).toBeUndefined();
+  });
+
+  it('екран поразки: gameOver — так; у бою чи без партії на екрані — ні (аудит PR #516)', () => {
+    let battle = false;
+    let onScreen = true;
+    const f = makeFixture({ isGameOver: () => true, inBattle: () => battle, partyOnScreen: () => onScreen });
+    f.panels.renderCampaign();
+    expect(document.getElementById('campaign-defeat')!.classList.contains('hidden')).toBe(false);
+    battle = true;
+    f.panels.renderCampaign();
+    expect(document.getElementById('campaign-defeat')!.classList.contains('hidden')).toBe(true);
+    battle = false;
+    onScreen = false;
+    f.panels.renderCampaign();
+    expect(document.getElementById('campaign-defeat')!.classList.contains('hidden')).toBe(true);
+  });
+
+  it('ростер: кнопка «заряд» — видати зі складу і зняти назад', () => {
+    const f = makeFixture();
+    const s = f.party.roster.soldiers[0]!;
+    f.party.workshop.store['breach-charge'] = 1;
+    f.panels.renderRoster();
+    const b = document.getElementById('btn-equip-' + s.id + '-charge') as HTMLButtonElement;
+    expect(b.textContent).toBe('заряд');
+    expect(b.title).toBe('Спорядити «Пробивний заряд» зі складу — Атака по броньованій цілі — без броні (один раз)');
+    expect(readyToIssue(f.party)).toBeGreaterThan(0);
+    b.click();
+    expect(f.party.workshop.equipped[s.id]?.charge).toBe(true);
+    expect(f.party.workshop.store['breach-charge']).toBe(0);
+    f.panels.renderRoster();
+    const on = document.getElementById('btn-equip-' + s.id + '-charge') as HTMLButtonElement;
+    expect(on.textContent).toBe('заряд ✓');
+    on.click();
+    expect(f.party.workshop.equipped[s.id]?.charge).toBeUndefined();
+    expect(f.party.workshop.store['breach-charge']).toBe(1);
   });
 });

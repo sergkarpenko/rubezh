@@ -619,11 +619,15 @@ describe('workshopEventText: перетворювач подій цеху (П11.
       text: '✗ Витратники с2 втрачено разом із оперативником (Регенеративний гель, Імпульсна граната)',
       cls: 'lose',
     });
-    // п18.2: ключ «charge» — назва «Пробивний заряд»; трофеї до UI п18.5 у журнал не йдуть
+    // п18.2: ключ «charge» — назва «Пробивний заряд»
     expect(workshopEventText(evWorkshop({ type: 'equipment_lost', soldierId: 'с2', items: ['charge'] }))?.text).toBe(
       '✗ Витратники с2 втрачено разом із оперативником (Пробивний заряд)'
     );
-    expect(researchEventText({ type: 'trophies', gained: { demon: 2 } })).toBeNull();
+    // п18.5 (ADR-0157): трофеї — рядок журналу «Вузла», типи порядком ядра
+    expect(researchEventText({ type: 'trophies', gained: { golem: 1, demon: 2 } })).toEqual({
+      text: '⚑ Трофеї: демон +2, голем +1',
+      cls: 'win',
+    });
   });
 });
 

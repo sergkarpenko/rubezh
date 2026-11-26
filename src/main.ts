@@ -7,7 +7,7 @@
 // ітерацій — docs/workflow.md. DOM-ініціалізація — лише у браузері
 // (typeof document): node-середовище (vitest) імпортує модуль без побічних ефектів.
 
-import { RADAR_RANGE, advanceTime } from './core/geo';
+import { advanceTime } from './core/geo';
 import { chooseRole, hireSoldier, hospitalTick, isBankrupt, readySoldiers } from './core/squad';
 import { completeAssault } from './core/assault';
 import { awaitingRole, type SoldierRole } from './core/career';
@@ -35,7 +35,7 @@ import { createSound } from './ui/audio';
 // П14.8 (ADR-0073): ambient-шар — модуль src/ui/ambient.ts.
 import { createAmbient } from './ui/ambient';
 // пR.2 (ADR-0037): панелі стану і топбара — модуль src/ui/panels.ts; масштаб сітки — src/ui/grid.ts.
-import { createPanels, inAirCombat, readyToIssue } from './ui/panels';
+import { createPanels, gateCell, inAirCombat, readyToIssue } from './ui/panels';
 import { GCELL } from './ui/grid';
 // Т.43: зупинки кнопок часу («До події», «+1 доба») — модуль src/ui/time-control.ts.
 import { geoHotkey, isSpaceForEvent, runTime, type RunMode } from './ui/time-control';
@@ -45,7 +45,7 @@ import { nextStep, renderNextStep, showStepTarget, type StepTarget } from './ui/
 import { createBattleUI, type BattleUIState } from './ui/battle';
 // П13.2 (ADR-0066): вертикальний тулбар бойових дій збоку — модуль src/ui/toolbar.ts.
 import { createToolbar } from './ui/toolbar';
-import { createInput } from './ui/input';
+import { cellFromPoint, createInput } from './ui/input';
 // П6.7 (ADR-0029): векторні спрайти — чисті функції малювання шару відображення.
 // П6.8 (ADR-0029): анімаційний рушій — черга + rAF лише під час активних анімацій.
 // пR.3 (ADR-0038): рушій і фабрики анімацій — чиста логіка src/core/render-core.ts;
@@ -224,6 +224,7 @@ const OVERLAY_IDS = [
   'new-game-dialog',
   'exit-confirm',
   'campaign-victory',
+  'campaign-defeat', // п18.5 (ADR-0157): екран поразки
   'evac-confirm',
   'role-dialog', // п16.4 (ADR-0147): вікно вибору ролі — Esc і клік поза ним його не закривають
 ];
@@ -420,6 +421,7 @@ const panels = createPanels({
   geoAnimNow: () => geoAnim.now,
   // Т.58: на стартовому екрані екран перемоги не показуємо — і коли невдале «Продовжити» перемальовує панелі
   victoryDismissed: () => victoryDismissed || !partyOnScreen,
+  partyOnScreen: () => partyOnScreen, // п18.5 (аудит PR #516): екран поразки — лише над грою, не над стартовим
   ambient, // П14.8: ефекти поверх кадру геосцени (ADR-0073)
 });
 
@@ -555,7 +557,8 @@ function partyTick(): void {
   // ефект (П14.5: сектор + кільця замість кільця П6.9; туман не розкривається).
   if (hasRaf && !geoAnim.busy) {
     const b = p.geo.base;
-    geoAnim.push(...motion([makeGeoScanAnim(b.x * GCELL + GCELL / 2, b.y * GCELL + GCELL / 2, (RADAR_RANGE + 0.5) * GCELL)]));
+    // п18.5 (ADR-0157): радіус скан-радара — radarRange (6 після «Пеленгу брами»)
+    geoAnim.push(...motion([makeGeoScanAnim(b.x * GCELL + GCELL / 2, b.y * GCELL + GCELL / 2, (radarRange(p.research) + 0.5) * GCELL)]));
   }
   if (!gameOver && isBankrupt(p.econ, p.roster, p.campaign.preset)) {
     gameOver = true;
@@ -698,6 +701,7 @@ function exitToStart(): void {
   geoAnim.cancel();
   ambient.pause();
   el('campaign-victory').classList.add('hidden'); // Т.58: вихід з екрана перемоги — екран не лишається поверх стартового
+  el('campaign-defeat').classList.add('hidden'); // п18.5: так само екран поразки
   screens?.showStart();
 }
 
@@ -764,6 +768,21 @@ if (typeof document !== 'undefined') {
   };
   // Т.58 (рішення власника 17.11.2026 «Третя кнопка»): вихід з екрана перемоги — той самий шлях, що «На стартовий екран» у меню
   el('btn-victory-exit').onclick = () => screens?.requestExit();
+  // п18.5 (ADR-0157; рішення власника «А. Два вікна + зупинка»): екран поразки — ті самі дві дії
+  el('btn-defeat-again').onclick = () => startNewParty(42);
+  el('btn-defeat-exit').onclick = () => screens?.requestExit();
+  // п18.5 (рішення власника «А. Кодом»): тап по порталу Брами на геосцені = «▶ Атакувати Браму Розриву»
+  el('geo').addEventListener('click', (ev) => {
+    if (party === null || ui.mission !== null) return;
+    const btn = document.getElementById('btn-gate') as HTMLButtonElement | null;
+    if (btn === null || btn.disabled) return;
+    const cv = el<HTMLCanvasElement>('geo');
+    const r = cv.getBoundingClientRect();
+    if (r.width === 0 || r.height === 0) return;
+    const c = cellFromPoint(ev.clientX, ev.clientY, r, cv); // GCELL = BCELL (src/ui/grid.ts)
+    const g = gateCell(party);
+    if (c.x === g.x && c.y === g.y) btn.click();
+  });
   // П4.5 (ADR-0021): найм солдата — списання грошей, новобранець у кінець ростеру
   el('btn-hire').onclick = () => {
     try {
@@ -890,7 +909,7 @@ if (typeof document !== 'undefined') {
   document.addEventListener('keydown', (ev) => {
     if (ev.key !== 'Tab') return;
     // п16.4: вікно вибору ролі — поверх інших, першим
-    const box = ['role-dialog', ...Object.keys(OVERLAY_ESC_CLOSE), 'campaign-victory']
+    const box = ['role-dialog', ...Object.keys(OVERLAY_ESC_CLOSE), 'campaign-victory', 'campaign-defeat']
       .map((id) => el(id))
       .find((o) => !o.classList.contains('hidden'));
     if (box === undefined) return;

@@ -106,7 +106,8 @@ export type GameEvent =
   // ті самі, що в прицільного; при вбивстві — precise_shot, death, shot (як у fireOnce).
   | { type: 'dash'; unitId: string; bonus: number } // bonus — додані AP (не підсумок)
   | { type: 'precise_shot'; shooterId: string; targetId: string }
-  | { type: 'field_aid'; unitId: string; targetId: string; healed: number };
+  | { type: 'field_aid'; unitId: string; targetId: string; healed: number }
+  | { type: 'charge'; shooterId: string; targetId: string }; // п18.5 (ADR-0157): «Пробивний заряд» витрачено
 
 export interface GameMap {
   width: number;
@@ -617,6 +618,7 @@ function useCharge(state: GameState, s: Unit, t: Unit): boolean {
   const items = state.items?.[s.id];
   if (!items?.charge || !(t.armor !== undefined && t.armor > 0)) return false;
   items.charge = false;
+  state.log.push({ type: 'charge', shooterId: s.id, targetId: t.id }); // п18.5: подія для журналу бою (без RNG)
   return true;
 }
 

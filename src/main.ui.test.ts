@@ -1517,9 +1517,10 @@ describeScenario('п18.3: загроза 100 — поразка; перемог�
   step('підготовка: нова партія — екрана перемоги нема, кампанія «триває», чип доби без «/30»', () => {
     startParty();
     expect($('clock').textContent).toBe('Д1 00:00');
-    expect($('campaign-status').textContent).toBe('кампанія: триває');
+    expect($('threat-num').textContent).toBe('0'); // п18.5 (ADR-0157): чип загрози замість «кампанія: …»
     expect($('campaign-progress').textContent).toBe('Д1'); // п18.3: без «/30»
     expect($('campaign-victory').classList.contains('hidden')).toBe(true);
+    expect($('campaign-defeat').classList.contains('hidden')).toBe(true);
   });
 
   step(
@@ -1540,7 +1541,7 @@ describeScenario('п18.3: загроза 100 — поразка; перемог�
       closeBattle();
       expect($('battle-panel').classList.contains('hidden')).toBe(true);
       for (let i = 0; i < 30; i++) passDay();
-      expect($('campaign-status').textContent).not.toBe('кампанія: перемога');
+      expect($('campaign-victory').classList.contains('hidden')).toBe(true); // межа 30-ї доби — без перемоги
     },
     60_000
   );
@@ -1552,8 +1553,12 @@ describeScenario('п18.3: загроза 100 — поразка; перемог�
       c.assaults = 3; // усі пороги штурму вже минули
     });
     passDay();
-    expect($('campaign-status').textContent).toBe('кампанія: поразка');
+    // п18.5 (рішення власника «А. Два вікна + зупинка»): екран поразки з причиною, добою і розкладом рахунку
+    expect($('threat-num').textContent).toBe('100');
     expect($('campaign-victory').classList.contains('hidden')).toBe(true);
+    expect($('campaign-defeat').classList.contains('hidden')).toBe(false);
+    expect($('campaign-defeat-text').textContent).toMatch(/^Загроза Розриву досягла 100 на \d+-й добі\.$/);
+    expect($('campaign-defeat-lines').textContent).toMatch(/^зонди \d+ × 100 · місії \d+ × 150 · живі \d+ × 50 · кредити 0,25 × \d+$/);
     expect($('log').textContent).toContain('✗ Загроза Розриву досягла 100 — партію програно.');
     const clock = $('clock').textContent;
     passDay();
@@ -1568,9 +1573,21 @@ describeScenario('п18.3: загроза 100 — поразка; перемог�
       c.defeatDay = 1;
       c.score = { ufosShotDown: 0, missionsWon: 0, veteransAlive: 6, moneyLeft: 300, total: 375 };
     });
-    expect($('campaign-status').textContent).toBe('кампанія: поразка');
+    expect($('campaign-defeat').classList.contains('hidden')).toBe(false);
+    expect($('campaign-defeat-text').textContent).toBe('Загроза Розриву досягла 100 на 1-й добі.');
+    expect($('campaign-defeat-score').textContent).toBe('375');
     passDay();
     expect($('clock').textContent).toBe('Д1 00:00');
+    // п18.5: «Грати знов» на екрані поразки — нова партія, екран сховано
+    btn('btn-defeat-again').click();
+    expect($('campaign-defeat').classList.contains('hidden')).toBe(true);
+    expect($('threat-num').textContent).toBe('0');
+    saveWithCampaign((c) => {
+      c.status = 'поразка';
+      c.threat = 100;
+      c.defeatDay = 1;
+    });
+    expect($('campaign-defeat').classList.contains('hidden')).toBe(false);
   });
 
   step('сейв зі статусом «перемога»: екран перемоги; «Грати далі» — екран зникає, час іде, рахунок не змінюється', () => {
@@ -1580,23 +1597,26 @@ describeScenario('п18.3: загроза 100 — поразка; перемог�
       c.victoryDay = 1;
       c.score = { ufosShotDown: 0, missionsWon: 0, veteransAlive: 6, moneyLeft: 300, total: 375 };
     });
-    expect($('campaign-status').textContent).toBe('кампанія: перемога');
+    expect($('campaign-goal').textContent).toContain('Браму Розриву зачинено'); // п18.5
     expect($('campaign-victory').classList.contains('hidden')).toBe(false);
+    expect($('campaign-victory-text').textContent).toBe('Брама Розриву зачинена на 1-й добі.');
     expect($('campaign-score').textContent).toBe('375');
+    expect($('campaign-score-lines').textContent).toBe('зонди 0 × 100 · місії 0 × 150 · живі 6 × 50 · кредити 0,25 × 300');
     btn('btn-continue').click();
     expect($('campaign-victory').classList.contains('hidden')).toBe(true);
     expect($('log').textContent).toContain('Партію продовжено');
     passDay();
     expect($('clock').textContent).toBe('Д2 00:00');
-    expect($('campaign-status').textContent).toBe('кампанія: перемога');
+    expect($('campaign-goal').textContent).toContain('Браму Розриву зачинено');
     expect($('campaign-score').textContent).toBe('375');
   });
 
   step('«Грати знов»: рестарт — нова кампанія «триває», екран приховано', () => {
     btn('btn-play-again').click();
     expect($('clock').textContent).toBe('Д1 00:00');
-    expect($('campaign-status').textContent).toBe('кампанія: триває');
+    expect($('threat-num').textContent).toBe('0');
     expect($('campaign-victory').classList.contains('hidden')).toBe(true);
+    expect($('campaign-defeat').classList.contains('hidden')).toBe(true);
   });
 });
 
@@ -1631,6 +1651,23 @@ describeScenario('п18.4: штурм бази і «Брама Розриву»',
     btn('btn-tick').click(); // подію поразки журнал виводить наступним дренажем
     expect($('log').textContent).toMatch(/Штурм бази не відбито ✗ — втрачено \d+ кредит\S* і половину складу, загроза \+10/);
     expect(Number($('money').textContent)).toBeLessThan(money);
+  });
+
+  step('п18.5 (рішення власника «А. Два вікна + зупинка»): «+1 доба» стає на програному штурмі без боєготових', () => {
+    btn('btn-play-again').click();
+    for (let i = 0; i < 24; i++) btn('btn-tick').click(); // Д1 12:00
+    saveEdit((st) => {
+      st.campaign.threat = 59;
+      for (const s of st.roster.soldiers) st.roster.hospital[s.id] = 500;
+    });
+    expect($('clock').textContent).toBe('Д1 12:00');
+    // зонди теж зупиняють «+1 доба» — тиснути, доки штурм не стався; стати мусить рівно на межі доби
+    const lost = (): number => ($('log').textContent!.match(/Штурм бази не відбито/g) ?? []).length; // журнал — і з минулих партій
+    const before = lost();
+    for (let i = 0; i < 10 && lost() === before; i++) btn('btn-day').click();
+    expect(lost()).toBe(before + 1);
+    // сід 42: загроза 60 — посеред доби (невиявлений зонд відлетів, +2), прогін став на штурмі, а не через 48 тіків
+    expect($('clock').textContent).toBe('Д1 15:00');
   });
 
   step('штурм у сейві (чекає бою) — перший «+1 тік» відкриває бій замість тіку, годинник стоїть', () => {
@@ -1692,6 +1729,12 @@ describeScenario('п18.4: штурм бази і «Брама Розриву»',
       expect(document.getElementById('btn-gate')).toBeNull(); // повтор — через добу
       passDay();
       expect(document.getElementById('btn-gate')).not.toBeNull();
+      // п18.5 (рішення власника «А. Кодом»): тап по порталу на геосцені (клітинка праворуч від вузла) = кнопка
+      $('geo').dispatchEvent(new MouseEvent('click', { clientX: 8 * 48 + 24, clientY: 4 * 48 + 24 })); // вузол — нічого
+      expect($('battle-panel').classList.contains('hidden')).toBe(true);
+      $('geo').dispatchEvent(new MouseEvent('click', { clientX: 9 * 48 + 24, clientY: 4 * 48 + 24 }));
+      expect($('battle-panel').classList.contains('hidden')).toBe(false);
+      expect($('bctx-kind').textContent).toBe('Брама Розриву');
     },
     60_000
   );
@@ -1832,11 +1875,11 @@ describePage('П12.4: вкладки статус-колонки «Загін»/
   it('розмітка: скелет #status-tabs у колонці, 6 панелей з data-tab; «Загін» — фінанси/ростер, «База» — сканери/винищувач/дослідження/цех (рішення власника П12.4); «Збереження» — вікно поза колонкою (Т.128)', () => {
     const col = htmlRaw.match(/<aside id="status">[\s\S]*?<\/aside>/)![0];
     expect(col).toContain('<div id="status-tabs"></div>'); // скелет — контент генерує модуль
-    expect((col.match(/data-tab="/g) ?? []).length).toBe(6); // усі панелі колонки розподілені
+    expect((col.match(/data-tab="/g) ?? []).length).toBe(7); // усі панелі колонки розподілені (п18.5: + «Мета кампанії»)
     const byTab = (tab: string): number =>
       (col.match(new RegExp('<section class="panel" data-tab="' + tab + '">[\\s\\S]*?</section>', 'g')) ?? []).length;
     expect(byTab('squad')).toBe(2); // фінанси + ростер (ADR-0065)
-    expect(byTab('base')).toBe(4); // дослідження + цех (ADR-0065) + сканери + винищувач (рішення власника)
+    expect(byTab('base')).toBe(5); // дослідження + цех (ADR-0065) + сканери + винищувач (рішення власника) + мета кампанії (п18.5)
     expect(byTab('system')).toBe(0); // Т.128: «Збереження» — вікно з «Меню»
     expect(col).not.toContain('save-panel');
     expect($('save-dialog').contains($('save-panel'))).toBe(true);
@@ -1850,11 +1893,11 @@ describePage('П12.4: вкладки статус-колонки «Загін»/
 
   it('флоу: перемикання вкладок показує всі 6 панелей, панелі лишаються в DOM, вибір персиститься поза сейвом', () => {
     startParty();
-    expect(colPanels().length).toBe(6); // жодна панель не втрачена (критерій 1)
+    expect(colPanels().length).toBe(7); // жодна панель не втрачена (критерій 1; п18.5 — «Мета кампанії»)
     btn('status-tab-squad').click();
     expect(visibleTitles()).toEqual(['Фінанси', 'Ростер загону']);
     btn('status-tab-base').click();
-    expect(visibleTitles()).toEqual(['Сенсорна сітка', 'Перехоплювач', 'Дослідження', 'Кузня']);
+    expect(visibleTitles()).toEqual(['Мета кампанії', 'Сенсорна сітка', 'Перехоплювач', 'Дослідження', 'Кузня']);
     // приховані панелі зберігають контент у DOM (контракти не послаблюються)
     expect($('roster').textContent).toContain('оперативник');
     expect($('money-card').textContent).not.toBe('');
@@ -2508,6 +2551,28 @@ describePage('Т.58: стартовий екран після невдалого
     exitViaMenu();
     expect(hidden('start-note')).toBe(true);
     expect($('start-note').textContent).toBe('');
+  });
+
+  it('п18.5 (аудит PR #516): «На стартовий екран» на екрані поразки; невдале «Продовжити» поразку поверх стартового не повертає', () => {
+    const good = freshSave();
+    const lost = JSON.parse(good) as { state: { campaign: Record<string, unknown> } };
+    Object.assign(lost.state.campaign, { status: 'поразка', threat: 100, defeatDay: 1 });
+    localStorage.setItem('rubezh.save.1', JSON.stringify(lost));
+    try {
+      btn('btn-load-1').click();
+      expect(hidden('campaign-defeat')).toBe(false);
+      btn('btn-defeat-exit').click();
+      expect(hidden('start-screen')).toBe(false);
+      expect(hidden('campaign-defeat')).toBe(true);
+      const bad = JSON.parse(good) as { state: { geo: { ufos: unknown } } };
+      bad.state.geo.ufos = [null];
+      localStorage.setItem('rubezh.save.1', JSON.stringify(bad));
+      btn('btn-start-continue').click();
+      expect(hidden('start-note')).toBe(false);
+      expect(hidden('campaign-defeat')).toBe(true);
+    } finally {
+      localStorage.setItem('rubezh.save.1', good);
+    }
   });
 
   it('Т.58: «На стартовий екран» на екрані перемоги — вихід, з незбереженою дією через підтвердження; екран перемоги поверх стартового не лишається', () => {
@@ -3389,6 +3454,7 @@ describePage('Т.128: «Збереження» — вікно з «Меню» (A
     startParty('42');
     const heads = [...document.querySelectorAll('#status section.panel h2, #save-dialog h2')];
     expect(heads.map((h) => h.textContent)).toEqual([
+      'Мета кампанії',
       'Сенсорна сітка',
       'Перехоплювач',
       'Фінанси',
