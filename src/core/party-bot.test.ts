@@ -207,6 +207,15 @@ describe('Т.22: запобіжник останнього загону і ре�
     expect(partyBotMissionStep(p, DEFAULT_PARTY_POLICY).launched).toBe(true);
   });
 
+  it('п18.2 (ADR-0153 п. 9): трофеї — лише за перемогу, по одному за кожного ворога місії', () => {
+    const p = partyWithTarget();
+    const info = partyBotMissionStep(p, DEFAULT_PARTY_POLICY);
+    expect(info.outcome).toBe('перемога'); // сід 42, перша ціль
+    const total = Object.values(p.research.trophies).reduce((a, b) => a + b, 0);
+    expect(total).toBeGreaterThanOrEqual(2); // звичайна місія — 2 або 3 вороги, усі загинули
+    expect(p.research.log.filter((e) => e.type === 'trophies')).toHaveLength(1);
+  });
+
   it('без грошей, але з четвертим боєготовим місія запускається', () => {
     const p = createParty(42, 'норма');
     for (let t = 0; t < 30 * TICKS_PER_DAY && missionTargets(p.geo).length === 0; t++) advanceTime(p.geo, 1);

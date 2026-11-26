@@ -75,6 +75,7 @@ export interface Unit {
 export interface UnitItems {
   medkit: boolean; // «Аптечка»: доступна дія «Лікування»
   grenade: boolean; // «Осколкова граната»: доступна дія «Кидок»
+  charge?: boolean; // п18.2 (ADR-0154): «Пробивний заряд» — перша атака по броньованій цілі без броні
 }
 
 // п16.3 (ADR-0147 п. 3, 11): роль оперативника і прапорець «дію використано»
@@ -482,7 +483,8 @@ function fireOnce(
   target: Unit,
   mode: ShotMode,
   chance: number,
-  mult = 1
+  mult = 1,
+  pierce = false
 ): { hit: boolean; damage: number } {
   const hit = state.rng() < chance;
   let damage = 0;
@@ -490,7 +492,7 @@ function fireOnce(
     const dmin = shooter.weapon.damage[0],
       dmax = shooter.weapon.damage[1];
     damage = Math.floor((dmin + Math.floor(state.rng() * (dmax - dmin + 1))) * mult);
-    if (target.armor !== undefined && target.armor > 0) damage = Math.max(1, damage - target.armor);
+    if (!pierce && target.armor !== undefined && target.armor > 0) damage = Math.max(1, damage - target.armor);
     target.hp -= damage;
     if (target.hp <= 0) {
       target.hp = 0;
@@ -567,9 +569,10 @@ export function resolveAttack(state: GameState, shooterId: string, targetId: str
   const profile = s.weapon.modes[mode];
   s.ap -= profile.apCost;
   const chance = calculateHitChance(s, mode);
+  const pierce = useCharge(state, s, t);
   const result: AttackResult = { shots: [], targetDown: false };
   for (let i = 0; i < profile.shots; i++) {
-    const shot = fireOnce(state, s, t, mode, chance);
+    const shot = fireOnce(state, s, t, mode, chance, 1, pierce);
     result.shots.push(shot);
     if (!t.alive) {
       result.targetDown = true;
@@ -595,6 +598,17 @@ export function grenadeZone(center: Vec2): Vec2[] {
 
 function inCells(pos: Vec2, cells: Vec2[]): boolean {
   return cells.some((c) => c.x === pos.x && c.y === pos.y);
+}
+
+// п18.2 (рішення власника «А. Сам на броні», ADR-0154): заряд стрільця витрачається
+// першою атакою (постріл будь-яким режимом чи «Точний постріл») по цілі з бронею —
+// уся атака, і черга, без броні; по цілі без броні заряд лишається. Дозор заряду не бере.
+// RNG не викликається — порядок кидків той самий.
+function useCharge(state: GameState, s: Unit, t: Unit): boolean {
+  const items = state.items?.[s.id];
+  if (!items?.charge || !(t.armor !== undefined && t.armor > 0)) return false;
+  items.charge = false;
+  return true;
 }
 
 // Витратники юніта в цьому бою (відсутній запис = предметів немає).
@@ -767,7 +781,8 @@ export function preciseShot(state: GameState, shooterId: string, targetId: strin
   s.ap -= PRECISE_AP_COST;
   slot.used = true;
   state.log.push({ type: 'precise_shot', shooterId: s.id, targetId: t.id });
-  const shot = fireOnce(state, s, t, 'aimed', calculateHitChance(s, 'aimed'), PRECISE_DAMAGE_MULT);
+  const pierce = useCharge(state, s, t);
+  const shot = fireOnce(state, s, t, 'aimed', calculateHitChance(s, 'aimed'), PRECISE_DAMAGE_MULT, pierce);
   return { shots: [shot], targetDown: !t.alive };
 }
 

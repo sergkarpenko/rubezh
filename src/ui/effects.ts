@@ -5,7 +5,7 @@
 // детермінізм: жодного RNG, усе відображення констант.
 
 import { GRENADE_AP_COST, GRENADE_DAMAGE, GRENADE_RANGE, HEAL_AP_COST, HEAL_AMOUNT, HIT_CHANCE_CAP, type Unit } from '../core/combat';
-import { BASE_LAB_SLOTS, MAX_LAB_SLOTS, type ProjectId } from '../core/research';
+import { BASE_LAB_SLOTS, MAX_LAB_SLOTS, RADAR_RANGE_BASE, RADAR_RANGE_WIDE, type KeyProjectId, type ProjectId } from '../core/research';
 import { ARMOR_MAX_HP_BONUS, OPTICS_ACCURACY_BONUS, type ItemId } from '../core/workshop';
 import { GUN_MODULE_DAMAGE } from '../core/intercept';
 
@@ -78,12 +78,27 @@ export function projectEffect(id: ProjectId, soldier?: Unit): string {
       return labSlotsEffect();
     case 'gun-module':
       return gunModuleEffect();
+    default:
+      return keyProjectEffect(id);
   }
+}
+
+// п18.2 (рішення власника «А. Повні», ADR-0154): ефекти ключових протоколів і заряду.
+// Показ у панелях — UI п18.5 (до нього ключові протоколи й заряд у панелях сховано).
+export const KEY_PROJECT_EFFECTS: Record<KeyProjectId, string> = {
+  'rift-anatomy': 'Відкриває «Пробивний заряд» у «Кузні»',
+  'gate-bearing': 'Радар вузла — ' + RADAR_RANGE_WIDE + ' клітинок замість ' + RADAR_RANGE_BASE,
+  'gate-key': 'Відкриває «Браму Розриву» і дві турелі бази',
+};
+export const BREACH_CHARGE_EFFECT = 'Атака по броньованій цілі — без броні (один раз)';
+
+function keyProjectEffect(id: KeyProjectId): string {
+  return KEY_PROJECT_EFFECTS[id];
 }
 
 // Ефект предмета «Кузні» ДО замовлення (механіка витратників — у підказках).
 export function itemEffect(id: ItemId, soldier?: Unit): string {
-  return projectEffect(id, soldier);
+  return id === 'breach-charge' ? BREACH_CHARGE_EFFECT : projectEffect(id, soldier);
 }
 
 // T.39: «простий» текст ефекту для картки протоколу в панелі «Дослідження»
@@ -117,5 +132,7 @@ export function plainProjectEffect(id: ProjectId, soldier?: Unit): string {
       return NUM_NOM[MAX_LAB_SLOTS] + ' протоколи в роботі одночасно замість ' + NUM_GEN[BASE_LAB_SLOTS];
     case 'gun-module':
       return 'Перехоплювач завдає на ' + GUN_MODULE_DAMAGE + ' пошкодження більше за раунд';
+    default:
+      return keyProjectEffect(id);
   }
 }

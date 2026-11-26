@@ -19,7 +19,15 @@ import { applyRankBonus, newCareer, rankOf, type SoldierCareer, type SoldierRole
 import { createEconomy, type EconomyEvent, type EconomyState } from './economy';
 import { createIntercept, interceptRngState, type Fighter, type InterceptEvent, type InterceptState } from './intercept';
 import { createCampaign, DEFAULT_PRESET, type CampaignState, type DifficultyPreset } from './campaign';
-import { createResearch, type ProjectId, type ResearchEvent, type ResearchState, type Scientist } from './research';
+import {
+  createResearch,
+  emptyTrophies,
+  type ProjectId,
+  type ResearchEvent,
+  type ResearchState,
+  type Scientist,
+  type TrophyStore,
+} from './research';
 import {
   createWorkshop,
   emptyStore,
@@ -241,6 +249,9 @@ interface ResearchSave {
   pool: number;
   lastSalaryDay: number;
   log: ResearchEvent[];
+  // п18.2 (ADR-0153 п. 9, ADR-0154): трофеї; відсутнє поле (сейви до п18.2) = 0 кожного типу.
+  // Версія формату не зростає — v3 з загрозою і брамою — п18.3.
+  trophies?: Partial<TrophyStore>;
 }
 
 // П11.3 (ADR-0058): стан «Кузні» і складу в сейві; відсутнє поле (сейви до
@@ -331,6 +342,7 @@ export function serializeParty(party: Party, savedAt: string = ''): string {
         pool: party.research.pool,
         lastSalaryDay: party.research.lastSalaryDay,
         log: party.research.log.slice(),
+        trophies: { ...party.research.trophies },
       },
       workshop: {
         queue: party.workshop.queue.map((o) => ({ ...o })),
@@ -437,7 +449,8 @@ function parseSave(json: string): SaveData {
       !Array.isArray(rsv.completed) ||
       !Number.isInteger(rsv.pool) ||
       !Number.isInteger(rsv.lastSalaryDay) ||
-      !Array.isArray(rsv.log))
+      !Array.isArray(rsv.log) ||
+      (rsv.trophies !== undefined && !validTrophies(rsv.trophies)))
   ) {
     fail('Пошкоджені дані збереження: наука');
   }
@@ -454,6 +467,12 @@ function parseSave(json: string): SaveData {
     fail('Пошкоджені дані збереження: Кузня');
   }
   return data;
+}
+
+// п18.2: трофеї в сейві — об'єкт лише з відомими типами і цілими ≥ 0.
+function validTrophies(t: unknown): boolean {
+  if (t === null || typeof t !== 'object' || Array.isArray(t)) return false;
+  return Object.entries(t).every(([k, v]) => k in emptyTrophies() && Number.isInteger(v) && (v as number) >= 0);
 }
 
 // Відновлює партію з JSON-рядка. rng відновлюється з позиції потоку
@@ -534,6 +553,7 @@ export function deserializeParty(json: string): Party {
             log: rsv.log.map((e) =>
               e.type === 'project_started' || e.type === 'project_completed' ? { ...e, id: migrateProjectKey(e.id as string) } : e
             ),
+            trophies: { ...emptyTrophies(), ...(rsv.trophies ?? {}) },
           }
         : createResearch(),
     // П11.3 (ADR-0058): відсутнє поле workshop (сейви до П11.3) = порожня

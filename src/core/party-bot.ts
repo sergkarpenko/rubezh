@@ -54,9 +54,11 @@ import { createParty, type Party } from './save';
 // П11.8: наука (research.ts) і цех (workshop.ts) — публічне API ядра, ядро не змінюється.
 import {
   HIRE_SCIENTIST_PRICE,
+  awardTrophies,
   PROJECT_CATALOG,
   fireScientist,
   hireScientist,
+  radarRange,
   researchTick,
   startProject,
   type ProjectId,
@@ -66,6 +68,7 @@ import {
   deployConsumables,
   equipItem,
   installGunModule,
+  itemUnlocked,
   orderItem,
   removeLostEquipment,
   settleConsumables,
@@ -253,7 +256,7 @@ function workshopDeficit(party: Party, id: ItemId): number {
 // workshop.ts — там приватний; дублювання маленьке, ядро не розкриває).
 // Гарматний модуль на солдатові не носиться — недосяжно за конструкцією
 // (workshopDeficit відсікає його до виклику).
-function soldierEquipKey(id: ItemId): 'armor' | 'optics' | 'medkit' | 'grenade' {
+function soldierEquipKey(id: ItemId): 'armor' | 'optics' | 'medkit' | 'grenade' | 'charge' {
   switch (id) {
     case 'armor':
       return 'armor';
@@ -263,6 +266,8 @@ function soldierEquipKey(id: ItemId): 'armor' | 'optics' | 'medkit' | 'grenade' 
       return 'medkit';
     case 'grenade':
       return 'grenade';
+    case 'breach-charge':
+      return 'charge'; // п18.2: політика бота заряду ще не замовляє (п18.6)
     case 'gun-module':
       throw new Error('Гарматний модуль перехоплювача — озброєння перехоплювача, ключ екіпірування оперативника недосяжний');
   }
@@ -307,7 +312,7 @@ export function partyBotScienceStep(party: Party, policy: PartyBotPolicy): void 
   // замовлення (черга порожня) — виробництво не випереджає потребу.
   if (policy.workshopOrders.length > 0 && party.workshop.queue.length === 0) {
     for (const id of policy.workshopOrders) {
-      if (!party.research.completed.includes(id)) continue; // гейт завершеного проєкту
+      if (!itemUnlocked(party.research, id)) continue; // гейт завершеного проєкту
       if (workshopDeficit(party, id) <= 0) continue;
       if (party.econ.money - presetPrice(WORKSHOP_CATALOG[id].cost, preset) < reserve) continue;
       orderItem(party.econ, party.workshop, party.research, id, preset);
@@ -370,6 +375,7 @@ export function partyBotMissionStep(party: Party, policy: PartyBotPolicy): Missi
   const outcome: 'перемога' | 'поразка' | 'евакуйовано' =
     battle.outcome === 'перемога' ? 'перемога' : battle.outcome === 'евакуйовано' ? 'евакуйовано' : 'поразка';
   completeMission(party.geo, mission.briefing.ufoId, outcome);
+  awardTrophies(party.research, mission.state, outcome); // п18.2 (ADR-0153 п. 9): трофеї лише за перемогу
   const aftermath = applyMissionResult(party.roster, mission.state);
   assignBotRoles(party.roster); // п16.3 (ADR-0147 п. 12): роль кожному, хто дослужився до «Боєць»
   removeLostEquipment(party.workshop, aftermath.lost); // броня й око — на склад (ADR-0091)
@@ -458,7 +464,7 @@ export function simulateParty(seed: number, preset: DifficultyPreset = DEFAULT_P
     // Фаза 2: тік партії — той самий порядок, що partyTick (main.ts, П8.4a);
     // П11.8: researchTick/workshopTick додано дзеркально partyTick — без
     // вчених і замовлень no-op (критерій П11.8.2).
-    advanceTime(party.geo, 1);
+    advanceTime(party.geo, 1, radarRange(party.research)); // п18.2 (ADR-0153 п. 12)
     economyTick(party.econ, party.geo, party.campaign.preset);
     researchTick(party.research, party.econ, party.geo, party.campaign.preset);
     workshopTick(party.workshop);

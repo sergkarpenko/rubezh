@@ -16,6 +16,8 @@
 import { geoDay, type GeoState } from './geo';
 import { spend, type EconomyState } from './economy';
 import { type DifficultyPreset, DEFAULT_PRESET, sciencePrice } from './campaign';
+import type { GameState } from './combat';
+import { ENEMY_KINDS, ENEMY_ORDER, enemyKind, type EnemyKind } from './enemies';
 
 export const HIRE_SCIENTIST_PRICE = 100; // кандидат (П11.8); прецедент найму солдата, ADR-0021
 export const SCIENTIST_SALARY = 10; // зарплата за добу за вченого; Т.28 (ADR-0091): 20 → 10
@@ -25,7 +27,18 @@ export const MAX_LAB_SLOTS = 3; // після проєкту «Розширен�
 // Ідентифікатори проєктів — стабільні англійські ключі (П12.6, ADR-0064:
 // ключі — не відображувані назви; сейви ≤0.3.0 мігруються при завантаженні,
 // save.ts). Відображувані назви — поле name каталогу.
-export type ProjectId = 'armor' | 'optics' | 'medkit' | 'lab-extension' | 'grenade' | 'gun-module';
+export type ProjectId = 'armor' | 'optics' | 'medkit' | 'lab-extension' | 'grenade' | 'gun-module' | KeyProjectId;
+
+// п18.2 (ADR-0153 п. 1, 10; ADR-0154): ключові протоколи ланцюжка до фінальної місії.
+export type KeyProjectId = 'rift-anatomy' | 'gate-bearing' | 'gate-key';
+
+// п18.2 (ADR-0153 п. 2, 9): трофеї партії — лічильник за типом убитого ворога.
+export type TrophyStore = Record<EnemyKind, number>;
+export type TrophyCost = Partial<Record<EnemyKind, number>>;
+
+export function emptyTrophies(): TrophyStore {
+  return { demon: 0, hound: 0, golem: 0, eye: 0 };
+}
 
 export interface ProjectDef {
   id: ProjectId;
@@ -33,6 +46,7 @@ export interface ProjectDef {
   cost: number; // кредити за старт (кандидат, П11.8)
   points: number; // потік до завершення (кандидат, П11.8)
   prerequisite?: ProjectId; // передумова — завершений протокол
+  trophies?: TrophyCost; // п18.2 (ADR-0153 п. 10): трофеї, що списуються на старті разом із кредитами
 }
 
 // Стартовий каталог (ADR-0058): Т1 без передумов, Т2 — за передумовами.
@@ -55,12 +69,65 @@ export const PROJECTS: ProjectDef[] = [
   { id: 'gun-module', name: 'Гарматний модуль перехоплювача', cost: 128, points: 36, prerequisite: 'optics' },
 ];
 
+// п18.2 (ADR-0153 п. 10; кандидати чисел — перемір на п18.6): три ключові протоколи.
+// Окремий масив: панель «Дослідження» ітерує PROJECTS, а ключові протоколи
+// до UI п18.5 у панелях не показуються (рішення власника «А. Сховати до п18.5», ADR-0154).
+export const KEY_PROJECTS: ProjectDef[] = [
+  { id: 'rift-anatomy', name: 'Анатомія Розриву', cost: 120, points: 20, trophies: { demon: 6, hound: 3 } },
+  { id: 'gate-bearing', name: 'Пеленг брами', cost: 160, points: 30, prerequisite: 'rift-anatomy', trophies: { golem: 2, eye: 2 } },
+  {
+    id: 'gate-key',
+    name: 'Ключ брами',
+    cost: 200,
+    points: 40,
+    prerequisite: 'gate-bearing',
+    trophies: { demon: 4, hound: 2, golem: 1, eye: 2 },
+  },
+];
+
 export const LAB_EXTENSION_PROJECT: ProjectId = 'lab-extension';
 
-export const PROJECT_CATALOG: Record<ProjectId, ProjectDef> = Object.fromEntries(PROJECTS.map((p) => [p.id, p])) as Record<
-  ProjectId,
-  ProjectDef
->;
+// п18.2 (ADR-0153 п. 12): радіус радара бази — 4, після «Пеленгу брами» — 6.
+export const RADAR_RANGE_BASE = 4; // те саме, що RADAR_RANGE у geo.ts
+export const RADAR_RANGE_WIDE = 6;
+export function radarRange(research: Pick<ResearchState, 'completed'>): number {
+  return research.completed.includes('gate-bearing') ? RADAR_RANGE_WIDE : RADAR_RANGE_BASE;
+}
+
+// п18.2: причина «Бракує трофеїв: …» (усі типи, яких бракує, порядком ENEMY_ORDER) або undefined.
+export function missingTrophies(trophies: TrophyStore, cost: TrophyCost | undefined): string | undefined {
+  if (!cost) return undefined;
+  const lacks = ENEMY_ORDER.filter((k) => (cost[k] ?? 0) > trophies[k]).map(
+    (k) => ENEMY_KINDS[k].name.toLowerCase() + ' ' + trophies[k] + ' з ' + cost[k]
+  );
+  return lacks.length > 0 ? 'Бракує трофеїв: ' + lacks.join(', ') : undefined;
+}
+
+// Списати трофеї (перевірку зроблено missingTrophies до оплати).
+export function spendTrophies(trophies: TrophyStore, cost: TrophyCost | undefined): void {
+  if (!cost) return;
+  for (const k of ENEMY_ORDER) trophies[k] -= cost[k] ?? 0;
+}
+
+// п18.2 (ADR-0153 п. 9, EARS 1): трофеї за виграну місію — по одному за кожного
+// загиблого ворога за його типом (відсутній kind ≡ демон). Поразка й евакуація — нічого.
+// Без RNG: бойовий RNG і траєкторія геосцени не змінюються. Повертає нараховане.
+export function awardTrophies(research: ResearchState, battle: Pick<GameState, 'units'>, outcome: string): TrophyCost {
+  const gained: TrophyCost = {};
+  if (outcome !== 'перемога') return gained;
+  for (const u of battle.units) {
+    if (u.side !== 'alien' || u.alive) continue;
+    const k = enemyKind(u);
+    gained[k] = (gained[k] ?? 0) + 1;
+    research.trophies[k] += 1;
+  }
+  if (Object.keys(gained).length > 0) research.log.push({ type: 'trophies', gained });
+  return gained;
+}
+
+export const PROJECT_CATALOG: Record<ProjectId, ProjectDef> = Object.fromEntries(
+  [...PROJECTS, ...KEY_PROJECTS].map((p) => [p.id, p])
+) as Record<ProjectId, ProjectDef>;
 
 // Відображувана назва протоколу за ключем (для throw-текстів, журналу і
 // панелей; невідомий ключ — як є, без викиту).
@@ -104,7 +171,8 @@ export type ResearchEvent =
   | { type: 'salary_shortfall'; day: number; fired: string[] }
   | { type: 'points'; day: number; amount: number }
   | { type: 'project_started'; id: ProjectId }
-  | { type: 'project_completed'; id: ProjectId };
+  | { type: 'project_completed'; id: ProjectId }
+  | { type: 'trophies'; gained: TrophyCost }; // п18.2: трофеї за виграну місію
 
 export interface ResearchState {
   scientists: Scientist[]; // штат вчених (окремий від ростеру солдатів)
@@ -115,6 +183,7 @@ export interface ResearchState {
   pool: number; // спільний пул наукових точок (невитрачені)
   lastSalaryDay: number; // остання доба, за яку зарплату вже проведено
   log: ResearchEvent[]; // події науки для журналу (П11.6)
+  trophies: TrophyStore; // п18.2 (ADR-0153 п. 9): трофеї за типом убитого ворога
 }
 
 export function createResearch(): ResearchState {
@@ -127,6 +196,7 @@ export function createResearch(): ResearchState {
     pool: 0,
     lastSalaryDay: 0,
     log: [],
+    trophies: emptyTrophies(),
   };
 }
 
@@ -219,7 +289,11 @@ export function startProject(
   if (research.active.length >= research.slots) {
     throw new Error('Немає вільного слота лабораторії техномагії (' + research.slots + ')');
   }
+  // п18.2 (ADR-0153 п. 10, EARS 2): трофеї — перевірка до оплати, списання разом із кредитами
+  const lack = missingTrophies(research.trophies, def.trophies);
+  if (lack !== undefined) throw new Error(lack);
   spend(econ, sciencePrice(def.cost, preset));
+  spendTrophies(research.trophies, def.trophies);
   const project: ActiveProject = { id, invested: 0 };
   research.active.push(project);
   research.log.push({ type: 'project_started', id });

@@ -8,7 +8,7 @@
 // геосцені (прецедент панелі збереження, П5.3): у бою кнопки вимкнені.
 // Детермінізм: панель лише читає стан ядра, жодного RNG.
 
-import { ITEM_IDS, WORKSHOP_CATALOG, itemName, orderItem, type ItemId } from '../core/workshop';
+import { ITEM_IDS, WORKSHOP_CATALOG, itemName, itemUnlocked, orderItem, type ItemId } from '../core/workshop';
 import { sciencePrice } from '../core/campaign';
 import type { Party } from '../core/save';
 import { itemEffect } from './effects';
@@ -42,7 +42,7 @@ export interface OrderButtonState {
 export function orderButtonState(party: Party, id: ItemId, busy: boolean): OrderButtonState {
   const def = WORKSHOP_CATALOG[id];
   const price = sciencePrice(def.cost, party.campaign.preset);
-  const notResearched = !party.research.completed.includes(id);
+  const notResearched = !itemUnlocked(party.research, id);
   const title = notResearched
     ? 'Ще не досліджено'
     : party.econ.money < price

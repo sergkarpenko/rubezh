@@ -3463,3 +3463,31 @@ describePage('п16.4: вікно вибору ролі і ростер', () => {
     expect($('role-dialog').classList.contains('hidden')).toBe(true);
   });
 });
+
+describePage('п18.2 (ADR-0153 п. 12): радар 6 після «Пеленгу брами» — тік партії на сторінці', () => {
+  type Raw = {
+    state: {
+      geo: { base: { x: number; y: number }; ufos: Record<string, unknown>[] };
+      research: { completed: string[] };
+    };
+  };
+  const detectedAfterTick = (completed: string[]): boolean => {
+    startParty();
+    btn('btn-save-1').click();
+    const raw = JSON.parse(localStorage.getItem('rubezh.save.1')!) as Raw;
+    const pos = { x: raw.state.geo.base.x - 6, y: 0 };
+    raw.state.geo.ufos.push({ id: 'z9', kind: 'розвідник', detected: false, status: 'летить', landedTicksLeft: 8, pos, target: pos });
+    raw.state.research.completed.push(...completed);
+    localStorage.setItem('rubezh.save.1', JSON.stringify(raw));
+    btn('btn-load-1').click();
+    btn('btn-tick').click();
+    btn('btn-save-1').click();
+    const after = JSON.parse(localStorage.getItem('rubezh.save.1')!) as Raw;
+    return after.state.geo.ufos.find((u) => u.id === 'z9')?.detected === true;
+  };
+
+  it('зонд за 6 клітинок: без протоколу — не виявлено, після «Пеленгу брами» — виявлено', () => {
+    expect(detectedAfterTick([])).toBe(false);
+    expect(detectedAfterTick(['rift-anatomy', 'gate-bearing'])).toBe(true);
+  });
+});

@@ -18,7 +18,7 @@ import { TICK_MINUTES, detectedUfos, missionTargets } from '../core/geo';
 import { FIGHTER_MAX_HP, FIGHTER_REPAIR_COST } from '../core/intercept';
 import type { Party } from '../core/save';
 import { isBankrupt, readySoldiers } from '../core/squad';
-import { ITEM_IDS, WORKSHOP_CATALOG, type ItemId } from '../core/workshop';
+import { ITEM_IDS, SoldierItemIdOf, WORKSHOP_CATALOG, itemUnlocked, type ItemId } from '../core/workshop';
 import { EQUIP_ITEMS, gunModuleReady, inAirCombat, readyToIssue } from './panels';
 import type { StatusTabId } from './status-tabs';
 
@@ -60,11 +60,11 @@ function everProduced(party: Party, id: ItemId): boolean {
 // «Кузні», ні в оперативників, ні на перехоплювачі), а кредитів на нього вистачає.
 function canOrderNew(party: Party, id: ItemId): boolean {
   const w = party.workshop;
-  if (!party.research.completed.includes(id)) return false;
+  if (!itemUnlocked(party.research, id)) return false;
   if (w.store[id] > 0 || w.queue.some((o) => o.id === id)) return false;
   if (id === 'gun-module') {
     if (party.intercept.fighter.gunModule) return false;
-  } else if (party.roster.soldiers.some((s) => w.equipped[s.id]?.[id] === true)) return false;
+  } else if (party.roster.soldiers.some((s) => w.equipped[s.id]?.[SoldierItemIdOf(id)] === true)) return false;
   return party.econ.money >= sciencePrice(WORKSHOP_CATALOG[id].cost, party.campaign.preset);
 }
 

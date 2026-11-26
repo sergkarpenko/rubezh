@@ -526,6 +526,7 @@ describe('цех: Т.12 — зняття саме того предмета, щ�
       optics: { name: 'Кібернетичне око', cost: 50, ticks: 20 },
       armor: { name: 'Композитна броня', cost: 60, ticks: 24 },
       'gun-module': { name: 'Гарматний модуль перехоплювача', cost: 80, ticks: 32 },
+      'breach-charge': { name: 'Пробивний заряд', cost: 50, ticks: 16, unlockedBy: 'rift-anatomy', trophies: { hound: 1 } },
     });
     expect(itemName('гаубиця' as ItemId)).toBe('гаубиця');
   });

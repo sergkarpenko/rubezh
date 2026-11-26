@@ -8,6 +8,7 @@
 // обробники вводу (модуль input) працюють із тим самим об'єктом.
 
 import { SQUAD_SPAWN, completeMission, createMission, missionOutcome, type Mission } from '../core/mission';
+import { awardTrophies } from '../core/research';
 import { applyMissionResult, deployRoles, missionSquad } from '../core/squad';
 import { RANK_NAMES, rankOf, type SoldierCareer } from '../core/career';
 // Т.28 (ADR-0091): броня й око загиблих — на склад, витратники зникають.
@@ -832,6 +833,7 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
     // П11.4 (ADR-0058): витратники уцілілих — використані зникають, невикористані лишаються.
     settleConsumables(party.workshop, aftermath.survivors, mission.state.items);
     completeMission(party.geo, mission.briefing.ufoId, outcome);
+    awardTrophies(party.research, mission.state, outcome); // п18.2 (ADR-0153 п. 9): трофеї лише за перемогу; показ — п18.5
     // п16.4 (ADR-0147 п. 7, 14; EARS 7): рядок втрати зі статистикою — у журнал і в картку результату.
     // Журнал історії після завантаження не відтворює (adoptParty у main.ts) — подія ядра для нього не потрібна.
     for (const line of aftermath.lossLines) deps.journal(line, 'lose', 'battle');

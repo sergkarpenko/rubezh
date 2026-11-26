@@ -45,7 +45,16 @@ import { interceptTick, repairTick } from '../src/core/intercept';
 import { VICTORY_DAY, sciencePrice, campaignScore, campaignTick, type DifficultyPreset } from '../src/core/campaign';
 import { createParty } from '../src/core/save';
 import { PROJECT_CATALOG, fireScientist, researchTick, type ProjectId } from '../src/core/research';
-import { WORKSHOP_CATALOG, equipItem, installGunModule, orderItem, workshopTick, type ItemId } from '../src/core/workshop';
+import {
+  SoldierItemIdOf,
+  WORKSHOP_CATALOG,
+  equipItem,
+  installGunModule,
+  itemUnlocked,
+  orderItem,
+  workshopTick,
+  type ItemId,
+} from '../src/core/workshop';
 import {
   DEFAULT_PARTY_POLICY,
   MISSION_SQUAD_SIZE,
@@ -157,9 +166,13 @@ function scienceTail(party: ReturnType<typeof createParty>, policy: PartyBotPoli
   const squad = readySoldiers(party.roster).slice(0, first);
   if (policy.workshopOrders.length > 0 && w.queue.length === 0) {
     for (const id of policy.workshopOrders) {
-      if (!party.research.completed.includes(id)) continue;
+      if (!itemUnlocked(party.research, id)) continue;
       const lacking =
-        id === 'gun-module' ? (party.intercept.fighter.gunModule ? 0 : 1) : squad.filter((s) => !w.equipped[s.id]?.[id]).length;
+        id === 'gun-module'
+          ? party.intercept.fighter.gunModule
+            ? 0
+            : 1
+          : squad.filter((s) => !w.equipped[s.id]?.[SoldierItemIdOf(id)]).length;
       if (lacking - w.store[id] - w.queue.filter((o) => o.id === id).length <= 0) continue;
       const price = sciencePrice(WORKSHOP_CATALOG[id].cost, preset);
       if (party.econ.money - price < policy.hireReserve) continue;
@@ -188,11 +201,11 @@ function run(name: string, v: Variant, preset: DifficultyPreset, seed: number): 
     party.research.completed = [...v.done];
     sci.scientistsUpTo = 0;
     sci.projects = [];
-    sci.workshopOrders = v.done.filter((id): id is ItemId => id !== 'lab-extension');
+    sci.workshopOrders = v.done.filter((id) => id !== 'lab-extension') as ItemId[];
   }
   if (v.projects) {
     sci.projects = v.projects;
-    sci.workshopOrders = v.projects.filter((id): id is ItemId => id !== 'lab-extension');
+    sci.workshopOrders = v.projects.filter((id) => id !== 'lab-extension') as ItemId[];
   }
   const reserve = v.reserve(preset);
   const sciStep: PartyBotPolicy = reserve === null ? sci : { ...sci, hireReserve: reserve };
