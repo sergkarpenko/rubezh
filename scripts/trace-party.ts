@@ -75,6 +75,7 @@ interface Bust {
   alive: number;
   afterRepair: boolean; // боєготових не було, гроші на найм були — їх забрав ремонт
   afterAssault: boolean; // п18.4: у тік банкрутства був штурм бази (програний забирає 30 % кредитів)
+  afterGate: boolean; // Т.210 (аудит PR #526): у тік банкрутства був бій фіналу «Брама Розриву»
   spent48: { hire: number; science: number; salary: number; repair: number; assault: number }; // витрати за останню добу
   recoverTicks?: number; // --no-bankrupt: через скільки тіків умова банкрутства зникла
   wonAfter: number; // --no-bankrupt: виграно місій після банкрутства
@@ -121,7 +122,8 @@ function run(seed: number): Rec {
     const m4 = party.econ.money;
     partyBotScienceStep(party, policy); // разом із купівлею перехоплювача (partyBotFleetStep, п19.6)
     const m5 = party.econ.money;
-    if (partyBotGateStep(party, policy).fought) rec.gateAttempts += 1; // Т.210: фінал перед місією — як simulateParty
+    const gate = partyBotGateStep(party, policy); // Т.210: фінал перед місією — як simulateParty
+    if (gate.fought) rec.gateAttempts += 1;
     spent.push({ repair: Math.max(0, m0 - m1), salary: m2 - m3, assault: m3 - mA, hire: mA - m4, science: m4 - m5 });
     const readyBefore = readySoldiers(party.roster).length;
     const skip = flags.has('nomissions') || (flags.has('guard') && readyBefore === 3 && m5 < hire);
@@ -155,8 +157,9 @@ function run(seed: number): Rec {
         day,
         money: party.econ.money,
         alive: party.roster.soldiers.length,
-        afterRepair: !ms.launched && !assault.fought,
+        afterRepair: !ms.launched && !assault.fought && !gate.fought,
         afterAssault: assault.fought,
+        afterGate: gate.fought,
         spent48,
         wonAfter: 0,
       };
@@ -232,7 +235,7 @@ console.log(
 if (busts.length) {
   const s = (k: keyof Bust['spent48']): string => (busts.reduce((a, b) => a + b.spent48[k], 0) / busts.length).toFixed(0);
   console.log(
-    `банкрутства: після програної місії ${busts.filter((b) => !b.afterRepair && !b.afterAssault).length}, після оплати ремонту ${busts.filter((b) => b.afterRepair).length}, після штурму бази ${busts.filter((b) => b.afterAssault).length}`
+    `банкрутства: після програної місії ${busts.filter((b) => !b.afterRepair && !b.afterAssault && !b.afterGate).length}, після оплати ремонту ${busts.filter((b) => b.afterRepair).length}, після штурму бази ${busts.filter((b) => b.afterAssault).length}, після фіналу ${busts.filter((b) => b.afterGate).length}`
   );
   console.log(
     `  гроші в мить банкрутства: ${Math.min(...busts.map((b) => b.money))}–${Math.max(...busts.map((b) => b.money))}, медіана ${median(busts.map((b) => b.money))}; живих у ростері 0: ${busts.filter((b) => b.alive === 0).length}`
@@ -249,7 +252,22 @@ if (busts.length) {
 }
 console.log('медіани наприкінці доби серед партій, що дожили: доба — гроші / живих у ростері');
 console.log(
-  [1, 3, 5, 10, 15, 20, 25, 29]
+  // доби — до останньої завершеної за горизонтом (Т.210, аудит PR #526: з `--days 60` обривались на 29-й)
+  [
+    ...new Set([
+      1,
+      3,
+      5,
+      10,
+      15,
+      20,
+      25,
+      ...Array.from({ length: Math.floor(HORIZON_DAYS / 10) }, (_, i) => 10 * (i + 3)),
+      HORIZON_DAYS - 1,
+    ]),
+  ]
+    .filter((d) => d >= 1 && d < HORIZON_DAYS)
+    .sort((a, b) => a - b)
     .map(
       (d) =>
         `${d} — ${median(recs.filter((r) => r.moneyByDay.length >= d).map((r) => r.moneyByDay[d - 1]))} / ${median(recs.filter((r) => r.aliveByDay.length >= d).map((r) => r.aliveByDay[d - 1]))}`

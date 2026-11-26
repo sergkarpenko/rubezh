@@ -394,8 +394,8 @@ for (const name of variants) {
 
 if (out) {
   mkdirSync(dirname(out), { recursive: true });
-  const header =
-    'variant,preset,seed,won,days,missions,missionsWon,lost,hired,daysNoFullSquad,money30,roster,score,projects,scientistDays,spentScience,spentSalary,blockedTicks,noSquadTicks,missionsFirstHalf,gateAttempts';
+  // колонка грошей — на добу горизонту (`money30` за типового `--days 30`, як у CSV Т.23–Т.29; аудит Vibe PR #526)
+  const header = `variant,preset,seed,won,days,missions,missionsWon,lost,hired,daysNoFullSquad,money${HORIZON_DAYS},roster,score,projects,scientistDays,spentScience,spentSalary,blockedTicks,noSquadTicks,missionsFirstHalf,gateAttempts`;
   const lines = all.map((r) =>
     [
       r.variant,
