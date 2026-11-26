@@ -217,7 +217,9 @@ export function unequipItem(workshop: WorkshopState, soldier: Unit, id: ItemId):
   if (!eq || !eq[soldierId]) {
     throw new Error('Предмета немає на оперативникові: ' + itemName(id));
   }
-  eq[soldierId] = false;
+  if (soldierId === 'charge')
+    delete eq.charge; // п18.2: поле заряду — лише за наявності (аудит PR #513)
+  else eq[soldierId] = false;
   workshop.store[id] += 1;
   if (soldierId === 'armor') {
     soldier.maxHp -= ARMOR_MAX_HP_BONUS;

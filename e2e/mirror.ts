@@ -33,6 +33,7 @@ import type { DifficultyPreset } from '../src/core/campaign';
 import { advanceTime, detectedUfos, geoClock, missionTargets, type Ufo } from '../src/core/geo';
 import { findPath, pathApCost, sideVisibleCells } from '../src/core/map';
 import { completeMission, createMission, missionOutcome, type Mission, type MissionOutcome } from '../src/core/mission';
+import { awardTrophies, radarRange } from '../src/core/research';
 import { createParty, type Party } from '../src/core/save';
 import { applyMissionResult, chooseRole, deployRoles, hospitalTick, missionSquad, readySoldiers } from '../src/core/squad';
 import { deployConsumables } from '../src/core/workshop';
@@ -84,7 +85,7 @@ export class CoreMirror {
 
   tick(ticks = 1): void {
     for (let i = 0; i < ticks; i++) {
-      advanceTime(this.party.geo, 1);
+      advanceTime(this.party.geo, 1, radarRange(this.party.research));
       hospitalTick(this.party.roster);
     }
   }
@@ -369,6 +370,7 @@ export class CoreMirror {
     if (mission === null || outcome === 'триває') throw new Error('Дзеркало: бій ще триває');
     const aftermath = applyMissionResult(this.party.roster, mission.state);
     completeMission(this.party.geo, mission.briefing.ufoId, outcome);
+    awardTrophies(this.party.research, mission.state, outcome); // п18.2: дзеркало finish у battle.ts
     this.mission = null;
     if (outcome === 'перемога') {
       const wounded = aftermath.wounded.length > 0 ? ' · поранених: ' + aftermath.wounded.length : '';

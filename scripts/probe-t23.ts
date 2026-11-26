@@ -44,8 +44,9 @@ import { hospitalTick, isBankrupt, missionRisksBankruptcy, readySoldiers } from 
 import { interceptTick, repairTick } from '../src/core/intercept';
 import { VICTORY_DAY, sciencePrice, campaignScore, campaignTick, type DifficultyPreset } from '../src/core/campaign';
 import { createParty } from '../src/core/save';
-import { PROJECT_CATALOG, fireScientist, researchTick, type ProjectId } from '../src/core/research';
+import { PROJECT_CATALOG, fireScientist, radarRange, researchTick, type ProjectId } from '../src/core/research';
 import {
+  ITEM_IDS,
   SoldierItemIdOf,
   WORKSHOP_CATALOG,
   equipItem,
@@ -113,7 +114,8 @@ function parseVariant(name: string): Variant {
   for (const part of name.split('+')) {
     const num = Number(part.replace(/^[a-z]+/, ''));
     if (part === 'none') v.science = false;
-    else if (part === 'gift') v.gift = Object.keys(WORKSHOP_CATALOG) as ItemId[];
+    else if (part === 'gift')
+      v.gift = [...ITEM_IDS]; // п18.2: п'ять чинних предметів, як до кроку
     else if (part.startsWith('p:')) v.projects = part.slice(2).split('.') as ProjectId[];
     else if (part === 'fire') v.fire = true;
     else if (part === 'nofire') v.fire = false;
@@ -201,11 +203,11 @@ function run(name: string, v: Variant, preset: DifficultyPreset, seed: number): 
     party.research.completed = [...v.done];
     sci.scientistsUpTo = 0;
     sci.projects = [];
-    sci.workshopOrders = v.done.filter((id) => id !== 'lab-extension') as ItemId[];
+    sci.workshopOrders = v.done.filter((id) => id in WORKSHOP_CATALOG) as ItemId[]; // п18.2: ключові протоколи предмета не мають
   }
   if (v.projects) {
     sci.projects = v.projects;
-    sci.workshopOrders = v.projects.filter((id) => id !== 'lab-extension') as ItemId[];
+    sci.workshopOrders = v.projects.filter((id) => id in WORKSHOP_CATALOG) as ItemId[];
   }
   const reserve = v.reserve(preset);
   const sciStep: PartyBotPolicy = reserve === null ? sci : { ...sci, hireReserve: reserve };
@@ -241,7 +243,7 @@ function run(name: string, v: Variant, preset: DifficultyPreset, seed: number): 
     partyBotInterceptStep(party, policy.intercept);
     interceptTick(party.intercept, party.geo);
     repairTick(party.intercept, party.geo);
-    advanceTime(party.geo, 1);
+    advanceTime(party.geo, 1, radarRange(party.research));
     economyTick(party.econ, party.geo, preset);
     const m0 = party.econ.money;
     researchTick(party.research, party.econ, party.geo, preset);
@@ -311,7 +313,7 @@ const mean = (a: number[]): number => a.reduce((x, y) => x + y, 0) / a.length;
 const f1 = (x: number): string => x.toFixed(1);
 
 const all: Rec[] = [];
-const ITEMS = Object.keys(WORKSHOP_CATALOG) as ItemId[];
+const ITEMS: ItemId[] = [...ITEM_IDS];
 // Ціни каталогу до першого варіанта: кожен варіант стартує від них, а не від цін попереднього.
 const baseCosts = Object.fromEntries(ITEMS.map((id) => [id, WORKSHOP_CATALOG[id].cost]));
 const PROJECT_IDS = Object.keys(PROJECT_CATALOG) as ProjectId[];

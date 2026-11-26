@@ -211,6 +211,11 @@ describe('п18.2: «Пробивний заряд» у «Кузні» (ADR-0153 
     expect(r.trophies.hound).toBe(1);
     for (let i = 0; i < 16; i++) workshopTick(w);
     expect(w.store['breach-charge']).toBe(1);
+    // бракує кредитів — трофей не списано (аудит PR #513)
+    const poor = rich(10);
+    expect(() => orderItem(poor, w, r, 'breach-charge')).toThrow();
+    expect(r.trophies.hound).toBe(1);
+    expect(w.queue).toEqual([]);
   });
 
   it('екіпірування, бій і розрахунок: невитрачений лишається, витрачений зникає, із загиблим — втрачено', () => {
@@ -232,6 +237,12 @@ describe('п18.2: «Пробивний заряд» у «Кузні» (ADR-0153 
     unequipItem(w, a, 'breach-charge');
     expect(w.equipped).toEqual({});
     expect(w.store['breach-charge']).toBe(1);
+    // зняття заряду з бійця в броні — без поля charge: false (аудит PR #513)
+    w.store.armor = 1;
+    equipItem(w, a, 'armor');
+    equipItem(w, a, 'breach-charge');
+    unequipItem(w, a, 'breach-charge');
+    expect(w.equipped.s1).toEqual({ armor: true, optics: false, medkit: false, grenade: false });
   });
 
   it('без заряду запис екіпірування і копія в бій — без поля charge (байт-у-байт як до п18.2)', () => {
@@ -372,7 +383,7 @@ describe('п18.2: сейв — трофеї й заряд (ADR-0154)', () => {
     const q = deserializeParty(JSON.stringify(data));
     expect(q.research.trophies).toEqual(emptyTrophies());
     expect(q.workshop.store['breach-charge']).toBe(0);
-    for (const bad of [{ demon: -1 }, { dragon: 1 }, { hound: 1.5 }, [1], null]) {
+    for (const bad of [{ demon: -1 }, { dragon: 1 }, { constructor: 1 }, { toString: 2 }, { hound: 1.5 }, [1], null]) {
       data.state.research.trophies = bad;
       expect(() => deserializeParty(JSON.stringify(data))).toThrow('Пошкоджені дані збереження: наука');
     }

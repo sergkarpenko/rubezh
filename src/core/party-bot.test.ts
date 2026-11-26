@@ -216,6 +216,13 @@ describe('Т.22: запобіжник останнього загону і ре�
     expect(p.research.log.filter((e) => e.type === 'trophies')).toHaveLength(1);
   });
 
+  it('п18.2 (аудит PR #513): ключовий протокол у політиці без трофеїв — пропуск, а не помилка', () => {
+    const p = createParty(42, 'норма');
+    p.econ.money = 10_000; // кредитів на старт будь-якого протоколу з резервом
+    expect(() => partyBotScienceStep(p, { ...SCIENCE_POLICY, projects: ['rift-anatomy', 'armor'] })).not.toThrow();
+    expect(p.research.active.map((a) => a.id)).toEqual(['armor']);
+  });
+
   it('без грошей, але з четвертим боєготовим місія запускається', () => {
     const p = createParty(42, 'норма');
     for (let t = 0; t < 30 * TICKS_PER_DAY && missionTargets(p.geo).length === 0; t++) advanceTime(p.geo, 1);

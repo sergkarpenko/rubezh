@@ -23,7 +23,7 @@ import { advanceTime, missionTargets } from '../src/core/geo';
 import { creditMissionBonus, economyTick } from '../src/core/economy';
 import { applyMissionResult, hospitalTick, isBankrupt, missionSquad, readySoldiers } from '../src/core/squad';
 import { interceptTick, repairTick } from '../src/core/intercept';
-import { researchTick } from '../src/core/research';
+import { awardTrophies, radarRange, researchTick } from '../src/core/research';
 import { deployConsumables, removeLostEquipment, settleConsumables, workshopTick } from '../src/core/workshop';
 import { campaignTick, VICTORY_DAY, type DifficultyPreset } from '../src/core/campaign';
 import { autoBattle } from '../src/core/ai-bot';
@@ -53,6 +53,7 @@ function missionStep(party: Party): { evacUnits: number } {
   const battle = autoBattle(mission.state);
   const outcome: 'перемога' | 'поразка' = battle.outcome === 'перемога' ? 'перемога' : 'поразка';
   completeMission(party.geo, mission.briefing.ufoId, outcome);
+  awardTrophies(party.research, mission.state, outcome);
   const aftermath = applyMissionResult(party.roster, mission.state);
   removeLostEquipment(party.workshop, aftermath.lost);
   settleConsumables(party.workshop, aftermath.survivors, mission.state.items);
@@ -70,7 +71,7 @@ function replay(seed: number, preset: DifficultyPreset): { save: string; evacUni
     partyBotInterceptStep(party, policy.intercept);
     interceptTick(party.intercept, party.geo);
     repairTick(party.intercept, party.geo);
-    advanceTime(party.geo, 1);
+    advanceTime(party.geo, 1, radarRange(party.research));
     economyTick(party.econ, party.geo, party.campaign.preset);
     researchTick(party.research, party.econ, party.geo, party.campaign.preset);
     workshopTick(party.workshop);

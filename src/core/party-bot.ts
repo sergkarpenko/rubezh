@@ -58,6 +58,7 @@ import {
   PROJECT_CATALOG,
   fireScientist,
   hireScientist,
+  missingTrophies,
   radarRange,
   researchTick,
   startProject,
@@ -253,7 +254,7 @@ function workshopDeficit(party: Party, id: ItemId): number {
 }
 
 // Ключ екіпірування за предметом каталогу (дзеркало SoldierItemIdOf у
-// workshop.ts — там приватний; дублювання маленьке, ядро не розкриває).
+// workshop.ts; тут гарматний модуль — помилкою, а не мовчки).
 // Гарматний модуль на солдатові не носиться — недосяжно за конструкцією
 // (workshopDeficit відсікає його до виклику).
 function soldierEquipKey(id: ItemId): 'armor' | 'optics' | 'medkit' | 'grenade' | 'charge' {
@@ -305,6 +306,7 @@ export function partyBotScienceStep(party: Party, policy: PartyBotPolicy): void 
     const def = PROJECT_CATALOG[id];
     if (def.prerequisite !== undefined && !r.completed.includes(def.prerequisite)) continue;
     if (party.econ.money - presetPrice(def.cost, preset) < reserve) continue;
+    if (missingTrophies(r.trophies, def.trophies) !== undefined) continue; // п18.2: ключовий протокол без трофеїв (аудит PR #513)
     startProject(party.econ, r, id, preset);
     break;
   }

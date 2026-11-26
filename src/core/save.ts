@@ -19,6 +19,7 @@ import { applyRankBonus, newCareer, rankOf, type SoldierCareer, type SoldierRole
 import { createEconomy, type EconomyEvent, type EconomyState } from './economy';
 import { createIntercept, interceptRngState, type Fighter, type InterceptEvent, type InterceptState } from './intercept';
 import { createCampaign, DEFAULT_PRESET, type CampaignState, type DifficultyPreset } from './campaign';
+import { ENEMY_ORDER } from './enemies';
 import {
   createResearch,
   emptyTrophies,
@@ -472,7 +473,8 @@ function parseSave(json: string): SaveData {
 // п18.2: трофеї в сейві — об'єкт лише з відомими типами і цілими ≥ 0.
 function validTrophies(t: unknown): boolean {
   if (t === null || typeof t !== 'object' || Array.isArray(t)) return false;
-  return Object.entries(t).every(([k, v]) => k in emptyTrophies() && Number.isInteger(v) && (v as number) >= 0);
+  // аудит PR #513: не `in` — він бачить ключі прототипу («constructor», «toString»)
+  return Object.entries(t).every(([k, v]) => (ENEMY_ORDER as readonly string[]).includes(k) && Number.isInteger(v) && (v as number) >= 0);
 }
 
 // Відновлює партію з JSON-рядка. rng відновлюється з позиції потоку

@@ -21,7 +21,7 @@ import {
   researchTick,
   startProject,
 } from './core/research';
-import { ENEMY_ORDER } from './core/enemies';
+import { ENEMY_ORDER, makeEnemy } from './core/enemies';
 import {
   ARMOR_MAX_HP_BONUS,
   ITEM_IDS,
@@ -64,7 +64,19 @@ const CHOICES = ['далека', 'середня', 'впритул', 'відст
 // Команда: тип і два «сирі» числа — скільки часу минає або який за порядком об'єкт.
 // Вага — як часто команда трапляється: часу більше за решту, бо наука, цех і зонди
 // живуть добами, а до екіпірування партія доходить лише через науку і цех.
-const WEIGHTS = { tick: 2, days: 3, wait: 3, hire: 1, scientist: 3, dismiss: 1, project: 3, order: 3, equip: 3, unequip: 2 } as const;
+const WEIGHTS = {
+  tick: 2,
+  days: 3,
+  wait: 3,
+  hire: 1,
+  scientist: 3,
+  dismiss: 1,
+  project: 3,
+  order: 3,
+  equip: 3,
+  unequip: 2,
+  loot: 2,
+} as const;
 const WEIGHTS_AIR = { gun: 1, intercept: 3, round: 1, repair: 2, mission: 3, reload: 2 } as const;
 type Kind = keyof typeof WEIGHTS | keyof typeof WEIGHTS_AIR;
 const cmdArb = fc.record({
@@ -78,6 +90,10 @@ type Cmd = typeof cmdArb extends fc.Arbitrary<infer T> ? T : never;
 // самі доходять до них рідко. Генератор бере довільний початок дебюту (може й порожній)
 // і номер протоколу: броня, око, гель або розширення лабораторії.
 const OPENING = ['scientist', 'project', 'days', 'scientist', 'days', 'scientist', 'wait', 'order', 'wait', 'equip'] as const;
+// п18.2 (аудит PR #513): номер протоколу 4 — дебют із трофеями: два «loot» по 4 трофеї кожного
+// типу, далі той самий дебют — п'ятий відкритий протокол «Анатомія Розриву», замовлення і
+// видача — «Пробивний заряд» (єдиний відкритий предмет).
+const OPENING_CHARGE = ['loot', 'loot', ...OPENING] as const;
 
 // Один тік партії — у тому порядку, що й partyTick шару відображення (src/main.ts).
 // Т.16: у повітряному бою час заморожено — тік нічого не робить, як і в partyTick.
@@ -185,6 +201,18 @@ function apply(p: Party, c: Cmd): Party {
     round: () => round(CHOICES[c.i % CHOICES.length]),
     repair: () => startRepair(intercept, geo, econ),
     mission: () => mission(p, c.i),
+    // п18.2 (аудит PR #513): трофеї з випадкових місій рідко доходять до ключових протоколів —
+    // команда нараховує їх тим самим awardTrophies, як за виграний бій з 1–4 ворогами кожного типу
+    loot: () =>
+      void awardTrophies(
+        research,
+        {
+          units: ENEMY_ORDER.flatMap((k) =>
+            Array.from({ length: 1 + ((c.n + c.i) % 4) }, (_, j) => ({ ...makeEnemy(k, k + j, j, { x: 0, y: 0 }), alive: false }))
+          ),
+        },
+        'перемога'
+      ),
   };
   commands[c.t]();
   return p;
@@ -360,12 +388,14 @@ const partyArb = fc
   .tuple(
     fc.nat(),
     fc.constantFrom<DifficultyPreset>('легкий', 'норма', 'складний'),
-    fc.nat(OPENING.length),
-    fc.nat(3),
+    fc.nat(OPENING_CHARGE.length),
+    fc.nat(4),
     fc.array(cmdArb, { maxLength: 80, size: 'max' })
   )
   .map(([seed, preset, length, protocol, cmds]): [number, DifficultyPreset, Cmd[]] => {
-    const opening = OPENING.slice(0, length).map((t) => ({ t, n: 0, i: protocol }));
+    const opening = (protocol === 4 ? OPENING_CHARGE : OPENING)
+      .slice(0, length)
+      .map((t) => ({ t, n: protocol === 4 ? 3 : 0, i: protocol }));
     return [seed, preset, [...opening, ...cmds]];
   });
 
