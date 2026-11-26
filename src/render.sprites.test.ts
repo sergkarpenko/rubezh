@@ -42,7 +42,6 @@ import {
   drawPathPreview,
   drawReachZone,
   drawSoldierSprite,
-  unitLetter,
   unitRing,
   drawTargetFrame,
   drawUfoSprite,
@@ -446,22 +445,17 @@ describe('читабельність стану (ADR-0007)', () => {
     expect((owA!.args as number[])[2]).toBe(CY - 21);
   });
 
-  it('п17.2 (аудит PR #507): ворог з літерою типу — знак дозору праворуч від плашки, не під нею', () => {
+  it('п17.5 (рішення власника «Б. Без літери»): знак дозору ворога — у тому ж куті, що й у бійця; тексту, крім числа HP, немає', () => {
     const rf = rasterFactory();
     initPixelSprites(rf.make);
-    for (const [letter, w] of [
-      ['Гн', 15],
-      ['Д', 9],
-    ] as const) {
-      const a = mockCtx();
-      drawAlienSprite(a.ctx, alien({ overwatch: true, letter, ring: ALIEN_RING, hp: 10 }));
-      const ow = a.calls.find((c) => c.m === 'drawImage' && (c.args as number[])[3] === 10);
-      const x = (ow!.args as number[])[1];
-      expect(x).toBe(CX - 23 + w + 1); // центр знака — на 6 px правіше краю плашки
-      expect(x).toBeGreaterThanOrEqual(CX - 23 + w); // плашка x [CX-23, CX-23+w) знака не накриває
-      expect(x + 10).toBeLessThan(CX + 24 - (2 * 6 + 3) - 1); // і знак не доходить до плашки числа HP «10»
-      expect((ow!.args as number[])[2]).toBe(CY - 21);
-    }
+    const a = mockCtx();
+    drawAlienSprite(a.ctx, alien({ overwatch: true, ring: ENEMY_LOOK.hound.ring, kind: 'hound', hp: 10 }));
+    const ow = a.calls.find((c) => c.m === 'drawImage' && (c.args as number[])[3] === 10);
+    expect((ow!.args as number[])[1]).toBe(CX - 21);
+    expect((ow!.args as number[])[2]).toBe(CY - 21);
+    const n = animCtx();
+    drawAlienSprite(n.ctx, alien({ ring: ALIEN_RING, kind: 'golem' }));
+    expect(n.calls.filter((c) => c.m === 'fillText').map((c) => c.args[0])).toEqual(['10']);
   });
 });
 
@@ -861,16 +855,21 @@ describe('П14.2/П14.3 (ADR-0072): атлас спрайтів юнітів —
       { side: 'alien' as const, pose: undefined, col: ATLAS_POSE_COL.idle, row: 1 },
       { side: 'alien' as const, pose: 'fire' as const, col: ATLAS_POSE_COL.fire, row: 1 },
       { side: 'alien' as const, pose: 'death' as const, col: ATLAS_POSE_COL.death, row: 1 },
+      // п17.5 (ADR-0152): ряд за типом ворога — гончак 2, голем 3, око 4; демон із полем — 1
+      { side: 'alien' as const, pose: undefined, col: ATLAS_POSE_COL.idle, row: 2, kind: 'hound' as const },
+      { side: 'alien' as const, pose: 'fire' as const, col: ATLAS_POSE_COL.fire, row: 3, kind: 'golem' as const },
+      { side: 'alien' as const, pose: 'death' as const, col: ATLAS_POSE_COL.death, row: 4, kind: 'eye' as const },
+      { side: 'alien' as const, pose: undefined, col: ATLAS_POSE_COL.idle, row: 1, kind: 'demon' as const },
     ];
     for (const c of cases) {
       const s = animCtx();
-      drawUnitSprite(s.ctx, { ...soldier(), side: c.side, pose: c.pose });
+      drawUnitSprite(s.ctx, { ...soldier(), side: c.side, pose: c.pose, kind: 'kind' in c ? c.kind : undefined });
       const d = s.calls.find((call) => call.m === 'drawImage');
       expect(d, `side=${c.side} pose=${c.pose ?? 'idle'}`).toBeDefined();
       const a = d!.args as number[];
       expect(a[0]).toBe(atlasImg); // джерело — атлас
       expect(a[1]).toBe(c.col * ATLAS_FRAME); // колонка кадру
-      expect(a[2]).toBe(c.row * ATLAS_FRAME); // рядок: 0 — оперативник, 1 — демон Розриву
+      expect(a[2]).toBe(c.row * ATLAS_FRAME); // рядок: 0 — оперативник, 1 — демон Розриву, 2–4 — гончак, голем, око (п17.5)
       expect(a[3]).toBe(ATLAS_FRAME);
       expect(a[4]).toBe(ATLAS_FRAME);
       expect(a[5]).toBe(CX - ATLAS_UNIT / 2); // Math.round(24 − 34) = −10
@@ -1595,37 +1594,12 @@ describe('Т.129: кільце кольору бійця під ногами', (
     expect(unitRing('alien', 's1')).toBe(ALIEN_RING);
   });
 
-  it('п17.2: unitRing і unitLetter — колір і літера типу ворога; свій — без літери', () => {
+  it('п17.2: unitRing — колір типу ворога; свій — колір за id', () => {
     expect(unitRing('alien', 'a1', 'demon')).toBe(ALIEN_RING);
     expect(unitRing('alien', 'a1', 'hound')).toBe(ENEMY_LOOK.hound.ring);
     expect(unitRing('alien', 'a1', 'eye')).toBe(ENEMY_LOOK.eye.ring);
     expect(unitRing('player', 's1', 'golem')).toBe(FIGHTER_COLORS[0]);
-    expect(unitLetter('alien')).toBe('Д');
-    expect(unitLetter('alien', 'golem')).toBe('Гл');
-    expect(unitLetter('player', 'golem')).toBeUndefined();
     expect(ringCalls((c) => drawAlienSprite(c, alien({ ring: unitRing('alien', 'a2', 'golem') })))[0]!.style).toBe(ENEMY_LOOK.golem.ring);
-  });
-
-  it('п17.2: літера типу — плашка в лівому верхньому куті кольором кільця; у «вогні» й загиблому — немає', () => {
-    const a = animCtx();
-    drawAlienSprite(a.ctx, alien({ ring: ENEMY_LOOK.hound.ring, letter: 'Гн', hp: 7, maxHp: 7 }));
-    const iText = a.calls.findIndex((c) => c.m === 'fillText' && c.args[0] === 'Гн');
-    expect(iText).toBeGreaterThanOrEqual(0);
-    expect(a.calls[iText]!.args.slice(1)).toEqual([CX - 24 + 2, CY - 21]);
-    // плашка: x = лівий край клітинки + 1, ширина 2 × 6 + 3 = 15 — не доходить до числа HP праворуч
-    const plate = a.calls.find((c) => c.m === 'fillRect' && c.args[0] === CX - 23 && c.args[1] === CY - 23) as
-      { args: number[] } | undefined;
-    expect(plate?.args.slice(2)).toEqual([15, 11]);
-    expect(CX - 23 + 15).toBeLessThan(CX + 24 - (1 * 6 + 3) - 1);
-    expect(a.sets.some((x) => x.p === 'fillStyle' && x.v === ENEMY_LOOK.hound.ring)).toBe(true);
-    for (const over of [{ pose: 'fire' as const }, { hp: 0 }]) {
-      const b = animCtx();
-      drawAlienSprite(b.ctx, alien({ ring: ALIEN_RING, letter: 'Д', ...over }));
-      expect(b.calls.some((c) => c.m === 'fillText' && c.args[0] === 'Д')).toBe(false);
-    }
-    const n = animCtx();
-    drawAlienSprite(n.ctx, alien({ ring: ALIEN_RING }));
-    expect(n.calls.filter((c) => c.m === 'fillText').map((c) => c.args[0])).toEqual(['10']);
   });
 
   it('кільце в межах клітинки; рамка вибору — поверх кільця', () => {

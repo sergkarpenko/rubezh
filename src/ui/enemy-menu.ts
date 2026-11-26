@@ -18,6 +18,9 @@ import {
   type ShotMode,
   type Unit,
 } from '../core/combat';
+import { enemyKind, type EnemyKind } from '../core/enemies';
+import { ATLAS_ROW } from '../render';
+import unitAtlasUrl from '../../assets/units-atlas.png';
 
 // Чому дія недоступна — ті самі перевірки, що й assertCanFire / throwGrenade ядра
 export type MenuBlock = 'ap' | 'range' | 'los' | 'none' | null;
@@ -33,6 +36,7 @@ export interface EnemyMenuShot {
 
 export interface EnemyMenuView {
   id: string;
+  kind: EnemyKind; // п17.5: тип — мініатюра з ряду атласа
   name: string;
   hp: number;
   maxHp: number;
@@ -59,6 +63,7 @@ export function enemyMenuView(state: GameState, target: Unit, shooter: Unit | un
   const w = target.weapon;
   const view: EnemyMenuView = {
     id: target.id,
+    kind: enemyKind(target),
     name: target.name,
     hp: target.hp,
     maxHp: target.maxHp,
@@ -124,10 +129,23 @@ function button(action: string, label: string, ap: number, chance: string, block
   );
 }
 
+// п17.5 (ADR-0152; рішення власника «А. Мініатюра типу»): кадр «стій» свого ряду атласа бійців —
+// фігура (x 8–88, y 33–93 кадру 96) у 2/3 масштабу: 53 × 40 px; атлас 480 × 480 → 320 × 320.
+export const FACE_SCALE = 2 / 3;
+export function enemyFaceStyle(kind: EnemyKind): string {
+  const x = -Math.round(8 * FACE_SCALE);
+  const y = -Math.round((ATLAS_ROW[kind] * 96 + 33) * FACE_SCALE);
+  return 'background-image:url(' + unitAtlasUrl + ');background-position:' + x + 'px ' + y + 'px';
+}
+
 export function enemyMenuHtml(v: EnemyMenuView): string {
   const pct = v.maxHp > 0 ? Math.round((v.hp / v.maxHp) * 100) : 0;
   let html =
-    '<div class="em-head"><span class="em-name">' +
+    '<div class="em-head"><span class="em-face" data-kind="' +
+    v.kind +
+    '" style="' +
+    enemyFaceStyle(v.kind) +
+    '"></span><span class="em-name">' +
     esc(v.name) +
     '</span><span class="em-hpn">HP ' +
     v.hp +

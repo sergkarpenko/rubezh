@@ -408,9 +408,20 @@
       }
       #benemy .em-head {
         display: flex;
-        justify-content: space-between;
+        align-items: center;
         gap: 6px;
         font-size: 13px;
+      }
+      /* п17.5 (ADR-0152): мініатюра типу ворога — кадр «стій» з атласа бійців (enemyFaceStyle) */
+      #benemy .em-face {
+        flex: none;
+        width: 53px;
+        height: 40px;
+        background-size: 320px 320px;
+        background-repeat: no-repeat;
+      }
+      #benemy.compact .em-face {
+        display: none;
       }
       #benemy .em-name {
         overflow: hidden;
@@ -420,6 +431,7 @@
       }
       #benemy .em-hpn {
         flex: none;
+        margin-left: auto; /* п17.5: справа, як і до мініатюри (була space-between) */
       }
       #benemy .em-hp {
         height: 5px;

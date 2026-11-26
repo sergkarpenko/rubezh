@@ -39,7 +39,6 @@ import {
   drawReachZone,
   drawTargetFrame,
   drawUnitSprite,
-  unitLetter,
   unitRing,
 } from '../render';
 import {
@@ -463,7 +462,7 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
     }
     // Т.132 (ADR-0121): віддача стрільця — перші кадри польоту кулі; Т.144 (ADR-0125): «менше руху» — без віддачі
     const recoil =
-      activeAnim !== null && activeAnim.kind === 'tracer' && activeAnim.calm !== true
+      activeAnim !== null && activeAnim.kind === 'tracer' && activeAnim.calm !== true && activeAnim.melee !== true // п17.5: удар кігтями — без віддачі
         ? recoilPx(animT(activeAnim, deps.anim.now), tracerShare(activeAnim))
         : 0;
 
@@ -570,6 +569,7 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
           maxHp: u.maxHp, // смерть уже застосована — порожня смуга (П14.4)
           selected: false,
           overwatch: false,
+          kind: u.kind, // п17.5: ряд атласа за типом
         });
         continue;
       }
@@ -611,7 +611,7 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
         recoil: u.id === firingId ? recoil : 0, // Т.132: віддача пострілу
         breath: u.id === firingId ? 0 : (deps.ambient.breath?.(at) ?? 0), // Т.132: дихання у спокої
         ring: unitRing(u.side, u.id, u.kind), // Т.129: кільце кольору бійця; п17.2: ворог — колір типу
-        letter: unitLetter(u.side, u.kind), // п17.2 (ADR-0149 п. 15): літера типу ворога
+        kind: u.kind, // п17.5 (ADR-0152): ряд атласа за типом ворога
         flip: (facing.get(u.id) ?? native) !== native, // П14.3: дзеркало за напрямком
       });
     }
@@ -630,6 +630,7 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
       activeAnim !== null && activeAnim.kind === 'tracer' && firingId !== null
         ? {
             side: activeAnim.side,
+            kind: activeAnim.enemyKind, // п17.5: якір дула свого типу
             flip: (facing.get(firingId) ?? (activeAnim.side === 'player' ? 1 : -1)) !== (activeAnim.side === 'player' ? 1 : -1),
           }
         : undefined;

@@ -328,6 +328,8 @@ export interface TracerAnim extends CalmFlag {
   dur: number; // TRACER_MS (+ IMPACT_MS при влучанні)
   start: number | null;
   fog?: true; // п17.3: стрілець у тумані — from = перша видима клітинка лінії, пози «вогонь» і спалаху дула немає
+  enemyKind?: EnemyKind; // п17.5: тип стрільця-ворога — ряд атласа і якір дула (без поля — демон)
+  melee?: true; // п17.5 (рішення власника «А. Удар без трасера»): удар гончака — риски кігтів на цілі, без кулі
 }
 export interface DeathAnim extends CalmFlag {
   kind: 'death';
@@ -335,6 +337,7 @@ export interface DeathAnim extends CalmFlag {
   side: Side;
   at: Vec2;
   hpMax: number; // П14.4: показник життя загиблого — порожня смуга (hp 0)
+  enemyKind?: EnemyKind; // п17.5: тип загиблого ворога — ряд атласа (без поля — демон)
   dur: number;
   start: number | null;
 }
@@ -425,7 +428,9 @@ export function makeTracerAnim(side: Side, from: Vec2, to: Vec2, hit: boolean): 
   return { kind: 'tracer', side, from, to, hit, dur: TRACER_MS + (hit ? IMPACT_MS : 0), start: null };
 }
 export function makeDeathAnim(u: Unit): DeathAnim {
-  return { kind: 'death', unitId: u.id, side: u.side, at: { ...u.pos }, hpMax: u.maxHp, dur: DEATH_MS, start: null };
+  const a: DeathAnim = { kind: 'death', unitId: u.id, side: u.side, at: { ...u.pos }, hpMax: u.maxHp, dur: DEATH_MS, start: null };
+  if (u.kind !== undefined) a.enemyKind = u.kind; // п17.5: демон — без поля, як раніше
+  return a;
 }
 export function makeOwFlashAnim(u: Unit): OwFlashAnim {
   return { kind: 'owflash', side: u.side, at: { ...u.pos }, dur: OW_FLASH_MS, start: null };
@@ -676,14 +681,21 @@ export function animsFromEvents(events: readonly GameEvent[], units: readonly Un
     }
     return u.pos;
   };
+  // п17.5: тип стрільця — у трасер (ряд атласа і якір дула); удар гончака (зброя лише впритул) —
+  // `melee`: риски кігтів на цілі замість кулі (рішення власника «А. Удар без трасера»).
+  const typed = (a: TracerAnim, shooter: Unit): TracerAnim => {
+    if (shooter.kind !== undefined) a.enemyKind = shooter.kind;
+    if (shooter.kind === 'hound') a.melee = true;
+    return a;
+  };
   const tracer = (shooter: Unit, to: Vec2, hit: boolean, at: number): void => {
     const p = posAt(shooter, at);
     if (shooter.side === 'player' || distance(p, to) <= VISION_RANGE || seen(p)) {
-      anims.push(makeTracerAnim(shooter.side, { ...shooter.pos }, { ...to }, hit));
+      anims.push(typed(makeTracerAnim(shooter.side, { ...shooter.pos }, { ...to }, hit), shooter));
       return;
     }
     const from = lineCells(p, to).find((c) => seen(c) || (c.x === to.x && c.y === to.y)) ?? to;
-    const a = makeTracerAnim(shooter.side, { ...from }, { ...to }, hit);
+    const a = typed(makeTracerAnim(shooter.side, { ...from }, { ...to }, hit), shooter);
     a.fog = true;
     anims.push(a);
   };
@@ -777,7 +789,12 @@ export function animsFromEvents(events: readonly GameEvent[], units: readonly Un
     }
     if (e.type === 'overwatch' && e.armed) {
       const u = byId.get(e.unitId);
-      if (u !== undefined) anims.push(makeOwFlashAnim(u));
+      // п17.5 (кандидат 178 д): спалах дозору ворога в тумані не малюється — позиція на момент
+      // події (`posAt`: ворог міг піти після), і кільце стоїть там, де він узяв дозор
+      if (u !== undefined) {
+        const p = posAt(u, i);
+        if (u.side === 'player' || seen(p)) anims.push({ ...makeOwFlashAnim(u), at: { ...p } });
+      }
     }
     i++; // turn — не анімується; overwatch(armed:false) ядра не логує
   }
@@ -790,14 +807,15 @@ export function animsFromEvents(events: readonly GameEvent[], units: readonly Un
 // від бірюзи своїх, пурпуру Розриву і бурштину головної дії (ADR-0064, ADR-0115).
 export const FIGHTER_COLORS = ['#8ee35b', '#5b9bff', '#f5e050', '#ff8a5c', '#b58cff', '#f2f5fa'] as const;
 export const ALIEN_RING = '#ff2e88'; // кільце ворогів — пурпур Розриву (ADR-0064)
-// п17.2 (ADR-0149 п. 4, 15; рішення власника «Б. Контраст»): до мальованих кадрів п17.5 тип
-// ворога видно кільцем кольору типу і літерою в лівому верхньому куті клітинки; демон —
-// пурпур, як раніше; три нові кольори не збігаються з шістьма кольорами бійців.
-export const ENEMY_LOOK: Record<EnemyKind, { ring: string; letter: string }> = {
-  demon: { ring: ALIEN_RING, letter: 'Д' },
-  hound: { ring: '#ff3b30', letter: 'Гн' },
-  golem: { ring: '#8fa3b8', letter: 'Гл' },
-  eye: { ring: '#2ee6d6', letter: 'О' },
+// п17.2 (ADR-0149 п. 4, 15; рішення власника «Б. Контраст»): тип ворога видно кільцем кольору
+// типу; демон — пурпур, як раніше; три нові кольори не збігаються з шістьма кольорами бійців.
+// п17.5 (ADR-0152; рішення власника «Б. Без літери»): тимчасову літеру типу прибрано — тип видно
+// з малюнка свого ряду атласа.
+export const ENEMY_LOOK: Record<EnemyKind, { ring: string }> = {
+  demon: { ring: ALIEN_RING },
+  hound: { ring: '#ff3b30' },
+  golem: { ring: '#8fa3b8' },
+  eye: { ring: '#2ee6d6' },
 };
 export const HELMET_SHAPES = 3;
 // Геометрія кільця під ногами (src/render.ts і гейт e2e — одне місце правди):

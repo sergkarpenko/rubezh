@@ -154,9 +154,9 @@ function drawPixelSprite(ctx: CanvasRenderingContext2D, def: PixelSprite, cx: nu
 }
 
 // --- П14.2/П14.3 (ADR-0072): атлас спрайтів юнітів бою — згенеровані кадри ---
-// Джерело — assets/units-atlas.png (480×192): сітка 5×2 кадрів 96×96, порядок
-// колонок idle → walk1 → walk2 → fire → death; ряд 0 — оперативник, ряд 1 —
-// демон Розриву. П14.3: walk2 — окремий кадр (фідбек П14.2, константи кадрів
+// Джерело — assets/units-atlas.png: з п17.5 (ADR-0152) 480 × 480 — сітка 5 × 5 кадрів 96 × 96
+// (до п17.5 — 480 × 192, 5 × 2), порядок колонок idle → walk1 → walk2 → fire → death; ряди —
+// оперативник, демон, гончак, голем, око (ATLAS_ROW). П14.3: walk2 — окремий кадр (фідбек П14.2, константи кадрів
 // 0/1/2/3/4); план — джерело правди чисел (style-references.md, Фаза 14).
 // Т.133 (ADR-0122): кадри «мальовані» (аркуші Gemini, плавна альфа), геометрія та сама;
 // стиль, промпти й конвертер — style-references.md, розділ «Т.133».
@@ -185,14 +185,35 @@ export const ATLAS_WALK2_COL = 2;
 // виміряні по атласу скриптом конвертації (Т.133: `scripts/assets/units-t133-report.json`, поле muzzle);
 // дзеркалення — x → 96 − x. Підказку
 // передає ЛИШЕ бойовище (battle.ts); трасер перехоплення на геосцені — від центру.
-export const MUZZLE_ANCHOR: Readonly<Record<'player' | 'alien', { x: number; y: number }>> = {
+// п17.5 (ADR-0152): атлас п'яти рядів — якір дула за типом ворога (`alien` — демон),
+// поле muzzle звіту `scripts/assets/units-t194-report.json`; у гончака — край риски удару
+// (трасера немає, якір лишається для повноти).
+export const MUZZLE_ANCHOR: Readonly<Record<'player' | 'alien' | Exclude<EnemyKind, 'demon'>, { x: number; y: number }>> = {
   player: { x: 78, y: 45 }, // дуловий спалах АР-14 «Гарт» — правий край кадру fire (Т.134: нові аркуші)
-  alien: { x: 8, y: 48 }, // дуловий спалах фазового різака — лівий край кадру fire (Т.134: нові аркуші)
+  alien: { x: 4, y: 49 }, // дуло гармати демона — лівий край кадру fire (п17.5: новий аркуш)
+  hound: { x: 14, y: 56 }, // край риски кігтів
+  golem: { x: 7, y: 46 }, // дуло гармати-руки
+  eye: { x: 26, y: 64 }, // кінець променя зі зіниці
 };
 
-// Точка дула на полі для центру клітинки стрільця (cx, cy); recoil — віддача, px (назад).
-export function muzzlePoint(side: 'player' | 'alien', flip: boolean, cx: number, cy: number, recoil = 0): { x: number; y: number } {
-  const m = MUZZLE_ANCHOR[side];
+// п17.5: ряд атласа за типом ворога (ряд 0 — оперативник); без типу — демон.
+export const ATLAS_ROW: Readonly<Record<EnemyKind, number>> = { demon: 1, hound: 2, golem: 3, eye: 4 };
+
+function muzzleKey(side: 'player' | 'alien', kind?: EnemyKind): keyof typeof MUZZLE_ANCHOR {
+  return side === 'player' || kind === undefined || kind === 'demon' ? side : kind;
+}
+
+// Точка дула на полі для центру клітинки стрільця (cx, cy); recoil — віддача, px (назад);
+// kind — тип стрільця-ворога (п17.5; без нього — демон).
+export function muzzlePoint(
+  side: 'player' | 'alien',
+  flip: boolean,
+  cx: number,
+  cy: number,
+  recoil = 0,
+  kind?: EnemyKind
+): { x: number; y: number } {
+  const m = MUZZLE_ANCHOR[muzzleKey(side, kind)];
   const o = unitFrameOrigin(cx, cy);
   const back = recoil * facingSign(side, flip);
   const mx = flip ? ATLAS_FRAME - m.x : m.x;
@@ -216,7 +237,7 @@ export interface UnitSpriteView extends UnitSprite {
   maxHp: number; // П14.4: показник життя — частка hp/maxHp у смузі HP
   recoil?: number; // Т.132: віддача пострілу, px — фігура відходить назад від погляду
   breath?: number; // Т.132: «дихання» у спокої, 0..1 (ambient-шар; стискання по висоті від ніг)
-  letter?: string; // п17.2 (ADR-0149 п. 15): літера типу ворога в лівому верхньому куті клітинки
+  kind?: EnemyKind; // п17.5 (ADR-0152): тип ворога — ряд атласа; без поля — демон
 }
 
 // Поза за станом юніта — чиста функція, детермінована (без RNG, ADR-0003):
@@ -383,7 +404,7 @@ export function isGeoTowerReady(): boolean {
 // (flip) — дзеркало scale(-1,1) навколо центру кадру, детерміновано (без RNG;
 // напрямок рахує викликач — battle.ts, ядро і розкладка кадрів без змін).
 // Т.132: віддача (recoil) — зсув назад від погляду; дихання (breath) — лише в позі «стій».
-function drawAtlasUnit(ctx: CanvasRenderingContext2D, u: UnitSpriteView, row: 0 | 1, img: CanvasImageSource): void {
+function drawAtlasUnit(ctx: CanvasRenderingContext2D, u: UnitSpriteView, row: number, img: CanvasImageSource): void {
   const pose = unitPose(u);
   const col = pose === 'walk' && u.step === 2 ? ATLAS_WALK2_COL : ATLAS_POSE_COL[pose];
   const o = unitFrameOrigin(u.cx, u.cy);
@@ -412,9 +433,8 @@ function drawAtlasUnit(ctx: CanvasRenderingContext2D, u: UnitSpriteView, row: 0 
 function drawOverwatchMarker(ctx: CanvasRenderingContext2D, u: UnitSpriteView): void {
   // Т.132: верхній лівий кут клітинки для обох сторін — правий верхній зайняло число HP,
   // нижній край — смуга HP; більша фігура (68 px) стоїть по центру між ними.
-  // п17.2 (аудит PR #507): кут зайняла плашка літери типу ворога — знак стає праворуч від неї
-  const x = u.letter === undefined ? u.cx - OW_OFF : u.cx - 24 + 1 + letterPlateW(u.letter) + OW_GAP;
-  drawPixelSprite(ctx, OW_BOLT, x, u.cy - OW_OFF, SPRITE_SCALE);
+  // п17.5 (рішення власника «Б. Без літери»): плашки літери типу ворога немає — знак у куті й у ворога
+  drawPixelSprite(ctx, OW_BOLT, u.cx - OW_OFF, u.cy - OW_OFF, SPRITE_SCALE);
 }
 
 // Рамка вибору (доробка П6.12 за валідацією власника): кутові дужки по кутах
@@ -492,29 +512,8 @@ export function unitRing(side: 'player' | 'alien', id: string, kind?: EnemyKind)
   return side === 'player' ? fighterLook(id).color : ENEMY_LOOK[kind ?? 'demon'].ring;
 }
 
-// п17.2: літера типу ворога (свій боєць — без літери).
-export function unitLetter(side: 'player' | 'alien', kind?: EnemyKind): string | undefined {
-  return side === 'player' ? undefined : ENEMY_LOOK[kind ?? 'demon'].letter;
-}
-
-// п17.2 (ADR-0149 п. 4; рішення власника «Б. Контраст»): літера типу — плашка в лівому
-// верхньому куті клітинки, дзеркально до числа HP, колір — колір кільця; як і число HP,
-// у позі «вогонь» не малюється (накрила б ствол і спалах дула), загиблому — теж.
-const OW_GAP = 6; // від плашки літери до центру знака дозору (півширина знака 5 + 1 px)
-function letterPlateW(letter: string): number {
-  return letter.length * 6 + 3;
-}
-function drawKindLetter(ctx: CanvasRenderingContext2D, u: UnitSpriteView): void {
-  if (u.letter === undefined || u.pose === 'fire' || u.hp <= 0) return;
-  const w = letterPlateW(u.letter);
-  const px = u.cx - 24 + 1;
-  ctx.fillStyle = HP_PLATE_BG;
-  ctx.fillRect(px, u.cy - 23, w, 11);
-  ctx.fillStyle = u.ring ?? ENEMY_LOOK.demon.ring;
-  ctx.font = 'bold 10px monospace';
-  ctx.textBaseline = 'top';
-  ctx.fillText(u.letter, px + 1, u.cy - 21);
-}
+// п17.5 (ADR-0152; рішення власника «Б. Без літери»): тимчасову літеру типу ворога (п17.2)
+// прибрано — тип видно з малюнка ряду атласа і кільця кольору типу.
 
 // Т.129 (ADR-0118): кільце кольору бійця під ногами — еліпс 34 × 12 px біля
 // низу клітинки, лінія 2 px зі світінням; малюється до силуету (ноги поверх)
@@ -564,11 +563,11 @@ export function drawSoldierSprite(ctx: CanvasRenderingContext2D, u: UnitSpriteVi
 
 export function drawAlienSprite(ctx: CanvasRenderingContext2D, u: UnitSpriteView): void {
   drawFootRing(ctx, u);
-  if (unitAtlasImg !== null) drawAtlasUnit(ctx, u, 1, unitAtlasImg);
+  if (unitAtlasImg !== null)
+    drawAtlasUnit(ctx, u, ATLAS_ROW[u.kind ?? 'demon'], unitAtlasImg); // п17.5: ряд за типом
   else drawPixelSprite(ctx, (u.frame ?? 0) === 1 ? ALIEN_STEP : ALIEN_STAND, u.cx, u.cy, SPRITE_SCALE);
   if (u.overwatch) drawOverwatchMarker(ctx, u);
   drawHpBadge(ctx, u); // П14.4: смуга HP + число у кутковій зоні (читабельність)
-  drawKindLetter(ctx, u); // п17.2: літера типу ворога
   if (u.selected) drawSelectionBrackets(ctx, u.cx, u.cy);
 }
 
@@ -966,6 +965,31 @@ const HEAL_NUM = '#7fe2a0';
 const DNUM_RISE = 16; // підйом числа за тривалість анімації, px
 const BOOM_CALM_R = 14; // Т.144 (ADR-0125): нерухоме кільце вибуху за «менше руху», px
 const IMPACT_CALM_R = 6; // Т.144: нерухоме кільце влучання, px
+
+// п17.5 (рішення власника «А. Удар без трасера»): удар гончака — три паралельні риски кігтів
+// навскіс через ціль (колір гончака), ростуть за grow 0..1 і гаснуть за alpha; без кулі,
+// спалаху дула й іскор. «Менше руху» — одразу повні риски.
+const CLAW = '#ff3b30';
+const CLAW_LEN = 13; // півдовжина риски, px
+const CLAW_GAP = 6; // відстань між рисками, px
+export function drawClawSlash(ctx: CanvasRenderingContext2D, x: number, y: number, grow: number, alpha: number): void {
+  ctx.globalAlpha = alpha;
+  ctx.strokeStyle = CLAW;
+  ctx.lineWidth = 2;
+  ctx.shadowColor = CLAW;
+  ctx.shadowBlur = IMPACT_GLOW;
+  for (let k = -1; k <= 1; k++) {
+    const ox = x + k * CLAW_GAP;
+    const oy = y - CLAW_LEN;
+    ctx.beginPath();
+    ctx.moveTo(ox + CLAW_LEN * 0.6, oy);
+    ctx.lineTo(ox + CLAW_LEN * 0.6 - 1.2 * CLAW_LEN * grow, oy + 2 * CLAW_LEN * grow);
+    ctx.stroke();
+  }
+  ctx.shadowBlur = 0;
+  ctx.lineWidth = 1;
+  ctx.globalAlpha = 1;
+}
 const OW_CALM_R = 8; // Т.144: нерухоме кільце дозору, px
 // Т.132 (ADR-0121): спалах дула, іскри влучання, пил розчинення
 const MUZZLE_FLASH_SHARE = 0.35; // частка польоту кулі зі спалахом дула
@@ -980,6 +1004,7 @@ const DUST = 8; // частинок розчинення
 export interface MuzzleHint {
   side: 'player' | 'alien';
   flip: boolean;
+  kind?: EnemyKind; // п17.5: тип стрільця-ворога — якір дула (без поля — демон)
 }
 
 // Один кадр анімаційного шару (малюється поверх статичного стану).
@@ -1166,7 +1191,7 @@ export function drawAnimFrame(
         selected: a.selected,
         overwatch: a.overwatch,
         ring: unitRing(a.side, a.unitId, a.enemyKind),
-        letter: unitLetter(a.side, a.enemyKind),
+        kind: a.enemyKind, // п17.5: ряд атласа за типом
         flip: dir !== 0 && dir !== (a.side === 'player' ? 1 : -1),
       });
       ctx.globalAlpha = 1;
@@ -1192,7 +1217,7 @@ export function drawAnimFrame(
       selected: a.selected,
       overwatch: a.overwatch,
       ring: unitRing(a.side, a.unitId, a.enemyKind), // Т.129: кільце їде разом із бійцем
-      letter: unitLetter(a.side, a.enemyKind), // п17.2: і літера типу
+      kind: a.enemyKind, // п17.5: ряд атласа за типом
       frame,
       step: frame === 1 ? 2 : 1, // П14.3: двокадрова ходьба — walk1/walk2 (фолбек — frame)
       flip: dir !== 0 && dir !== native,
@@ -1209,8 +1234,14 @@ export function drawAnimFrame(
     // — лише з підказкою бойовища; без неї (геосцена) — від центру клітинки.
     const share = tracerShare(a);
     const calm = a.calm === true; // Т.144 (ADR-0125): «менше руху» — лінія пострілу на місці, без віддачі, спалаху дула й іскор
+    if (a.melee === true) {
+      // промах — бліді риски (удар повз), влучання — яскраві і гаснуть у фазі влучання
+      const fade = calm || t < share ? 1 : 1 - (t - share) / (1 - share);
+      drawClawSlash(ctx, x1, y1, calm ? 1 : Math.min(1, t / share), fade * (a.hit ? 1 : 0.45));
+      return;
+    }
     if (muzzle !== undefined) {
-      const m = muzzlePoint(muzzle.side, muzzle.flip, x0, y0, calm ? 0 : recoilPx(t, share));
+      const m = muzzlePoint(muzzle.side, muzzle.flip, x0, y0, calm ? 0 : recoilPx(t, share), muzzle.kind);
       x0 = m.x;
       y0 = m.y;
     }
@@ -1293,6 +1324,7 @@ export function drawAnimFrame(
       selected: false,
       overwatch: false,
       pose: 'death',
+      kind: a.enemyKind, // п17.5: кадр смерті свого типу
     });
     ctx.globalAlpha = 1;
     return;
@@ -1320,6 +1352,7 @@ export function drawAnimFrame(
       selected: false,
       overwatch: false,
       pose: 'death', // П14.2 (ADR-0072): кадр смерті з атласа; фолбек — матриця
+      kind: a.enemyKind, // п17.5: кадр смерті свого типу
     });
     ctx.restore();
     if (t > 0) {

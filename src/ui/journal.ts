@@ -33,6 +33,7 @@ export interface JournalDeps {
   researchLog(): readonly ResearchEvent[]; // П11.6: події науки (ADR-0058)
   workshopLog(): readonly WorkshopEvent[]; // П11.6: події цеху (ADR-0058)
   unitName(id: string): string; // назва юніта бою для тексту пострілів
+  isMelee?(id: string): boolean; // п17.5: стрілець б'є впритул (гончак) — у дужках «кігті», а не режим
   onGeoEvent(e: GeoEvent): void; // П7.5 (ADR-0032): анімації перехоплення з geo-подій
   // П11.7 (ADR-0059): звуки — там, де журнал уже бачить подію (без дублювання
   // умов); опціональні, щоб ізоляція звуку лишалась тривіальною (критерій 1).
@@ -141,7 +142,7 @@ export function createJournal(deps: JournalDeps): Journal {
     if (!log) return;
     for (; seenBattleLog < log.length; seenBattleLog++) {
       const e = log[seenBattleLog];
-      const msg = battleEventText(e, deps.unitName);
+      const msg = battleEventText(e, deps.unitName, deps.isMelee);
       if (msg) journal(msg.text, msg.cls, 'battle');
       // П11.7 (ADR-0059): постріл/влучання/смерть → звук (drain-контур журналу).
       deps.onBattleSound?.(e);
@@ -218,10 +219,16 @@ export function createJournal(deps: JournalDeps): Journal {
 }
 
 // П7: чистий перетворювач події бою → рядок журналу; null — не для гравця.
-export function battleEventText(e: GameEvent, name: (id: string) => string): { text: string; cls: string } | null {
+// п17.5 (рішення власника «А. Удар без трасера, «(кігті)»»): удар гончака — «(кігті)» замість режиму.
+export function battleEventText(
+  e: GameEvent,
+  name: (id: string) => string,
+  melee: (id: string) => boolean = () => false
+): { text: string; cls: string } | null {
   if (e.type === 'shot') {
+    const how = melee(e.shooterId) ? 'кігті' : MODE_LABEL[e.mode];
     return {
-      text: name(e.shooterId) + ' → ' + name(e.targetId) + ' (' + MODE_LABEL[e.mode] + '): ' + (e.hit ? '−' + e.damage : 'промах'),
+      text: name(e.shooterId) + ' → ' + name(e.targetId) + ' (' + how + '): ' + (e.hit ? '−' + e.damage : 'промах'),
       cls: '',
     };
   }

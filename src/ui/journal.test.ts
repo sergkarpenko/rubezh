@@ -145,6 +145,14 @@ describe('battleEventText: події бою → журнал', () => {
   });
 
   it('П11.4: лікування — клас win; граната — ураження списком, порожня зона — «нікого»', () => {
+    // п17.5 (рішення власника «(кігті)»): удар гончака — «кігті» замість режиму
+    expect(
+      battleEventText(
+        evBattle({ type: 'shot', shooterId: 'a1', targetId: 's1', mode: 'snap', hit: true, damage: 5 }),
+        name,
+        (id) => id === 'a1'
+      )?.text
+    ).toBe(name('a1') + ' → ' + name('s1') + ' (кігті): −5');
     expect(battleEventText(evBattle({ type: 'heal', unitId: 's1', targetId: 's1', healed: 3 }), name)).toEqual({
       text: '✚ Гарт лікує Гарт: +3 HP',
       cls: 'win',
@@ -306,6 +314,19 @@ describe('Journal: drain* — seen-трекінг подій', () => {
     expect(items[0].textContent).toContain('Гарт → Морок');
     j2.drainBattle(); // seen-трекінг: другий виклик нічого не додає
     expect(document.querySelectorAll('#log li')).toHaveLength(1);
+  });
+
+  it('п17.5: drainBattle з isMelee — удар гончака «(кігті)», постріл бійця — режимом', () => {
+    const battleLog: GameEvent[] = [
+      evBattle({ type: 'shot', shooterId: 'a1', targetId: 's1', mode: 'snap', hit: true, damage: 5 }),
+      evBattle({ type: 'shot', shooterId: 's1', targetId: 'a1', mode: 'snap', hit: false, damage: 0 }),
+    ];
+    const j = createJournal(
+      makeDeps({ battleLog: () => battleLog, unitName: (id) => (id === 's1' ? 'Гарт' : 'Гончак 1'), isMelee: (id) => id === 'a1' })
+    );
+    j.drainBattle();
+    const texts = [...document.querySelectorAll<HTMLLIElement>('#log li')].map((li) => li.textContent);
+    expect(texts).toEqual(['Гарт → Гончак 1 (швидкий): промах', 'Гончак 1 → Гарт (кігті): −5']);
   });
 
   it('П11.7 (ADR-0059): drain викликає хуки звуку для кожної події один раз (seen-трекінг)', () => {
