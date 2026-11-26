@@ -4,6 +4,7 @@
 //   node scripts/run-ts.mjs scripts/sim-p8.5.ts --seeds 5               — короткий прогін
 //   node scripts/run-ts.mjs scripts/sim-p8.5.ts --presets складний       — лише один пресет
 //   node scripts/run-ts.mjs scripts/sim-p8.5.ts --policy campaign        — політика кампанії п18.6
+//   … --policy campaign --interceptors 1                                  — п19.6: перехоплювачів політики (1 — без купівлі)
 // П10.4: третій пресет «складний» + прапорець --presets (probe-прогони кандидатів
 // у копії репозиторія до зміни коду — патерн П8.6). Запуск — scripts/run-ts.mjs
 // на vite з devDependencies (Т.103), нових залежностей немає.
@@ -22,6 +23,8 @@ import {
   type PartySimResult,
 } from '../src/core/party-bot';
 import type { DifficultyPreset } from '../src/core/campaign';
+import type { Party } from '../src/core/save';
+import { REGION_IDS, REGION_NAMES, trustDelta, type RegionId } from '../src/core/regions';
 
 const ALL_PRESETS: DifficultyPreset[] = ['легкий', 'норма', 'складний'];
 
@@ -69,19 +72,72 @@ function parsePolicy(): PartyBotPolicy {
   return p;
 }
 
+// п19.6 (ADR-0159 п. 17): --interceptors N — interceptorsUpTo політики (виміри варіантів купівлі).
+function withInterceptors(p: PartyBotPolicy): PartyBotPolicy {
+  const i = process.argv.indexOf('--interceptors');
+  if (i === -1 || !process.argv[i + 1]) return p;
+  const n = Number(process.argv[i + 1]);
+  if (!Number.isInteger(n) || n < 0 || n > 3) throw new Error('--interceptors: ціле 0..3');
+  return { ...p, name: p.name + '-i' + n, interceptorsUpTo: n };
+}
+
+// п19.6: геосцена партії — з останнього стану (спостерігач onTick лише читає).
+interface GeoStats {
+  regionsOut: number; // регіонів, що вийшли, наприкінці партії
+  allowanceMean: number; // середня дотація доби
+  leftDetected: Record<RegionId, number>; // відльоти без бою за регіоном
+  leftUndetected: Record<RegionId, number>;
+  bought: number; // куплено перехоплювачів
+  firstBuyDay: number | null; // доба першої купівлі
+  launchesOther: number; // погонь перехоплювачами з «Кузні» (id ≥ 2)
+}
+
+function geoStats(p: Readonly<Party>, firstBuyDay: number | null): GeoStats {
+  const zero = (): Record<RegionId, number> => ({ west: 0, north: 0, east: 0, south: 0 });
+  const st: GeoStats = {
+    regionsOut: REGION_IDS.filter((id) => p.campaign.regions[id].out).length,
+    allowanceMean: 0,
+    leftDetected: zero(),
+    leftUndetected: zero(),
+    bought: p.workshop.log.filter((e) => e.type === 'interceptor_order').length,
+    firstBuyDay,
+    launchesOther: p.intercept.log.filter((e) => e.type === 'intercept_start' && (e.fighter ?? 1) >= 2).length,
+  };
+  const allow = p.econ.log.filter((e) => e.type === 'allowance').map((e) => (e as { amount: number }).amount);
+  st.allowanceMean = allow.length ? allow.reduce((a, b) => a + b, 0) / allow.length : 0;
+  const log = p.geo.log;
+  for (let i = 0; i < log.length; i++) {
+    const ch = log[i].type === 'ufo_left' ? trustDelta(log, i) : null;
+    if (!ch) continue;
+    if (ch.delta <= -30) st.leftDetected[ch.region] += 1;
+    else st.leftUndetected[ch.region] += 1;
+  }
+  return st;
+}
+
 const seedCount = parseSeedCount();
-const POLICY = parsePolicy();
+const POLICY = withInterceptors(parsePolicy());
 const PRESETS = parsePresets();
 const seeds = Array.from({ length: seedCount }, (_, i) => i + 1);
 const byPreset = new Map<DifficultyPreset, PartySimResult[]>();
+const geoBy = new Map<DifficultyPreset, GeoStats[]>();
 const started = Date.now();
 
 for (const preset of PRESETS) {
   const results: PartySimResult[] = [];
+  const geos: GeoStats[] = [];
   for (const seed of seeds) {
-    results.push(simulateParty(seed, preset, { policy: POLICY }));
+    let last: Readonly<Party> | null = null;
+    let buyDay: number | null = null;
+    const onTick = (p: Readonly<Party>) => {
+      last = p;
+      if (buyDay === null && p.workshop.queue.some((o) => o.id === 'interceptor')) buyDay = Math.floor(p.geo.minute / 1440) + 1;
+    };
+    results.push(simulateParty(seed, preset, { policy: POLICY, onTick }));
+    geos.push(geoStats(last!, buyDay));
   }
   byPreset.set(preset, results);
+  geoBy.set(preset, geos);
 }
 
 console.log(
@@ -136,6 +192,21 @@ for (const preset of PRESETS) {
   console.log(
     `| Ремонтів винищувача | ${mean((r) => r.repairs)} / партію (витрати ${mean((r) => r.repairSpent)}); HP=0 без грошей ${mean((r) => r.repairsWhenPoor)} |`
   );
+  // п19.6 (ADR-0159 п. 17): регіони і перехоплювачі
+  const gs = geoBy.get(preset)!;
+  const gmean = (f: (g: GeoStats) => number) => round1(gs.reduce((a, g) => a + f(g), 0) / gs.length);
+  const outAny = gs.filter((g) => g.regionsOut > 0).length;
+  console.log(
+    `| Регіонів вийшло | ${gmean((g) => g.regionsOut)} / партію; партій з виходом ${outAny} (${round1((100 * outAny) / gs.length)}%) |`
+  );
+  console.log(`| Дотація | ${gmean((g) => g.allowanceMean)} / добу в середньому |`);
+  console.log(
+    `| Відльотів без бою (виявлених / невиявлених) | ${REGION_IDS.map((id) => `${REGION_NAMES[id]} ${gmean((g) => g.leftDetected[id])} / ${gmean((g) => g.leftUndetected[id])}`).join('; ')} |`
+  );
+  const buys = gs.filter((g) => g.firstBuyDay !== null).map((g) => g.firstBuyDay!);
+  console.log(
+    `| Перехоплювачів куплено | ${gmean((g) => g.bought)} / партію${buys.length ? `; перша купівля — медіана доби ${median(buys)}` : ''}; погонь куплених ${gmean((g) => g.launchesOther)} / партію |`
+  );
   console.log('');
 }
 
@@ -175,14 +246,16 @@ console.log('');
 // CSV кривих (дні × партії) для додаткового аналізу.
 mkdirSync('dist', { recursive: true });
 const lines = [
-  'preset,seed,outcome,endDay,score,missionsLaunched,missionsWon,soldiersLost,soldiersWounded,repairs,hiredTotal,assaults,assaultsLost,gateAttempts',
+  'preset,seed,outcome,endDay,score,missionsLaunched,missionsWon,soldiersLost,soldiersWounded,repairs,hiredTotal,assaults,assaultsLost,gateAttempts,regionsOut,allowanceMean,interceptorsBought,firstBuyDay',
 ];
 for (const preset of PRESETS) {
-  for (const r of byPreset.get(preset)!) {
+  const gs = geoBy.get(preset)!;
+  byPreset.get(preset)!.forEach((r, i) => {
+    const g = gs[i];
     lines.push(
-      `${preset},${r.seed},${r.outcome},${r.endDay},${r.score.total},${r.missionsLaunched},${r.missionsWon},${r.soldiersLost},${r.soldiersWounded},${r.repairs},${r.hiredTotal},${r.assaults},${r.assaultsLost},${r.gateAttempts}`
+      `${preset},${r.seed},${r.outcome},${r.endDay},${r.score.total},${r.missionsLaunched},${r.missionsWon},${r.soldiersLost},${r.soldiersWounded},${r.repairs},${r.hiredTotal},${r.assaults},${r.assaultsLost},${r.gateAttempts},${g.regionsOut},${round1(g.allowanceMean)},${g.bought},${g.firstBuyDay ?? ''}`
     );
-  }
+  });
 }
 writeFileSync('dist/p8.5-parties.csv', lines.join('\n'), 'utf8');
 console.log(`CSV партій: dist/p8.5-parties.csv (${lines.length - 1} партій)`);

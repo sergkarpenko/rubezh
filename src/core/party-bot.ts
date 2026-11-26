@@ -26,7 +26,7 @@
 
 import { TICK_MINUTES, advanceTime, chebyshevWrap, geoDay, missionTargets, type GeoState, type Ufo } from './geo';
 import { creditMissionBonus, economyTick, hirePrice } from './economy';
-import { totalTrust } from './regions';
+import { REGION_IDS, totalTrust, type RegionId } from './regions';
 import {
   applyMissionResult,
   assignBotRoles,
@@ -38,7 +38,18 @@ import {
   missionSquad,
   readySoldiers,
 } from './squad';
-import { FIGHTER_MAX_HP, FIGHTER_REPAIR_COST, interceptRound, interceptTick, repairTick, startIntercept, startRepair } from './intercept';
+import {
+  FIGHTER_MAX_HP,
+  FIGHTER_REPAIR_COST,
+  fighterInBattle,
+  hangarPos,
+  interceptRound,
+  interceptTick,
+  repairTick,
+  startIntercept,
+  startRepair,
+  type Fighter,
+} from './intercept';
 import { BALANCED_POLICY, type InterceptPolicy } from './intercept-bot';
 import { autoBattle, type EvacPolicy } from './ai-bot';
 import { completeMission, createMission, type Mission } from './mission';
@@ -62,11 +73,14 @@ import {
 import { ENEMY_ORDER } from './enemies';
 import { rankOf } from './career';
 import {
+  INTERCEPTOR_COST,
   WORKSHOP_CATALOG,
   deployConsumables,
   equipItem,
   installGunModule,
+  interceptorCount,
   itemUnlocked,
+  orderInterceptor,
   orderItem,
   removeLostEquipment,
   settleConsumables,
@@ -105,6 +119,10 @@ export interface PartyBotPolicy {
   // п18.6 (ADR-0158): дозор бота — тримати позицію в дозорі (ai-bot.ts holdStep): 'all' — у кожному бою,
   // 'gate' — лише у фіналі. Немає — бій байт-у-байт як до п18.6.
   hold?: 'all' | 'gate';
+  // п19.6 (ADR-0159 п. 17): тримати перехоплювачів (разом із замовленими) не менше — купівля в «Кузні»,
+  // коли черга порожня і гроші після оплати не нижчі за резерв найму; ангар — регіон з найнижчою довірою.
+  // Немає — без купівлі, партії байт-у-байт як до п19.6.
+  interceptorsUpTo?: number;
 }
 
 // Стандартна політика (X-COM-стиль): перехоплення — balanced (intercept-bot),
@@ -143,6 +161,8 @@ export const SCIENCE_POLICY: PartyBotPolicy = {
 // цех — броня і «Пробивний заряд» з резервом трофеїв; дозор у кожному бою (рішення власника
 // «А. У кожному бою»); фінал — коли в загоні троє зі званням від «Боєць». Виміри —
 // docs/reports/p18.6-balance.md.
+// п19.6 (ADR-0159 п. 17): перехоплювачів політики кампанії — перший і ще один із «Кузні».
+export const CAMPAIGN_INTERCEPTORS = 2;
 export const CAMPAIGN_POLICY: PartyBotPolicy = {
   ...DEFAULT_PARTY_POLICY,
   name: 'campaign',
@@ -154,6 +174,7 @@ export const CAMPAIGN_POLICY: PartyBotPolicy = {
   reserveTrophies: true,
   hold: 'all',
   gateMinRanked: MISSION_SQUAD_SIZE,
+  interceptorsUpTo: CAMPAIGN_INTERCEPTORS,
 };
 
 export type PartyOutcome = 'триває' | 'перемога' | 'банкрутство' | 'поразка'; // п18.3: «поразка» — загроза 100
@@ -217,35 +238,61 @@ export interface SimulatePartyOptions {
   onTick?: (party: Readonly<Party>, tick: number) => void;
 }
 
-// Перший виявлений НЛО у повітрі — ціль запуску (дзеркало intercept-bot.ts).
-function detectedFlyingUfo(geo: GeoState): Ufo | null {
-  const list = geo.ufos.filter((u) => u.detected && u.status === 'летить');
-  return list.length ? list[0] : null;
+// Виявлені НЛО у повітрі, яких ще не переслідує жоден перехоплювач, — цілі запуску в порядку
+// списку геосцени (дзеркало intercept-bot.ts; з одним перехоплювачем — лише перша).
+function freeFlyingUfos(party: Party): Ufo[] {
+  const chased = new Set(party.intercept.fighters.filter((f) => f.status === 'погоня' || f.status === 'бій').map((f) => f.targetId));
+  return party.geo.ufos.filter((u) => u.detected && u.status === 'летить' && !chased.has(u.id));
+}
+
+// п19.6 (ADR-0159 п. 17): найближчий до цілі боєготовий перехоплювач (від ангара, Чебишев із
+// замиканням по X); рівні — менший id.
+function nearestFighter(ready: Fighter[], geo: GeoState, ufo: Ufo): Fighter | null {
+  let best: Fighter | null = null;
+  let bestDist = Infinity;
+  for (const f of ready) {
+    const d = chebyshevWrap(hangarPos(f.region, geo), ufo.pos);
+    if (d < bestDist) {
+      best = f;
+      bestDist = d;
+    }
+  }
+  return best;
 }
 
 // Крок бот-гравця перехопленням — дзеркало interceptBotStep (intercept-bot.ts),
 // але раунд бою викликається З ПРЕСЕТОМ ПАРТІЇ (критерій П8.5.3): множник
 // премії за збиття береться з party.campaign.preset (прецедент panels.ts, П8.4a).
+// п19.6 (ADR-0159 п. 17): кожен перехоплювач — за станом на початку кроку (одна дія на крок):
+// бій — раунд, пошкоджений у ангарі — ремонт, боєготові — погоня найближчим на кожну вільну ціль за
+// порядком; перша ціль, на яку політика не запускає, зупиняє запуски кроку. З одним перехоплювачем —
+// байт-у-байт як до п19.6.
 export function partyBotInterceptStep(party: Party, policy: InterceptPolicy): void {
   const ic = party.intercept;
-  const f = ic.fighters[0];
-  if (f.status === 'на базі' && f.hp === FIGHTER_MAX_HP) {
-    const target = detectedFlyingUfo(party.geo);
-    if (target && policy.shouldLaunch(target.kind, chebyshevWrap(party.geo.base, target.pos))) {
-      startIntercept(ic, party.geo, target.id);
+  const fighters = [...ic.fighters];
+  const inBattle = fighterInBattle(ic);
+  const damaged = fighters.filter((f) => f.status === 'на базі' && f.hp < FIGHTER_MAX_HP && !f.repairTicksLeft);
+  const ready = fighters.filter((f) => f.status === 'на базі' && f.hp === FIGHTER_MAX_HP);
+  if (inBattle && ic.activeUfoId) {
+    const ufo = party.geo.ufos.find((u) => u.id === ic.activeUfoId);
+    if (ufo) {
+      interceptRound(ic, party.geo, policy.chooseRange(ufo.kind, inBattle.hp), party.econ, party.campaign.preset, party.roster);
     }
-  } else if (f.status === 'на базі' && f.hp < FIGHTER_MAX_HP && !f.repairTicksLeft) {
+  }
+  for (const f of damaged) {
     // Пошкоджений без ремонту: платимо одразу, як лише є гроші (X-COM досвід, ADR-0021).
     // Т.22 (ADR-0089): без боєготових ремонт чекає — цей крок іде раніше за найм,
     // і ремонт забрав би гроші, на які після розгрому наймають новий загін.
     if (party.econ.money >= FIGHTER_REPAIR_COST && readySoldiers(party.roster).length > 0) {
-      startRepair(ic, party.geo, party.econ);
+      startRepair(ic, party.geo, party.econ, f.id);
     }
-  } else if (f.status === 'бій' && ic.activeUfoId) {
-    const ufo = party.geo.ufos.find((u) => u.id === ic.activeUfoId);
-    if (ufo) {
-      interceptRound(ic, party.geo, policy.chooseRange(ufo.kind, f.hp), party.econ, party.campaign.preset, party.roster);
-    }
+  }
+  for (const target of freeFlyingUfos(party)) {
+    const f = nearestFighter(ready, party.geo, target);
+    if (!f) break;
+    if (!policy.shouldLaunch(target.kind, chebyshevWrap(hangarPos(f.region, party.geo), target.pos))) break;
+    startIntercept(ic, party.geo, target.id, f.id);
+    ready.splice(ready.indexOf(f), 1);
   }
 }
 
@@ -282,7 +329,7 @@ function presetPrice(base: number, preset: DifficultyPreset): number {
 // (для гарматного модуля — один на винищувач). Порядок — за ростером
 // (ветерани перші, прецедент missionSquad), жодного RNG.
 function workshopDeficit(party: Party, id: ItemId): number {
-  if (id === 'gun-module') return party.intercept.fighters[0].gunModule ? 0 : 1;
+  if (id === 'gun-module') return party.intercept.fighters.filter((f) => !f.gunModule).length; // п19.6: на кожен
   const key: keyof SoldierEquipment = soldierEquipKey(id);
   const lacking = readySoldiers(party.roster).filter((s) => !party.workshop.equipped[s.id]?.[key]).length;
   const supply = party.workshop.store[id] + party.workshop.queue.filter((o) => o.id === id).length;
@@ -318,7 +365,14 @@ function soldierEquipKey(id: ItemId): 'armor' | 'optics' | 'medkit' | 'grenade' 
 // (ремонт винищувача лишають на кращі часи). Уся політика вимкнена — no-op
 // (партії без науки байт-у-байт незмінні, критерій П11.8.2).
 export function partyBotScienceStep(party: Party, policy: PartyBotPolicy): void {
-  if (policy.scientistsUpTo <= 0 && policy.projects.length === 0 && policy.workshopOrders.length === 0 && !policy.equip) return;
+  if (
+    policy.scientistsUpTo <= 0 &&
+    policy.projects.length === 0 &&
+    policy.workshopOrders.length === 0 &&
+    !policy.equip &&
+    !policy.interceptorsUpTo
+  )
+    return;
   const preset = party.campaign.preset;
   const reserve = policy.hireReserve;
   // 1) штат вчених: тримати не менше scientistsUpTo, лишаючи резерв. Т.28:
@@ -358,6 +412,8 @@ export function partyBotScienceStep(party: Party, policy: PartyBotPolicy): void 
       break;
     }
   }
+  // 3.5) п19.6 (ADR-0159 п. 17): перехоплювач — коли черга й далі порожня (предмети цеху першими).
+  partyBotFleetStep(party, policy);
   if (!policy.equip) return;
   // 4) екіпірування: готові предмети зі складу — боєготовим у порядку ростера
   // (броня/оптика постійні, аптечка/граната — витратники на наступну місію).
@@ -368,14 +424,34 @@ export function partyBotScienceStep(party: Party, policy: PartyBotPolicy): void 
       equipItem(party.workshop, soldier, id);
     }
   }
-  // 5) гарматний модуль: зі складу на перехоплювач, лише у вузлі (ADR-0058).
-  if (
-    party.intercept.fighters[0].status === 'на базі' &&
-    !party.intercept.fighters[0].gunModule &&
-    party.workshop.store['gun-module'] > 0
-  ) {
-    installGunModule(party.workshop, party.intercept);
+  // 5) гарматний модуль: зі складу на перехоплювач, лише в ангарі (ADR-0058); п19.6 — за id.
+  for (const f of party.intercept.fighters) {
+    if (party.workshop.store['gun-module'] <= 0) break;
+    if (f.status === 'на базі' && !f.gunModule) installGunModule(party.workshop, party.intercept, f.id);
   }
+}
+
+// п19.6 (ADR-0159 п. 17): регіон ангара нового перехоплювача — найнижча довіра серед регіонів,
+// що не вийшли; рівні — регіон без перехоплювача, далі порядок REGION_IDS. Усі вийшли — «Північ» (вузол).
+export function weakestRegion(party: Pick<Party, 'campaign' | 'intercept'>): RegionId {
+  const regions = party.campaign.regions;
+  const manned = new Set(party.intercept.fighters.map((f) => f.region));
+  const open = REGION_IDS.filter((id) => !regions[id].out);
+  if (open.length === 0) return 'north';
+  return [...open].sort((a, b) => regions[a].trust - regions[b].trust || Number(manned.has(a)) - Number(manned.has(b)))[0];
+}
+
+// п19.6: купівля перехоплювача політикою — до interceptorsUpTo разом із замовленими, черга «Кузні»
+// порожня (одне активне замовлення, як предмети), гроші після оплати — не нижче резерву найму
+// (hireUpTo × ціна найму пресета + hireReserve).
+export function partyBotFleetStep(party: Party, policy: PartyBotPolicy): void {
+  const upTo = policy.interceptorsUpTo ?? 0;
+  if (upTo <= 0 || party.workshop.queue.length > 0) return;
+  if (interceptorCount(party.workshop, party.intercept) >= upTo) return;
+  // резерв найму — повний загін за ціною пресета і залишок на ремонт (купівля не з'їдає найм після розгрому)
+  const reserve = hirePrice(party.campaign.preset) * policy.hireUpTo + policy.hireReserve;
+  if (party.econ.money - presetPrice(INTERCEPTOR_COST, party.campaign.preset) < reserve) return;
+  orderInterceptor(party.econ, party.workshop, party.intercept, weakestRegion(party), party.campaign.preset);
 }
 
 // п18.6 (ADR-0158): чи вистачає трофеїв на предмет цеху з резервом незапущених ключових
