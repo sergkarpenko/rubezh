@@ -145,6 +145,14 @@ describe('battleEventText: події бою → журнал', () => {
   });
 
   it('П11.4: лікування — клас win; граната — ураження списком, порожня зона — «нікого»', () => {
+    // п17.5 (рішення власника «(кігті)»): удар гончака — «кігті» замість режиму
+    expect(
+      battleEventText(
+        evBattle({ type: 'shot', shooterId: 'a1', targetId: 's1', mode: 'snap', hit: true, damage: 5 }),
+        name,
+        (id) => id === 'a1'
+      )?.text
+    ).toBe(name('a1') + ' → ' + name('s1') + ' (кігті): −5');
     expect(battleEventText(evBattle({ type: 'heal', unitId: 's1', targetId: 's1', healed: 3 }), name)).toEqual({
       text: '✚ Гарт лікує Гарт: +3 HP',
       cls: 'win',

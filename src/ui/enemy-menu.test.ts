@@ -1,7 +1,7 @@
 // Т.131 (ADR-0120): меню на ворогові — дані картки, HTML і місце біля клітинки демона.
 import { describe, expect, it } from 'vitest';
 import { GRENADE_AP_COST, GRENADE_RANGE, calculateHitChance, createGame, makeUnit, type GameState, type Unit } from '../core/combat';
-import { MENU_SHOTS, enemyMenuHtml, enemyMenuPlace, enemyMenuView } from './enemy-menu';
+import { FACE_SCALE, MENU_SHOTS, enemyFaceStyle, enemyMenuHtml, enemyMenuPlace, enemyMenuView } from './enemy-menu';
 import { makeEnemy } from '../core/enemies';
 
 function game(shooterAt: { x: number; y: number }, alienAt: { x: number; y: number }, blocked: string[] = []): GameState {
@@ -19,6 +19,24 @@ describe('п17.2: меню на ворогові — типи ворогів (р
     st.units.push(e);
     return enemyMenuHtml(enemyMenuView(st, e, undefined));
   };
+  it('п17.5 (рішення власника «А. Мініатюра типу»): у шапці — кадр «стій» свого ряду атласа', () => {
+    for (const [kind, row] of [
+      ['demon', 1],
+      ['hound', 2],
+      ['golem', 3],
+      ['eye', 4],
+    ] as const) {
+      const h = view(kind);
+      expect(h).toContain('<span class="em-face" data-kind="' + kind + '"');
+      const y = -Math.round((row * 96 + 33) * FACE_SCALE);
+      expect(enemyFaceStyle(kind)).toContain('background-position:-5px ' + y + 'px');
+      expect(h.indexOf('em-face')).toBeLessThan(h.indexOf('em-name')); // мініатюра — перед назвою
+    }
+    // ворог без поля `kind` (демон ядра) — ряд демона
+    const st = game({ x: 2, y: 2 }, { x: 5, y: 2 });
+    expect(enemyMenuView(st, unit(st, 'a1'), undefined).kind).toBe('demon');
+  });
+
   it('демон — як раніше: шкода й дальність, без нових рядків', () => {
     const h = view('demon');
     expect(h).toContain('>Шкода 2–5 · дальність 12</div>');

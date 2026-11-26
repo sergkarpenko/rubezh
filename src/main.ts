@@ -196,6 +196,7 @@ const journalUI = createJournal({
   researchLog: () => activeParty().research.log, // П11.6: події науки → журнал («База»)
   workshopLog: () => activeParty().workshop.log, // П11.6: події цеху → журнал («База»)
   unitName,
+  isMelee: (id) => ui.mission?.state.units.find((x) => x.id === id)?.kind === 'hound', // п17.5: «(кігті)»
   onGeoEvent: (e) => {
     if (hasRaf) geoAnim.push(...motion(interceptAnims(e as InterceptEvent)));
   },

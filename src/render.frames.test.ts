@@ -350,11 +350,11 @@ describe('фідбек власника 2026-10-22: якір дула — тра
   };
 
   it('демон (натив, вліво): старт — дуло фазового різака, лівий край кадру', () => {
-    expect(tracerStart('alien', 5, 3, false)).toEqual([264 - 28, 264 - 13]); // (8,48) → +6, +34
+    expect(tracerStart('alien', 5, 3, false)).toEqual([264 - 31, 264 - 12]); // п17.5: (4,49) → +3, +35
   });
 
   it('демон (дзеркало, вправо): дуло віддзеркалене до правого краю (x → 96 − x)', () => {
-    expect(tracerStart('alien', 5, 7, true)).toEqual([264 + 28, 264 - 13]); // 88 → +62
+    expect(tracerStart('alien', 5, 7, true)).toEqual([264 + 31, 264 - 12]); // 92 → +65
   });
 
   it('солдат: дуло — правий край кадру fire, на рівні зброї', () => {
@@ -365,9 +365,34 @@ describe('фідбек власника 2026-10-22: якір дула — тра
     expect(tracerStart('player', 5, 3, true)).toEqual([264 - 21, 264 - 15]); // 18 → +13
   });
 
+  it('п17.5: muzzlePoint за типом ворога — якір свого ряду атласа (голем (7,46), око (26,64))', () => {
+    expect(muzzlePoint('alien', false, 264, 264, 0, 'golem')).toEqual({ x: 230 + 5, y: 217 + 33 });
+    expect(muzzlePoint('alien', true, 264, 264, 0, 'eye')).toEqual({ x: 230 + 50, y: 217 + 45 }); // 96 − 26 = 70 → 50
+    expect(muzzlePoint('alien', false, 264, 264, 0, 'demon')).toEqual(muzzlePoint('alien', false, 264, 264));
+  });
+
+  it('п17.5: удар гончака (`melee`) — три риски кігтів на цілі, без лінії від стрільця і спалаху дула', () => {
+    const a = makeTracerAnim('alien', { x: 5, y: 5 }, { x: 4, y: 5 }, true);
+    a.melee = true;
+    a.start = 0;
+    const { ctx, calls } = animCtx();
+    drawAnimFrame(ctx, a, TRACER_MS / 2, 48, 8, Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY, {
+      side: 'alien',
+      flip: false,
+      kind: 'hound',
+    });
+    const moves = calls.filter((c) => c.m === 'moveTo').map((c) => c.args as number[]);
+    expect(moves).toHaveLength(3);
+    for (const [x, y] of moves) {
+      expect(Math.abs(x! - 216)).toBeLessThanOrEqual(14); // біля центру цілі (4,5): 216, 264
+      expect(Math.abs(y! - 264)).toBeLessThanOrEqual(14);
+    }
+    expect(calls.some((c) => c.m === 'arc')).toBe(false); // спалаху дула немає
+  });
+
   it('muzzlePoint: віддача зсуває дуло назад від погляду', () => {
     expect(muzzlePoint('player', false, 264, 264, 3)).toEqual({ x: 264 + 21 - 3, y: 264 - 15 });
-    expect(muzzlePoint('alien', false, 264, 264, 3)).toEqual({ x: 264 - 28 + 3, y: 264 - 13 });
+    expect(muzzlePoint('alien', false, 264, 264, 3)).toEqual({ x: 264 - 31 + 3, y: 264 - 12 });
     expect(muzzlePoint('player', true, 264, 264, 3)).toEqual({ x: 264 - 21 + 3, y: 264 - 15 });
   });
 });

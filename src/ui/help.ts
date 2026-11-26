@@ -12,6 +12,7 @@ import { EVAC_AP_COST } from '../core/combat';
 import { FIGHTER_REPAIR_COST } from '../core/intercept';
 import { SCORE_PER_MISSION_WON, SCORE_PER_MONEY, SCORE_PER_UFO_SHOT_DOWN, SCORE_PER_VETERAN_ALIVE, VICTORY_DAY } from '../core/campaign';
 import { BASE_LAB_SLOTS, SCIENTIST_SALARY } from '../core/research';
+import { ENEMY_KINDS } from '../core/enemies';
 import { el } from './dom';
 
 // Залежності від шару застосунку (main.ts): стан слотів і сховища від панелі
@@ -79,6 +80,19 @@ function helpHtml(): string {
     FIGHTER_REPAIR_COST +
     '.</li>' +
     '<li>Поразка — банкрутство: немає боєготових оперативників і кредитів на вербування.</li>' +
+    // п17.5 (ADR-0152; рішення власника «А. З добами»): доби і числа — з ENEMY_KINDS ядра; у стовпчику
+    // «Мета кампанії» — єдине місце з запасом висоти (гейт 1366 × 768, 736 px — виміряно з DejaVu Sans)
+    '<li><b>Вороги</b>: з ' +
+    ENEMY_KINDS.hound.fromDay +
+    '-ї доби гончак (кігті впритул), з ' +
+    ENEMY_KINDS.golem.fromDay +
+    '-ї голем (броня ' +
+    ENEMY_KINDS.golem.armor +
+    '), з ' +
+    ENEMY_KINDS.eye.fromDay +
+    '-ї око (промінь до ' +
+    ENEMY_KINDS.eye.weapon.range +
+    ' клітинок).</li>' +
     '</ul></div>' +
     '<div><h3>Керування</h3><ul>' +
     // Т.43: «До події» і зупинки «+1 доба» одним пунктом — довідка має вміщатись у 1366 × 768 (гейт e2e)

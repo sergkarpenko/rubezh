@@ -83,6 +83,7 @@ import {
 } from './render-core';
 import { makeUnit, type GameEvent, type Unit } from './combat';
 import { WORLD_H, WORLD_W, createGeoGame, type GeoEvent } from './geo';
+import { makeEnemy } from './enemies';
 
 const unit = (id: string, side: 'player' | 'alien', x: number, y: number): Unit => makeUnit({ id, side, pos: { x, y } });
 
@@ -1135,18 +1136,16 @@ describe('Т.147: межі гілок render-core (живі мутанти Т.11
     expect(ALIEN_RING).toMatch(/^#[0-9a-f]{6}$/);
     expect(FIGHTER_COLORS as readonly string[]).not.toContain(ALIEN_RING);
   });
-  it('п17.2: ENEMY_LOOK — демон пурпур «Д»; чотири різні кольори, жоден не колір бійця; літери різні', () => {
-    expect(ENEMY_LOOK.demon).toEqual({ ring: ALIEN_RING, letter: 'Д' });
-    expect(ENEMY_LOOK.hound).toEqual({ ring: '#ff3b30', letter: 'Гн' });
-    expect(ENEMY_LOOK.golem).toEqual({ ring: '#8fa3b8', letter: 'Гл' });
-    expect(ENEMY_LOOK.eye).toEqual({ ring: '#2ee6d6', letter: 'О' });
+  it('п17.2: ENEMY_LOOK — демон пурпур; чотири різні кольори, жоден не колір бійця (п17.5: без літер)', () => {
+    expect(ENEMY_LOOK.demon).toEqual({ ring: ALIEN_RING });
+    expect(ENEMY_LOOK.hound).toEqual({ ring: '#ff3b30' });
+    expect(ENEMY_LOOK.golem).toEqual({ ring: '#8fa3b8' });
+    expect(ENEMY_LOOK.eye).toEqual({ ring: '#2ee6d6' });
     const looks = Object.values(ENEMY_LOOK);
     expect(new Set(looks.map((l) => l.ring)).size).toBe(4);
-    expect(new Set(looks.map((l) => l.letter)).size).toBe(4);
     for (const l of looks) {
       expect(l.ring).toMatch(/^#[0-9a-f]{6}$/);
       expect(FIGHTER_COLORS as readonly string[]).not.toContain(l.ring);
-      expect(l.letter.length).toBeLessThanOrEqual(2); // плашка ≤ 15 px — не заходить на число HP
     }
   });
   it('п17.2: makeMoveAnim несе тип ворога; демон і оперативник — без поля', () => {
@@ -1560,5 +1559,55 @@ describe('п17.3: трасер стрільця з туману — від кр�
     const [tr] = animsFromEvents([shot(false)], [d, near], new Set());
     expect(tr).toMatchObject({ kind: 'tracer', from: { x: 0, y: 0 }, to: { x: 12, y: 0 } });
     expect('fog' in tr).toBe(false);
+  });
+});
+
+// п17.5 (ADR-0152): тип ворога їде в анімацію — ряд атласа і якір дула; удар гончака — без кулі
+// (рішення власника «А. Удар без трасера»); спалах дозору ворога в тумані не малюється (кандидат 178 д).
+describe('п17.5: тип ворога в анімаціях, удар гончака, дозор у тумані', () => {
+  const s1 = makeUnit({ id: 's1', side: 'player', name: 'Гарт', pos: { x: 2, y: 2 } });
+  const shot = (shooterId: string, targetId: string): GameEvent => ({
+    type: 'shot',
+    shooterId,
+    targetId,
+    mode: 'snap',
+    hit: true,
+    damage: 4,
+  });
+
+  it('гончак: трасер з `melee` і типом; голем — з типом без `melee`; демон — без полів', () => {
+    const hound = makeEnemy('hound', 'a1', 0, { x: 3, y: 2 });
+    const golem = makeEnemy('golem', 'a2', 0, { x: 6, y: 2 });
+    const demon = makeEnemy('demon', 'a3', 0, { x: 2, y: 6 });
+    const [h] = animsFromEvents([shot('a1', 's1')], [s1, hound]);
+    expect(h).toMatchObject({ kind: 'tracer', enemyKind: 'hound', melee: true });
+    const [g] = animsFromEvents([shot('a2', 's1')], [s1, golem]);
+    expect(g).toMatchObject({ kind: 'tracer', enemyKind: 'golem' });
+    expect('melee' in g).toBe(false);
+    const [d] = animsFromEvents([shot('a3', 's1')], [s1, demon]);
+    expect('enemyKind' in d || 'melee' in d).toBe(false);
+    const [p] = animsFromEvents([shot('s1', 'a1')], [s1, hound]);
+    expect('enemyKind' in p || 'melee' in p).toBe(false); // стрілець-боєць — без типу
+  });
+
+  it('смерть ока — з типом; демона — без поля', () => {
+    const eye = makeEnemy('eye', 'a1', 0, { x: 5, y: 5 });
+    const demon = makeEnemy('demon', 'a2', 0, { x: 6, y: 5 });
+    expect(makeDeathAnim(eye)).toMatchObject({ kind: 'death', enemyKind: 'eye' });
+    expect('enemyKind' in makeDeathAnim(demon)).toBe(false);
+  });
+
+  it('дозор ворога: у тумані — без спалаху; видимий — спалах на клітинці взяття дозору (до наступного ходу)', () => {
+    const a1 = makeEnemy('golem', 'a1', 0, { x: 9, y: 9 }); // стан після пачки: пішов у (9,9)
+    const ow: GameEvent = { type: 'overwatch', unitId: 'a1', armed: true };
+    const mv: GameEvent = { type: 'move', unitId: 'a1', from: { x: 5, y: 5 }, to: { x: 9, y: 9 } };
+    expect(animsFromEvents([ow], [s1, a1], new Set(['2,2']))).toEqual([]); // туман
+    const seen = animsFromEvents([ow, mv], [s1, a1], new Set(['5,5'])).filter((x) => x.kind === 'owflash');
+    expect(seen).toMatchObject([{ kind: 'owflash', at: { x: 5, y: 5 } }]);
+    // клітинка дозору в тумані, кінцева — видима: спалаху немає (позиція — на момент події)
+    expect(animsFromEvents([ow, mv], [s1, a1], new Set(['9,9'])).filter((x) => x.kind === 'owflash')).toEqual([]);
+    // боєць гравця — завжди
+    const so: GameEvent = { type: 'overwatch', unitId: 's1', armed: true };
+    expect(animsFromEvents([so], [s1, a1], new Set()).map((x) => x.kind)).toEqual(['owflash']);
   });
 });
