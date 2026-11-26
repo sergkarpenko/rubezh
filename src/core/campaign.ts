@@ -23,6 +23,9 @@ export const THREAT_PER_DAY = 2; // за кожну завершену добу 
 export const THREAT_UFO_LEFT_DETECTED = 6; // виявлений зонд відлетів без бою
 export const THREAT_UFO_LEFT_UNDETECTED = 2; // невиявлений зонд відлетів (радар має ціну)
 export const THREAT_MISSION_WON = -1; // виграна місія стримує загрозу
+export const THREAT_BATTLE_LOST = 10; // п18.4: програний штурм бази чи фінал (ADR-0153 п. 13)
+// п18.4 (ADR-0153 п. 16): штурм бази — коли загроза вперше досягає порога (по одному на поріг).
+export const ASSAULT_THRESHOLDS: readonly number[] = [60, 75, 90];
 
 // Вагові коефіцієнти рахунку — константи (ADR-0033); зафіксовано П8.6 за симуляціями
 // (120 сідів × 2 пресети, docs/reports/p8.6-tuning.md): ветерани ×2 (ростер — головний
@@ -91,6 +94,10 @@ export interface CampaignState {
   defeatDay: number | null; // п18.3: доба поразки за загрозою
   threat: number; // п18.3: шкала загрози 0–100
   threatCursor: number; // п18.3: скільки подій geo.log уже враховано в загрозі
+  // п18.4 (ADR-0155 п. 9, ADR-0156): необов'язкові поля сейва v3 — без поля 0 / false.
+  assaults?: number; // скільки порогів штурму вже спрацювало (0..3)
+  assaultPending?: boolean; // штурм почався і чекає бою (застосунок — бій одразу, бот — авто-бій)
+  gateReadyAt?: number; // хвилина геоцени, з якої брама знову доступна (після поразки — +1440)
 }
 
 export function createCampaign(preset: DifficultyPreset = DEFAULT_PRESET): CampaignState {
@@ -116,6 +123,7 @@ export function threatDelta(log: GeoEvent[], i: number): number {
   if (e.type === 'day') return THREAT_PER_DAY;
   if (e.type === 'mission_won') return THREAT_MISSION_WON;
   if (e.type === 'ufo_left') return ufoLeftDelta(log, i, e.ufoId);
+  if (e.type === 'assault_lost' || e.type === 'gate_lost') return THREAT_BATTLE_LOST; // п18.4
   return 0;
 }
 
@@ -167,5 +175,13 @@ export function campaignTick(ctx: CampaignContext, campaign: CampaignState): voi
       campaign.threatCursor = log.length;
       return;
     }
+  }
+  // п18.4 (ADR-0153 п. 16): поріг штурму — по одному; наступний чекає, поки бій не відбувся.
+  const done = campaign.assaults ?? 0;
+  if (!campaign.assaultPending && done < ASSAULT_THRESHOLDS.length && campaign.threat >= ASSAULT_THRESHOLDS[done]) {
+    campaign.assaults = done + 1;
+    campaign.assaultPending = true;
+    log.push({ type: 'base_assault', threshold: ASSAULT_THRESHOLDS[done], minute: ctx.geo.minute });
+    campaign.threatCursor = log.length;
   }
 }

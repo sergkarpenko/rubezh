@@ -9,6 +9,7 @@ import { createGame, makeUnit, moveUnit, type GameState, type Unit } from '../co
 import { enemyKind, enemyMix, kindsForThreat, makeEnemy } from '../core/enemies';
 import { missionSeed } from '../core/mission';
 import { createParty, type Party } from '../core/save';
+import { campaignTick } from '../core/campaign';
 import { initPixelSprites, initUnitAtlas } from '../render';
 import { ALIEN_RING, RING_DY, RING_RX, fighterLook, makeDeathAnim, makeMoveAnim, makeTracerAnim } from '../core/render-core';
 import { createBattleUI, validFireTargets, validHealTargets, type BattleDeps, type BattleUIState } from './battle';
@@ -295,6 +296,62 @@ describe('battle: флоу місії (запуск/закриття/завер�
       const kinds = f.ui.mission!.state.units.filter((u) => u.side === 'alien').map((u) => enemyKind(u));
       expect(kinds).toEqual(enemyMix(kindsForThreat(threat), kinds.length, seed));
     }
+  });
+
+  // п18.4 (ADR-0156; рішення власника «А. Мінімум»): штурм бази і фінал — той самий шлях запуску, свої наслідки
+  it('п18.4: штурм — бій бази без зонда, рядок журналу, стрічка «штурм бази»; перемога — штурм знято, без премії', () => {
+    const f = makeFixture();
+    f.party.campaign.threat = 60;
+    f.party.campaign.threatCursor = f.party.geo.log.length;
+    campaignTick({ geo: f.party.geo, roster: f.party.roster, econ: f.party.econ }, f.party.campaign);
+    f.battle.launchAssault();
+    expect(f.ui.mission!.briefing.op).toBe('штурм');
+    expect(vi.mocked(f.deps.journal).mock.calls.map((c) => c[0])).toContain('▶ Штурм бази: загін займає оборону вузла «Рубіж»');
+    f.battle.renderBattle();
+    expect(document.getElementById('bctx-kind')!.textContent).toBe('штурм бази');
+    const money = f.party.econ.money;
+    for (const u of f.ui.mission!.state.units) if (u.side === 'alien') u.alive = false;
+    f.battle.finish('перемога');
+    expect(f.party.campaign.assaultPending).toBe(false);
+    expect(f.party.econ.money).toBe(money); // премії за штурм немає
+    expect(f.party.geo.log.at(-1)!.type).toBe('assault_won');
+    expect(document.getElementById('bresult')!.textContent).toContain('ШТУРМ ВІДБИТО ✓');
+  });
+
+  it('п18.4: програний штурм — −30 % кредитів і банер; фінал: поразка — gate_lost, перемога — «перемога» партії', () => {
+    const f = makeFixture();
+    f.party.campaign.threat = 60;
+    f.party.campaign.threatCursor = f.party.geo.log.length;
+    campaignTick({ geo: f.party.geo, roster: f.party.roster, econ: f.party.econ }, f.party.campaign);
+    f.battle.launchAssault();
+    const money = f.party.econ.money;
+    for (const u of f.ui.mission!.state.units) if (u.side === 'player') u.alive = false;
+    f.battle.finish('поразка');
+    expect(f.party.econ.money).toBe(money - Math.floor(money * 0.3));
+    expect(document.getElementById('bresult')!.textContent).toContain('ШТУРМ НЕ ВІДБИТО ✗');
+    f.battle.close();
+    f.party.research.completed.push('gate-key');
+    f.battle.launchGate();
+    expect(f.ui.mission!.briefing.op).toBe('брама');
+    f.battle.renderBattle();
+    expect(document.getElementById('bctx-kind')!.textContent).toBe('Брама Розриву');
+    f.battle.finish('евакуйовано');
+    expect(f.party.geo.log.at(-1)!.type).toBe('gate_lost');
+    expect(document.getElementById('bresult')!.textContent).toContain('БРАМА РОЗРИВУ ВСТОЯЛА ✗');
+    f.battle.close();
+    f.party.campaign.gateReadyAt = 0;
+    f.battle.launchGate();
+    for (const u of f.ui.mission!.state.units) if (u.side === 'alien') u.alive = false;
+    f.battle.finish('перемога');
+    expect(f.party.campaign.status).toBe('перемога');
+    expect(document.getElementById('bresult')!.textContent).toContain('БРАМУ РОЗРИВУ ЗАКРИТО ✓ — ПЕРЕМОГА');
+  });
+
+  it('п18.4: брама закрита — відмова рядком журналу, бій не почато', () => {
+    const f = makeFixture();
+    f.battle.launchGate();
+    expect(f.ui.mission).toBeNull();
+    expect(f.deps.journal).toHaveBeenCalledWith('✗ Брама Розриву зараз недоступна', 'lose');
   });
 
   it('Т.7: журнал втрат і поранених — рід за іменем, «тіків» узгоджено з числом', () => {

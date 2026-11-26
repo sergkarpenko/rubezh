@@ -19,7 +19,7 @@ import { createRoster, type Roster } from './squad';
 import { applyRankBonus, newCareer, rankOf, type SoldierCareer, type SoldierRole } from './career';
 import { createEconomy, type EconomyEvent, type EconomyState } from './economy';
 import { createIntercept, interceptRngState, type Fighter, type InterceptEvent, type InterceptState } from './intercept';
-import { createCampaign, DEFAULT_PRESET, THREAT_MAX, type CampaignState, type DifficultyPreset } from './campaign';
+import { createCampaign, DEFAULT_PRESET, THREAT_MAX, ASSAULT_THRESHOLDS, type CampaignState, type DifficultyPreset } from './campaign';
 import { ENEMY_ORDER } from './enemies';
 import {
   createResearch,
@@ -241,6 +241,19 @@ interface CampaignSave {
   defeatDay?: number | null;
   threat?: number;
   threatCursor?: number;
+  // п18.4 (ADR-0155 п. 9, ADR-0156): необов'язкові й у v3 — без поля 0 / false
+  assaults?: number;
+  assaultPending?: boolean;
+  gateReadyAt?: number;
+}
+
+// п18.4: поля штурмів і брами — копія лише заданих (сейв без них — як у п18.3).
+function campaignBattleFields(c: Pick<CampaignSave, 'assaults' | 'assaultPending' | 'gateReadyAt'>): Partial<CampaignSave> {
+  return {
+    ...(c.assaults !== undefined ? { assaults: c.assaults } : {}),
+    ...(c.assaultPending !== undefined ? { assaultPending: c.assaultPending } : {}),
+    ...(c.gateReadyAt !== undefined ? { gateReadyAt: c.gateReadyAt } : {}),
+  };
 }
 
 // П9.2: прапорці підказок у сейві; відсутнє поле (старі сейви) = усі false.
@@ -349,6 +362,7 @@ export function serializeParty(party: Party, savedAt: string = ''): string {
         defeatDay: party.campaign.defeatDay,
         threat: party.campaign.threat,
         threatCursor: party.campaign.threatCursor,
+        ...campaignBattleFields(party.campaign), // п18.4: лише задані поля
       },
       hints: { ...party.hints },
       research: {
@@ -471,6 +485,19 @@ function parseSave(json: string): SaveData {
   ) {
     fail('Пошкоджені дані збереження: загроза кампанії');
   }
+  // п18.4 (ADR-0156): штурми і брама — лише у v3, кожне поле необов'язкове.
+  if (
+    ccsv !== undefined &&
+    ((ccsv.assaults !== undefined &&
+      (!Number.isInteger(ccsv.assaults) || ccsv.assaults < 0 || ccsv.assaults > ASSAULT_THRESHOLDS.length)) ||
+      (ccsv.assaultPending !== undefined && typeof ccsv.assaultPending !== 'boolean') ||
+      (ccsv.assaultPending === true && (ccsv.assaults ?? 0) === 0) ||
+      (ccsv.gateReadyAt !== undefined && (!Number.isInteger(ccsv.gateReadyAt) || ccsv.gateReadyAt < 0)) ||
+      (data.version !== SAVE_VERSION &&
+        (ccsv.assaults !== undefined || ccsv.assaultPending !== undefined || ccsv.gateReadyAt !== undefined)))
+  ) {
+    fail('Пошкоджені дані збереження: штурми і брама');
+  }
   // П9.2: поле hints опційне (старі сейви) — але якщо є, має бути об'єктом.
   if (data.state.hints !== undefined && (typeof data.state.hints !== 'object' || data.state.hints === null)) {
     fail('Пошкоджені дані збереження: підказки');
@@ -573,7 +600,12 @@ export function deserializeParty(json: string): Party {
       victoryDay: cc.victoryDay,
       // п18.3 (ADR-0153 п. 18): v3 — копія; v1 / v2 — загроза з доби й виграних місій
       ...(data.version === SAVE_VERSION
-        ? { defeatDay: cc.defeatDay ?? null, threat: cc.threat as number, threatCursor: cc.threatCursor as number }
+        ? {
+            defeatDay: cc.defeatDay ?? null,
+            threat: cc.threat as number,
+            threatCursor: cc.threatCursor as number,
+            ...campaignBattleFields(cc),
+          }
         : { defeatDay: null, threat: migrateThreat(geo), threatCursor: geo.log.length }),
     },
     // П9.2: відсутнє поле hints (старі сейви) = усі підказки ще не показано.

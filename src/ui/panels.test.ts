@@ -72,6 +72,7 @@ function makeFixture(over: Partial<PanelsDeps> = {}): Fixture {
     journal: vi.fn(),
     renderAll: vi.fn(),
     launchMission: vi.fn(),
+    launchGate: vi.fn(),
     drainGeo: vi.fn(),
     drainEcon: vi.fn(),
     activeGeoAnim: () => null,
@@ -223,6 +224,56 @@ describe('renderUfos: сканери НЛО', () => {
     f.panels.renderUfos();
     (document.querySelector('button.mission') as HTMLButtonElement).click();
     expect(f.deps.launchMission).toHaveBeenCalledWith(f.party.geo.ufos.find((u) => u.id !== undefined)!.id);
+  });
+});
+
+// п18.4 (ADR-0156; рішення власника «А. Мінімум»): рядок фіналу «Брама Розриву» в панелі зондів
+describe('п18.4: renderUfos — рядок «Брама Розриву»', () => {
+  it('до «Ключа брами» рядка немає; після — кнопка над зондами, клік — launchGate; nodeActions +1', () => {
+    const f = makeFixture();
+    f.panels.renderUfos();
+    expect(document.getElementById('btn-gate')).toBeNull();
+    const before = f.panels.nodeActions();
+    f.party.research.completed.push('gate-key');
+    f.panels.renderUfos();
+    const box = document.getElementById('ufos')!;
+    expect(box.textContent).not.toContain('Нічого не виявлено'); // рядок брами замість підказки
+    expect(box.firstElementChild!.textContent).toContain('Брама Розриву');
+    const b = document.getElementById('btn-gate') as HTMLButtonElement;
+    expect(b.textContent).toBe('▶ Атакувати Браму Розриву');
+    expect(b.disabled).toBe(false);
+    b.click();
+    expect(f.deps.launchGate).toHaveBeenCalledTimes(1);
+    expect(f.panels.nodeActions()).toBe(before + 1);
+    // і з виявленими зондами — брама першим рядком
+    expect(tickUntil(f.party, () => detectedUfos(f.party.geo).length > 0)).toBe(true);
+    f.panels.renderUfos();
+    expect(box.firstElementChild!.querySelector('#btn-gate')).not.toBeNull();
+    expect(box.children.length).toBe(1 + detectedUfos(f.party.geo).length);
+  });
+
+  it('без боєготових — вимкнена з причиною (і без дії на вкладці); пауза після поразки — рядка немає', () => {
+    const f = makeFixture();
+    f.party.research.completed.push('gate-key');
+    for (const s of f.party.roster.soldiers) f.party.roster.hospital[s.id] = 3;
+    f.panels.renderUfos();
+    const b = document.getElementById('btn-gate') as HTMLButtonElement;
+    expect(b.disabled).toBe(true);
+    expect(b.title).toContain('Немає боєготових');
+    expect(f.panels.nodeActions()).toBe(0);
+    f.party.campaign.gateReadyAt = f.party.geo.minute + 1440;
+    f.panels.renderUfos();
+    expect(document.getElementById('btn-gate')).toBeNull();
+    expect(document.getElementById('ufos')!.textContent).toContain('Нічого не виявлено');
+  });
+
+  it('у бою і після кінця гри — вимкнена', () => {
+    for (const over of [{ inBattle: () => true }, { isGameOver: () => true }]) {
+      const f = makeFixture(over);
+      f.party.research.completed.push('gate-key');
+      f.panels.renderUfos();
+      expect((document.getElementById('btn-gate') as HTMLButtonElement).disabled).toBe(true);
+    }
   });
 });
 

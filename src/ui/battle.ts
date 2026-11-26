@@ -9,6 +9,7 @@
 
 import { SQUAD_SPAWN, completeMission, createMission, missionOutcome, type Mission } from '../core/mission';
 import { awardTrophies } from '../core/research';
+import { completeAssault, completeGate, createAssault, createGateMission, type CampaignBattleOptions } from '../core/assault';
 import { applyMissionResult, deployRoles, missionSquad } from '../core/squad';
 import { RANK_NAMES, rankOf, type SoldierCareer } from '../core/career';
 // Т.28 (ADR-0091): броня й око загиблих — на склад, витратники зникають.
@@ -136,6 +137,8 @@ export interface BattleUI {
   renderBattle(): void;
   binfo(text: string): void;
   launch(ufoId: string): void;
+  launchAssault(): void; // п18.4 (ADR-0156): штурм бази — бій одразу (рішення власника «А. Мінімум»)
+  launchGate(): void; // п18.4: фінал «Брама Розриву» — кнопкою панелі зондів
   close(): void;
   finish(outcome: BattleOutcome): void;
   checkOutcome(): boolean;
@@ -145,6 +148,13 @@ export interface BattleUI {
   skipAlienTurn(): boolean; // Т.117: ручний бій — обірвати анімації ходу демонів, одразу підсумок; true — плашку пропущено
   autoAlienTurn(from: number | null): void; // Т.116: авто-бій — null: хід демонів почався (плашка), число: скінчився (підсумок подій від from)
   autoStopped(): void; // Т.116: авто-бій зупинено — плашка «діють» зникає, підсумок лишається
+}
+
+// п18.4 (ADR-0156): банер результату штурму чи брами.
+export function campaignBanner(op: 'штурм' | 'брама', outcome: BattleOutcome): string {
+  if (op === 'штурм') return outcome === 'перемога' ? 'ШТУРМ ВІДБИТО ✓' : 'ШТУРМ НЕ ВІДБИТО ✗ — втрачено 30 % кредитів і половину складу';
+  if (outcome === 'перемога') return 'БРАМУ РОЗРИВУ ЗАКРИТО ✓ — ПЕРЕМОГА';
+  return 'БРАМА РОЗРИВУ ВСТОЯЛА ✗ — повтор через добу';
 }
 
 // П6.14: валідні цілі стрільця — живі видимі прибульці (туман, ADR-0006) у
@@ -418,7 +428,8 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
     // ADR-0027 (П6.3): контекст-стрічка бою — тип місії, заморожений час,
     // чий хід (активний юніт HP/AP — з Т.130 у картках смуги загону). Час геосцени стоїть (ADR-0026: місія
     // не переривається) — показуємо його як «заморожено».
-    el('bctx-kind').textContent = mission.briefing.kind;
+    el('bctx-kind').textContent =
+      mission.briefing.op === 'штурм' ? 'штурм бази' : mission.briefing.op === 'брама' ? 'Брама Розриву' : mission.briefing.kind;
     el('bctx-time').textContent = geoClock(deps.getParty().geo) + ' · заморожено';
     // Т.33: поки плашка ходу демонів на екрані — хід ще їхній (стан ядра вже передав хід загону)
     el('bctx-turn').textContent =
@@ -507,7 +518,7 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
     // Т.119: зона ходу і прев'ю шляху — лише коли гравець справді може ходити: не в авто-бої
     // і не під час анімації (рух, постріл)
     const calm = !deps.autoBusy() && activeAnim === null;
-    if (calm && sel && playerTurnActive() && ui.fireMode === null && ui.itemMode === null) {
+    if (calm && sel && !sel.turret && playerTurnActive() && ui.fireMode === null && ui.itemMode === null) {
       drawReachZone(ctx, reachableCells(st, sel.pos, sel.ap, vis), sel.pos, BCELL);
     }
 
@@ -774,6 +785,21 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
   }
 
   function launch(ufoId: string): void {
+    start(
+      (party, opts) => createMission(party.geo, ufoId, { ...opts, threat: party.campaign.threat }), // п18.3: склад за загрозою
+      '▶ Місія: загін висаджено біля зонду Розриву ' + ufoId
+    );
+  }
+
+  // п18.4 (ADR-0156): штурм бази і фінал — той самий шлях запуску, інша фабрика бою.
+  function launchAssault(): void {
+    start(createAssault, '▶ Штурм бази: загін займає оборону вузла «Рубіж»');
+  }
+  function launchGate(): void {
+    start(createGateMission, '▶ Брама Розриву: загін висаджено біля брами');
+  }
+
+  function start(make: (party: Party, opts: CampaignBattleOptions) => Mission, line: string): void {
     if (ui.mission) return;
     deps.anim.cancel(); // П6.8: новий бій — без залишків черги попереднього
     deps.cancelGeoAnim(); // П6.9: геосцену сховано — пульс радара скидаємо
@@ -783,12 +809,7 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
       // П11.4 (ADR-0058): аптечка/граната при солдатах — у стан бою.
       // п16.4 (ADR-0147): ролі загону — копія з ростеру (без ролей — бій байт-у-байт як до п16.3)
       const roles = deployRoles(party.roster, squad);
-      ui.mission = createMission(party.geo, ufoId, {
-        squad,
-        items: deployConsumables(party.workshop, squad),
-        ...(roles !== null ? { roles } : {}),
-        threat: party.campaign.threat, // п18.3: склад ворогів за загрозою
-      });
+      ui.mission = make(party, { squad, items: deployConsumables(party.workshop, squad), ...(roles !== null ? { roles } : {}) });
     } catch (e) {
       deps.journal('✗ ' + (e as Error).message, 'lose');
       return;
@@ -805,7 +826,7 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
     ui.tapCell = null;
     ui.aimCell = null; // П6.14
     deps.resetBattleLog();
-    deps.journal('▶ Місія: загін висаджено біля зонду Розриву ' + ufoId, '', 'battle');
+    deps.journal(line, '', 'battle');
     binfo('Ваш хід: виберіть бійця — на полі або карткою загону, потім клітинку — прев’ю шляху; повторний клік у ту саму клітинку — хід.');
     deps.renderAll();
   }
@@ -833,7 +854,11 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
     removeLostEquipment(party.workshop, aftermath.lost);
     // П11.4 (ADR-0058): витратники уцілілих — використані зникають, невикористані лишаються.
     settleConsumables(party.workshop, aftermath.survivors, mission.state.items);
-    completeMission(party.geo, mission.briefing.ufoId, outcome);
+    // п18.4 (ADR-0156): штурм і брама — свої наслідки (зонда немає; штурм без евакуації)
+    const op = mission.briefing.op;
+    if (op === 'штурм') completeAssault(party, outcome === 'перемога' ? 'перемога' : 'поразка');
+    else if (op === 'брама') completeGate(party, outcome);
+    else completeMission(party.geo, mission.briefing.ufoId, outcome);
     awardTrophies(party.research, mission.state, outcome); // п18.2 (ADR-0153 п. 9): трофеї лише за перемогу; показ — п18.5
     // п16.4 (ADR-0147 п. 7, 14; EARS 7): рядок втрати зі статистикою — у журнал і в картку результату.
     // Журнал історії після завантаження не відтворює (adoptParty у main.ts) — подія ядра для нього не потрібна.
@@ -855,11 +880,22 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
       turns: mission.state.turn,
       killed: aliens.filter((u) => !u.alive).length,
       aliens: aliens.length,
-      bonus: outcome === 'перемога' ? missionBonus(mission.briefing.kind, party.campaign.preset) : null,
+      bonus: outcome === 'перемога' && op === undefined ? missionBonus(mission.briefing.kind, party.campaign.preset) : null,
       wounded: aftermath.wounded.map((s) => s.name + ' — лікарня: ' + ticksText(party.roster.hospital[s.id])),
       lost: aftermath.lossLines.map((line) => line.replace(/^✝ /, '')), // п16.4: «✝ » додає сама картка
     });
-    if (outcome === 'перемога') {
+    if (op !== undefined) {
+      // п18.4 (рішення власника «А. Мінімум»): підсумок штурму чи брами — у журналі геоцени
+      // (рядки geoEventText); перемога в брамі відкриває чинний екран перемоги.
+      el('bresult').innerHTML =
+        '<div class="banner ' +
+        (outcome === 'перемога' ? 'win' : 'lose') +
+        '">' +
+        campaignBanner(op, outcome) +
+        '</div>' +
+        card +
+        '<button id="btn-close">← Повернутись на геосцену</button>';
+    } else if (outcome === 'перемога') {
       // П4.5 (ADR-0021): премія за перемогу за тип НЛО; надходження — у журнал
       creditMissionBonus(party.econ, mission.briefing.kind, party.campaign.preset);
       const woundedNote = aftermath.wounded.length > 0 ? ' · поранених: ' + aftermath.wounded.length : '';
@@ -897,6 +933,8 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
     renderBattle,
     binfo,
     launch,
+    launchAssault,
+    launchGate,
     close,
     finish,
     checkOutcome,

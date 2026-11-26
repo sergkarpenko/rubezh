@@ -208,7 +208,8 @@ export function missionRisksBankruptcy(
 // стані дав би ще +1 місію і досвід). Тики лікарні — з різниці maxHp − hp, прирости
 // звання її не міняють.
 export function applyMissionResult(roster: Roster, state: GameState): MissionAftermath {
-  const deployed = [...state.units.filter((u) => u.side === 'player'), ...(state.evacuated ?? [])];
+  // п18.4 (ADR-0156): турелі бази — поза ростером і досвідом
+  const deployed = [...state.units.filter((u) => u.side === 'player' && !u.turret), ...(state.evacuated ?? [])];
   if (deployed.length === 0) throw new Error('У стані місії немає оперативників гравця');
   const lost: Unit[] = [];
   const survivors: Unit[] = [];

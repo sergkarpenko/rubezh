@@ -396,6 +396,10 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
     ui.fireMode = null;
     if (ui.itemMode === 'precise') ui.itemMode = null; // п16.4: «Точний постріл» знято разом із режимом пострілу
     ui.aimCell = null; // П6.14: зведений режим знято — підказки прицілювання теж
+    if (sel.turret) {
+      battle.binfo('Турель нерухома — лише вогонь і дозор.'); // п18.4 (ADR-0156)
+      return;
+    }
     try {
       // ADR-0081: шлях планується за видимим — юніт у тумані його не перекриває
       const path = findPath(st, sel.pos, cell, undefined, battle.visibleCells());
@@ -519,7 +523,7 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
       }
       return;
     }
-    const path = findPath(ui.mission.state, sel.pos, cell, undefined, battle.visibleCells()); // ADR-0081
+    const path = sel.turret ? null : findPath(ui.mission.state, sel.pos, cell, undefined, battle.visibleCells()); // ADR-0081; п18.4: турель — без прев'ю
     if (samePath(path, ui.hoverPath)) return; // без перемальовки на кожен піксель
     ui.hoverPath = path;
     ui.hoverAp = path ? pathApCost(path) : 0;

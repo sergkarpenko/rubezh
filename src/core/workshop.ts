@@ -87,7 +87,8 @@ export type WorkshopEvent =
   | { type: 'equipment_lost'; soldierId: string; items: (keyof SoldierEquipment)[] } // витратники загиблого зникли (до Т.28 — усі предмети)
   | { type: 'equipment_returned'; soldierId: string; items: ('armor' | 'optics')[] } // броня й око загиблого — на склад (ADR-0091)
   | { type: 'gun_module_installed' } // модуль зі складу на винищувач
-  | { type: 'gun_module_removed' }; // модуль з винищувача назад на склад
+  | { type: 'gun_module_removed' } // модуль з винищувача назад на склад
+  | { type: 'store_lost'; lost: Partial<Record<ItemId, number>> }; // п18.4: половина складу — у програному штурмі бази
 
 export interface WorkshopOrder {
   id: ItemId;

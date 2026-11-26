@@ -299,6 +299,17 @@ export function geoEventText(e: GeoEvent, knownDetected: ReadonlySet<string>): {
       return { text: '✦ Ремонт перехоплювача оплачено (−' + FIGHTER_REPAIR_COST + ')', cls: 'lose' };
     case 'fighter_repair_done':
       return { text: '✦ Ремонт перехоплювача завершено — знову боєготовий', cls: 'win' };
+    // п18.4 (ADR-0156; рішення власника «А. Мінімум»): штурм бази і фінал «Брама Розриву»
+    case 'base_assault':
+      return { text: '⚠ Штурм вузла «Рубіж»: загроза ' + e.threshold + ' — демони атакують базу.', cls: 'lose' };
+    case 'assault_won':
+      return { text: 'Штурм бази відбито ✓', cls: 'win' };
+    case 'assault_lost':
+      return { text: 'Штурм бази не відбито ✗ — втрачено ' + e.money + ' кредитів і половину складу, загроза +10', cls: 'lose' };
+    case 'gate_lost':
+      return { text: 'Брама Розриву встояла ✗ — загроза +10, повтор через добу', cls: 'lose' };
+    case 'campaign_victory':
+      return { text: '★ Браму Розриву закрито — перемога (рахунок ' + e.score + ')', cls: 'win' };
     default:
       return null; // ufo_spawned / ufo_move — приховано туманом
   }
@@ -380,5 +391,7 @@ export function workshopEventText(e: WorkshopEvent): { text: string; cls: string
       return { text: '⚑ Кузня: гарматний модуль встановлено на перехоплювач', cls: '' };
     case 'gun_module_removed':
       return { text: '⚑ Кузня: гарматний модуль знято з перехоплювача → склад', cls: '' };
+    case 'store_lost':
+      return null; // п18.4: утрату складу називає рядок штурму (geoEventText, assault_lost)
   }
 }

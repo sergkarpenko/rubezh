@@ -8,7 +8,8 @@
 // (typeof document): node-середовище (vitest) імпортує модуль без побічних ефектів.
 
 import { RADAR_RANGE, advanceTime } from './core/geo';
-import { chooseRole, hireSoldier, hospitalTick, isBankrupt } from './core/squad';
+import { chooseRole, hireSoldier, hospitalTick, isBankrupt, readySoldiers } from './core/squad';
+import { completeAssault } from './core/assault';
 import { awaitingRole, type SoldierRole } from './core/career';
 import { roleDialogHtml } from './ui/roles';
 import { economyTick } from './core/economy';
@@ -412,6 +413,7 @@ const panels = createPanels({
   journal,
   renderAll,
   launchMission: battle.launch,
+  launchGate: battle.launchGate, // п18.4: фінал «Брама Розриву»
   drainGeo: () => journalUI.drainGeo(),
   drainEcon: () => journalUI.drainEcon(),
   activeGeoAnim: () => geoAnim.active(),
@@ -535,6 +537,7 @@ function interceptAnims(e: InterceptEvent): Anim[] {
 function partyTick(): void {
   if (party === null || inAirCombat(party)) return;
   const p = party;
+  if (startPendingAssault(p)) return; // п18.4: штурм, що чекає бою (сейв), — бій замість тіку
   advanceTime(p.geo, 1, radarRange(p.research)); // п18.2: радар 6 після «Пеленгу брами»
   economyTick(p.econ, p.geo, p.campaign.preset);
   // П11.2 (ADR-0058): зарплата і наукові точки — тим самим контуром доби,
@@ -566,6 +569,20 @@ function partyTick(): void {
     gameOver = true;
     journal('✗ Загроза Розриву досягла 100 — партію програно.', 'lose');
   }
+  startPendingAssault(p); // п18.4 (ADR-0156): поріг 60 / 75 / 90 — штурм бази одразу
+}
+
+// п18.4 (рішення власника «А. Мінімум»): штурм бази починається сам — бій відкривається,
+// час стоїть (runTime зупиняється на ui.mission); без боєготових — програно без бою.
+// Рядки журналу — з подій геоцени (base_assault, assault_lost; geoEventText). true — бій почато.
+function startPendingAssault(p: Party): boolean {
+  if (gameOver || !p.campaign.assaultPending || ui.mission !== null) return false;
+  if (readySoldiers(p.roster).length === 0) {
+    completeAssault(p, 'поразка');
+    return false;
+  }
+  battle.launchAssault();
+  return ui.mission !== null;
 }
 
 // --- пR.2 (ADR-0037): панелі стану і топбара — модуль src/ui/panels.ts ---

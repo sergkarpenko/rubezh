@@ -64,8 +64,12 @@ export const ALIENS_PER_KIND: Record<UfoKind, number> = { розвідник: 2,
 // Детермінований сід місії (FNV-1a) з ідентифікатора НЛО та хвилини запуску.
 // Один і той самий хід гри → та сама мапа і той самий бойовий RNG.
 export function missionSeed(geo: GeoState, ufoId: string): number {
+  return textSeed(ufoId + ':' + geo.minute);
+}
+
+// FNV-1a рядка — сід бойовища (п18.4: штурм і брама беруть свій рядок, ADR-0156).
+export function textSeed(s: string): number {
   let h = 0x811c9dc5;
-  const s = ufoId + ':' + geo.minute;
   for (let i = 0; i < s.length; i++) {
     h ^= s.charCodeAt(i);
     h = Math.imul(h, 0x01000193);
@@ -99,10 +103,23 @@ const MAP_SEED_ATTEMPTS = 50;
 
 // Бойовище місії: makeTestMap зі зв'язністю — усі точки висадки і НЛО
 // досяжні з першої точки висадки (інакше місію неможливо виграти).
-function missionMap(seed: number): GameMap {
+// п18.4 (ADR-0156): розмір, зона ворогів і додаткова чиста зона (3 × 3 навколо clear) —
+// параметрами для штурму бази і брами; типові — звичайна місія байт-у-байт.
+export function connectedMap(
+  seed: number,
+  width = MISSION_MAP_W,
+  height = MISSION_MAP_H,
+  enemyZone: readonly Vec2[] = ALIEN_SPAWN,
+  clear?: Vec2
+): GameMap {
   for (let i = 0; i < MAP_SEED_ATTEMPTS; i++) {
-    const map = makeTestMap(seed + i, MISSION_MAP_W, MISSION_MAP_H);
-    if (reachable(map, SQUAD_SPAWN[0], [...SQUAD_SPAWN.slice(1), ...ALIEN_SPAWN])) return map;
+    let map = makeTestMap(seed + i, width, height);
+    if (clear) {
+      const blocked = new Set(map.blocked);
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) blocked.delete(clear.x + dx + ',' + (clear.y + dy));
+      map = { ...map, blocked };
+    }
+    if (reachable(map, SQUAD_SPAWN[0], [...SQUAD_SPAWN.slice(1), ...enemyZone])) return map;
   }
   throw new Error('Не вдалося згенерувати зв’язне бойовище для місії');
 }
@@ -112,9 +129,14 @@ export function makeSoldier(id: string, name: string): Unit {
   return makeUnit({ id, side: 'player', name, pos: { x: 0, y: 0 }, firingAccuracy: 0.6, weapon: RIFLE });
 }
 
+// п18.4 (ADR-0156): бій кампанії без зонда — штурм бази або фінал «Брама Розриву»;
+// без поля — звичайна місія з зонда.
+export type MissionOp = 'штурм' | 'брама';
+
 export interface MissionBriefing {
-  ufoId: string;
-  kind: UfoKind;
+  ufoId: string; // п18.4: у штурмі й брамі — 'база' / 'брама' (зонда немає)
+  kind: UfoKind; // п18.4: у штурмі й брамі — не має значення (премії немає)
+  op?: MissionOp;
   aliens: number; // прибульців на бойовищі
   minute: number; // хвилина геосцени на момент запуску
 }
@@ -144,7 +166,7 @@ function findTarget(geo: GeoState, ufoId: string): Ufo {
 export function createMission(geo: GeoState, ufoId: string, opts: CreateMissionOptions = {}): Mission {
   const ufo = findTarget(geo, ufoId);
   const seed = missionSeed(geo, ufoId);
-  const map = missionMap(seed);
+  const map = connectedMap(seed);
   const rng = mulberry32(seed);
 
   const squad = opts.squad ?? [makeSoldier('s1', 'Іван'), makeSoldier('s2', 'Олена'), makeSoldier('s3', 'Тарас')];

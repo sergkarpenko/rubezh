@@ -831,7 +831,12 @@ export interface FighterLook {
   shape: number; // 0..HELMET_SHAPES-1
 }
 
+// п18.4 (ADR-0156, рішення власника «А. Мінімум»): турель бази (id 't1', 't2') до п18.5 —
+// кадр оперативника з сірим кільцем; сірий не збігається з кольорами бійців і типів ворогів.
+export const TURRET_RING = '#9aa1ab';
+
 export function fighterLook(id: string): FighterLook {
+  if (/^t\d+$/.test(id)) return { index: 0, color: TURRET_RING, shape: 0 };
   const m = /^s(\d+)$/.exec(id);
   const index = m ? Math.max(0, Number(m[1]) - 1) : 0;
   const n = FIGHTER_COLORS.length;

@@ -5,6 +5,7 @@
 // застосунку (party/mission/gameOver) модуль знає лише через Deps-інтерфейс;
 // логіка ядра — виклики src/core, DOM — через хелпер el (src/ui/dom.ts).
 
+import { gateOpen } from '../core/assault';
 import { RADAR_RANGE, TICK_MINUTES, detectedUfos, geoClock, geoDay, missionTargets, type Ufo } from '../core/geo';
 import {
   FIGHTER_MAX_HP,
@@ -98,6 +99,7 @@ export interface PanelsDeps {
   journal(text: string, cls?: string, cat?: LogCat): void;
   renderAll(): void;
   launchMission(ufoId: string): void;
+  launchGate(): void; // п18.4 (ADR-0156): фінал «Брама Розриву»
   drainGeo(): void; // нові geo-події → журнал (seen-трекінг у src/ui/journal.ts)
   drainEcon(): void; // нові події економіки → журнал
   activeGeoAnim(): Anim | null; // активна анімація геосцени (пульс радара, П6.9)
@@ -202,11 +204,31 @@ export function createPanels(deps: PanelsDeps): Panels {
     const targets = new Set(missionTargets(party.geo).map((u) => u.id));
     let n = party.intercept.fighter.status === 'бій' ? 1 : 0;
     if (gunModuleReady(party)) n++; // Т.80: модуль на складі чекає встановлення
+    if (gateOpen(party) && readySoldiers(party.roster).length > 0) n++; // п18.4: брама чекає атаки
     for (const u of detectedUfos(party.geo)) {
       if (canIntercept(party, u)) n++;
       if (targets.has(u.id)) n++;
     }
     return n;
+  }
+
+  // п18.4 (рішення власника «А. Мінімум»): рядок фіналу в панелі зондів — кнопка
+  // «▶ Атакувати Браму Розриву» (боєготових немає — вимкнена з причиною, як «Запустити місію»).
+  function gateRow(party: Party): HTMLElement {
+    const div = document.createElement('div');
+    div.className = 'ufo';
+    div.innerHTML = '<b>Брама Розриву</b> · відкрита<br><span class="meta">фінальна місія · 6 ворогів</span>';
+    const btn = document.createElement('button');
+    btn.className = 'mission';
+    btn.id = 'btn-gate';
+    btn.textContent = '▶ Атакувати Браму Розриву';
+    const ready = readySoldiers(party.roster).length;
+    btn.disabled = deps.inBattle() || deps.isGameOver() || ready === 0;
+    if (ready === 0) btn.title = 'Немає боєготових оперативників — чекайте одужання або вербуйте';
+    btn.onclick = () => deps.launchGate();
+    div.appendChild(btn);
+    setWhy(btn, btn.disabled && btn.title !== '' ? btn.title : null);
+    return div;
   }
 
   function renderUfos(): void {
@@ -215,8 +237,9 @@ export function createPanels(deps: PanelsDeps): Panels {
     box.innerHTML = '';
     const detected = detectedUfos(party.geo);
     const targets = new Set(missionTargets(party.geo).map((u) => u.id));
+    if (gateOpen(party)) box.appendChild(gateRow(party)); // п18.4: фінал — над зондами
     if (detected.length === 0) {
-      box.innerHTML = '<div class="meta">Нічого не виявлено — рухайте час.</div>';
+      if (box.childElementCount === 0) box.innerHTML = '<div class="meta">Нічого не виявлено — рухайте час.</div>';
       return;
     }
     for (const u of detected) {

@@ -40,7 +40,8 @@ import {
 import { FIGHTER_MAX_HP, FIGHTER_REPAIR_COST, interceptRound, interceptTick, repairTick, startIntercept, startRepair } from './intercept';
 import { BALANCED_POLICY, type InterceptPolicy } from './intercept-bot';
 import { autoBattle, type EvacPolicy } from './ai-bot';
-import { completeMission, createMission } from './mission';
+import { completeMission, createMission, type Mission } from './mission';
+import { completeAssault, completeGate, createAssault, createGateMission, gateOpen } from './assault';
 import { DEFAULT_PRESET, sciencePrice, campaignScore, campaignTick, type CampaignScore, type DifficultyPreset } from './campaign';
 import { createParty, type Party } from './save';
 // П11.8: наука (research.ts) і цех (workshop.ts) — публічне API ядра, ядро не змінюється.
@@ -171,6 +172,10 @@ export interface PartySimResult {
   workshopProduced: number; // предмети, що дійшли до складу
   equippedItems: number; // екіпірування на солдатів (після втрат — повторне)
   scientistsByDay: number[]; // крива штату вчених наприкінці доби 1..N
+  // п18.4 (ADR-0156): штурми бази і спроби фіналу
+  assaults: number; // штурмів (зокрема програних без бою)
+  assaultsLost: number;
+  gateAttempts: number; // боїв «Брама Розриву»
 }
 
 export interface SimulatePartyOptions {
@@ -392,6 +397,68 @@ export function partyBotMissionStep(party: Party, policy: PartyBotPolicy): Missi
   return info;
 }
 
+// п18.4 (ADR-0156): бій кампанії авто-боєм — розрахунок ростеру, складу і трофеїв, як у місії
+// (без премії); евакуацію політика бота може вмикати лише там, де є зона (брама).
+function botCampaignBattle(
+  party: Party,
+  policy: PartyBotPolicy,
+  make: (p: Party, o: { squad: ReturnType<typeof missionSquad> }) => Mission
+): { mission: Mission; outcome: 'перемога' | 'поразка' | 'евакуйовано'; lost: number; wounded: number } {
+  const squad = missionSquad(party.roster, Math.min(policy.missionSquadSize, readySoldiers(party.roster).length));
+  const consumables = deployConsumables(party.workshop, squad);
+  const roles = deployRoles(party.roster, squad);
+  const mission = make(party, {
+    squad,
+    ...(Object.keys(consumables).length > 0 ? { items: consumables } : {}),
+    ...(roles ? { roles } : {}),
+  });
+  const battle = autoBattle(mission.state, undefined, policy.evac);
+  const outcome: 'перемога' | 'поразка' | 'евакуйовано' =
+    battle.outcome === 'перемога' ? 'перемога' : battle.outcome === 'евакуйовано' ? 'евакуйовано' : 'поразка';
+  awardTrophies(party.research, mission.state, outcome);
+  const aftermath = applyMissionResult(party.roster, mission.state);
+  assignBotRoles(party.roster);
+  removeLostEquipment(party.workshop, aftermath.lost);
+  settleConsumables(party.workshop, aftermath.survivors, mission.state.items);
+  return { mission, outcome, lost: aftermath.lost.length, wounded: aftermath.wounded.length };
+}
+
+export interface CampaignBattleInfo {
+  fought: boolean; // штурм відбувся (зокрема програний без бою) / фінал зіграно
+  outcome: 'перемога' | 'поразка' | 'евакуйовано' | null;
+  lost: number;
+  wounded: number;
+}
+
+// п18.4 (ADR-0153 п. 16): штурм бази — одразу, як у застосунку (main.ts startPendingAssault):
+// загін до 3 боєготових (без запобіжника останнього загону — штурм не обирають), без боєготових —
+// програно без бою. Один штурм за крок.
+export function partyBotAssaultStep(party: Party, policy: PartyBotPolicy): CampaignBattleInfo {
+  const info: CampaignBattleInfo = { fought: false, outcome: null, lost: 0, wounded: 0 };
+  if (party.campaign.status !== 'триває' || !party.campaign.assaultPending) return info;
+  info.fought = true;
+  if (readySoldiers(party.roster).length === 0) {
+    completeAssault(party, 'поразка');
+    info.outcome = 'поразка';
+    return info;
+  }
+  const b = botCampaignBattle(party, policy, createAssault);
+  const outcome = b.outcome === 'перемога' ? 'перемога' : 'поразка'; // евакуації в штурмі немає
+  completeAssault(party, outcome);
+  return { fought: true, outcome, lost: b.lost, wounded: b.wounded };
+}
+
+// п18.4 (ADR-0153 п. 17, 19): фінал — щойно брама відкрита і загін повний (політика п18.6
+// уточнить; до п18.6 бот «Ключа брами» не досліджує, тож крок у партії бота недосяжний).
+export function partyBotGateStep(party: Party, policy: PartyBotPolicy): CampaignBattleInfo {
+  const info: CampaignBattleInfo = { fought: false, outcome: null, lost: 0, wounded: 0 };
+  if (!policy.missions || !gateOpen(party)) return info;
+  if (readySoldiers(party.roster).length < policy.missionSquadSize) return info;
+  const b = botCampaignBattle(party, policy, createGateMission);
+  completeGate(party, b.outcome);
+  return { fought: true, outcome: b.outcome, lost: b.lost, wounded: b.wounded };
+}
+
 // П8.5: зіграти повну партію бот-гравцем і зібрати метрики. Порядок фаз тіка —
 // partyTick (main.ts) + рішення гравця між тіками; перехоплення — порядок
 // simulateInterceptCampaign (intercept-bot.ts). Завершення (п18.3): поразка за загрозою
@@ -438,6 +505,9 @@ export function simulateParty(seed: number, preset: DifficultyPreset = DEFAULT_P
     workshopProduced: 0,
     equippedItems: 0,
     scientistsByDay: [],
+    assaults: 0,
+    assaultsLost: 0,
+    gateAttempts: 0,
   };
   let icCursor = 0; // курсор журналу перехоплень (метрики — з нових подій)
   let econCursor = 0; // курсор журналу економіки
@@ -474,12 +544,29 @@ export function simulateParty(seed: number, preset: DifficultyPreset = DEFAULT_P
     // склад місії цього тіку бачить події доби й відльотів цього тіку; поразка — місій немає.
     campaignTick({ geo: party.geo, roster: party.roster, econ: party.econ }, party.campaign);
 
+    // Фаза 2.5 (п18.4): штурм бази — до рішень гравця, як startPendingAssault у partyTick.
+    const a = partyBotAssaultStep(party, policy);
+    if (a.fought) {
+      res.assaults += 1;
+      if (a.outcome !== 'перемога') res.assaultsLost += 1;
+      res.soldiersLost += a.lost;
+      res.soldiersWounded += a.wounded;
+    }
+
     // Фаза 3: найм (перед місіями — загін має бути повним).
     res.hiredTotal += partyBotHireStep(party, policy);
 
     // Фаза 3.5 (П11.8): рішення науки — вчені/проєкти/цех/екіпірування
     // (перед місією: витратники цього тика йдуть у бій).
     partyBotScienceStep(party, policy);
+
+    // Фаза 3.8 (п18.4): фінал «Брама Розриву» — перед звичайною місією.
+    const g = partyBotGateStep(party, policy);
+    if (g.fought) {
+      res.gateAttempts += 1;
+      res.soldiersLost += g.lost;
+      res.soldiersWounded += g.wounded;
+    }
 
     // Фаза 4: тактична місія (час геосцени заморожено — синхронний бій).
     const m = partyBotMissionStep(party, policy);
