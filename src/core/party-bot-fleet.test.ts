@@ -9,9 +9,11 @@ import type { Ufo } from './geo';
 import { addFighter, FIGHTER_MAX_HP, hangarPos } from './intercept';
 import { BALANCED_POLICY, CAUTIOUS_POLICY } from './intercept-bot';
 import {
+  AIR_BATTLE_MAX_ROUNDS,
   CAMPAIGN_INTERCEPTORS,
   CAMPAIGN_POLICY,
   DEFAULT_PARTY_POLICY,
+  partyBotAirBattle,
   partyBotFleetStep,
   partyBotInterceptStep,
   partyBotScienceStep,
@@ -80,6 +82,10 @@ describe('п19.6: купівля перехоплювача політикою �
     expect(p.workshop.queue).toHaveLength(1);
     partyBotFleetStep(p, { ...CAMPAIGN_POLICY, interceptorsUpTo: 3 }); // разом із замовленим — уже три
     expect(p.workshop.queue).toHaveLength(1);
+    p.workshop.queue = [];
+    addFighter(p.intercept, p.geo, 'south'); // три — понад ліміт політика не замовляє і не кидає
+    expect(() => partyBotFleetStep(p, { ...CAMPAIGN_POLICY, interceptorsUpTo: 4 })).not.toThrow();
+    expect(p.workshop.queue).toEqual([]);
   });
 
   it('купівля — у кроці науки після предметів цеху, коли черга й далі порожня', () => {
@@ -215,27 +221,97 @@ describe('п19.6: перехоплення кількома перехоплюв
     partyBotScienceStep(p, pol);
     expect(p.workshop.queue.map((o) => o.id)).toEqual(['gun-module']); // другому бракує
     p.workshop.queue = [];
+    p.workshop.store['gun-module'] = 1; // другий у польоті — модуль уже на складі, не замовляти ще
+    p.intercept.fighters[1].status = 'погоня';
+    partyBotScienceStep(p, pol);
+    expect(p.workshop.queue).toEqual([]);
+    p.workshop.store['gun-module'] = 0;
     p.intercept.fighters[1].gunModule = true;
     partyBotScienceStep(p, pol);
     expect(p.workshop.queue).toEqual([]);
   });
+
+  it('політика лише з interceptorsUpTo — крок науки не виходить раніше і купує', () => {
+    const p = createParty(42, 'норма');
+    p.econ.money = 5000;
+    partyBotScienceStep(p, { ...DEFAULT_PARTY_POLICY, interceptorsUpTo: 2 });
+    expect(p.workshop.queue.map((o) => o.id)).toEqual(['interceptor']);
+  });
+
+  it('той, хто вийшов із бою цим кроком (відступ), не злітає тим самим кроком на вільну ціль', () => {
+    const p = createParty(42, 'норма');
+    p.geo.ufos = [ufo('a', 8, 4), ufo('b', 10, 4)];
+    partyBotInterceptStep(p, BALANCED_POLICY); // погоня на «a»
+    const ic = p.intercept;
+    ic.fighters[0].status = 'бій';
+    ic.activeUfoId = 'a';
+    const retreat = { ...BALANCED_POLICY, chooseRange: () => 'відступ' as unknown as 'далека' };
+    partyBotInterceptStep(p, retreat);
+    expect([ic.fighters[0].status, ic.fighters[0].targetId]).toEqual(['на базі', null]);
+    expect(ic.log.filter((e) => e.type === 'intercept_start')).toHaveLength(1);
+    partyBotInterceptStep(p, BALANCED_POLICY); // наступним кроком — так
+    expect(ic.fighters[0].status).toBe('погоня');
+  });
+});
+
+describe('п19.6: повітряний бій бота — до кінця, поки час стоїть (рішення власника «А. Бій як у грі»)', () => {
+  function engaged(): Party {
+    const p = createParty(42, 'норма');
+    p.geo.ufos = [ufo('a', 8, 4)];
+    partyBotInterceptStep(p, BALANCED_POLICY);
+    const ic = p.intercept;
+    Object.assign(ic.fighters[0], { status: 'бій', pos: { x: 8, y: 4 } });
+    ic.activeUfoId = 'a';
+    return p;
+  }
+
+  it('бій, що почався, бот доводить до кінця одним викликом; без бою — нуль раундів', () => {
+    const p = engaged();
+    const rounds = partyBotAirBattle(p, BALANCED_POLICY);
+    expect(rounds).toBeGreaterThan(0);
+    expect(p.intercept.log.filter((e) => e.type === 'intercept_round')).toHaveLength(rounds);
+    expect(p.intercept.fighters[0].status).not.toBe('бій');
+    expect(p.intercept.activeUfoId).toBeNull();
+    expect(partyBotAirBattle(p, BALANCED_POLICY)).toBe(0);
+  });
+
+  it('зонд бою зник (бот виграв на ньому місію) — бій переривається «ufo_lost», а не застрягає', () => {
+    const p = engaged();
+    p.geo.ufos = [];
+    partyBotInterceptStep(p, BALANCED_POLICY);
+    const last = p.intercept.log[p.intercept.log.length - 2];
+    expect(last).toMatchObject({ type: 'intercept_aborted', ufoId: 'a', reason: 'ufo_lost' });
+    expect(p.intercept.fighters[0].status).toBe('на базі');
+    const q = engaged();
+    q.geo.ufos = [];
+    expect(partyBotAirBattle(q, BALANCED_POLICY)).toBe(1);
+    expect(q.intercept.fighters[0].status).toBe('на базі');
+  });
+
+  it('запобіжник: бій без влучань — не довше AIR_BATTLE_MAX_ROUNDS раундів за виклик', () => {
+    const p = engaged();
+    p.intercept.rng = () => 0.999; // ніхто не влучає
+    expect(partyBotAirBattle(p, BALANCED_POLICY)).toBe(AIR_BATTLE_MAX_ROUNDS);
+    expect(p.intercept.fighters[0].status).toBe('бій');
+  });
 });
 
 describe('п19.6: повні партії політики кампанії з купівлею', () => {
-  it('сід 7 «норма»: другий перехоплювач в ангарі «Захід», одна його погоня; ланцюжок і перемога — як до п19.6', () => {
+  it('сід 6 «норма»: другий перехоплювач в ангарі «Захід», 22 погоні з 53; перемога на 41-й', () => {
     let last: Readonly<Party> | null = null;
-    const r = simulateParty(7, 'норма', { policy: CAMPAIGN_POLICY, onTick: (p) => (last = p) });
-    expect([r.outcome, r.endDay, r.gateAttempts, r.soldiersLost]).toEqual(['перемога', 37, 2, 11]);
+    const r = simulateParty(6, 'норма', { policy: CAMPAIGN_POLICY, onTick: (p) => (last = p) });
+    expect([r.outcome, r.endDay, r.gateAttempts, r.launches, r.shotDown]).toEqual(['перемога', 41, 3, 53, 44]);
     const fin = last as unknown as Party;
     expect(fin.intercept.fighters.map((f) => f.id + ':' + f.region)).toEqual(['1:north', '2:west']);
     const starts = fin.intercept.log.filter((e) => e.type === 'intercept_start').map((e) => e.fighter ?? 1);
-    expect(starts).toEqual([1, 1, 1, 2]);
+    expect([starts.length, starts.filter((id) => id === 2).length]).toEqual([53, 22]);
+    expect(fin.intercept.fighters.every((f) => f.status !== 'бій')).toBe(true); // бій не переживає тік
   }, 30_000);
 
-  it('без купівлі (interceptorsUpTo 1) — сід 7 байт-у-байт як політика без поля', () => {
+  it('без купівлі (interceptorsUpTo 1) — сід 7 байт-у-байт як політика без поля; бій до кінця — 41 погоня, 31 збито', () => {
     const a = simulateParty(7, 'норма', { policy: { ...CAMPAIGN_POLICY, interceptorsUpTo: 1 } });
     const b = simulateParty(7, 'норма', { policy: { ...CAMPAIGN_POLICY, interceptorsUpTo: undefined } });
     expect(JSON.stringify(a)).toBe(JSON.stringify(b));
-    expect(a.launches).toBe(3);
+    expect([a.launches, a.shotDown]).toEqual([41, 31]); // до п19.6 — 3 і 1: перехоплювач застрягав у «бою»
   }, 30_000);
 });

@@ -63,6 +63,7 @@ import {
   SCIENCE_POLICY,
   TICKS_PER_DAY,
   partyBotHireStep,
+  partyBotAirBattle,
   partyBotInterceptStep,
   partyBotMissionStep,
   partyBotScienceStep,
@@ -245,6 +246,7 @@ function run(name: string, v: Variant, preset: DifficultyPreset, seed: number): 
     if (on && t % TICKS_PER_DAY === 0) for (const id of v.gift) party.workshop.store[id] = 99;
     partyBotInterceptStep(party, policy.intercept);
     interceptTick(party.intercept, party.geo);
+    partyBotAirBattle(party, policy.intercept); // п19.6: як simulateParty
     repairTick(party.intercept, party.geo);
     advanceTime(party.geo, 1, radarRange(party.research));
     economyTick(party.econ, party.geo, preset, totalTrust(party.campaign.regions)); // п19.2: дотація з довір

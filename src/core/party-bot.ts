@@ -41,6 +41,7 @@ import {
 import {
   FIGHTER_MAX_HP,
   FIGHTER_REPAIR_COST,
+  MAX_FIGHTERS,
   fighterInBattle,
   hangarPos,
   interceptRound,
@@ -260,6 +261,35 @@ function nearestFighter(ready: Fighter[], geo: GeoState, ufo: Ufo): Fighter | nu
   return best;
 }
 
+// Раунд повітряного бою бота: дистанція — за політикою; зонда вже немає — interceptRound сам перериває
+// бій (`ufo_lost`), вибір для нього не важить. п19.6 (аудит PR #525): до п19.6 охорона «є зонд» лишала
+// перехоплювач у «бою» назавжди, коли бот вигравав місію на зонді, з яким той ще бився.
+function botRound(party: Party, policy: InterceptPolicy, f: Fighter): void {
+  const ic = party.intercept;
+  const ufo = party.geo.ufos.find((u) => u.id === ic.activeUfoId);
+  const choice = ufo ? policy.chooseRange(ufo.kind, f.hp) : 'відступ';
+  interceptRound(ic, party.geo, choice, party.econ, party.campaign.preset, party.roster);
+}
+
+// Запобіжник повітряного бою одного тіку (бій з кидками RNG закінчується за кілька раундів).
+export const AIR_BATTLE_MAX_ROUNDS = 100;
+
+// п19.6 (ADR-0164; рішення власника «А. Бій як у грі»): повітряний бій, що почався цим тіком, бот
+// доводить до кінця, поки час стоїть, — як гравець у застосунку (час у бою не йде, раунди тіків не
+// споживають). Викликати одразу після interceptTick, до advanceTime. Повертає зіграні раунди.
+export function partyBotAirBattle(party: Party, policy: InterceptPolicy): number {
+  let rounds = 0;
+  for (
+    let f = fighterInBattle(party.intercept);
+    f && party.intercept.activeUfoId && rounds < AIR_BATTLE_MAX_ROUNDS;
+    f = fighterInBattle(party.intercept)
+  ) {
+    botRound(party, policy, f);
+    rounds += 1;
+  }
+  return rounds;
+}
+
 // Крок бот-гравця перехопленням — дзеркало interceptBotStep (intercept-bot.ts),
 // але раунд бою викликається З ПРЕСЕТОМ ПАРТІЇ (критерій П8.5.3): множник
 // премії за збиття береться з party.campaign.preset (прецедент panels.ts, П8.4a).
@@ -273,12 +303,7 @@ export function partyBotInterceptStep(party: Party, policy: InterceptPolicy): vo
   const inBattle = fighterInBattle(ic);
   const damaged = fighters.filter((f) => f.status === 'на базі' && f.hp < FIGHTER_MAX_HP && !f.repairTicksLeft);
   const ready = fighters.filter((f) => f.status === 'на базі' && f.hp === FIGHTER_MAX_HP);
-  if (inBattle && ic.activeUfoId) {
-    const ufo = party.geo.ufos.find((u) => u.id === ic.activeUfoId);
-    if (ufo) {
-      interceptRound(ic, party.geo, policy.chooseRange(ufo.kind, inBattle.hp), party.econ, party.campaign.preset, party.roster);
-    }
-  }
+  if (inBattle && ic.activeUfoId) botRound(party, policy, inBattle);
   for (const f of damaged) {
     // Пошкоджений без ремонту: платимо одразу, як лише є гроші (X-COM досвід, ADR-0021).
     // Т.22 (ADR-0089): без боєготових ремонт чекає — цей крок іде раніше за найм,
@@ -329,7 +354,13 @@ function presetPrice(base: number, preset: DifficultyPreset): number {
 // (для гарматного модуля — один на винищувач). Порядок — за ростером
 // (ветерани перші, прецедент missionSquad), жодного RNG.
 function workshopDeficit(party: Party, id: ItemId): number {
-  if (id === 'gun-module') return party.intercept.fighters.filter((f) => !f.gunModule).length; // п19.6: на кожен
+  if (id === 'gun-module') {
+    // п19.6 (аудит PR #525): на кожен перехоплювач без модуля, мінус склад і черга — інакше, поки
+    // перехоплювач у польоті (модуль ставиться лише на базі), бот замовляв модулі без кінця
+    const lackingModule = party.intercept.fighters.filter((f) => !f.gunModule).length;
+    const supplyModule = party.workshop.store['gun-module'] + party.workshop.queue.filter((o) => o.id === 'gun-module').length;
+    return Math.max(0, lackingModule - supplyModule);
+  }
   const key: keyof SoldierEquipment = soldierEquipKey(id);
   const lacking = readySoldiers(party.roster).filter((s) => !party.workshop.equipped[s.id]?.[key]).length;
   const supply = party.workshop.store[id] + party.workshop.queue.filter((o) => o.id === id).length;
@@ -445,7 +476,7 @@ export function weakestRegion(party: Pick<Party, 'campaign' | 'intercept'>): Reg
 // порожня (одне активне замовлення, як предмети), гроші після оплати — не нижче резерву найму
 // (hireUpTo × ціна найму пресета + hireReserve).
 export function partyBotFleetStep(party: Party, policy: PartyBotPolicy): void {
-  const upTo = policy.interceptorsUpTo ?? 0;
+  const upTo = Math.min(policy.interceptorsUpTo ?? 0, MAX_FIGHTERS); // аудит Vibe PR #525: понад ліміт — не кидати
   if (upTo <= 0 || party.workshop.queue.length > 0) return;
   if (interceptorCount(party.workshop, party.intercept) >= upTo) return;
   // резерв найму — повний загін за ціною пресета і залишок на ремонт (купівля не з'їдає найм після розгрому)
@@ -656,6 +687,7 @@ export function simulateParty(seed: number, preset: DifficultyPreset = DEFAULT_P
     // Фаза 1: рішення перехоплень + погоня/ремонт (порядок intercept-bot.ts).
     partyBotInterceptStep(party, policy.intercept);
     interceptTick(party.intercept, party.geo);
+    partyBotAirBattle(party, policy.intercept); // п19.6: бій — до кінця, поки час стоїть
     repairTick(party.intercept, party.geo);
     for (const e of party.intercept.log.slice(icCursor)) {
       if (e.type === 'intercept_start') res.launches += 1;
@@ -745,6 +777,7 @@ export function simulateParty(seed: number, preset: DifficultyPreset = DEFAULT_P
     researchCursor = party.research.log.length;
     for (const e of party.workshop.log.slice(workshopCursor)) {
       if (e.type === 'order') res.workshopSpent += presetPrice(WORKSHOP_CATALOG[e.id].cost, preset);
+      if (e.type === 'interceptor_order') res.workshopSpent += presetPrice(INTERCEPTOR_COST, preset); // п19.6
       if (e.type === 'produced') res.workshopProduced += 1;
       if (e.type === 'equip') res.equippedItems += 1;
     }
