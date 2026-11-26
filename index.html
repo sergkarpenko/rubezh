@@ -1076,6 +1076,114 @@
             0 0 14px rgba(127, 226, 160, 0.5);
         }
       }
+      /* п18.5 (ADR-0157; рішення власника «А. Два вікна + зупинка»): рядок причини і розклад рахунку
+         на екранах перемоги й поразки; екран поразки — той самий каркас, червоні тони */
+      #campaign-victory .end-text,
+      #campaign-defeat .end-text {
+        color: #d7e4f7;
+        margin: 0 0 4px;
+      }
+      #campaign-victory .score-lines,
+      #campaign-defeat .score-lines {
+        color: #9fb0c8;
+        font-size: 13px;
+        margin: -8px 0 8px;
+      }
+      #campaign-defeat {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(13, 16, 23, 0.95);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        z-index: 100;
+        max-width: none;
+        text-align: center;
+      }
+      #campaign-defeat h2 {
+        color: #ff9c9c;
+        font-size: 24px;
+        margin: 0 0 16px;
+      }
+      #campaign-defeat .score {
+        font-size: 32px;
+        font-weight: 600;
+        color: #d7e4f7;
+        margin: 16px 0;
+      }
+      #campaign-defeat .btn-play-again {
+        background: linear-gradient(180deg, #4a1d24 0%, #290f14 100%);
+        border-color: #ff9c9c;
+        color: #ffc4c4;
+        padding: 12px 24px;
+        font-size: 16px;
+        margin-top: 16px;
+        box-shadow:
+          inset 0 1px 0 rgba(255, 255, 255, 0.12),
+          0 2px 4px rgba(0, 0, 0, 0.45);
+      }
+      /* п18.5 (ADR-0157; рішення власника «А. Шапка + панель»): чип загрози в шапці — число і смужка 0–100
+         з рисками порогів штурму; колір — бірюза, бурштин від першого порога штурму, червоний від останнього */
+      #threat .tbar {
+        position: relative;
+        display: inline-block;
+        width: 56px;
+        height: 6px;
+        margin-left: 6px;
+        vertical-align: middle;
+        border-radius: 3px;
+        background: rgba(255, 255, 255, 0.12);
+        overflow: hidden;
+      }
+      #threat .tbar i {
+        position: absolute;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        background: #00e5ff;
+      }
+      #threat .tbar s {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        width: 1px;
+        background: rgba(13, 16, 23, 0.9);
+      }
+      #threat.warn .tbar i {
+        background: #ffb84d;
+      }
+      #threat.warn b {
+        color: #ffb84d;
+      }
+      #threat.crit .tbar i {
+        background: #ff6b6b;
+      }
+      #threat.crit b {
+        color: #ff6b6b;
+      }
+      /* п18.5: панель «Мета кампанії» — ланцюжок кроками, рядки стану */
+      #campaign-goal .goal-chain {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 2px 6px;
+        margin-bottom: 4px;
+      }
+      #campaign-goal .goal-chain .done {
+        color: #7fe2a0;
+      }
+      #campaign-goal .goal-chain .now {
+        color: #ffb84d;
+      }
+      #campaign-goal .goal-chain .later {
+        color: #7d8aa0;
+      }
+      #campaign-goal > div {
+        margin-bottom: 3px;
+      }
       /* П9.1 (Фаза 9): екран «Як грати» — оверлей; контент генерує src/ui/help.ts */
       #help-screen {
         position: fixed;
@@ -1091,32 +1199,20 @@
         padding: 16px;
         overflow: auto;
       }
+      /* п18.5 (ADR-0157): «Мета кампанії» з ланцюжком і загрозою подовжилась — довідка ширша (до 1000 px)
+         і у дві колонки: «Легенда» | «Мета кампанії», під ними «Керування» | «Наука і спорядження»;
+         висота вміщується в 1366 × 768 і 1024 × 768 (гейт e2e), вузький екран — одна колонка */
       #help-screen .help-box {
-        max-width: 880px;
+        max-width: 1000px;
       }
-      /* T.39: чотири блоки довідки у три колонки: «Легенда» — високий (рядки 1–2,
-         колонка 1), «Наука і спорядження» — під «Метою»/«Керуванням» (рядок 2,
-         колонки 2–3); вузький екран — одна колонка */
       .help-cols {
         display: grid;
-        grid-template-columns: repeat(3, 1fr);
-        gap: 8px 28px;
-      }
-      .help-cols > div:first-child {
-        grid-row: 1 / 3;
-      }
-      .help-cols > div:nth-child(4) {
-        grid-column: 2 / 4;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 4px 28px;
       }
       @media (max-width: 760px) {
         .help-cols {
           grid-template-columns: 1fr;
-        }
-        .help-cols > div:first-child {
-          grid-row: auto;
-        }
-        .help-cols > div:nth-child(4) {
-          grid-column: auto;
         }
       }
       .help-cols h3 {
@@ -1131,7 +1227,7 @@
         padding-left: 18px;
       }
       .help-cols li {
-        margin: 4px 0;
+        margin: 3px 0; /* п18.5: 4 → 3 px — запас висоти 1366 × 768 (вимір у ADR-0157) */
       }
       .help-version {
         margin: 10px 0 0;
@@ -2227,7 +2323,8 @@
       </div>
       <div class="chips">
         <span class="chip clock" id="clock">—</span>
-        <span class="chip" id="campaign-status">Кампанія: —</span>
+        <!-- п18.5 (ADR-0157): чип загрози замість «кампанія: …»; вміст — src/ui/panels.ts renderCampaign -->
+        <span class="chip" id="threat" title="Загроза Розриву">Загроза <b id="threat-num">0</b></span>
         <span class="chip" id="campaign-progress" title="День кампанії">Д0</span>
         <span class="chip">Баланс: <b id="money">—</b></span>
         <span class="chip">Боєготові: <b id="ready">—</b></span>
@@ -2307,6 +2404,11 @@
              «Збереження» — вікно #save-dialog з «Меню»; іконки заголовків — data-icon (src/ui/tab-icons.ts);
              активна вкладка — localStorage поза сейвом (ADR-0026) -->
         <div id="status-tabs"></div>
+        <!-- п18.5 (ADR-0157; рішення власника «А. Шапка + панель»): мета кампанії — перша панель «Вузла» -->
+        <section class="panel" data-tab="base">
+          <h2 data-icon="precise">Мета кампанії</h2>
+          <div id="campaign-goal"></div>
+        </section>
         <section class="panel" data-tab="base">
           <h2 data-icon="probe">Сенсорна сітка</h2>
           <div id="ufos"></div>
@@ -2343,10 +2445,22 @@
     <script type="module" src="/src/main.ts"></script>
     <section class="panel hidden" id="campaign-victory">
       <h2>Перемога в кампанії!</h2>
-      <div class="score" id="campaign-score">—</div>
+      <!-- п18.5 (ADR-0157): доба перемоги і розклад рахунку — src/ui/panels.ts renderCampaign -->
+      <p class="end-text" id="campaign-victory-text"></p>
+      <div class="score">Рахунок <span id="campaign-score">—</span></div>
+      <div class="score-lines" id="campaign-score-lines"></div>
       <button id="btn-continue" class="btn-play-again">Грати далі</button>
       <button id="btn-play-again" class="btn-play-again">Грати знов</button>
       <button id="btn-victory-exit" class="btn-play-again">На стартовий екран</button>
+    </section>
+    <!-- п18.5 (ADR-0157; рішення власника «А. Два вікна + зупинка»): екран поразки — загроза 100 або банкрутство -->
+    <section class="panel hidden" id="campaign-defeat">
+      <h2>Поразка</h2>
+      <p class="end-text" id="campaign-defeat-text"></p>
+      <div class="score">Рахунок <span id="campaign-defeat-score">—</span></div>
+      <div class="score-lines" id="campaign-defeat-lines"></div>
+      <button id="btn-defeat-again" class="btn-play-again">Грати знов</button>
+      <button id="btn-defeat-exit" class="btn-play-again">На стартовий екран</button>
     </section>
     <!-- П9.1 (Фаза 9): екран «Як грати» — контент генерує src/ui/help.ts;
          показ при першому візиті (порожні слоти) або кнопкою «?» у топбарі -->

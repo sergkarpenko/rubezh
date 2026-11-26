@@ -831,8 +831,8 @@ export interface FighterLook {
   shape: number; // 0..HELMET_SHAPES-1
 }
 
-// п18.4 (ADR-0156, рішення власника «А. Мінімум»): турель бази (id 't1', 't2') до п18.5 —
-// кадр оперативника з сірим кільцем; сірий не збігається з кольорами бійців і типів ворогів.
+// п18.4 (ADR-0156): турель бази (id 't1', 't2') — сіре кільце; сірий не збігається з кольорами
+// бійців і типів ворогів. п18.5 (ADR-0157): силует турелі — кодом (drawTurretSprite у render.ts).
 export const TURRET_RING = '#9aa1ab';
 
 export function fighterLook(id: string): FighterLook {

@@ -218,3 +218,28 @@ describe('Т.43: причина під «Замовити» в «Кузні»', 
     }
   });
 });
+
+// п18.5 (ADR-0157): «Пробивний заряд» — у «Кузні» після «Анатомії Розриву», трофей гончака на вході.
+describe('п18.5: «Пробивний заряд» у «Кузні»', () => {
+  it('рядок заряду з ефектом; до протоколу — «Ще не досліджено»; без трофея — причина; з трофеєм — замовлення', () => {
+    const panel = createWorkshopPanel(makeDeps());
+    panel.render();
+    const b = el<HTMLButtonElement>('btn-order-breach-charge');
+    expect(b.disabled).toBe(true);
+    expect(b.title).toBe('Ще не досліджено');
+    expect(el('workshop').textContent).toContain('Пробивний заряд · 50 · ');
+    expect(el('workshop').textContent).toContain('Атака по броньованій цілі — без броні (один раз)');
+    expect(el('workshop').textContent).toContain('Пробивний заряд 0'); // склад
+    party.research.completed.push('rift-anatomy');
+    panel.render();
+    expect(el<HTMLButtonElement>('btn-order-breach-charge').title).toBe('Бракує трофеїв: гончак 0 з 1');
+    expect(el<HTMLButtonElement>('btn-order-breach-charge').disabled).toBe(true);
+    party.research.trophies.hound = 1;
+    panel.render();
+    const ok = el<HTMLButtonElement>('btn-order-breach-charge');
+    expect(ok.disabled).toBe(false);
+    ok.click();
+    expect(party.workshop.queue.map((o) => o.id)).toEqual(['breach-charge']);
+    expect(party.research.trophies.hound).toBe(0);
+  });
+});

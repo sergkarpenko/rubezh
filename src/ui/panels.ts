@@ -5,8 +5,8 @@
 // застосунку (party/mission/gameOver) модуль знає лише через Deps-інтерфейс;
 // логіка ядра — виклики src/core, DOM — через хелпер el (src/ui/dom.ts).
 
-import { gateOpen } from '../core/assault';
-import { RADAR_RANGE, TICK_MINUTES, detectedUfos, geoClock, geoDay, missionTargets, type Ufo } from '../core/geo';
+import { gateKeyDone, gateOpen } from '../core/assault';
+import { TICK_MINUTES, WORLD_W, detectedUfos, geoClock, geoDay, missionTargets, type Ufo } from '../core/geo';
 import {
   FIGHTER_MAX_HP,
   FIGHTER_REPAIR_COST,
@@ -19,6 +19,8 @@ import {
   type InterceptChoice,
 } from '../core/intercept';
 import { dailyAllowance, hirePrice, missionBonus } from '../core/economy';
+import { radarRange } from '../core/research';
+import type { Vec2 } from '../core/combat';
 // П11.6 (ADR-0058): екіпірування в картці солдата ростеру — броня/оптика
 // (постійні), аптечка/граната (витратні); дії — лише на геосцені.
 import {
@@ -34,7 +36,7 @@ import { missionRisksBankruptcy, readySoldiers } from '../core/squad';
 import { SQUAD_SPAWN } from '../core/mission';
 import type { Party } from '../core/save';
 import { gunModuleEffect, itemEffect } from './effects';
-import { drawAnimFrame, drawFighterSprite, drawGeoBaseSprite, drawGeoTerrain, drawUfoSprite } from '../render';
+import { drawAnimFrame, drawFighterSprite, drawGatePortal, drawGeoBaseSprite, drawGeoTerrain, drawUfoSprite } from '../render';
 import type { Anim } from '../core/render-core';
 import { el, setWhy } from './dom';
 import { setIconText } from './icons';
@@ -43,6 +45,7 @@ import { RANK_NAMES, rankOf } from '../core/career';
 import { chevronHtml, roleLabel, xpLine } from './roles';
 import { GCELL } from './grid';
 import { geoEventText, type LogCat } from './journal';
+import { renderEndScreens, renderGoalPanel, renderThreatChip } from './campaign-panel';
 import { ticksText } from './text';
 import type { AmbientGeoScene } from './ambient';
 
@@ -59,7 +62,14 @@ export const EQUIP_ITEMS: [SoldierItemId, keyof SoldierEquipment, string][] = [
   ['optics', 'optics', 'око'],
   ['medkit', 'medkit', 'гель'],
   ['grenade', 'grenade', 'граната'],
+  ['breach-charge', 'charge', 'заряд'], // п18.5 (ADR-0157): «Пробивний заряд» (до п18.5 панель його не видавала)
 ];
+
+// п18.5 (ADR-0157): клітинка Брами Розриву на геосцені — праворуч від вузла (горизонталь замкнена).
+export function gateCell(party: Pick<Party, 'geo'>): Vec2 {
+  const b = party.geo.base;
+  return { x: (b.x + 1) % WORLD_W, y: b.y };
+}
 
 // Залежності від шару застосунку (main.ts): читання стану і дії панелей.
 // Панелі не знають, як стан зберігається у застосунку.
@@ -122,7 +132,7 @@ export interface Panels {
   renderFinances(): void;
   renderRoster(): void;
   renderInterceptCtx(): void;
-  renderCampaign(): void; // П8.3: чипи кампанії + екран перемоги
+  renderCampaign(): void; // П8.3: чипи кампанії + екран перемоги; п18.5 — загроза, мета, поразка
   nodeActions(): number; // Т.7: дії, що чекають гравця на вкладці «Вузол» (сигнал вкладки)
 }
 
@@ -148,13 +158,23 @@ export function createPanels(deps: PanelsDeps): Panels {
     const b = party.geo.base;
     ctx.setLineDash([5, 4]);
     ctx.strokeStyle = 'rgba(0,229,255,0.25)'; // П12.7: межа сенсорної сітки — приглушений неоновий ціан
-    ctx.strokeRect((b.x - RADAR_RANGE) * GCELL, (b.y - RADAR_RANGE) * GCELL, (2 * RADAR_RANGE + 1) * GCELL, (2 * RADAR_RANGE + 1) * GCELL);
+    // п18.5 (ADR-0157): рамка — радіус radarRange (6 після «Пеленгу брами»); по вертикалі — у межах канви
+    // (світ 9 рядків: радар 4 уже займає всю висоту, ширшає лише горизонталь)
+    const rr = radarRange(party.research);
+    const fy0 = Math.max(0, (b.y - rr) * GCELL);
+    const fy1 = Math.min(cv.height, (b.y + rr + 1) * GCELL);
+    ctx.strokeRect((b.x - rr) * GCELL, fy0, (2 * rr + 1) * GCELL, fy1 - fy0);
     ctx.setLineDash([]);
 
     // П6.7 (ADR-0029): статичні спрайти геосцени — база і позначки НЛО (туман:
     // detectedUfos повертає лише виявлені — невиявлені в малювання не потрапляють).
     // П14.5: вежа-радар з атласу тайлів (фолбек — піксельний спрайт ВУЗОЛ)
     drawGeoBaseSprite(ctx, { cx: b.x * GCELL + GCELL / 2, cy: b.y * GCELL + GCELL / 2, size: GCELL });
+    // п18.5 (ADR-0157; рішення власника «А. Кодом»): Брама Розриву — портал у клітинці праворуч від вузла
+    if (gateKeyDone(party) && party.campaign.status === 'триває') {
+      const g = gateCell(party);
+      drawGatePortal(ctx, { cx: g.x * GCELL + GCELL / 2, cy: g.y * GCELL + GCELL / 2, size: GCELL, open: gateOpen(party) });
+    }
 
     for (const u of detectedUfos(party.geo)) {
       drawUfoSprite(ctx, {
@@ -185,6 +205,8 @@ export function createPanels(deps: PanelsDeps): Panels {
       ch: cv.height,
       base: { x: b.x, y: b.y },
       scanActive: ga !== null && ga.kind === 'gscan',
+      range: rr, // п18.5: розгортка радара 6
+      ...(gateOpen(party) ? { gate: gateCell(party) } : {}), // п18.5: пульс відкритої брами
     });
     if (ga !== null) drawAnimFrame(ctx, ga, deps.geoAnimNow(), GCELL, 0, cv.width, cv.height);
 
@@ -596,21 +618,18 @@ export function createPanels(deps: PanelsDeps): Panels {
     }
   }
 
-  // П8.3: чипи кампанії у топбарі + екран перемоги (статус кампанії, доба N; п18.3 — без «/30»).
+  // П8.3: чипи кампанії у топбарі + екран перемоги (п18.3 — доба без «/30»).
+  // п18.5 (ADR-0157): чип загрози замість «кампанія: …», панель «Мета кампанії», екран поразки.
   function renderCampaign(): void {
     const party = deps.getParty();
-    el('campaign-status').textContent = 'кампанія: ' + party.campaign.status;
+    renderThreatChip(party);
     el('campaign-progress').textContent = 'Д' + geoDay(party.geo); // п18.3: без «/30» — таймера 30 діб немає (рішення власника «А. Мінімум»)
     el('campaign-progress').classList.toggle('hidden', deps.inBattle());
-    // П8.3: відображення екрану перемоги кампанії
-    const victoryPanel = el('campaign-victory');
-    const isVictory = party.campaign.status === 'перемога';
+    renderGoalPanel(party);
     // П8.3a: endless (рішення власника 2026-10-15) — «Грати далі» ховає екран,
     // але статус «перемога» і зафіксований рахунок лишаються (EARS Фази 8)
-    victoryPanel.classList.toggle('hidden', !isVictory || deps.victoryDismissed());
-    if (isVictory && party.campaign.score) {
-      el('campaign-score').textContent = String(party.campaign.score.total);
-    }
+    const isVictory = party.campaign.status === 'перемога';
+    renderEndScreens(party, isVictory && !deps.victoryDismissed(), !isVictory && deps.isGameOver() && !deps.inBattle());
   }
 
   return {

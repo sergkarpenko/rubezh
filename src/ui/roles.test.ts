@@ -119,6 +119,11 @@ describe('п16.4: картка смуги загону (EARS 8) і журнал 
       text: '◎ Іван: «Точний постріл»',
       cls: '',
     });
+    // п18.5 (ADR-0157): витрачений «Пробивний заряд» — мітка перед рядком пострілу
+    expect(battleEventText({ type: 'charge', shooterId: 's1', targetId: 'a1' }, name)).toEqual({
+      text: '⚡ Іван: «Пробивний заряд» — броню пробито (a1)',
+      cls: '',
+    });
     expect(battleEventText({ type: 'field_aid', unitId: 's2', targetId: 's1', healed: 3 }, name)).toEqual({
       text: '✚ Олена: «Польова допомога» → Іван +3 HP',
       cls: 'win',

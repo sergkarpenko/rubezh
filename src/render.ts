@@ -238,6 +238,7 @@ export interface UnitSpriteView extends UnitSprite {
   recoil?: number; // Т.132: віддача пострілу, px — фігура відходить назад від погляду
   breath?: number; // Т.132: «дихання» у спокої, 0..1 (ambient-шар; стискання по висоті від ніг)
   kind?: EnemyKind; // п17.5 (ADR-0152): тип ворога — ряд атласа; без поля — демон
+  turret?: boolean; // п18.5 (ADR-0157): турель бази — власний силует кодом замість кадру атласа
 }
 
 // Поза за станом юніта — чиста функція, детермінована (без RNG, ADR-0003):
@@ -551,10 +552,67 @@ function drawFootRing(ctx: CanvasRenderingContext2D, u: UnitSpriteView): void {
   ctx.lineWidth = 1;
 }
 
+// п18.5 (ADR-0157; рішення власника «А. Кодом»): турель бази — шестикутна основа, башта і ствол
+// у бік погляду (flip) на висоті башти — нижче плашки HP у куті клітинки; трасер пострілу турелі
+// стартує з кінчика ствола (turretMuzzle; підказку MuzzleHint.turret дає battle.ts).
+const TURRET_HEAD_DY = -4; // центр башти — 4 px вище центру клітинки
+const TURRET_BARREL = 21; // кінчик ствола — 21 px від центру по горизонталі
+export function turretMuzzle(flip: boolean, cx: number, cy: number, recoil = 0): { x: number; y: number } {
+  const dir = flip ? -1 : 1;
+  return { x: cx + dir * (TURRET_BARREL - recoil), y: cy + TURRET_HEAD_DY };
+}
+// Без атласа і без RNG; загибла турель (hp 0) — лише основа, темніша.
+const TURRET_BODY = '#5d6470';
+const TURRET_EDGE = '#c9ced6';
+export function drawTurretSprite(ctx: CanvasRenderingContext2D, u: UnitSpriteView): void {
+  const flip = u.flip === true;
+  const recoil = u.recoil ?? 0;
+  const by = u.cy + 9; // центр основи — над кільцем (нижня дуга кільця лишається видимою)
+  ctx.fillStyle = u.hp > 0 ? TURRET_BODY : '#3a3f47';
+  ctx.strokeStyle = TURRET_EDGE;
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  for (let i = 0; i < 6; i++) {
+    const a = Math.PI / 6 + (i * Math.PI) / 3;
+    const x = u.cx + Math.cos(a) * 13;
+    const y = by + Math.sin(a) * 7;
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  if (u.hp <= 0) {
+    ctx.lineWidth = 1;
+    return;
+  }
+  const m = turretMuzzle(flip, u.cx, u.cy, recoil);
+  const hx = u.cx - (flip ? -1 : 1) * recoil; // башта відходить з віддачею
+  const hy = u.cy + TURRET_HEAD_DY;
+  ctx.strokeStyle = TURRET_EDGE;
+  ctx.lineWidth = 4;
+  ctx.beginPath();
+  ctx.moveTo(hx, hy);
+  ctx.lineTo(m.x, m.y);
+  ctx.stroke();
+  ctx.fillStyle = TURRET_BODY;
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.arc(hx, hy, 9, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = '#00e5ff'; // сенсор башти — ціан «Рубіжу»
+  ctx.beginPath();
+  ctx.arc(hx + (flip ? -3 : 3), hy - 1, 2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.lineWidth = 1;
+}
+
 export function drawSoldierSprite(ctx: CanvasRenderingContext2D, u: UnitSpriteView): void {
   drawFootRing(ctx, u);
   // П14.2 (ADR-0072): атлас готовий — кадр з нього; інакше матриці ADR-0031.
-  if (unitAtlasImg !== null) drawAtlasUnit(ctx, u, 0, unitAtlasImg);
+  if (u.turret === true) drawTurretSprite(ctx, u);
+  else if (unitAtlasImg !== null) drawAtlasUnit(ctx, u, 0, unitAtlasImg);
   else drawPixelSprite(ctx, (u.frame ?? 0) === 1 ? SOLDIER_STEP : SOLDIER_STAND, u.cx, u.cy, SPRITE_SCALE);
   if (u.overwatch) drawOverwatchMarker(ctx, u);
   drawHpBadge(ctx, u); // П14.4: смуга HP + число у кутковій зоні (читабельність)
@@ -603,6 +661,31 @@ export function drawGeoBaseSprite(ctx: CanvasRenderingContext2D, b: BaseSprite):
   const dh = Math.round(ih * scale);
   ctx.imageSmoothingEnabled = true;
   ctx.drawImage(geoTowerImg, Math.round(b.cx - dw / 2), Math.round(b.cy - dh / 2), dw, dh);
+}
+
+// п18.5 (ADR-0157; рішення власника «А. Кодом»): Брама Розриву на геосцені — пурпуровий портал
+// у клітинці біля вузла: два кільця і шість іскор; `open` false (пауза після поразки) — приглушено.
+export const GATE_COLOR = '#c45cff';
+export function drawGatePortal(ctx: CanvasRenderingContext2D, g: { cx: number; cy: number; size: number; open: boolean }): void {
+  const r = g.size * 0.34;
+  ctx.globalAlpha = g.open ? 1 : 0.45;
+  ctx.fillStyle = 'rgba(196,92,255,0.18)';
+  ctx.beginPath();
+  ctx.ellipse(g.cx, g.cy, r, r * 1.15, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = GATE_COLOR;
+  ctx.lineWidth = 2;
+  ctx.stroke();
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.ellipse(g.cx, g.cy, r * 0.55, r * 0.7, 0, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.fillStyle = '#f0d4ff';
+  for (let i = 0; i < 6; i++) {
+    const a = (i * Math.PI) / 3;
+    ctx.fillRect(Math.round(g.cx + Math.cos(a) * r * 1.3) - 1, Math.round(g.cy + Math.sin(a) * r * 1.45) - 1, 2, 2);
+  }
+  ctx.globalAlpha = 1;
 }
 
 export function drawFighterSprite(ctx: CanvasRenderingContext2D, f: FighterSprite): void {
@@ -1005,6 +1088,7 @@ export interface MuzzleHint {
   side: 'player' | 'alien';
   flip: boolean;
   kind?: EnemyKind; // п17.5: тип стрільця-ворога — якір дула (без поля — демон)
+  turret?: boolean; // п18.5 (ADR-0157): стрілець — турель, дуло — кінчик ствола (turretMuzzle)
 }
 
 // Один кадр анімаційного шару (малюється поверх статичного стану).
@@ -1241,7 +1325,10 @@ export function drawAnimFrame(
       return;
     }
     if (muzzle !== undefined) {
-      const m = muzzlePoint(muzzle.side, muzzle.flip, x0, y0, calm ? 0 : recoilPx(t, share), muzzle.kind);
+      const m =
+        muzzle.turret === true
+          ? turretMuzzle(muzzle.flip, x0, y0, calm ? 0 : recoilPx(t, share))
+          : muzzlePoint(muzzle.side, muzzle.flip, x0, y0, calm ? 0 : recoilPx(t, share), muzzle.kind);
       x0 = m.x;
       y0 = m.y;
     }

@@ -130,6 +130,8 @@ export interface AmbientGeoScene {
   ch: number;
   base: Vec2;
   scanActive?: boolean;
+  range?: number; // п18.5 (ADR-0157): радіус радара в клітинках (radarRange; без поля — RADAR_RANGE)
+  gate?: Vec2; // п18.5: клітинка відкритої Брами Розриву — пульс порталу
 }
 
 // Бій: wall-pulse (кванти стін) + hp-glow (бейджі поранених).
@@ -175,7 +177,13 @@ export function paintGeoAmbient(ctx: CanvasRenderingContext2D, s: AmbientGeoScen
   // відображення (ADR-0073): зона виявлення у ядрі не змінюється; подієвий
   // gscan (короткий, 1200 мс) лишається на повному радіусі — там обріз
   // непомітний, а ambient-сектор обертається безперервно.
+  // п18.5 (ADR-0157): радар 6 після «Пеленгу брами» — зона ширшає лише по горизонталі (світ 9 рядків),
+  // тож розгортка — еліпс у межах канви: rx і ry вписані окремо; для радара 4 rx = ry (те саме коло).
+  // Радар 4 — коло, як до п18.5 (байт-у-байт); ширший — горизонтальна піввісь до свого радіуса.
+  const range = s.range ?? RADAR_RANGE;
   const maxR = Math.max(1, Math.min((RADAR_RANGE + 0.5) * s.cell, cx, cy, s.cw - cx, s.ch - cy));
+  const rx = range > RADAR_RANGE ? Math.max(maxR, Math.min((range + 0.5) * s.cell, cx, s.cw - cx)) : maxR;
+  const sx = rx / maxR; // розтяг по горизонталі (1 — коло)
   if (!s.scanActive && fx < AMBIENT_MAX_EFFECTS) {
     fx++; // radar-sweep — безперервна розгортка (розвиток подієвого gscan)
     const ang = radarSweepAngle(t);
@@ -183,14 +191,26 @@ export function paintGeoAmbient(ctx: CanvasRenderingContext2D, s: AmbientGeoScen
     ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(cx, cy);
-    ctx.lineTo(cx + Math.cos(ang) * maxR, cy + Math.sin(ang) * maxR);
+    ctx.lineTo(cx + Math.cos(ang) * maxR * sx, cy + Math.sin(ang) * maxR);
     ctx.stroke();
     ctx.fillStyle = 'rgba(0,229,255,0.05)'; // слід сектора за променем (глибина розгортки)
     ctx.beginPath();
     ctx.moveTo(cx, cy);
-    ctx.arc(cx, cy, maxR, ang - Math.PI / 6, ang);
+    if (sx === 1) ctx.arc(cx, cy, maxR, ang - Math.PI / 6, ang);
+    else ctx.ellipse(cx, cy, rx, maxR, 0, ang - Math.PI / 6, ang);
     ctx.closePath();
     ctx.fill();
+  }
+  // п18.5 (ADR-0157): пульс Брами Розриву — кільце, що розходиться за 2 с (без RNG; лише під «Анімацією»)
+  if (s.gate !== undefined && fx < AMBIENT_MAX_EFFECTS) {
+    fx++;
+    const k = (t % 2000) / 2000;
+    ctx.strokeStyle = 'rgba(196,92,255,' + (0.6 * (1 - k)).toFixed(3) + ')';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(s.gate.x * s.cell + s.cell / 2, s.gate.y * s.cell + s.cell / 2, s.cell * (0.3 + 0.35 * k), 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.lineWidth = 1;
   }
   if (fx >= AMBIENT_MAX_EFFECTS) return;
   // city-flicker вимкнено (кандидат А «нічний супутник»): вогні міст

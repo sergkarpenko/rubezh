@@ -270,6 +270,11 @@ describe('п18.2: заряд у бою — «А. Сам на броні» (ADR-0
     expect(st.items?.s1.charge).toBe(false);
     expect(resolveAttack(st, 's1', 'a1', 'snap').shots).toEqual([{ hit: true, damage: 4 }]);
     expect(g.hp).toBe(16 - 6 - 4);
+    // п18.5 (ADR-0157): подія 'charge' — одна, перед пострілом, на яку пішов заряд (журнал бою)
+    const charges = st.log.filter((e) => e.type === 'charge');
+    expect(charges).toEqual([{ type: 'charge', shooterId: 's1', targetId: 'a1' }]);
+    const at = st.log.findIndex((e) => e.type === 'charge');
+    expect(st.log[at + 1]).toMatchObject({ type: 'shot', shooterId: 's1', targetId: 'a1', damage: 6 });
   });
 
   it('черга — усі кулі без броні; промах теж витрачає заряд', () => {
@@ -288,6 +293,7 @@ describe('п18.2: заряд у бою — «А. Сам на броні» (ADR-0
     const st = fight(d, seq(0, 0.99));
     resolveAttack(st, 's1', 'a1', 'snap');
     expect(st.items?.s1.charge).toBe(true);
+    expect(st.log.some((e) => e.type === 'charge')).toBe(false); // п18.5: заряд не пішов — події немає
   });
 
   it('без заряду — броня, як у п17.2; RNG той самий', () => {

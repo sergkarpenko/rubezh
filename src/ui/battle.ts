@@ -582,6 +582,7 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
           selected: false,
           overwatch: false,
           kind: u.kind, // п17.5: ряд атласа за типом
+          turret: u.turret === true, // п18.5: турель — силует кодом
         });
         continue;
       }
@@ -624,6 +625,7 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
         breath: u.id === firingId ? 0 : (deps.ambient.breath?.(at) ?? 0), // Т.132: дихання у спокої
         ring: unitRing(u.side, u.id, u.kind), // Т.129: кільце кольору бійця; п17.2: ворог — колір типу
         kind: u.kind, // п17.5 (ADR-0152): ряд атласа за типом ворога
+        turret: u.turret === true, // п18.5 (ADR-0157): турель бази — силует кодом
         flip: (facing.get(u.id) ?? native) !== native, // П14.3: дзеркало за напрямком
       });
     }
@@ -643,6 +645,7 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
         ? {
             side: activeAnim.side,
             kind: activeAnim.enemyKind, // п17.5: якір дула свого типу
+            turret: st.units.find((u) => u.id === firingId)?.turret === true, // п18.5: дуло турелі — кінчик ствола
             flip: (facing.get(firingId) ?? (activeAnim.side === 'player' ? 1 : -1)) !== (activeAnim.side === 'player' ? 1 : -1),
           }
         : undefined;
