@@ -313,9 +313,9 @@ export function createResearchPanel(deps: ResearchPanelDeps): ResearchPanel {
             const hint =
               itemId !== 'gun-module'
                 ? ' — видайте на вкладці «Загін»'
-                : party.intercept.fighters[0].gunModule
+                : party.intercept.fighters.every((f) => f.gunModule === true)
                   ? ''
-                  : ' — встановіть у панелі «Перехоплювач»';
+                  : ' — встановіть у панелі «Перехоплювачі»'; // п19.4: панель середньої колонки
             notes.push('На складі: ' + onStore + hint);
           }
           for (const n of notes) {

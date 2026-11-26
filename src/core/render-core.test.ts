@@ -625,6 +625,14 @@ describe('П14.5: хвіст перехоплення — точки з поді
     to: { x: tx, y: ty },
     minute: 30,
   });
+  // п19.4: рух з позначкою перехоплювача (два і більше — поле fighter, ADR-0161)
+  const mvf = (fx: number, fy: number, tx: number, ty: number, fighter: number): GeoEvent => ({
+    type: 'intercept_move',
+    from: { x: fx, y: fy },
+    to: { x: tx, y: ty },
+    minute: 30,
+    fighter,
+  });
 
   it('послідовні кроки → ламана [from, to…]; хвіст не-рухів після — пропускається', () => {
     const log: GeoEvent[] = [mv(0, 0, 1, 0), mv(1, 0, 2, 0), { type: 'intercept_engage', ufoId: 'u1', pos: { x: 2, y: 0 }, minute: 30 }];
@@ -642,6 +650,22 @@ describe('П14.5: хвіст перехоплення — точки з поді
       mv(1, 0, 2, 0),
     ];
     expect(geoTrailPoints(log)).toEqual([
+      { x: 1, y: 0 },
+      { x: 2, y: 0 },
+    ]);
+  });
+
+  // п19.4 (аудит PR #522): два перехоплювачі в погоні — рухи в тіку чергуються блоками за id;
+  // хвіст — лише того, чий рух останній (поле fighter), рухи іншого пропускаються, а не рвуть ламану
+  it('кілька перехоплювачів: хвіст лише того, чий рух останній', () => {
+    const log: GeoEvent[] = [mvf(0, 0, 1, 0, 1), mvf(9, 5, 9, 4, 2), mvf(1, 0, 2, 0, 1), mvf(9, 4, 9, 3, 2)];
+    expect(geoTrailPoints(log)).toEqual([
+      { x: 9, y: 5 },
+      { x: 9, y: 4 },
+      { x: 9, y: 3 },
+    ]);
+    expect(geoTrailPoints(log.slice(0, 3))).toEqual([
+      { x: 0, y: 0 },
       { x: 1, y: 0 },
       { x: 2, y: 0 },
     ]);

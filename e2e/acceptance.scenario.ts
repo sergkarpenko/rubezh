@@ -472,7 +472,8 @@ test('сценарій приймання ADR-0030: партія → місія 
     await expectIcons(page, '#status section.panel:not(.hidden) h2 svg.h-icon', 16, 2, 'y');
     await expectIcons(page, '#btn-hire svg.btn-icon', 16, 1, 'y');
     await page.locator('#status-tab-base').click();
-    await expectIcons(page, '#status section.panel:not(.hidden) h2 svg.h-icon', 16, 5, 'y'); // п18.5: + «Мета кампанії»
+    await expectIcons(page, '#status section.panel:not(.hidden) h2 svg.h-icon', 16, 3, 'y'); // п19.4: «Мета кампанії» і перехоплювачі — у #mid
+    await expectIcons(page, '#mid section.panel h2 svg.h-icon', 16, 3, 'y'); // п19.4: середня колонка — три панелі
     await expectIcons(page, '#btn-hire-scientist svg.btn-icon', 16, 1, 'y');
     // заголовок «Сенсорна сітка» з іконкою — в один рядок (рішення власника Т.128; від шрифту — запас ≈ 100 px)
     expect(
@@ -487,6 +488,43 @@ test('сценарій приймання ADR-0030: партія → місія 
     const avatars = page.locator('#roster .soldier svg.avatar');
     await expect(avatars).toHaveCount(FIGHTER_COLORS.length);
     expect(await avatars.evaluateAll((a) => a.map((s) => s.getAttribute('data-color')))).toEqual([...FIGHTER_COLORS]);
+  });
+
+  // п19.4 (ADR-0159 п. 5, 15; EARS 8): на 1366 × 768 мапа — ≈ половина ширини ліворуч, журнал під нею,
+  // середня колонка («Мета кампанії», «Регіони», «Перехоплювачі») між мапою і вкладками; на 1024 × 768 —
+  // одна права колонка (середні панелі над вкладками); на телефоні — мапа зверху, середня колонка під нею
+  await test.step('п19.4: компоновка «Мапа + дві колонки»', async () => {
+    const vp = page.viewportSize()!;
+    const geom = () =>
+      page.evaluate(() => {
+        const r = (id: string) => document.getElementById(id)!.getBoundingClientRect();
+        return {
+          map: r('geo'),
+          journal: r('journal'),
+          mid: r('mid'),
+          status: r('status'),
+          regions: document.querySelectorAll('#regions .region').length,
+        };
+      });
+    await page.setViewportSize({ width: 1366, height: 768 });
+    const g = await geom();
+    expect(g.regions, 'рядків «Регіони»').toBe(4);
+    expect(g.map.width / 1366, 'частка ширини мапи на 1366 × 768').toBeGreaterThan(0.45);
+    expect(g.map.width / 1366, 'частка ширини мапи на 1366 × 768').toBeLessThan(0.6);
+    expect(g.journal.top, 'журнал — під мапою').toBeGreaterThanOrEqual(g.map.bottom);
+    expect(g.mid.left, 'середня колонка — праворуч від мапи').toBeGreaterThanOrEqual(g.map.right);
+    expect(g.status.left, 'вкладки — праворуч від середньої колонки').toBeGreaterThanOrEqual(g.mid.right);
+    expect(Math.abs(g.mid.top - g.status.top), 'середня колонка і вкладки — від одного верху').toBeLessThanOrEqual(1);
+    await page.setViewportSize({ width: 1024, height: 768 });
+    const ipad = await geom();
+    expect(ipad.mid.left, '1024: середня колонка — над вкладками, у правій колонці').toBe(ipad.status.left);
+    expect(ipad.status.top, '1024: вкладки — під середньою колонкою').toBeGreaterThanOrEqual(ipad.mid.bottom);
+    expect(ipad.map.width, '1024: мапа — як до п19.4 (≈ 640 px)').toBeGreaterThan(600);
+    await page.setViewportSize({ width: 390, height: 844 });
+    const phone = await geom();
+    expect(phone.mid.top, '390: середня колонка — під мапою').toBeGreaterThanOrEqual(phone.map.bottom);
+    expect(phone.journal.top, '390: журнал — під середньою колонкою').toBeGreaterThanOrEqual(phone.mid.bottom);
+    await page.setViewportSize(vp);
   });
 
   // Т.31: геосцена, журнал і колонка стану — в одному екрані; сторінка не
@@ -509,7 +547,9 @@ test('сценарій приймання ADR-0030: партія → місія 
       expect(m.page, 'вкладка ' + tab + ': сторінка вища за вікно').toBeLessThanOrEqual(m.win);
       expect(m.journal, 'вкладка ' + tab + ': журнал нижче вікна').toBeLessThanOrEqual(m.win);
       expect(m.log, 'вкладка ' + tab + ': у журналі менше двох рядків').toBeGreaterThanOrEqual(40);
-      expect(m.map, 'вкладка ' + tab + ': карта нижча за половину вікна').toBeGreaterThanOrEqual(m.win / 2);
+      // п19.4 (ADR-0159 п. 5, рішення власника «А. Мапа + дві колонки»): мапа — ≈ половина ширини, тож нижча за
+      // половину вікна (на 1440 × 900 — ≈ 0,48); межа Т.31 «≥ ½ висоти» — тепер ≥ 0,45
+      expect(m.map, 'вкладка ' + tab + ': карта нижча за 0,45 вікна').toBeGreaterThanOrEqual(m.win * 0.45);
       expect(m.gap, 'вкладка ' + tab + ': порожнеча між картою і журналом').toBeLessThanOrEqual(16);
     }
     await page.locator('#btn-log-expand').click();
@@ -567,7 +607,12 @@ test('сценарій приймання ADR-0030: партія → місія 
     const workshopInView = await page.evaluate(() => {
       const col = document.querySelector<HTMLElement>('#status')!.getBoundingClientRect();
       const w = document.querySelector<HTMLElement>('#workshop')!.getBoundingClientRect();
-      return w.top >= col.top - 1 && w.bottom <= col.bottom + 1;
+      // п19.4: з рядком купівлі перехоплювача «Кузня» (≈ 950 px) вища за колонку (≈ 825 px на 1440 × 900) —
+      // у видимій частині мають бути верх панелі і перший рядок каталогу, а не вся панель
+      const first = document.querySelector<HTMLElement>('#workshop .ufo')!.getBoundingClientRect();
+      return w.height > col.height
+        ? w.top >= col.top - 1 && first.bottom <= col.bottom + 1
+        : w.top >= col.top - 1 && w.bottom <= col.bottom + 1;
     });
     expect(workshopInView, '#workshop має бути у видимій частині колонки після кроку 2').toBe(true);
     // Т.43: причина неактивної кнопки — рядком під нею (на iPad підказки title не видно)

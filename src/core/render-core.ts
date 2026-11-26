@@ -467,9 +467,12 @@ export function geoTrailPoints(log: readonly GeoEvent[], max = GEO_TRAIL_POINTS)
   const moves: { from: Vec2; to: Vec2 }[] = [];
   let i = log.length - 1;
   while (i >= 0 && log[i]!.type !== 'intercept_move') i--; // хвіст не-рухів пропускаємо
+  // п19.4 (аудит PR #522): з двома і більше перехоплювачами рухи в тіку чергуються — хвіст лише того,
+  // чий рух останній (поле fighter; з одним його немає — як до п19.4); рухи інших пропускаються
+  const who = i >= 0 ? (log[i] as { fighter?: number }).fighter : undefined;
   while (i >= 0 && log[i]!.type === 'intercept_move') {
-    const m = log[i]! as { type: 'intercept_move'; from: Vec2; to: Vec2 };
-    moves.unshift({ from: { ...m.from }, to: { ...m.to } });
+    const m = log[i]! as { type: 'intercept_move'; from: Vec2; to: Vec2; fighter?: number };
+    if (m.fighter === who) moves.unshift({ from: { ...m.from }, to: { ...m.to } });
     i--;
   }
   if (moves.length === 0) return [];

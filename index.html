@@ -91,13 +91,15 @@
         flex-wrap: wrap;
         margin-left: auto;
       }
-      /* ADR-0027: сітка «фокусна зона + колонка стану»; журнал — під фокусною */
+      /* ADR-0027: сітка «фокусна зона + колонка стану»; журнал — під фокусною.
+         п19.4 (ADR-0159 п. 5, 15; рішення власника «А. Мапа + дві колонки»): між ними — середня колонка #mid
+         («Мета кампанії», «Регіони», «Перехоплювачі»); мапа — решта ширини (≈ половина на 1366 × 768) */
       main#layout {
         display: grid;
-        grid-template-columns: minmax(0, 1fr) 320px;
+        grid-template-columns: minmax(0, 1fr) 280px 320px;
         grid-template-areas:
-          'focus status'
-          'journal status';
+          'focus mid status'
+          'journal mid status';
         gap: 16px;
         padding: 16px;
         align-items: start;
@@ -112,11 +114,19 @@
       #journal {
         grid-area: journal;
       }
-      aside#status {
+      aside#status,
+      aside#mid {
         grid-area: status;
         display: flex;
         flex-direction: column;
         gap: 16px;
+      }
+      aside#mid {
+        grid-area: mid;
+      }
+      /* п19.4: у бою середньої колонки немає (мапи теж) — її стан у топбарі й контекст-стрічці */
+      #layout.in-battle #mid {
+        display: none;
       }
       /* П12.4 (ADR-0065): вкладки статус-колонки «Загін»/«База» (Т.128: «Система» — у «Меню», ADR-0117) —
          патерн фільтрів журналу #log-tabs; панелі лишаються в DOM,
@@ -164,13 +174,47 @@
         box-shadow: 0 0 8px rgba(255, 180, 84, 0.8);
       }
       /* ADR-0027: двоколонковий каркас до ~900px (iPad Pro 1024/1366), нижче — складання */
+      /* п19.4: на телефоні мапа зверху, під нею — середня колонка, журнал і вкладки */
       @media (max-width: 899px) {
         main#layout {
           grid-template-columns: minmax(0, 1fr);
           grid-template-areas:
             'focus'
+            'mid'
             'journal'
             'status';
+        }
+      }
+      /* п19.4: обгортка #side (середня колонка + колонка стану) — без власного блоку: обидві колонки —
+         комірки сітки #layout; на вікні завширшки з iPad (900–1180 px) три колонки лишили б мапі ≈ 350–450 px —
+         там #side стає однією колонкою 320 px (середні панелі над вкладками, одна прокрутка), мапа — як до п19.4 */
+      #side {
+        display: contents;
+      }
+      @media (min-width: 900px) and (max-width: 1180px) {
+        main#layout {
+          grid-template-columns: minmax(0, 1fr) 320px;
+          grid-template-areas:
+            'focus side'
+            'journal side';
+        }
+        #side {
+          grid-area: side;
+          display: flex;
+          flex-direction: column;
+          gap: 16px;
+          min-height: 0;
+          overflow-y: auto;
+          scrollbar-width: thin;
+          scrollbar-color: #31435f transparent;
+        }
+        main#layout #side > aside {
+          flex: none;
+          min-height: auto;
+          overflow: visible;
+        }
+        #layout.in-battle #side {
+          display: none;
         }
       }
       /* Т.124: панелі — «скло»: напівпрозорий градієнт над світінням тла, розмиття і глибока тінь */
@@ -721,6 +765,71 @@
       .meta {
         color: #7d8794;
         font-size: 12px;
+      }
+      /* п19.4 (ADR-0159 п. 15): «Регіони» — рядок регіону: назва, смуга довіри, число; під ними — частка дотації */
+      .region {
+        display: grid;
+        grid-template-columns: 72px minmax(0, 1fr) 28px 54px;
+        align-items: center;
+        column-gap: 8px;
+        margin: 0 0 6px;
+      }
+      .region .rg-share {
+        text-align: right;
+        white-space: nowrap;
+      }
+      .region .rg-hangar {
+        color: #00e5ff;
+        font-size: 12px;
+      }
+      .region .rg-bar {
+        height: 6px;
+        border-radius: 3px;
+        background: #1c2432;
+        overflow: hidden;
+      }
+      .region .rg-bar i {
+        display: block;
+        height: 100%;
+      }
+      .region .rg-trust {
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+      }
+      .region.out .rg-name {
+        color: #7d8794;
+        text-decoration: line-through;
+      }
+      /* п19.4: прокрутка до вмісту панелі колонки «до верху» (scrollToWorkshop) — під липкими вкладками */
+      #status section.panel > div {
+        scroll-margin-top: 72px;
+      }
+      /* п19.4: «Перехоплювачі» — картка на кожен перехоплювач; кнопки — рядом із відступом */
+      .fighter-card {
+        margin: 6px 0;
+        padding: 8px;
+        border: 1px solid #232a36;
+        border-radius: 6px;
+      }
+      .fighter-card .fc-title {
+        font-weight: 600;
+        margin-bottom: 2px;
+      }
+      .fighter-card button {
+        margin: 4px 6px 0 0;
+      }
+      /* дистанції бою — дві в ряд у вузькій колонці (280 px) */
+      .fighter-card button.intercept-range {
+        margin: 0;
+        padding: 4px 6px;
+        font-size: 13px;
+      }
+      .fighter-card .assign-row {
+        display: flex;
+        flex-wrap: wrap;
+      }
+      #interceptor-order .order-line {
+        flex-wrap: wrap;
       }
       .soldier {
         display: flex;
@@ -1937,7 +2046,8 @@
         #ictx {
           flex: none;
         }
-        aside#status {
+        aside#status,
+        aside#mid {
           min-height: 0;
           overflow-y: auto;
           scrollbar-width: thin;
@@ -2396,51 +2506,60 @@
         </div>
         <ul id="log"></ul>
       </section>
-      <aside id="status">
-        <!-- П12.4 (ADR-0065): вкладки колонки «Загін»/«База» — контент
+      <!-- п19.4 (ADR-0159 п. 15): середня колонка геосцени — мета кампанії (з вкладки «Вузол», п18.5),
+           регіони з довірою і перехоплювачі; без вкладок, у бою схована -->
+      <div id="side">
+        <aside id="mid">
+          <section class="panel">
+            <h2 data-icon="precise">Мета кампанії</h2>
+            <div id="campaign-goal"></div>
+          </section>
+          <section class="panel">
+            <h2 data-icon="geo">Регіони</h2>
+            <div id="regions"></div>
+          </section>
+          <section class="panel">
+            <h2 data-icon="fighter">Перехоплювачі</h2>
+            <div id="fighter"></div>
+          </section>
+        </aside>
+        <aside id="status">
+          <!-- П12.4 (ADR-0065): вкладки колонки «Загін»/«База» — контент
              генерує src/ui/status-tabs.ts; панелі — атрибут data-tab: «Загін» —
              ростер/фінанси, «База» — сканери/винищувач/дослідження/цех (розподіл
              «Сканери»/«Винищувач» — рішення власника, сесія П12.4); Т.128 (ADR-0117):
              «Збереження» — вікно #save-dialog з «Меню»; іконки заголовків — data-icon (src/ui/tab-icons.ts);
              активна вкладка — localStorage поза сейвом (ADR-0026) -->
-        <div id="status-tabs"></div>
-        <!-- п18.5 (ADR-0157; рішення власника «А. Шапка + панель»): мета кампанії — перша панель «Вузла» -->
-        <section class="panel" data-tab="base">
-          <h2 data-icon="precise">Мета кампанії</h2>
-          <div id="campaign-goal"></div>
-        </section>
-        <section class="panel" data-tab="base">
-          <h2 data-icon="probe">Сенсорна сітка</h2>
-          <div id="ufos"></div>
-        </section>
-        <section class="panel" data-tab="base">
-          <h2 data-icon="fighter">Перехоплювач</h2>
-          <div id="fighter"></div>
-        </section>
-        <section class="panel" data-tab="squad">
-          <h2 data-icon="finance">Фінанси</h2>
-          <div style="margin-bottom: 8px">
-            Баланс: <b id="money-card">—</b>
-            <!-- Т.7: числа — з ядра за пресетом партії (panels.ts renderFinances; урок П9.1) -->
-            <span class="meta" id="econ-rates"></span>
-          </div>
-          <button id="btn-hire">Вербувати оперативника</button>
-        </section>
-        <!-- П11.6 (ADR-0058): панель «Дослідження» — штат вчених, слоти, каталог проєктів -->
-        <section class="panel" data-tab="base">
-          <h2 data-icon="research">Дослідження</h2>
-          <div id="research"></div>
-        </section>
-        <!-- П11.6 (ADR-0058): панель «Цех» — замовлення, черга, склад -->
-        <section class="panel" data-tab="base">
-          <h2 data-icon="forge">Кузня</h2>
-          <div id="workshop"></div>
-        </section>
-        <section class="panel" data-tab="squad">
-          <h2 data-icon="roster">Ростер загону</h2>
-          <div id="roster"></div>
-        </section>
-      </aside>
+          <div id="status-tabs"></div>
+          <section class="panel" data-tab="base">
+            <h2 data-icon="probe">Сенсорна сітка</h2>
+            <div id="ufos"></div>
+          </section>
+          <section class="panel" data-tab="squad">
+            <h2 data-icon="finance">Фінанси</h2>
+            <div style="margin-bottom: 8px">
+              Баланс: <b id="money-card">—</b>
+              <!-- Т.7: числа — з ядра за пресетом партії (panels.ts renderFinances; урок П9.1) -->
+              <span class="meta" id="econ-rates"></span>
+            </div>
+            <button id="btn-hire">Вербувати оперативника</button>
+          </section>
+          <!-- П11.6 (ADR-0058): панель «Дослідження» — штат вчених, слоти, каталог проєктів -->
+          <section class="panel" data-tab="base">
+            <h2 data-icon="research">Дослідження</h2>
+            <div id="research"></div>
+          </section>
+          <!-- П11.6 (ADR-0058): панель «Цех» — замовлення, черга, склад -->
+          <section class="panel" data-tab="base">
+            <h2 data-icon="forge">Кузня</h2>
+            <div id="workshop"></div>
+          </section>
+          <section class="panel" data-tab="squad">
+            <h2 data-icon="roster">Ростер загону</h2>
+            <div id="roster"></div>
+          </section>
+        </aside>
+      </div>
     </main>
     <script type="module" src="/src/main.ts"></script>
     <section class="panel hidden" id="campaign-victory">

@@ -6,20 +6,25 @@
 // логіка ядра — виклики src/core, DOM — через хелпер el (src/ui/dom.ts).
 
 import { gateKeyDone, gateOpen } from '../core/assault';
-import { TICK_MINUTES, WORLD_W, detectedUfos, geoClock, geoDay, missionTargets, type Ufo } from '../core/geo';
+import { TICK_MINUTES, WORLD_W, chebyshevWrap, detectedUfos, geoClock, geoDay, missionTargets, type Ufo } from '../core/geo';
 import {
   FIGHTER_MAX_HP,
   FIGHTER_REPAIR_COST,
   GUN_MODULE_DAMAGE,
   RANGE_PROFILES,
+  assignFighter,
+  baseWhere,
+  hangarPos,
   fighterInBattle,
   interceptRound,
   startIntercept,
   repairRisksBankruptcy,
   startRepair,
+  type Fighter,
   type InterceptChoice,
 } from '../core/intercept';
-import { totalTrust } from '../core/regions';
+import { REGION_IDS, REGION_NAMES, totalTrust } from '../core/regions';
+import { drawRegionsLayer, renderRegions } from './regions-panel';
 import { dailyAllowance, hirePrice, missionBonus } from '../core/economy';
 import { radarRange } from '../core/research';
 import type { Vec2 } from '../core/combat';
@@ -95,9 +100,50 @@ export function readyToIssue(party: Party): number {
 // ще не встановлено, перехоплювач у вузлі «Рубіж» (ті самі умови, що в ядрі
 // installGunModule і в активній кнопці «Встановити модуль»). Спільна умова
 // сигналу вкладки «Вузол» (nodeActions) і поради «Наступний крок».
+// п19.4: перехоплювачів кілька — перший без модуля на базі (його кнопку «Встановити» показує порада).
+export function gunModuleFighter(party: Party): Fighter | null {
+  if (party.workshop.store['gun-module'] <= 0) return null;
+  return party.intercept.fighters.find((f) => !f.gunModule && f.status === 'на базі') ?? null;
+}
 export function gunModuleReady(party: Party): boolean {
-  const f = party.intercept.fighters[0];
-  return !f.gunModule && party.workshop.store['gun-module'] > 0 && f.status === 'на базі';
+  return gunModuleFighter(party) !== null;
+}
+
+// п19.4: id кнопок картки перехоплювача — у першого (id 1) без суфікса (як до п19.4: порада
+// «Наступний крок», тести), в інших — «-<id>».
+export function fighterBtnId(base: string, f: Pick<Fighter, 'id'>): string {
+  return f.id === 1 ? base : base + '-' + f.id;
+}
+
+// п19.4: боєготовий перехоплювач — на базі з повним HP.
+export function fighterReady(f: Fighter): boolean {
+  return f.status === 'на базі' && f.hp === FIGHTER_MAX_HP;
+}
+
+// п19.4 (кнопка «Перехопити» в «Сенсорній сітці»): найближчий до зонда боєготовий перехоплювач
+// (відстань від ангара за Чебишевим з замиканням по X; рівні — менший id); немає — null.
+export function nearestReady(party: Party, u: Ufo): Fighter | null {
+  let best: Fighter | null = null;
+  let bestD = Infinity;
+  for (const f of party.intercept.fighters) {
+    if (!fighterReady(f)) continue;
+    const d = chebyshevWrap(hangarPos(f.region, party.geo), u.pos);
+    if (d < bestD) {
+      best = f;
+      bestD = d;
+    }
+  }
+  return best;
+}
+
+// п19.4: перехоплювач, що веде погоню чи бій за зондом (на один зонд — один, ADR-0161).
+function chaserOf(party: Party, ufoId: string): Fighter | null {
+  return party.intercept.fighters.find((f) => (f.status === 'погоня' || f.status === 'бій') && f.targetId === ufoId) ?? null;
+}
+
+// п19.4: перехоплювач для контекст-стрічки — той, що в бою, інакше перший у погоні.
+export function activeFighter(party: Party): Fighter | null {
+  return fighterInBattle(party.intercept) ?? party.intercept.fighters.find((f) => f.status === 'погоня') ?? null;
 }
 
 export function inAirCombat(party: Party): boolean {
@@ -135,14 +181,16 @@ export interface Panels {
   renderFinances(): void;
   renderRoster(): void;
   renderInterceptCtx(): void;
+  renderRegions(): void; // п19.4: панель «Регіони» середньої колонки
   renderCampaign(): void; // П8.3: чипи кампанії + екран перемоги; п18.5 — загроза, мета, поразка
   nodeActions(): number; // Т.7: дії, що чекають гравця на вкладці «Вузол» (сигнал вкладки)
 }
 
 // П7.4 (ADR-0032): «Перехопити» — лише для зонда в повітрі, коли перехоплювач
 // на базі. Спільна умова кнопки (renderUfos) і сигналу вкладки (nodeActions, Т.7).
+// п19.4: хоч один перехоплювач на базі, і зонд ще ніхто не переслідує.
 function canIntercept(party: Party, u: Ufo): boolean {
-  return u.status === 'летить' && party.intercept.fighters[0].status === 'на базі';
+  return u.status === 'летить' && chaserOf(party, u.id) === null && party.intercept.fighters.some((f) => f.status === 'на базі');
 }
 
 export function createPanels(deps: PanelsDeps): Panels {
@@ -157,6 +205,8 @@ export function createPanels(deps: PanelsDeps): Panels {
     // П12.7 (ADR-0064): терен геосцени — двотоновий синьо-чорний з неоновою
     // сіткою (ціан «Рубіжу»); кадр малюється з нуля (урок П6.6).
     drawGeoTerrain(ctx, cv.width, cv.height, GCELL);
+    // п19.4 (ADR-0159 п. 15): межі регіонів пунктиром і підписи з довірою — під радаром і спрайтами
+    drawRegionsLayer(ctx, party, GCELL);
 
     const b = party.geo.base;
     ctx.setLineDash([5, 4]);
@@ -189,9 +239,12 @@ export function createPanels(deps: PanelsDeps): Panels {
     }
     // П7.5 (ADR-0032): маркер винищувача на геосцені — лише поза базою (на базі він у
     // спрайті бази; погоня/бій — дельта-крило поруч із позначкою НЛО).
-    const fgt = party.intercept.fighters[0];
-    if (fgt.status === 'погоня' || fgt.status === 'бій') {
-      drawFighterSprite(ctx, { cx: fgt.pos.x * GCELL + GCELL / 2, cy: fgt.pos.y * GCELL + GCELL / 2 });
+    // п19.4: кожен перехоплювач; на базі в ангарі іншого регіону, ніж вузол, — крило на клітинці ангара
+    // (позиція — з ангара, а не pos: до першого вильоту pos може бути (0, 0), кандидат 196 г).
+    for (const fgt of party.intercept.fighters) {
+      const at =
+        fgt.status === 'погоня' || fgt.status === 'бій' ? fgt.pos : fgt.region !== 'north' ? hangarPos(fgt.region, party.geo) : null;
+      if (at !== null) drawFighterSprite(ctx, { cx: at.x * GCELL + GCELL / 2, cy: at.y * GCELL + GCELL / 2 });
     }
 
     // П6.9 (ADR-0029): анімаційний шар геосцени — пульс радара поверх статичного
@@ -227,8 +280,8 @@ export function createPanels(deps: PanelsDeps): Panels {
     if (deps.inBattle() || deps.isGameOver()) return 0;
     const party = deps.getParty();
     const targets = new Set(missionTargets(party.geo).map((u) => u.id));
-    let n = inAirCombat(party) ? 1 : 0;
-    if (gunModuleReady(party)) n++; // Т.80: модуль на складі чекає встановлення
+    // п19.4: дистанції бою і модуль — у середній колонці «Перехоплювачі» (видна без вкладки) — не рахуються
+    let n = 0;
     if (gateOpen(party) && readySoldiers(party.roster).length > 0) n++; // п18.4: брама чекає атаки
     for (const u of detectedUfos(party.geo)) {
       if (canIntercept(party, u)) n++;
@@ -279,20 +332,27 @@ export function createPanels(deps: PanelsDeps): Panels {
         const ib = document.createElement('button');
         ib.className = 'intercept';
         ib.textContent = '✦ Перехопити';
-        const readyFighter = party.intercept.fighters[0].hp === FIGHTER_MAX_HP;
-        ib.disabled = deps.inBattle() || deps.isGameOver() || !readyFighter;
-        ib.title = !readyFighter ? 'Перехоплювач пошкоджений — спочатку ремонт' : 'Підняти перехоплювач на перехоплення';
+        // п19.4: піднімається найближчий боєготовий; з двома і більше — номер і ангар у підказці
+        const pick = nearestReady(party, u);
+        const many = party.intercept.fighters.length > 1;
+        ib.disabled = deps.inBattle() || deps.isGameOver() || pick === null;
+        ib.title =
+          pick === null
+            ? 'Перехоплювач пошкоджений — спочатку ремонт'
+            : many
+              ? 'Підняти перехоплювач ' + pick.id + ' з ангара «' + REGION_NAMES[pick.region] + '» на перехоплення'
+              : 'Підняти перехоплювач на перехоплення';
         ib.onclick = () => {
-          if (deps.inBattle()) return;
+          if (deps.inBattle() || pick === null) return;
           try {
-            startIntercept(party.intercept, party.geo, u.id);
+            startIntercept(party.intercept, party.geo, u.id, many ? pick.id : undefined);
           } catch (e) {
             deps.journal('✗ ' + (e as Error).message, 'lose');
           }
           deps.renderAll();
         };
         div.appendChild(ib);
-        setWhy(ib, !readyFighter ? ib.title : null); // Т.43
+        setWhy(ib, pick === null ? ib.title : null); // Т.43
       }
       if (targets.has(u.id)) {
         const btn = document.createElement('button');
@@ -360,27 +420,67 @@ export function createPanels(deps: PanelsDeps): Panels {
   // під час погоні/бою (на базі/ремонті джерело правди — панель «Винищувач» у колонці стану).
   function renderInterceptCtx(): void {
     const party = deps.getParty();
-    const f = party.intercept.fighters[0];
-    const active = f.status === 'погоня' || f.status === 'бій';
-    el('ictx').classList.toggle('hidden', !active);
-    if (!active) return;
+    const f = activeFighter(party); // п19.4: той, хто в бою, інакше перший у погоні
+    el('ictx').classList.toggle('hidden', f === null);
+    if (f === null) return;
     el('ictx-target').textContent = f.targetId ?? '—';
     el('ictx-status').textContent = f.status;
     el('ictx-round').textContent = f.status === 'бій' ? String(party.intercept.round) : '—';
-    el('ictx-fighter').textContent = 'HP ' + f.hp + '/' + FIGHTER_MAX_HP;
-    const ufo = party.geo.ufos.find((u) => u.id === party.intercept.activeUfoId);
+    el('ictx-fighter').textContent = (party.intercept.fighters.length > 1 ? f.id + ' · ' : '') + 'HP ' + f.hp + '/' + FIGHTER_MAX_HP;
+    const ufo = f.status === 'бій' ? party.geo.ufos.find((u) => u.id === party.intercept.activeUfoId) : undefined;
     el('ictx-ufo').textContent = ufo ? 'HP ' + party.intercept.ufoHp[ufo.id] : '—';
   }
 
-  // П7.4 (ADR-0032): панель винищувача — статус/HP у колонці стану; кнопки дій залежно
-  // від стану: «Перехопити» (боєготовий + виявлений НЛО в повітрі), «Ремонт (50)»
+  // п19.4 (ADR-0159 п. 15): перехоплювачі, що показують кнопки регіонів «Призначити» (розгорнуто кліком).
+  const assignOpen = new Set<number>();
+
+  // П7.4 (ADR-0032): панель винищувача — статус/HP; кнопки дій залежно від стану: «Ремонт (50)»
   // (пошкоджений на базі), дистанції бою (стан «бій» — рішення гравця кожен раунд).
+  // п19.4 (ADR-0159 п. 15; рішення власника Т.207): панель «Перехоплювачі» середньої колонки —
+  // картка на кожен перехоплювач: ангар, стан, «Погоня» на виявлені зонди, дистанції бою, ремонт,
+  // модуль і «Призначити» (лише на базі). Рядок останнього переривання — над картками, як і досі.
   function renderFighter(): void {
     const party = deps.getParty();
     const box = el('fighter');
     box.innerHTML = '';
-    const f = party.intercept.fighters[0];
     renderInterceptCtx(); // П7.5: контекст-стрічка повітряного бою у фокусній зоні
+    // Т.43 (знахідка 15): перерване перехоплення лишається рядком на панелі до
+    // наступного старту — той самий текст, що в журналі; стан береться з журналу геосцени.
+    const log = party.geo.log;
+    let i = log.length - 1;
+    while (i >= 0 && !['intercept_start', 'intercept_aborted', 'intercept_break_off'].includes(log[i].type)) i--;
+    const last = log[i];
+    // Не показуємо пошкодження, яке вже відремонтовано (аудит PR #340). Т.51: для причин ufo_landed/ufo_lost
+    // рядок показуємо лише поки зонд із події ще в geo.ufos. п19.4: «відремонтовано» — у перехоплювача з події.
+    const owner =
+      last !== undefined && 'fighter' in last && last.fighter !== undefined
+        ? party.intercept.fighters.find((f) => f.id === last.fighter)
+        : party.intercept.fighters[0];
+    const stale =
+      last?.type === 'intercept_aborted' && last.reason === 'fighter_damaged' && (owner?.hp ?? FIGHTER_MAX_HP) === FIGHTER_MAX_HP;
+    const probeGone =
+      last?.type === 'intercept_aborted' &&
+      (last.reason === 'ufo_landed' || last.reason === 'ufo_lost') &&
+      !party.geo.ufos.some((u) => u.id === last.ufoId);
+    if (last?.type === 'intercept_aborted' && !stale && !probeGone) {
+      const note = document.createElement('div');
+      note.id = 'fighter-last';
+      note.className = 'meta';
+      note.textContent = geoEventText(last, new Set())?.text ?? '';
+      box.appendChild(note);
+    }
+    for (const f of party.intercept.fighters) box.appendChild(fighterCard(party, f));
+  }
+
+  function fighterCard(party: Party, f: Fighter): HTMLElement {
+    const many = party.intercept.fighters.length > 1;
+    const card = document.createElement('div');
+    card.className = 'fighter-card';
+    card.id = 'fighter-card-' + f.id;
+    const title = document.createElement('div');
+    title.className = 'fc-title';
+    title.textContent = (many ? 'Перехоплювач ' + f.id + ' · ' : '') + 'ангар «' + REGION_NAMES[f.region] + '»';
+    card.appendChild(title);
     const statusText =
       f.status === 'ремонт'
         ? 'ремонт: ' + ticksText(f.repairTicksLeft ?? 0)
@@ -388,7 +488,9 @@ export function createPanels(deps: PanelsDeps): Panels {
           ? f.hp < FIGHTER_MAX_HP
             ? 'на базі · пошкоджений'
             : 'боєготовий'
-          : f.status;
+          : f.status === 'погоня'
+            ? 'погоня: ' + (f.targetId ?? '?')
+            : f.status;
     const head = document.createElement('div');
     head.className = 'meta';
     head.style.marginBottom = '4px';
@@ -402,99 +504,117 @@ export function createPanels(deps: PanelsDeps): Panels {
       '/' +
       FIGHTER_MAX_HP +
       '</span>';
-    box.appendChild(head);
-    // Т.43 (знахідка 15): перерване перехоплення лишається рядком на панелі до
-    // наступного старту — той самий текст, що в журналі; стан береться з журналу геосцени.
-    const log = party.geo.log;
-    let i = log.length - 1;
-    while (i >= 0 && !['intercept_start', 'intercept_aborted', 'intercept_break_off'].includes(log[i].type)) i--;
-    const last = log[i];
-    // Не показуємо пошкодження, яке вже відремонтовано (аудит PR #340). Приземлення зонда
-    // під час погоні після Т.49 має власний текст журналу — рядок показуємо, як і решту причин; виняток — Т.51: для причин ufo_landed/ufo_lost рядок показуємо лише поки зонд із події ще в geo.ufos (див. probeGone нижче).
-    const stale = last?.type === 'intercept_aborted' && last.reason === 'fighter_damaged' && f.hp === FIGHTER_MAX_HP;
-    // Т.51: зонд останньої події вже не в geo.ufos (відлетів після приземлення, зник із радара або місію на ньому виграно) — рядок не показувати
-    const probeGone =
-      last?.type === 'intercept_aborted' &&
-      (last.reason === 'ufo_landed' || last.reason === 'ufo_lost') &&
-      !party.geo.ufos.some((u) => u.id === last.ufoId);
-    if (last?.type === 'intercept_aborted' && !stale && !probeGone) {
-      const note = document.createElement('div');
-      note.id = 'fighter-last';
-      note.className = 'meta';
-      note.textContent = geoEventText(last, new Set())?.text ?? '';
-      box.appendChild(note);
-    }
-    if (f.status === 'бій') {
-      const ufo = party.geo.ufos.find((u) => u.id === party.intercept.activeUfoId);
-      const ctx = document.createElement('div');
-      ctx.className = 'meta';
-      ctx.style.marginBottom = '4px';
-      ctx.textContent =
-        'Бій з ' + (ufo ? ufo.id : '?') + ' · раунд ' + party.intercept.round + ' · зонд HP ' + (ufo ? party.intercept.ufoHp[ufo.id] : '?');
-      box.appendChild(ctx);
-      const row = document.createElement('div');
-      row.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap;margin-bottom:4px';
-      for (const c of ['далека', 'середня', 'впритул', 'відступ'] as const) {
-        const b = document.createElement('button');
-        b.className = 'intercept-range';
-        b.dataset.choice = c;
-        b.textContent = c + (c !== 'відступ' ? ' (~' + Math.round(RANGE_PROFILES[c].fighterHitChance * 100) + '%)' : '');
-        b.disabled = deps.inBattle();
-        b.onclick = () => {
-          try {
-            interceptRound(party.intercept, party.geo, c as InterceptChoice, party.econ, party.campaign.preset, party.roster);
-          } catch (e) {
-            deps.journal('✗ ' + (e as Error).message, 'lose');
-          }
-          deps.renderAll();
-        };
-        row.appendChild(b);
-      }
-      box.appendChild(row);
-    }
-    if (f.status === 'на базі' && f.hp < FIGHTER_MAX_HP) {
+    card.appendChild(head);
+    if (f.status === 'бій') renderRanges(party, card);
+    if (fighterReady(f)) renderChase(party, f, card);
+    if (f.status === 'на базі' && f.hp < FIGHTER_MAX_HP) renderRepair(party, f, card);
+    renderGunModule(party, f, card);
+    if (f.status === 'на базі') renderAssign(party, f, card);
+    return card;
+  }
+
+  // П7.4: дистанції повітряного бою — у картці того, хто в бою (бій одночасно — один, ADR-0161).
+  function renderRanges(party: Party, box: HTMLElement): void {
+    const ufo = party.geo.ufos.find((u) => u.id === party.intercept.activeUfoId);
+    const ctx = document.createElement('div');
+    ctx.className = 'meta';
+    ctx.style.marginBottom = '4px';
+    ctx.textContent =
+      'Бій з ' + (ufo ? ufo.id : '?') + ' · раунд ' + party.intercept.round + ' · зонд HP ' + (ufo ? party.intercept.ufoHp[ufo.id] : '?');
+    box.appendChild(ctx);
+    const row = document.createElement('div');
+    row.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:4px'; // п19.4: дві в ряд
+    for (const c of ['далека', 'середня', 'впритул', 'відступ'] as const) {
       const b = document.createElement('button');
-      b.id = 'btn-repair';
-      b.textContent = 'Ремонт (' + FIGHTER_REPAIR_COST + ')';
-      b.disabled = deps.isGameOver() || party.econ.money < FIGHTER_REPAIR_COST;
-      b.title = b.disabled
-        ? 'Недостатньо кредитів (ціна ремонту ' + FIGHTER_REPAIR_COST + ')'
-        : 'Повний HP після ремонту (−' + FIGHTER_REPAIR_COST + ')';
+      b.className = 'intercept-range';
+      b.dataset.choice = c;
+      b.textContent = c + (c !== 'відступ' ? ' (~' + Math.round(RANGE_PROFILES[c].fighterHitChance * 100) + '%)' : '');
+      b.disabled = deps.inBattle();
       b.onclick = () => {
         try {
-          startRepair(party.intercept, party.geo, party.econ);
+          interceptRound(party.intercept, party.geo, c as InterceptChoice, party.econ, party.campaign.preset, party.roster);
         } catch (e) {
-          deps.journal('✗ ' + (e as Error).message, 'lose', 'econ');
+          deps.journal('✗ ' + (e as Error).message, 'lose');
+        }
+        deps.renderAll();
+      };
+      row.appendChild(b);
+    }
+    box.appendChild(row);
+  }
+
+  // п19.4: «Погоня» — боєготовий перехоплювач на виявлений зонд у повітрі, який ще ніхто не переслідує.
+  function renderChase(party: Party, f: Fighter, box: HTMLElement): void {
+    const many = party.intercept.fighters.length > 1;
+    for (const u of detectedUfos(party.geo)) {
+      if (u.status !== 'летить' || chaserOf(party, u.id) !== null) continue;
+      const b = document.createElement('button');
+      b.className = 'chase';
+      b.id = 'btn-chase-' + f.id + '-' + u.id;
+      b.textContent = '✦ Погоня: ' + u.kind + ' ' + u.id;
+      b.disabled = deps.inBattle() || deps.isGameOver();
+      b.title =
+        'Підняти перехоплювач' +
+        (many ? ' ' + f.id : '') +
+        ' з ангара «' +
+        REGION_NAMES[f.region] +
+        '» — до зонда ' +
+        chebyshevWrap(hangarPos(f.region, party.geo), u.pos) +
+        ' кл.';
+      b.onclick = () => {
+        if (deps.inBattle()) return;
+        try {
+          startIntercept(party.intercept, party.geo, u.id, many ? f.id : undefined);
+        } catch (e) {
+          deps.journal('✗ ' + (e as Error).message, 'lose');
         }
         deps.renderAll();
       };
       box.appendChild(b);
-      setWhy(b, party.econ.money < FIGHTER_REPAIR_COST ? b.title : null); // Т.43
-      // Т.26 (ADR-0090): авторемонт не почався, бо оплата доведе до банкрутства —
-      // рядок-попередження; ручна оплата лишається в один клік (як Т.24 для місії).
-      const preset = party.campaign.preset;
-      if (!b.disabled && repairRisksBankruptcy(party.econ, party.roster, preset)) {
-        const warn = document.createElement('div');
-        warn.className = 'mission-warn';
-        warn.id = 'repair-warn';
-        warn.textContent =
-          '⚠ Ремонт не почався сам: боєготових немає, а після ремонту не лишиться на вербування (' +
-          party.econ.money +
-          ' з ' +
-          (FIGHTER_REPAIR_COST + hirePrice(preset)) +
-          ').';
-        box.appendChild(warn);
-      }
     }
-    renderGunModule(box);
+  }
+
+  function renderRepair(party: Party, f: Fighter, box: HTMLElement): void {
+    const many = party.intercept.fighters.length > 1;
+    const b = document.createElement('button');
+    b.id = fighterBtnId('btn-repair', f);
+    b.textContent = 'Ремонт (' + FIGHTER_REPAIR_COST + ')';
+    b.disabled = deps.isGameOver() || party.econ.money < FIGHTER_REPAIR_COST;
+    b.title = b.disabled
+      ? 'Недостатньо кредитів (ціна ремонту ' + FIGHTER_REPAIR_COST + ')'
+      : 'Повний HP після ремонту (−' + FIGHTER_REPAIR_COST + ')';
+    b.onclick = () => {
+      try {
+        startRepair(party.intercept, party.geo, party.econ, many ? f.id : undefined);
+      } catch (e) {
+        deps.journal('✗ ' + (e as Error).message, 'lose', 'econ');
+      }
+      deps.renderAll();
+    };
+    box.appendChild(b);
+    setWhy(b, party.econ.money < FIGHTER_REPAIR_COST ? b.title : null); // Т.43
+    // Т.26 (ADR-0090): авторемонт не почався, бо оплата доведе до банкрутства —
+    // рядок-попередження; ручна оплата лишається в один клік (як Т.24 для місії).
+    const preset = party.campaign.preset;
+    if (!b.disabled && repairRisksBankruptcy(party.econ, party.roster, preset)) {
+      const warn = document.createElement('div');
+      warn.className = 'mission-warn';
+      warn.id = fighterBtnId('repair-warn', f);
+      warn.textContent =
+        '⚠ Ремонт не почався сам: боєготових немає, а після ремонту не лишиться на вербування (' +
+        party.econ.money +
+        ' з ' +
+        (FIGHTER_REPAIR_COST + hirePrice(preset)) +
+        ').';
+      box.appendChild(warn);
+    }
   }
 
   // Т.78 (кандидат 21, рішення власника 19.11.2026): гарматний модуль вручну —
-  // встановити зі складу і зняти назад, безкоштовно й одразу; лише у вузлі
-  // «Рубіж» (статус «на базі», правило ядра installGunModule/removeGunModule).
-  function renderGunModule(box: HTMLElement): void {
-    const party = deps.getParty();
-    const f = party.intercept.fighters[0];
+  // встановити зі складу і зняти назад, безкоштовно й одразу; лише на базі
+  // (статус «на базі», правило ядра installGunModule/removeGunModule). п19.4: на кожен перехоплювач.
+  function renderGunModule(party: Party, f: Fighter, box: HTMLElement): void {
+    const many = party.intercept.fighters.length > 1;
     const onStore = party.workshop.store['gun-module'];
     if (!f.gunModule && onStore <= 0) return;
     const atBase = f.status === 'на базі';
@@ -504,23 +624,23 @@ export function createPanels(deps: PanelsDeps): Panels {
         ? 'Під час бою недоступно'
         : atBase
           ? null
-          : 'Лише у вузлі «Рубіж»: перехоплювач зараз — ' + f.status;
+          : 'Лише ' + baseWhere(f) + ': перехоплювач зараз — ' + f.status;
     if (f.gunModule) {
       const note = document.createElement('div');
-      note.id = 'gun-module-state';
+      note.id = fighterBtnId('gun-module-state', f);
       note.className = 'meta';
       note.textContent = 'Гарматний модуль: встановлено';
       box.appendChild(note);
     }
     const b = document.createElement('button');
-    b.id = f.gunModule ? 'btn-gun-remove' : 'btn-gun-install';
+    b.id = fighterBtnId(f.gunModule ? 'btn-gun-remove' : 'btn-gun-install', f);
     b.textContent = f.gunModule ? 'Зняти модуль' : 'Встановити модуль (+' + GUN_MODULE_DAMAGE + ' пошк.)';
     b.disabled = why !== null;
     b.title = why ?? (f.gunModule ? 'Модуль повертається на склад' : gunModuleEffect() + ' · зі складу: ' + onStore);
     b.onclick = () => {
       try {
-        if (f.gunModule) removeGunModule(party.workshop, party.intercept);
-        else installGunModule(party.workshop, party.intercept);
+        if (f.gunModule) removeGunModule(party.workshop, party.intercept, many ? f.id : undefined);
+        else installGunModule(party.workshop, party.intercept, many ? f.id : undefined);
       } catch (e) {
         deps.journal('✗ ' + (e as Error).message, 'lose', 'base');
       }
@@ -528,6 +648,46 @@ export function createPanels(deps: PanelsDeps): Panels {
     };
     box.appendChild(b);
     setWhy(b, why);
+  }
+
+  // п19.4 (ADR-0161; рішення власника п19.3 «А. Кілька в одному»): «Призначити» — розгортає кнопки
+  // інших регіонів (будь-який, і той, що вийшов); клік — миттєве перебазування (assignFighter).
+  function renderAssign(party: Party, f: Fighter, box: HTMLElement): void {
+    const many = party.intercept.fighters.length > 1;
+    const open = assignOpen.has(f.id);
+    const b = document.createElement('button');
+    b.id = 'btn-assign-' + f.id;
+    b.className = 'assign';
+    b.textContent = '⇄ Призначити';
+    b.setAttribute('aria-expanded', String(open));
+    b.disabled = deps.inBattle() || deps.isGameOver();
+    b.title = 'Перебазувати перехоплювач' + (many ? ' ' + f.id : '') + ' в ангар іншого регіону — одразу і безкоштовно';
+    b.onclick = () => {
+      if (open) assignOpen.delete(f.id);
+      else assignOpen.add(f.id);
+      deps.renderAll();
+    };
+    box.appendChild(b);
+    if (!open || b.disabled) return;
+    const row = document.createElement('div');
+    row.className = 'assign-row';
+    for (const r of REGION_IDS) {
+      if (r === f.region) continue;
+      const rb = document.createElement('button');
+      rb.id = 'btn-assign-' + f.id + '-' + r;
+      rb.textContent = '→ ' + REGION_NAMES[r] + (party.campaign.regions[r].out ? ' (вийшов)' : '');
+      rb.onclick = () => {
+        try {
+          assignFighter(party.intercept, party.geo, f.id, r);
+        } catch (e) {
+          deps.journal('✗ ' + (e as Error).message, 'lose', 'base');
+        }
+        assignOpen.delete(f.id);
+        deps.renderAll();
+      };
+      row.appendChild(rb);
+    }
+    box.appendChild(row);
   }
 
   function renderRoster(): void {
@@ -646,6 +806,7 @@ export function createPanels(deps: PanelsDeps): Panels {
     renderFinances,
     renderRoster,
     renderInterceptCtx,
+    renderRegions: () => renderRegions(deps.getParty()),
     renderCampaign,
     nodeActions,
   };

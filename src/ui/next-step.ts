@@ -19,7 +19,7 @@ import { FIGHTER_MAX_HP, FIGHTER_REPAIR_COST } from '../core/intercept';
 import type { Party } from '../core/save';
 import { isBankrupt, readySoldiers } from '../core/squad';
 import { ITEM_IDS, SoldierItemIdOf, WORKSHOP_CATALOG, itemUnlocked, type ItemId } from '../core/workshop';
-import { EQUIP_ITEMS, gunModuleReady, inAirCombat, readyToIssue } from './panels';
+import { EQUIP_ITEMS, fighterBtnId, fighterReady, gunModuleFighter, inAirCombat, readyToIssue } from './panels';
 import type { StatusTabId } from './status-tabs';
 
 export const NEXT_STEP = {
@@ -63,7 +63,8 @@ function canOrderNew(party: Party, id: ItemId): boolean {
   if (!itemUnlocked(party.research, id)) return false;
   if (w.store[id] > 0 || w.queue.some((o) => o.id === id)) return false;
   if (id === 'gun-module') {
-    if (party.intercept.fighters[0].gunModule) return false;
+    // п19.4: модуль «є», коли він уже на кожному перехоплювачі (новому перехоплювачу — новий модуль)
+    if (party.intercept.fighters.every((f) => f.gunModule === true)) return false;
   } else if (party.roster.soldiers.some((s) => w.equipped[s.id]?.[SoldierItemIdOf(id)] === true)) return false;
   return party.econ.money >= sciencePrice(WORKSHOP_CATALOG[id].cost, party.campaign.preset);
 }
@@ -126,7 +127,7 @@ export function nextStep(party: Party, ctx: NextStepContext): NextStep | null {
   if (ctx.inBattle || ctx.gameOver || inAirCombat(party) || party.campaign.status !== 'триває') return null;
   if (isBankrupt(party.econ, party.roster, party.campaign.preset)) return null;
   const ready = readySoldiers(party.roster).length;
-  const fighter = party.intercept.fighters[0];
+  const fighters = party.intercept.fighters;
   const targets = missionTargets(party.geo);
   if (ready > 0) {
     const landed = targets.filter((u) => u.status === 'приземлився');
@@ -138,19 +139,23 @@ export function nextStep(party: Party, ctx: NextStepContext): NextStep | null {
     const shot = targets.find((u) => u.status === 'збитий');
     if (shot !== undefined) return { text: NEXT_STEP.shotDown, target: mission(shot.id) };
   }
-  const flying = detectedUfos(party.geo).some((u) => u.status === 'летить');
-  if (flying && fighter.status === 'на базі' && fighter.hp === FIGHTER_MAX_HP)
-    return { text: NEXT_STEP.inAir, target: { tab: 'base', selector: '#ufos button.intercept' } };
+  // п19.4: зонд у повітрі, якого ще ніхто не переслідує, і хоч один боєготовий перехоплювач
+  const chased = new Set(fighters.filter((f) => f.status === 'погоня' || f.status === 'бій').map((f) => f.targetId));
+  const flying = detectedUfos(party.geo).some((u) => u.status === 'летить' && !chased.has(u.id));
+  if (flying && fighters.some(fighterReady)) return { text: NEXT_STEP.inAir, target: { tab: 'base', selector: '#ufos button.intercept' } };
   if (ready === 0) return { text: NEXT_STEP.noReady, target: { tab: 'squad', id: 'btn-hire' } };
   const toOrder = ITEM_IDS.filter((id) => canOrderNew(party, id));
   const fresh = toOrder.find((id) => !CONSUMABLES.includes(id) || !everProduced(party, id));
   if (fresh !== undefined) return { text: NEXT_STEP.order, target: order(fresh) };
   if (readyToIssue(party) > 0) return { text: NEXT_STEP.issue, target: issueTarget(party) };
   // Т.80: модуль на складі — одразу після «видайте» (рішення власника 20.11.2026)
-  if (gunModuleReady(party)) return { text: NEXT_STEP.install, target: { tab: 'base', id: 'btn-gun-install' } };
+  // п19.4: кнопки перехоплювачів — у середній колонці (без вкладки): ціль — картка першого, кому треба
+  const gun = gunModuleFighter(party);
+  if (gun !== null) return { text: NEXT_STEP.install, target: { tab: null, id: fighterBtnId('btn-gun-install', gun) } };
   // ремонт радимо, лише коли кнопка «Ремонт» активна (кредитів вистачає) — аудит PR #339
-  if (fighter.status === 'на базі' && fighter.hp < FIGHTER_MAX_HP && party.econ.money >= FIGHTER_REPAIR_COST)
-    return { text: NEXT_STEP.repair, target: { tab: 'base', id: 'btn-repair' } };
+  const damaged = fighters.find((f) => f.status === 'на базі' && f.hp < FIGHTER_MAX_HP);
+  if (damaged !== undefined && party.econ.money >= FIGHTER_REPAIR_COST)
+    return { text: NEXT_STEP.repair, target: { tab: null, id: fighterBtnId('btn-repair', damaged) } };
   // Т.79: витратник, що вже був і закінчився, — нижче за «видайте» і «ремонт»
   if (toOrder.length > 0) return { text: NEXT_STEP.refill, target: order(toOrder[0]) };
   return { text: NEXT_STEP.time, target: { tab: null, id: 'btn-event' } };

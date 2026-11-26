@@ -291,14 +291,15 @@ describe('Т.7: nodeActions — дії, що чекають на вкладці 
     expect(f.panels.nodeActions()).toBe(missionTargets(f.party.geo).length); // перехоплювач у погоні — кнопки «Перехопити» нема
   });
 
-  it('приземлений зонд — місія рахується; повітряний бій — +1 (рішення про дистанцію)', () => {
+  // п19.4: дистанції повітряного бою — у середній колонці «Перехоплювачі» (без вкладки), сигнал «Вузла» їх не рахує
+  it('приземлений зонд — місія рахується; повітряний бій — не рахується (середня колонка, п19.4)', () => {
     const f = makeFixture();
     expect(tickUntil(f.party, () => missionTargets(f.party.geo).length > 0)).toBe(true);
     const base = f.panels.nodeActions();
     expect(base).toBeGreaterThanOrEqual(missionTargets(f.party.geo).length);
     f.party.intercept.fighters[0].status = 'бій';
     const flying = detectedUfos(f.party.geo).filter((u) => u.status === 'летить').length;
-    expect(f.panels.nodeActions()).toBe(base - flying + 1);
+    expect(f.panels.nodeActions()).toBe(base - flying);
   });
 
   it('у тактичному бою і після банкрутства — 0 (колонка неактивна)', () => {
@@ -310,13 +311,14 @@ describe('Т.7: nodeActions — дії, що чекають на вкладці 
   });
 });
 
-describe('Т.80: гарматний модуль на складі — дія на вкладці «Вузол»', () => {
-  it('модуль на складі, не встановлено, перехоплювач на базі — +1; інакше — 0', () => {
+// п19.4: кнопка модуля — у середній колонці «Перехоплювачі», сигнал вкладки «Вузол» її не рахує
+describe('Т.80: гарматний модуль на складі — gunModuleReady (з п19.4 — поза сигналом «Вузла»)', () => {
+  it('модуль на складі, не встановлено, перехоплювач на базі — готовий; nodeActions — 0', () => {
     const f = makeFixture();
     expect(f.panels.nodeActions()).toBe(0);
     f.party.workshop.store['gun-module'] = 1;
     expect(gunModuleReady(f.party)).toBe(true);
-    expect(f.panels.nodeActions()).toBe(1);
+    expect(f.panels.nodeActions()).toBe(0);
     f.party.intercept.fighters[0].status = 'ремонт';
     expect(gunModuleReady(f.party)).toBe(false); // не «на базі» — кнопка неактивна
     expect(f.panels.nodeActions()).toBe(0);
