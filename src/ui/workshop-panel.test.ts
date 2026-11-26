@@ -229,9 +229,10 @@ describe('п18.5: «Пробивний заряд» у «Кузні»', () => {
     expect(b.title).toBe('Ще не досліджено');
     expect(el('workshop').textContent).toContain('Пробивний заряд · 50 · ');
     expect(el('workshop').textContent).toContain('Атака по броньованій цілі — без броні (один раз)');
-    expect(el('workshop').textContent).toContain('Пробивний заряд 0'); // склад
+    expect(el('workshop').textContent).not.toContain('Пробивний заряд 0'); // склад — лише після протоколу (аудит PR #516)
     party.research.completed.push('rift-anatomy');
     panel.render();
+    expect(el('workshop').textContent).toContain('Пробивний заряд 0');
     expect(el<HTMLButtonElement>('btn-order-breach-charge').title).toBe('Бракує трофеїв: гончак 0 з 1');
     expect(el<HTMLButtonElement>('btn-order-breach-charge').disabled).toBe(true);
     party.research.trophies.hound = 1;

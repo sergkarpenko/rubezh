@@ -604,7 +604,7 @@ describe('renderCampaign: чипи кампанії і екран перемог
     f.party.campaign.score = { ufosShotDown: 0, missionsWon: 0, veteransAlive: 0, moneyLeft: 0, total: 1234 };
     f.panels.renderCampaign();
     expect(document.getElementById('campaign-victory')!.classList.contains('hidden')).toBe(false);
-    expect(document.getElementById('campaign-score')!.textContent).toBe('1234');
+    expect(document.getElementById('campaign-score')!.textContent).toBe('1\u00a0234'); // п18.5: пробіл розрядів
   });
 
   // П8.3a: endless (рішення власника 2026-10-15) — «Грати далі» ховає екран
@@ -615,7 +615,7 @@ describe('renderCampaign: чипи кампанії і екран перемог
     f.panels.renderCampaign();
     expect(document.getElementById('campaign-goal')!.textContent).toContain('Браму Розриву зачинено'); // п18.5
     expect(document.getElementById('campaign-victory')!.classList.contains('hidden')).toBe(true);
-    expect(document.getElementById('campaign-score')!.textContent).toBe('1234');
+    expect(document.getElementById('campaign-score')!.textContent).toBe('1\u00a0234'); // п18.5: пробіл розрядів
   });
 });
 
@@ -1074,6 +1074,21 @@ describe('п18.5: радар 6, Брама на геосцені, заряд у 
     f.panels.renderGeo();
     expect(ops.some((o) => o.startsWith('ellipse(456,216'))).toBe(true);
     expect(vi.mocked(f.deps.ambient.paintGeo).mock.calls.at(-1)![1].gate).toBeUndefined();
+  });
+
+  it('екран поразки: gameOver — так; у бою чи без партії на екрані — ні (аудит PR #516)', () => {
+    let battle = false;
+    let onScreen = true;
+    const f = makeFixture({ isGameOver: () => true, inBattle: () => battle, partyOnScreen: () => onScreen });
+    f.panels.renderCampaign();
+    expect(document.getElementById('campaign-defeat')!.classList.contains('hidden')).toBe(false);
+    battle = true;
+    f.panels.renderCampaign();
+    expect(document.getElementById('campaign-defeat')!.classList.contains('hidden')).toBe(true);
+    battle = false;
+    onScreen = false;
+    f.panels.renderCampaign();
+    expect(document.getElementById('campaign-defeat')!.classList.contains('hidden')).toBe(true);
   });
 
   it('ростер: кнопка «заряд» — видати зі складу і зняти назад', () => {

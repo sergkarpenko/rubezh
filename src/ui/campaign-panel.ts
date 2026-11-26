@@ -56,28 +56,38 @@ export function goalNextText(party: Party): string {
     if (gateOpen(party)) return 'Брама Розриву відкрита — атакуйте її в «Сенсорній сітці» або тапом по порталу на геосцені.';
     if (gateKeyDone(party) && c.status === 'триває') {
       const left = Math.max(1, Math.ceil(((c.gateReadyAt ?? 0) - party.geo.minute) / TICK_MINUTES));
-      return 'Брама Розриву — новий штурм через ' + ticksText(left) + '.';
+      return 'Брама Розриву — нова спроба через ' + ticksText(left) + '.';
     }
     return 'Брама Розриву недоступна.';
   }
   const head = 'Наступний крок до Брами: «' + next.name + '»';
   const active = party.research.active.find((p) => p.id === next.id);
   if (active) return head + ' — у роботі, ' + active.invested + ' з ' + next.points + ' очок потоку.';
-  const lack = missingTrophies(party.research.trophies, next.trophies);
-  if (lack !== undefined) return head + '. ' + lack + '.';
+  if (goalLackText(party) !== null) return head; // аудит PR #516: «Бракує трофеїв» — окремим рядком, як у превʼю
   return head + ' — трофеїв досить, дослідіть у панелі «Дослідження».';
 }
+
+// Рядок «Бракує трофеїв: …» для наступного ключового протоколу (не в роботі); null — не бракує.
+export function goalLackText(party: Party): string | null {
+  const next = nextKeyProject(party);
+  if (next === null || party.campaign.status !== 'триває' || party.research.active.some((p) => p.id === next.id)) return null;
+  return missingTrophies(party.research.trophies, next.trophies) ?? null;
+}
+
+// Короткі назви ланцюжка (превʼю власника: «◉ Анатомія → ○ Пеленг → ○ Ключ → ○ Брама»).
+const SHORT_NAMES: Readonly<Record<string, string>> = { 'rift-anatomy': 'Анатомія', 'gate-bearing': 'Пеленг', 'gate-key': 'Ключ' };
 
 // Ланцюжок: ✓ завершено, ◉ поточний крок, ○ далі; останній крок — Брама.
 export function goalChain(party: Party): { text: string; cls: 'done' | 'now' | 'later' }[] {
   const out: { text: string; cls: 'done' | 'now' | 'later' }[] = [];
   let current = false;
   for (const p of KEY_PROJECTS) {
-    if (party.research.completed.includes(p.id)) out.push({ text: '✓ ' + p.name, cls: 'done' });
+    const name = SHORT_NAMES[p.id] ?? p.name;
+    if (party.research.completed.includes(p.id)) out.push({ text: '✓ ' + name, cls: 'done' });
     else if (!current) {
       current = true;
-      out.push({ text: '◉ ' + p.name, cls: 'now' });
-    } else out.push({ text: '○ ' + p.name, cls: 'later' });
+      out.push({ text: '◉ ' + name, cls: 'now' });
+    } else out.push({ text: '○ ' + name, cls: 'later' });
   }
   const won = party.campaign.status === 'перемога';
   out.push(won ? { text: '✓ Брама', cls: 'done' } : current ? { text: '○ Брама', cls: 'later' } : { text: '◉ Брама', cls: 'now' });
@@ -119,11 +129,16 @@ export function scoreLinesText(s: CampaignScore): string {
   );
 }
 
+// Число рахунку з пробілом розрядів, як у превʼю («1 250»; нерозривний вузький пробіл не потрібен — звичайний нерозривний).
+export function scoreNumber(n: number): string {
+  return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '\u00a0');
+}
+
 // Причина поразки: загроза 100 (доба поразки ядра) або банкрутство (доба геоцени).
 export function defeatText(party: Party): string {
   const c = party.campaign;
   if (c.status === 'поразка') return 'Загроза Розриву досягла ' + THREAT_MAX + ' на ' + (c.defeatDay ?? geoDay(party.geo)) + '-й добі.';
-  return 'Банкрутство на ' + geoDay(party.geo) + '-й добі: немає боєготових оперативників і кредитів на вербування.';
+  return 'Банкрутство — немає боєготових і кредитів на вербування.'; // превʼю власника дослівно
 }
 
 export function victoryText(party: Party): string {
@@ -151,22 +166,27 @@ export function renderThreatChip(party: Party): void {
 export function renderGoalPanel(party: Party): void {
   const box = el('campaign-goal');
   box.innerHTML = '';
-  const chain = document.createElement('div');
-  chain.className = 'goal-chain';
-  for (const step of goalChain(party)) {
+  const line = (text: string, cls = ''): HTMLElement => {
+    const d = document.createElement('div');
+    d.textContent = text;
+    if (cls !== '') d.className = cls;
+    box.appendChild(d);
+    return d;
+  };
+  // аудит PR #516: порядок і вигляд — як у превʼю власника «А. Шапка + панель»
+  line(goalNextText(party));
+  const lack = goalLackText(party);
+  if (lack !== null) line(lack);
+  line('Трофеї: ' + trophiesText(party));
+  const chain = line('Ланцюжок: ', 'goal-chain');
+  goalChain(party).forEach((step, i) => {
+    if (i > 0) chain.append(' → ');
     const s = document.createElement('span');
     s.className = step.cls;
     s.textContent = step.text;
     chain.appendChild(s);
-  }
-  const lines = [goalNextText(party), 'Трофеї: ' + trophiesText(party), assaultsText(party)];
-  box.appendChild(chain);
-  for (const text of lines) {
-    const d = document.createElement('div');
-    d.textContent = text;
-    box.appendChild(d);
-  }
-  box.lastElementChild?.classList.add('meta');
+  });
+  line(assaultsText(party), 'meta');
 }
 
 // Екрани кінця партії. victoryShown — екран перемоги видимий (не закрито «Грати далі»);
@@ -178,13 +198,13 @@ export function renderEndScreens(party: Party, victoryShown: boolean, defeatShow
     // П8.3a: рахунок перемоги лишається і після «Грати далі» (екран схований)
     const s = endScore(party);
     el('campaign-victory-text').textContent = victoryText(party);
-    el('campaign-score').textContent = String(s.total);
+    el('campaign-score').textContent = scoreNumber(s.total);
     el('campaign-score-lines').textContent = scoreLinesText(s);
   }
   if (defeatShown) {
     const s = endScore(party);
     el('campaign-defeat-text').textContent = defeatText(party);
-    el('campaign-defeat-score').textContent = String(s.total);
+    el('campaign-defeat-score').textContent = scoreNumber(s.total);
     el('campaign-defeat-lines').textContent = scoreLinesText(s);
   }
 }

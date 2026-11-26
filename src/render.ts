@@ -1412,6 +1412,7 @@ export function drawAnimFrame(
       overwatch: false,
       pose: 'death',
       kind: a.enemyKind, // п17.5: кадр смерті свого типу
+      turret: a.turret, // п18.5 (аудит PR #516): турель розчиняється своїм силуетом
     });
     ctx.globalAlpha = 1;
     return;
@@ -1440,6 +1441,7 @@ export function drawAnimFrame(
       overwatch: false,
       pose: 'death', // П14.2 (ADR-0072): кадр смерті з атласа; фолбек — матриця
       kind: a.enemyKind, // п17.5: кадр смерті свого типу
+      turret: a.turret, // п18.5 (аудит PR #516): турель розчиняється своїм силуетом
     });
     ctx.restore();
     if (t > 0) {

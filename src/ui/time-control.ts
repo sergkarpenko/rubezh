@@ -10,7 +10,7 @@ import type { Party } from '../core/save';
 // Найдовший прогін однієї кнопки: 1 доба = 48 тіків по 30 хв.
 export const MAX_RUN_TICKS = 48;
 
-// «event» — кнопка «До події» (усі шість подій); «day» — «+1 доба» (лише зонди).
+// «event» — кнопка «До події» (усі сім подій); «day» — «+1 доба» (зонди і штурм вузла, п18.5).
 export type RunMode = 'event' | 'day';
 
 export type StopEvent = 'ufo_detected' | 'ufo_landed' | 'project_completed' | 'produced' | 'recovered' | 'repair_done' | 'assault';

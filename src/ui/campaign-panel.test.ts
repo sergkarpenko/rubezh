@@ -10,12 +10,14 @@ import {
   defeatText,
   endScore,
   goalChain,
+  goalLackText,
   goalNextText,
   nextKeyProject,
   renderEndScreens,
   renderGoalPanel,
   renderThreatChip,
   scoreLinesText,
+  scoreNumber,
   threatLevel,
   threatTitle,
   trophiesText,
@@ -69,21 +71,19 @@ describe('п18.5: чип загрози (рішення власника «А. �
 describe('п18.5: панель «Мета кампанії»', () => {
   it('старт: перший протокол — «Анатомія Розриву», бракує трофеїв; ланцюжок ◉ ○ ○ ○; трофеї нулі; штурми 0 з 3', () => {
     expect(nextKeyProject(p)?.id).toBe('rift-anatomy');
-    expect(goalNextText(p)).toBe('Наступний крок до Брами: «Анатомія Розриву». Бракує трофеїв: демон 0 з 6, гончак 0 з 3.');
-    expect(goalChain(p).map((s) => s.text + ':' + s.cls)).toEqual([
-      '◉ Анатомія Розриву:now',
-      '○ Пеленг брами:later',
-      '○ Ключ брами:later',
-      '○ Брама:later',
-    ]);
+    expect(goalNextText(p)).toBe('Наступний крок до Брами: «Анатомія Розриву»');
+    expect(goalLackText(p)).toBe('Бракує трофеїв: демон 0 з 6, гончак 0 з 3');
+    expect(goalChain(p).map((s) => s.text + ':' + s.cls)).toEqual(['◉ Анатомія:now', '○ Пеленг:later', '○ Ключ:later', '○ Брама:later']);
     expect(trophiesText(p)).toBe('демон 0 · гончак 0 · голем 0 · око 0');
     expect(assaultsText(p)).toBe('Штурми вузла: 0 з 3 (наступний — на загрозі 60)');
     renderGoalPanel(p);
     const lines = [...$('campaign-goal').children].map((c) => c.textContent);
+    // порядок і вигляд — як у превʼю власника (аудит PR #516)
     expect(lines).toEqual([
-      '◉ Анатомія Розриву○ Пеленг брами○ Ключ брами○ Брама',
-      goalNextText(p),
+      'Наступний крок до Брами: «Анатомія Розриву»',
+      'Бракує трофеїв: демон 0 з 6, гончак 0 з 3',
       'Трофеї: демон 0 · гончак 0 · голем 0 · око 0',
+      'Ланцюжок: ◉ Анатомія → ○ Пеленг → ○ Ключ → ○ Брама',
       'Штурми вузла: 0 з 3 (наступний — на загрозі 60)',
     ]);
     expect($('campaign-goal').lastElementChild!.classList.contains('meta')).toBe(true);
@@ -92,26 +92,29 @@ describe('п18.5: панель «Мета кампанії»', () => {
   it('трофеїв досить — дослідити; у роботі — очки; другий крок після першого', () => {
     p.research.trophies = { demon: 6, hound: 3, golem: 1, eye: 0 };
     expect(goalNextText(p)).toBe('Наступний крок до Брами: «Анатомія Розриву» — трофеїв досить, дослідіть у панелі «Дослідження».');
+    expect(goalLackText(p)).toBeNull();
     p.research.active.push({ id: 'rift-anatomy', invested: 7 });
     expect(goalNextText(p)).toBe('Наступний крок до Брами: «Анатомія Розриву» — у роботі, 7 з 20 очок потоку.');
+    expect(goalLackText(p)).toBeNull(); // у роботі — трофеї вже списано
     p.research.active = [];
     p.research.completed.push('rift-anatomy');
-    expect(goalNextText(p)).toBe('Наступний крок до Брами: «Пеленг брами». Бракує трофеїв: голем 1 з 2, око 0 з 2.');
+    expect(goalNextText(p)).toBe('Наступний крок до Брами: «Пеленг брами»');
+    expect(goalLackText(p)).toBe('Бракує трофеїв: голем 1 з 2, око 0 з 2');
+    renderGoalPanel(p);
+    expect($('campaign-goal').children).toHaveLength(5);
     expect(goalChain(p).map((s) => s.cls)).toEqual(['done', 'now', 'later', 'later']);
   });
 
   it('усі три протоколи: Брама відкрита; після поразки — пауза до повтору; перемога — зачинено', () => {
     p.research.completed.push('rift-anatomy', 'gate-bearing', 'gate-key');
     expect(nextKeyProject(p)).toBeNull();
-    expect(goalChain(p).map((s) => s.text + ':' + s.cls)).toEqual([
-      '✓ Анатомія Розриву:done',
-      '✓ Пеленг брами:done',
-      '✓ Ключ брами:done',
-      '◉ Брама:now',
-    ]);
+    expect(goalChain(p).map((s) => s.text + ':' + s.cls)).toEqual(['✓ Анатомія:done', '✓ Пеленг:done', '✓ Ключ:done', '◉ Брама:now']);
+    expect(goalLackText(p)).toBeNull();
+    renderGoalPanel(p);
+    expect($('campaign-goal').children).toHaveLength(4); // без рядка «Бракує»
     expect(goalNextText(p)).toBe('Брама Розриву відкрита — атакуйте її в «Сенсорній сітці» або тапом по порталу на геосцені.');
     p.campaign.gateReadyAt = p.geo.minute + GATE_RETRY_MINUTES;
-    expect(goalNextText(p)).toBe('Брама Розриву — новий штурм через 48 тіків.');
+    expect(goalNextText(p)).toBe('Брама Розриву — нова спроба через 48 тіків.');
     p.campaign.status = 'перемога';
     expect(goalNextText(p)).toBe('Браму Розриву зачинено — кампанію виграно.');
     expect(goalChain(p).at(-1)).toEqual({ text: '✓ Брама', cls: 'done' });
@@ -142,12 +145,14 @@ describe('п18.5: екрани кінця партії (рішення влас�
     expect($('campaign-victory').classList.contains('hidden')).toBe(false);
     expect($('campaign-defeat').classList.contains('hidden')).toBe(true);
     expect($('campaign-victory-text').textContent).toBe('Брама Розриву зачинена на 41-й добі.');
-    expect($('campaign-score').textContent).toBe('1350');
+    expect($('campaign-score').textContent).toBe('1\u00a0350'); // «1 350», як у превʼю
+    expect(scoreNumber(375)).toBe('375');
+    expect(scoreNumber(1234567)).toBe('1\u00a0234\u00a0567');
     expect($('campaign-score-lines').textContent).toBe(scoreLinesText(score));
     // П8.3a: «Грати далі» сховало екран — рахунок лишається
     renderEndScreens(p, false, false);
     expect($('campaign-victory').classList.contains('hidden')).toBe(true);
-    expect($('campaign-score').textContent).toBe('1350');
+    expect($('campaign-score').textContent).toBe('1\u00a0350');
     expect(victoryText(p)).toBe('Брама Розриву зачинена на 41-й добі.');
   });
 
@@ -158,9 +163,9 @@ describe('п18.5: екрани кінця партії (рішення влас�
     renderEndScreens(p, false, true);
     expect($('campaign-defeat').classList.contains('hidden')).toBe(false);
     expect($('campaign-defeat-text').textContent).toBe('Загроза Розриву досягла 100 на 38-й добі.');
-    expect($('campaign-defeat-score').textContent).toBe('1350');
+    expect($('campaign-defeat-score').textContent).toBe('1\u00a0350');
     const b = createParty(42);
-    expect(defeatText(b)).toBe('Банкрутство на 1-й добі: немає боєготових оперативників і кредитів на вербування.');
+    expect(defeatText(b)).toBe('Банкрутство — немає боєготових і кредитів на вербування.'); // превʼю дослівно
     expect(b.campaign.score).toBeNull();
     expect(endScore(b).total).toBeGreaterThan(0); // ядро рахунку банкрутства не фіксує — рахуємо зараз
     renderEndScreens(b, false, true);

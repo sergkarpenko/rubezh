@@ -180,6 +180,19 @@ describe('п18.5: турель і портал Брами', () => {
     expect(start.args[0] as number).toBeGreaterThan(2 * 48 + 24 + 15);
   });
 
+  it('загибель турелі — розчиняється силуетом кодом, без кадру оперативника (аудит PR #516)', () => {
+    const t = { id: 't1', side: 'player', pos: { x: 3, y: 1 }, maxHp: 12, turret: true } as Parameters<typeof makeDeathAnim>[0];
+    const d = makeDeathAnim(t);
+    expect(d.turret).toBe(true);
+    for (const calm of [false, true]) {
+      const r = frame({ ...d, calm }, DEATH_MS / 2);
+      expect(atlasRows(r.calls)).toEqual([]);
+    }
+    const s = makeDeathAnim({ ...t, id: 's1', turret: undefined });
+    expect('turret' in s).toBe(false);
+    expect(atlasRows(frame(s, DEATH_MS / 2).calls)).toEqual([0]);
+  });
+
   it('портал: два еліпси і шість іскор; закритий — приглушений', () => {
     const r = ctxRec();
     drawGatePortal(r.ctx, { cx: 456, cy: 216, size: 48, open: true });

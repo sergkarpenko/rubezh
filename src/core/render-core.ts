@@ -338,6 +338,7 @@ export interface DeathAnim extends CalmFlag {
   at: Vec2;
   hpMax: number; // П14.4: показник життя загиблого — порожня смуга (hp 0)
   enemyKind?: EnemyKind; // п17.5: тип загиблого ворога — ряд атласа (без поля — демон)
+  turret?: boolean; // п18.5 (ADR-0157, аудит PR #516): загибла турель — силует кодом, не кадр оперативника
   dur: number;
   start: number | null;
 }
@@ -430,6 +431,7 @@ export function makeTracerAnim(side: Side, from: Vec2, to: Vec2, hit: boolean): 
 export function makeDeathAnim(u: Unit): DeathAnim {
   const a: DeathAnim = { kind: 'death', unitId: u.id, side: u.side, at: { ...u.pos }, hpMax: u.maxHp, dur: DEATH_MS, start: null };
   if (u.kind !== undefined) a.enemyKind = u.kind; // п17.5: демон — без поля, як раніше
+  if (u.turret === true) a.turret = true; // п18.5: поле лише для турелі
   return a;
 }
 export function makeOwFlashAnim(u: Unit): OwFlashAnim {

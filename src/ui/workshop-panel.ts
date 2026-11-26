@@ -85,7 +85,9 @@ export function createWorkshopPanel(deps: WorkshopPanelDeps): WorkshopPanel {
     const store = document.createElement('div');
     store.className = 'meta';
     store.style.marginBottom = '6px';
-    store.textContent = 'Склад: ' + WORKSHOP_UI_ITEMS.map((id) => itemName(id) + ' ' + w.store[id]).join(' · ');
+    // аудит PR #516: заряд у рядку складу — після «Анатомії Розриву» або коли він є на складі
+    const shownItems = WORKSHOP_UI_ITEMS.filter((id) => id !== 'breach-charge' || itemUnlocked(party.research, id) || w.store[id] > 0);
+    store.textContent = 'Склад: ' + shownItems.map((id) => itemName(id) + ' ' + w.store[id]).join(' · ');
     box.appendChild(store);
 
     // каталог: замовлення — лише досліджені предмети (гейт завершеного

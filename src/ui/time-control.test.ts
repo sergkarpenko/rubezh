@@ -100,7 +100,7 @@ describe('Т.43: події зупинки (stopEvents)', () => {
 });
 
 describe('Т.43: правило режиму (shouldStop)', () => {
-  it('«До події» зупиняється на кожній із шести подій, «+1 доба» — лише на двох подіях зондів', () => {
+  it('«До події» зупиняється на кожній із шести подій Т.43 і на штурмі, «+1 доба» — на двох подіях зондів і штурмі (п18.5)', () => {
     for (const kind of SIX) {
       expect(shouldStop('event', [kind])).toBe(true);
       expect(shouldStop('day', [kind])).toBe(kind === 'ufo_detected' || kind === 'ufo_landed');

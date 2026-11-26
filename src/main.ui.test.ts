@@ -2553,6 +2553,28 @@ describePage('Т.58: стартовий екран після невдалого
     expect($('start-note').textContent).toBe('');
   });
 
+  it('п18.5 (аудит PR #516): «На стартовий екран» на екрані поразки; невдале «Продовжити» поразку поверх стартового не повертає', () => {
+    const good = freshSave();
+    const lost = JSON.parse(good) as { state: { campaign: Record<string, unknown> } };
+    Object.assign(lost.state.campaign, { status: 'поразка', threat: 100, defeatDay: 1 });
+    localStorage.setItem('rubezh.save.1', JSON.stringify(lost));
+    try {
+      btn('btn-load-1').click();
+      expect(hidden('campaign-defeat')).toBe(false);
+      btn('btn-defeat-exit').click();
+      expect(hidden('start-screen')).toBe(false);
+      expect(hidden('campaign-defeat')).toBe(true);
+      const bad = JSON.parse(good) as { state: { geo: { ufos: unknown } } };
+      bad.state.geo.ufos = [null];
+      localStorage.setItem('rubezh.save.1', JSON.stringify(bad));
+      btn('btn-start-continue').click();
+      expect(hidden('start-note')).toBe(false);
+      expect(hidden('campaign-defeat')).toBe(true);
+    } finally {
+      localStorage.setItem('rubezh.save.1', good);
+    }
+  });
+
   it('Т.58: «На стартовий екран» на екрані перемоги — вихід, з незбереженою дією через підтвердження; екран перемоги поверх стартового не лишається', () => {
     const good = freshSave();
     const won = JSON.parse(good) as { state: { campaign: { status: string } } };

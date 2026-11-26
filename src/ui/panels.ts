@@ -115,6 +115,7 @@ export interface PanelsDeps {
   activeGeoAnim(): Anim | null; // активна анімація геосцени (пульс радара, П6.9)
   geoAnimNow(): number; // час активної анімації геосцени
   victoryDismissed(): boolean; // П8.3a: гравець закрив екран перемоги і продовжує гру (endless)
+  partyOnScreen?(): boolean; // п18.5 (аудит PR #516): партія на екрані — інакше екран поразки не показується (без поля — так)
   ambient: GeoAmbient; // П14.8: ефекти поверх кадру геосцени (ADR-0073)
 }
 
@@ -629,7 +630,11 @@ export function createPanels(deps: PanelsDeps): Panels {
     // П8.3a: endless (рішення власника 2026-10-15) — «Грати далі» ховає екран,
     // але статус «перемога» і зафіксований рахунок лишаються (EARS Фази 8)
     const isVictory = party.campaign.status === 'перемога';
-    renderEndScreens(party, isVictory && !deps.victoryDismissed(), !isVictory && deps.isGameOver() && !deps.inBattle());
+    renderEndScreens(
+      party,
+      isVictory && !deps.victoryDismissed(),
+      !isVictory && deps.isGameOver() && !deps.inBattle() && (deps.partyOnScreen?.() ?? true)
+    );
   }
 
   return {

@@ -421,6 +421,7 @@ const panels = createPanels({
   geoAnimNow: () => geoAnim.now,
   // Т.58: на стартовому екрані екран перемоги не показуємо — і коли невдале «Продовжити» перемальовує панелі
   victoryDismissed: () => victoryDismissed || !partyOnScreen,
+  partyOnScreen: () => partyOnScreen, // п18.5 (аудит PR #516): екран поразки — лише над грою, не над стартовим
   ambient, // П14.8: ефекти поверх кадру геосцени (ADR-0073)
 });
 
