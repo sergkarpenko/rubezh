@@ -100,7 +100,8 @@ function build(a: Arena): GameState {
     map: { width: a.w, height: a.h, blocked },
     units,
     rng: mulberry32(a.seed),
-    items: Object.fromEntries(units.map((u) => [u.id, { medkit: true, grenade: true }])),
+    // п18.6 (кандидат 185 а): «Пробивний заряд» у кожного — подія charge і шкода без броні в генераторі
+    items: Object.fromEntries(units.map((u) => [u.id, { medkit: true, grenade: true, charge: true }])),
     evacZone: units.filter((u) => u.side === 'player').map((u) => u.pos),
     roles: Object.fromEntries(units.filter((u) => u.side === 'player').map((u, i) => [u.id, { role: ROLES[i % 3], used: false }])),
   });
@@ -191,18 +192,38 @@ function broken(s: GameState, ids: string): string[] {
   // «Точного пострілу», якщо перед подією стоїть precise_shot того самого стрільця (аудит PR #507)
   const pos = new Map(startOf.get(s) ?? []);
   const byId = new Map(all(s).map((u) => [u.id, u]));
+  // п18.6 (кандидат 185 а, ADR-0154): заряд — не більше однієї події charge на юніта, лише по цілі з бронею,
+  // подія ⇔ заряд витрачено; постріли тієї самої атаки після charge (рівно черга режиму першого пострілу,
+  // смерть цілі обриває) — без броні; наступна атака впритул за нею — вже з бронею
+  let pierce: { shooterId: string; targetId: string; left?: number } | null = null;
+  for (const u of all(s)) {
+    const n = s.log.filter((e) => e.type === 'charge' && e.shooterId === u.id).length;
+    if (n > 1 || (n === 1) !== (s.items?.[u.id]?.charge === false))
+      bad.push(u.id + ': подій charge ' + n + ', заряд ' + s.items?.[u.id]?.charge);
+  }
   for (const [i, e] of s.log.entries()) {
     if (e.type === 'move') pos.set(e.unitId, e.to);
+    if (e.type === 'charge') {
+      if (!((byId.get(e.targetId)!.armor ?? 0) > 0)) bad.push(e.shooterId + ': заряд по цілі без броні');
+      pierce = { shooterId: e.shooterId, targetId: e.targetId };
+      continue;
+    }
+    if (e.type !== 'shot' && e.type !== 'death') pierce = null;
     if (e.type !== 'shot') continue;
     const sh = byId.get(e.shooterId)!;
     const tg = byId.get(e.targetId)!;
     if (!weaponHasMode(sh.weapon, e.mode)) bad.push(sh.id + ': режим ' + e.mode + ' не зброї «' + sh.weapon.name + '»');
     if (distance(pos.get(sh.id)!, pos.get(tg.id)!) > sh.weapon.range) bad.push(sh.id + ': постріл далі дальності ' + sh.weapon.range);
+    if (pierce !== null && pierce.left === undefined) pierce.left = sh.weapon.modes[e.mode].shots;
+    const pierced = pierce !== null && pierce.shooterId === sh.id && pierce.targetId === tg.id && (pierce.left ?? 0) > 0;
+    if (pierce !== null) pierce.left = (pierce.left ?? 0) - 1;
     if (!e.hit) continue;
-    // precise_shot стоїть перед shot; при вбивстві між ними — death
-    const prev = s.log[i - 1]?.type === 'death' ? s.log[i - 2] : s.log[i - 1];
+    // precise_shot стоїть перед shot; при вбивстві між ними — death; п18.6: між ними може бути charge
+    let j = i - 1;
+    while (s.log[j]?.type === 'death' || s.log[j]?.type === 'charge') j--;
+    const prev = s.log[j];
     const m = prev !== undefined && prev.type === 'precise_shot' && prev.shooterId === sh.id ? PRECISE_DAMAGE_MULT : 1;
-    const armor = tg.armor ?? 0;
+    const armor = pierced ? 0 : (tg.armor ?? 0);
     const lo = Math.max(1, Math.floor(sh.weapon.damage[0] * m) - armor);
     const hi = Math.max(1, Math.floor(sh.weapon.damage[1] * m) - armor);
     if (e.damage < lo || e.damage > hi) bad.push(tg.id + ': шкода ' + e.damage + ' поза ' + lo + '–' + hi + ' (броня ' + armor + ')');
@@ -226,7 +247,7 @@ function act(s: GameState, a: Act, check: boolean): void {
   const cell = { x: a.x, y: a.y };
   if (a.t === 'bot') {
     if (s.activeSide === 'alien') aiStep(s);
-    else botTurn(s);
+    else botTurn(s, undefined, a.v % 2 === 1); // п18.6 (ADR-0158): непарне v — бот тримає позицію в дозорі
     return;
   }
   if (a.t === 'go') {

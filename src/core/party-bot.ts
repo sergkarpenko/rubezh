@@ -56,7 +56,10 @@ import {
   researchTick,
   startProject,
   type ProjectId,
+  type TrophyCost,
 } from './research';
+import { ENEMY_ORDER } from './enemies';
+import { rankOf } from './career';
 import {
   WORKSHOP_CATALOG,
   deployConsumables,
@@ -92,6 +95,15 @@ export interface PartyBotPolicy {
   // Т.76 (П15.5, ADR-0075): політика евакуації бота в бою (ai-bot.ts). Немає —
   // бот не евакуює, партії байт-у-байт як до Т.76.
   evac?: EvacPolicy;
+  // п18.6 (ADR-0158): трофеї, ще потрібні незапущеним ключовим протоколам політики, не витрачати
+  // на предмети цеху («Пробивний заряд» бере трофей гончака). Немає — без резерву.
+  reserveTrophies?: boolean;
+  // п18.6: фінал «Брама Розриву» — лише коли в загоні стільки бійців зі званням від «Боєць» і вище
+  // (missionSquad — ветерани перші). Немає — фінал одразу, щойно брама відкрита і загін повний.
+  gateMinRanked?: number;
+  // п18.6 (ADR-0158): дозор бота — тримати позицію в дозорі (ai-bot.ts holdStep): 'all' — у кожному бою,
+  // 'gate' — лише у фіналі. Немає — бій байт-у-байт як до п18.6.
+  hold?: 'all' | 'gate';
 }
 
 // Стандартна політика (X-COM-стиль): перехоплення — balanced (intercept-bot),
@@ -123,6 +135,24 @@ export const SCIENCE_POLICY: PartyBotPolicy = {
   workshopOrders: ['armor'],
   equip: true,
   fireScientistsWhenDone: true,
+};
+
+// п18.6 (ADR-0158): політика кампанії — ланцюжок до Брами. Три техноманти (90 точок ланцюжка ≈ 30 діб;
+// точки копляться в пулі, поки бракує трофеїв), броня першою, далі ключові протоколи за порядком;
+// цех — броня і «Пробивний заряд» з резервом трофеїв; дозор у кожному бою (рішення власника
+// «А. У кожному бою»); фінал — коли в загоні троє зі званням від «Боєць». Виміри —
+// docs/reports/p18.6-balance.md.
+export const CAMPAIGN_POLICY: PartyBotPolicy = {
+  ...DEFAULT_PARTY_POLICY,
+  name: 'campaign',
+  scientistsUpTo: 3,
+  projects: ['armor', 'rift-anatomy', 'gate-bearing', 'gate-key'],
+  workshopOrders: ['armor', 'breach-charge'],
+  equip: true,
+  fireScientistsWhenDone: true,
+  reserveTrophies: true,
+  hold: 'all',
+  gateMinRanked: MISSION_SQUAD_SIZE,
 };
 
 export type PartyOutcome = 'триває' | 'перемога' | 'банкрутство' | 'поразка'; // п18.3: «поразка» — загроза 100
@@ -181,6 +211,9 @@ export interface PartySimResult {
 export interface SimulatePartyOptions {
   policy?: PartyBotPolicy;
   maxDays?: number; // горизонт симуляції (дефолт PARTY_HORIZON_DAYS — до кінця партії)
+  // п18.6 (кандидат 180): спостерігач стану партії наприкінці кожного тіку — для вимірів скриптів;
+  // лише читає (зміна стану — порушення контракту), на результат і лог не впливає.
+  onTick?: (party: Readonly<Party>, tick: number) => void;
 }
 
 // Перший виявлений НЛО у повітрі — ціль запуску (дзеркало intercept-bot.ts).
@@ -270,7 +303,7 @@ function soldierEquipKey(id: ItemId): 'armor' | 'optics' | 'medkit' | 'grenade' 
     case 'grenade':
       return 'grenade';
     case 'breach-charge':
-      return 'charge'; // п18.2: політика бота заряду ще не замовляє (п18.6)
+      return 'charge'; // п18.2; замовляє політика кампанії (п18.6, CAMPAIGN_POLICY)
     case 'gun-module':
       throw new Error('Гарматний модуль перехоплювача — озброєння перехоплювача, ключ екіпірування оперативника недосяжний');
   }
@@ -318,6 +351,7 @@ export function partyBotScienceStep(party: Party, policy: PartyBotPolicy): void 
     for (const id of policy.workshopOrders) {
       if (!itemUnlocked(party.research, id)) continue; // гейт завершеного проєкту
       if (workshopDeficit(party, id) <= 0) continue;
+      if (!trophiesAfford(party, policy, WORKSHOP_CATALOG[id].trophies)) continue; // п18.6: трофеї предмета (заряд)
       if (party.econ.money - presetPrice(WORKSHOP_CATALOG[id].cost, preset) < reserve) continue;
       orderItem(party.econ, party.workshop, party.research, id, preset);
       break;
@@ -327,7 +361,7 @@ export function partyBotScienceStep(party: Party, policy: PartyBotPolicy): void 
   // 4) екіпірування: готові предмети зі складу — боєготовим у порядку ростера
   // (броня/оптика постійні, аптечка/граната — витратники на наступну місію).
   for (const soldier of readySoldiers(party.roster)) {
-    for (const id of ['armor', 'optics', 'medkit', 'grenade'] as const) {
+    for (const id of ['armor', 'optics', 'medkit', 'grenade', 'breach-charge'] as const) {
       if (party.workshop.equipped[soldier.id]?.[soldierEquipKey(id)]) continue;
       if (party.workshop.store[id] <= 0) continue;
       equipItem(party.workshop, soldier, id);
@@ -337,6 +371,23 @@ export function partyBotScienceStep(party: Party, policy: PartyBotPolicy): void 
   if (party.intercept.fighter.status === 'на базі' && !party.intercept.fighter.gunModule && party.workshop.store['gun-module'] > 0) {
     installGunModule(party.workshop, party.intercept);
   }
+}
+
+// п18.6 (ADR-0158): чи вистачає трофеїв на предмет цеху з резервом незапущених ключових
+// протоколів політики (reserveTrophies) — бот не витрачає гончаків «Анатомії» на заряди.
+function trophiesAfford(party: Party, policy: PartyBotPolicy, cost: TrophyCost | undefined): boolean {
+  if (!cost) return true;
+  const r = party.research;
+  const keep: TrophyCost = {};
+  if (policy.reserveTrophies) {
+    for (const pid of policy.projects) {
+      const need = PROJECT_CATALOG[pid].trophies;
+      if (!need || r.completed.includes(pid) || r.active.some((p) => p.id === pid)) continue;
+      for (const k of ENEMY_ORDER) keep[k] = (keep[k] ?? 0) + (need[k] ?? 0);
+    }
+  }
+  // тип, якого предмет не просить, не перевіряється (резерв голема й ока заряду не стосується)
+  return ENEMY_ORDER.every((k) => (cost[k] ?? 0) === 0 || r.trophies[k] - (keep[k] ?? 0) >= (cost[k] ?? 0));
 }
 
 export interface MissionStepInfo {
@@ -376,7 +427,7 @@ export function partyBotMissionStep(party: Party, policy: PartyBotPolicy): Missi
     ...(roles ? { roles } : {}),
     threat: party.campaign.threat, // п18.3 (ADR-0153 п. 14): склад ворогів за загрозою
   });
-  const battle = autoBattle(mission.state, undefined, policy.evac); // ліміт півходів autoBattle — рідкісний тупик
+  const battle = autoBattle(mission.state, undefined, policy.evac, policy.hold === 'all'); // ліміт півходів — рідкісний тупик
   // Т.76: «евакуйовано» — НЛО лишається, премії немає (completeMission); тупик — поразка, як і раніше.
   const outcome: 'перемога' | 'поразка' | 'евакуйовано' =
     battle.outcome === 'перемога' ? 'перемога' : battle.outcome === 'евакуйовано' ? 'евакуйовано' : 'поразка';
@@ -412,7 +463,8 @@ function botCampaignBattle(
     ...(Object.keys(consumables).length > 0 ? { items: consumables } : {}),
     ...(roles ? { roles } : {}),
   });
-  const battle = autoBattle(mission.state, undefined, policy.evac);
+  const hold = policy.hold === 'all' || (policy.hold === 'gate' && make === createGateMission);
+  const battle = autoBattle(mission.state, undefined, policy.evac, hold);
   const outcome: 'перемога' | 'поразка' | 'евакуйовано' =
     battle.outcome === 'перемога' ? 'перемога' : battle.outcome === 'евакуйовано' ? 'евакуйовано' : 'поразка';
   awardTrophies(party.research, mission.state, outcome);
@@ -448,12 +500,16 @@ export function partyBotAssaultStep(party: Party, policy: PartyBotPolicy): Campa
   return { fought: true, outcome, lost: b.lost, wounded: b.wounded };
 }
 
-// п18.4 (ADR-0153 п. 17, 19): фінал — щойно брама відкрита і загін повний (політика п18.6
-// уточнить; до п18.6 бот «Ключа брами» не досліджує, тож крок у партії бота недосяжний).
+// п18.4 (ADR-0153 п. 17, 19): фінал — щойно брама відкрита і загін повний; п18.6 (ADR-0158):
+// з gateMinRanked — ще й коли в загоні (missionSquad, ветерани перші) стільки бійців від «Боєць».
 export function partyBotGateStep(party: Party, policy: PartyBotPolicy): CampaignBattleInfo {
   const info: CampaignBattleInfo = { fought: false, outcome: null, lost: 0, wounded: 0 };
   if (!policy.missions || !gateOpen(party)) return info;
   if (readySoldiers(party.roster).length < policy.missionSquadSize) return info;
+  if (policy.gateMinRanked !== undefined) {
+    const squad = missionSquad(party.roster, policy.missionSquadSize);
+    if (squad.filter((u) => rankOf(party.roster.careers[u.id]?.xp ?? 0) >= 1).length < policy.gateMinRanked) return info;
+  }
   const b = botCampaignBattle(party, policy, createGateMission);
   completeGate(party, b.outcome);
   return { fought: true, outcome: b.outcome, lost: b.lost, wounded: b.wounded };
@@ -614,6 +670,7 @@ export function simulateParty(seed: number, preset: DifficultyPreset = DEFAULT_P
     workshopCursor = party.workshop.log.length;
 
     res.ticks = t + 1;
+    opts.onTick?.(party, t);
 
     // Кінець доби — знімок кривих балансу (гроші + боєготові + штат вчених).
     const day = geoDay(party.geo);

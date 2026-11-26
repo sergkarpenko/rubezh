@@ -3,6 +3,7 @@
 //   node scripts/run-ts.mjs scripts/sim-p8.5.ts                          — 120 сідів × 3 пресети
 //   node scripts/run-ts.mjs scripts/sim-p8.5.ts --seeds 5               — короткий прогін
 //   node scripts/run-ts.mjs scripts/sim-p8.5.ts --presets складний       — лише один пресет
+//   node scripts/run-ts.mjs scripts/sim-p8.5.ts --policy campaign        — політика кампанії п18.6
 // П10.4: третій пресет «складний» + прапорець --presets (probe-прогони кандидатів
 // у копії репозиторія до зміни коду — патерн П8.6). Запуск — scripts/run-ts.mjs
 // на vite з devDependencies (Т.103), нових залежностей немає.
@@ -12,7 +13,14 @@
 // docs/reports/p8.5-simulations.md та p10.4-tuning.md; CSV — у dist/p8.5-parties.csv.
 
 import { mkdirSync, writeFileSync } from 'node:fs';
-import { simulateParty, type PartySimResult } from '../src/core/party-bot';
+import {
+  CAMPAIGN_POLICY,
+  DEFAULT_PARTY_POLICY,
+  SCIENCE_POLICY,
+  simulateParty,
+  type PartyBotPolicy,
+  type PartySimResult,
+} from '../src/core/party-bot';
 import type { DifficultyPreset } from '../src/core/campaign';
 
 const ALL_PRESETS: DifficultyPreset[] = ['легкий', 'норма', 'складний'];
@@ -51,7 +59,18 @@ function readyCurveMean(results: PartySimResult[], day: number): number {
   return xs.length ? round1(xs.reduce((a, b) => a + b, 0) / xs.length) : 0;
 }
 
+// п18.6 (ADR-0158): політика бота — default (типово, як до п18.6), science, campaign.
+const POLICIES: Record<string, PartyBotPolicy> = { default: DEFAULT_PARTY_POLICY, science: SCIENCE_POLICY, campaign: CAMPAIGN_POLICY };
+function parsePolicy(): PartyBotPolicy {
+  const i = process.argv.indexOf('--policy');
+  if (i === -1 || !process.argv[i + 1]) return DEFAULT_PARTY_POLICY;
+  const p = POLICIES[process.argv[i + 1]];
+  if (!p) throw new Error('Невідома політика: ' + process.argv[i + 1] + ' (є: ' + Object.keys(POLICIES).join(', ') + ')');
+  return p;
+}
+
 const seedCount = parseSeedCount();
+const POLICY = parsePolicy();
 const PRESETS = parsePresets();
 const seeds = Array.from({ length: seedCount }, (_, i) => i + 1);
 const byPreset = new Map<DifficultyPreset, PartySimResult[]>();
@@ -60,12 +79,14 @@ const started = Date.now();
 for (const preset of PRESETS) {
   const results: PartySimResult[] = [];
   for (const seed of seeds) {
-    results.push(simulateParty(seed, preset));
+    results.push(simulateParty(seed, preset, { policy: POLICY }));
   }
   byPreset.set(preset, results);
 }
 
-console.log(`# П8.5 — масові симуляції: ${seedCount} сідів × ${PRESETS.length} пресети (${round1((Date.now() - started) / 1000)} с)\n`);
+console.log(
+  `# П8.5 — масові симуляції: ${seedCount} сідів × ${PRESETS.length} пресети, політика ${POLICY.name} (${round1((Date.now() - started) / 1000)} с)\n`
+);
 
 for (const preset of PRESETS) {
   const rs = byPreset.get(preset)!;
@@ -77,7 +98,12 @@ for (const preset of PRESETS) {
   console.log(`## Пресет «${preset}» (${rs.length} партій)\n`);
   console.log(`| Метрика | Значення |`);
   console.log(`| --- | --- |`);
-  console.log(`| Перемог | ${wins.length} (${round1((100 * wins.length) / rs.length)}%) |`);
+  // п18.6: доба перемоги — медіана і p10–p90 (межі власника ADR-0153 п. 4: 35–50)
+  const wd = wins.map((r) => r.endDay).sort((a, b) => a - b);
+  const pq = (p: number) => wd[Math.min(wd.length - 1, Math.floor(p * wd.length))];
+  console.log(
+    `| Перемог | ${wins.length} (${round1((100 * wins.length) / rs.length)}%)${wins.length ? `, доба — медіана ${median(wd)}, p10–p90 ${pq(0.1)}–${pq(0.9)}` : ''} |`
+  );
   // п18.3 (ADR-0155): поразка за загрозою — медіана доби
   const defeats = rs.filter((r) => r.outcome === 'поразка');
   console.log(
@@ -102,6 +128,9 @@ for (const preset of PRESETS) {
     )} / місію) |`
   );
   console.log(`| Загиблих солдатів | ${mean((r) => r.soldiersLost)} / партію |`);
+  console.log(
+    `| Штурмів бази | ${mean((r) => r.assaults)} / партію (програно ${mean((r) => r.assaultsLost)}); боїв «Брама Розриву» ${mean((r) => r.gateAttempts)} |`
+  );
   console.log(`| Найнято солдатів | ${mean((r) => r.hiredTotal)} / партію (витрати ${mean((r) => r.hireSpent)}) |`);
   console.log(`| Перехоплень | ${mean((r) => r.launches)} / партію; збитих НЛО ${mean((r) => r.shotDown)} |`);
   console.log(
@@ -145,11 +174,13 @@ console.log('');
 
 // CSV кривих (дні × партії) для додаткового аналізу.
 mkdirSync('dist', { recursive: true });
-const lines = ['preset,seed,outcome,endDay,score,missionsLaunched,missionsWon,soldiersLost,soldiersWounded,repairs,hiredTotal'];
+const lines = [
+  'preset,seed,outcome,endDay,score,missionsLaunched,missionsWon,soldiersLost,soldiersWounded,repairs,hiredTotal,assaults,assaultsLost,gateAttempts',
+];
 for (const preset of PRESETS) {
   for (const r of byPreset.get(preset)!) {
     lines.push(
-      `${preset},${r.seed},${r.outcome},${r.endDay},${r.score.total},${r.missionsLaunched},${r.missionsWon},${r.soldiersLost},${r.soldiersWounded},${r.repairs},${r.hiredTotal}`
+      `${preset},${r.seed},${r.outcome},${r.endDay},${r.score.total},${r.missionsLaunched},${r.missionsWon},${r.soldiersLost},${r.soldiersWounded},${r.repairs},${r.hiredTotal},${r.assaults},${r.assaultsLost},${r.gateAttempts}`
     );
   }
 }

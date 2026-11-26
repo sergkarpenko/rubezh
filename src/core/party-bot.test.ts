@@ -17,6 +17,7 @@ import { spend } from './economy';
 import { advanceTime, missionTargets } from './geo';
 import { BALANCED_POLICY, PASSIVE_POLICY } from './intercept-bot';
 import {
+  CAMPAIGN_POLICY,
   DEFAULT_PARTY_POLICY,
   SCIENCE_POLICY,
   TICKS_PER_DAY,
@@ -24,6 +25,8 @@ import {
   partyBotInterceptStep,
   partyBotMissionStep,
   partyBotScienceStep,
+  partyBotGateStep,
+  partyBotAssaultStep,
   PARTY_HORIZON_DAYS,
   simulateParty,
   type PartyBotPolicy,
@@ -116,7 +119,7 @@ describe('П8.5: оркестратор — повна партія (фіксо�
     // втрати 37 → 15, поранених 25 → 22, найм 36 → 13, залишок 4210, ветеранів 4, тотал 4553.
     // п18.3 (ADR-0153 п. 13–15): склад ворогів за загрозою і партія до поразки (56 діб замість 30) —
     // місій 23 → 58, поразок 1 → 10, втрати 15 → 57, поранених 22 → 48, найм 13 → 54, залишок 5385,
-    // ветеранів 3, тотал 8696; баланс — probe п18.6.
+    // ветеранів 3, тотал 8696; бот без політики кампанії (п18.6 — CAMPAIGN_POLICY, ADR-0158).
     // п18.4 (ADR-0156): три штурми бази (один програно: +10 загрози, −30 % кредитів) — поразка на 44-й добі:
     // місій 58 → 40, поразок 10 → 6, втрати 57 → 41, поранених 48 → 38, найм 54 → 40, залишок 3210, тотал 6153.
     expect(r.score).toEqual({ ufosShotDown: 0, missionsWon: 34, veteransAlive: 5, moneyLeft: 3210, total: 6153 });
@@ -129,7 +132,7 @@ describe('П8.5: оркестратор — повна партія (фіксо�
     expect(r.hireSpent).toBe(40 * hirePrice('норма')); // П11.8: hirePrice «норми» = 100
     expect(r.assaults).toBe(3);
     expect(r.assaultsLost).toBe(1);
-    expect(r.gateAttempts).toBe(0); // до п18.6 бот «Ключа брами» не досліджує
+    expect(r.gateAttempts).toBe(0); // DEFAULT «Ключа брами» не досліджує (CAMPAIGN_POLICY — п18.6)
   });
 
   // Т.22 (ADR-0089): чинний бот не банкрутує — останній загін без грошей на найм
@@ -471,5 +474,146 @@ describe('П11.8: partyBotScienceStep — детерміновані рішен�
     partyBotScienceStep(p, { ...NO_SCIENCE_BASE, scientistsUpTo: 0, equip: true });
     expect(p.intercept.fighter.gunModule).toBeFalsy(); // гейт «лише на базі» (ADR-0058; поле опційне)
     expect(p.workshop.store['gun-module']).toBe(1);
+  });
+});
+
+// п18.6 (ADR-0158): політика кампанії — ланцюжок до Брами, заряд з резервом трофеїв, дозор, фінал зі званнями.
+describe('п18.6: політика кампанії (CAMPAIGN_POLICY)', () => {
+  const BASE = { ...CAMPAIGN_POLICY, scientistsUpTo: 0, projects: [] as ProjectId[], equip: false };
+
+  it('склад політики: три техноманти, броня і три ключові протоколи за порядком, заряд, дозор у кожному бою, фінал зі званнями', () => {
+    expect(CAMPAIGN_POLICY).toMatchObject({
+      name: 'campaign',
+      scientistsUpTo: 3,
+      projects: ['armor', 'rift-anatomy', 'gate-bearing', 'gate-key'],
+      workshopOrders: ['armor', 'breach-charge'],
+      equip: true,
+      fireScientistsWhenDone: true,
+      reserveTrophies: true,
+      hold: 'all',
+      gateMinRanked: 3,
+    });
+  });
+
+  it('повна партія, сід 7 «норма»: ланцюжок 13 / 24 / 36-та доба, перемога на 37-й у другому фіналі; байт-у-байт', () => {
+    const days: Record<string, number> = {};
+    const r = simulateParty(7, 'норма', {
+      policy: CAMPAIGN_POLICY,
+      onTick: (p) => {
+        for (const id of p.research.completed) days[id] ??= Math.floor(p.geo.minute / 1440) + 1;
+      },
+    });
+    expect([r.outcome, r.endDay, r.gateAttempts, r.assaults, r.soldiersLost]).toEqual(['перемога', 37, 2, 0, 11]);
+    expect(r.completedProjects).toEqual(['armor', 'rift-anatomy', 'gate-bearing', 'gate-key']);
+    expect([days['rift-anatomy'], days['gate-bearing'], days['gate-key']]).toEqual([13, 24, 36]);
+    expect(simulateParty(7, 'норма', { policy: CAMPAIGN_POLICY })).toEqual(r);
+  }, 30_000);
+
+  it('повна партія, сід 6 «норма»: фінали програно, поразка за загрозою на 45-й добі', () => {
+    const r = simulateParty(6, 'норма', { policy: CAMPAIGN_POLICY });
+    expect([r.outcome, r.endDay, r.gateAttempts, r.assaults]).toEqual(['поразка', 45, 5, 3]);
+  }, 30_000);
+
+  it('onTick: виклик на кожен тік, результат той самий, що без спостерігача', () => {
+    let calls = 0;
+    const r = simulateParty(42, 'норма', { maxDays: 3, onTick: () => (calls += 1) });
+    expect(calls).toBe(r.ticks);
+    expect(r).toEqual(simulateParty(42, 'норма', { maxDays: 3 }));
+  });
+
+  it('заряд: трофеї гончаків для незапущених ключових протоколів не витрачає; надлишок — замовляє', () => {
+    const p = createParty(42, 'норма');
+    p.research.completed.push('rift-anatomy'); // «Пеленг» і «Ключ» не запущено — резерв гончаків 2 («Ключ брами»)
+    const pol: PartyBotPolicy = { ...BASE, projects: ['rift-anatomy', 'gate-bearing', 'gate-key'], workshopOrders: ['breach-charge'] };
+    p.research.trophies.hound = 2;
+    partyBotScienceStep(p, pol);
+    expect(p.workshop.queue).toHaveLength(0);
+    p.research.trophies.hound = 3;
+    partyBotScienceStep(p, pol);
+    expect(p.workshop.queue.map((o) => o.id)).toEqual(['breach-charge']);
+    expect(p.research.trophies.hound).toBe(2);
+  });
+
+  it('заряд: без reserveTrophies — один трофей гончака, і замовлення є; без трофея — немає і без помилки', () => {
+    const p = createParty(42, 'норма');
+    p.research.completed.push('rift-anatomy');
+    const pol: PartyBotPolicy = { ...BASE, projects: ['gate-key'], workshopOrders: ['breach-charge'], reserveTrophies: false };
+    expect(() => partyBotScienceStep(p, pol)).not.toThrow();
+    expect(p.workshop.queue).toHaveLength(0);
+    p.research.trophies.hound = 1;
+    partyBotScienceStep(p, pol);
+    expect(p.workshop.queue.map((o) => o.id)).toEqual(['breach-charge']);
+  });
+
+  it('запущений ключовий протокол резерву не тримає — його трофеї вже списано', () => {
+    const p = createParty(42, 'норма');
+    p.research.completed.push('rift-anatomy');
+    p.research.active.push({ id: 'gate-key', invested: 0 });
+    p.research.trophies.hound = 1;
+    partyBotScienceStep(p, { ...BASE, projects: ['gate-key'], workshopOrders: ['breach-charge'] });
+    expect(p.workshop.queue.map((o) => o.id)).toEqual(['breach-charge']);
+  });
+
+  it('екіпірування: заряд зі складу — боєготовому, повторно не дається', () => {
+    const p = createParty(42, 'норма');
+    p.workshop.store['breach-charge'] = 1;
+    partyBotScienceStep(p, { ...BASE, equip: true });
+    const first = readySoldiers(p.roster)[0];
+    expect(p.workshop.equipped[first.id]?.charge).toBe(true);
+    expect(p.workshop.store['breach-charge']).toBe(0);
+  });
+
+  it('фінал: брама відкрита, але у загоні двоє від «Боєць» — чекає; троє — бій', () => {
+    const p = createParty(42, 'норма');
+    p.research.completed.push('gate-key');
+    const squad = readySoldiers(p.roster).slice(0, 3);
+    p.roster.careers[squad[0].id].xp = 2;
+    p.roster.careers[squad[1].id].xp = 2;
+    p.roster.careers[squad[2].id].xp = 1; // «Рекрут»
+    expect(partyBotGateStep(p, CAMPAIGN_POLICY).fought).toBe(false);
+    p.roster.careers[squad[2].id].xp = 2;
+    expect(partyBotGateStep(p, CAMPAIGN_POLICY).fought).toBe(true);
+  });
+
+  it("дозор 'gate' звичайних місій не змінює (байт-у-байт як без дозору); 'all' — змінює", () => {
+    const base = simulateParty(42, 'норма', { maxDays: 10 });
+    expect(simulateParty(42, 'норма', { maxDays: 10, policy: { ...DEFAULT_PARTY_POLICY, hold: 'gate' } })).toEqual({ ...base });
+    expect(simulateParty(42, 'норма', { maxDays: 10, policy: { ...DEFAULT_PARTY_POLICY, hold: 'all' } }).soldiersWounded).not.toBe(
+      base.soldiersWounded
+    );
+  });
+
+  it("дозор 'gate' — у бою фіналу: той самий загін б'ється інакше, ніж без дозору", () => {
+    // сід бою брами — від хвилини: 10 боїв з різною хвилиною свіжим загоном — із дозором 2 перемоги, без — 0
+    const wins = (hold: PartyBotPolicy['hold']) => {
+      let n = 0;
+      for (let k = 0; k < 10; k++) {
+        const p = createParty(42, 'норма');
+        p.research.completed.push('gate-key');
+        p.geo.minute += k * 7;
+        if (partyBotGateStep(p, { ...CAMPAIGN_POLICY, gateMinRanked: undefined, hold }).outcome === 'перемога') n += 1;
+      }
+      return n;
+    };
+    expect([wins('gate'), wins(undefined)]).toEqual([2, 0]);
+  });
+
+  it("дозор 'gate' у штурмі бази не діє (байт-у-байт як без дозору); 'all' — діє (аудит PR #517)", () => {
+    const run = (hold: PartyBotPolicy['hold'], k: number) => {
+      const p = createParty(42, 'норма');
+      p.campaign.assaultPending = true;
+      p.geo.minute += k * 7;
+      const info = partyBotAssaultStep(p, { ...DEFAULT_PARTY_POLICY, hold });
+      return JSON.stringify([info, p.roster, p.econ.money]);
+    };
+    const ks = Array.from({ length: 10 }, (_, k) => k);
+    expect(ks.map((k) => run('gate', k))).toEqual(ks.map((k) => run(undefined, k)));
+    expect(ks.map((k) => run('all', k))).not.toEqual(ks.map((k) => run(undefined, k)));
+  });
+
+  it('фінал без gateMinRanked — одразу, як до п18.6, навіть із рекрутами', () => {
+    const p = createParty(42, 'норма');
+    p.research.completed.push('gate-key');
+    expect(partyBotGateStep(p, { ...CAMPAIGN_POLICY, gateMinRanked: undefined }).fought).toBe(true);
   });
 });
