@@ -34,7 +34,7 @@ import {
   GRENADE_AP_COST,
   distance,
   grenadeZone,
-  hasLineOfSight,
+  hasTerrainLine,
   type GameState,
   type Unit,
   type Vec2,
@@ -172,7 +172,7 @@ function aidTarget(state: GameState, u: Unit): Unit | null {
 function grenadeTarget(state: GameState, u: Unit, enemies: Unit[]): Vec2 | null {
   for (const e of enemies) {
     if (distance(u.pos, e.pos) > GRENADE_RANGE) continue;
-    if (!hasLineOfSight(state, u.pos, e.pos)) continue;
+    if (!hasTerrainLine(state, u.pos, e.pos)) continue; // п17.4: лінія кидка — лише рельєф, як у throwGrenade
     const zone = grenadeZone(e.pos);
     const inZone = (p: Vec2) => zone.some((c) => c.x === p.x && c.y === p.y);
     const foes = enemies.filter((x) => x.alive && inZone(x.pos)).length;

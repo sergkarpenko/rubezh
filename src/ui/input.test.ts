@@ -7,7 +7,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { EYE_BEAM, GOLEM_CANNON, HOUND_CLAWS } from '../core/enemies';
 import { advanceTime, missionTargets } from '../core/geo';
-import { distance, hasLineOfSight, type Unit } from '../core/combat';
+import { distance, hasLineOfSight, hasTerrainLine, type Unit } from '../core/combat';
 import { findPath } from '../core/map';
 import { makeMoveAnim, type Anim } from '../core/render-core';
 import { createParty, type Party } from '../core/save';
@@ -427,7 +427,7 @@ describe('input: витратники бою — аптечка і гранат�
         const c = { x: thrower.pos.x + dx, y: thrower.pos.y + dy };
         if (st.units.some((u) => u.alive && u.pos.x === c.x && u.pos.y === c.y)) continue;
         if (distance(thrower.pos, c) > 6) continue;
-        if (!hasLineOfSight(st, thrower.pos, c)) continue;
+        if (!hasTerrainLine(st, thrower.pos, c)) continue;
         target = c;
       }
     }
@@ -726,8 +726,25 @@ describe('Т.121: порожня клітинка поля під час ані�
   });
 
   it('зведений постріл по видимому демону під час анімації — як і раніше (постріл чи причина)', () => {
-    const { f, s, queue, to, tap } = animFixture();
-    const alien = f.ui.mission!.state.units.find((u) => u.side === 'alien' && u.alive)!;
+    const { f, s, queue } = animFixture();
+    const st = f.ui.mission!.state;
+    const alien = st.units.find((u) => u.side === 'alien' && u.alive)!;
+    // п17.4: юніти закривають вогонь — клітинка поруч без свого на лінії
+    const to = [1, 2, 3, -1, -2, -3]
+      .flatMap((d) => [
+        { x: s.pos.x + d, y: s.pos.y },
+        { x: s.pos.x, y: s.pos.y + d },
+      ])
+      .find(
+        (c) =>
+          c.x >= 0 &&
+          c.y >= 0 &&
+          !st.map.blocked.has(c.x + ',' + c.y) &&
+          !st.units.some((u) => u.alive && u.pos.x === c.x && u.pos.y === c.y) &&
+          hasLineOfSight(st, s.pos, c, 'player')
+      )!;
+    expect(to).toBeDefined();
+    const tap = () => clickAt(f, to.x, to.y);
     alien.pos = { ...to }; // демон поруч із загоном — видимий
     expect(f.battle.visibleCells().has(to.x + ',' + to.y)).toBe(true);
     f.input.armFire('snap');
@@ -1100,10 +1117,10 @@ describe('Т.131: меню на ворогові', () => {
       if (st.units.some((u) => u.alive && u.pos.x === p.x && u.pos.y === p.y)) continue;
       if (st.map.blocked.has(p.x + ',' + p.y)) continue;
       a.pos = p;
-      if (f.battle.visibleCells().has(p.x + ',' + p.y) && hasLineOfSight(st, s.pos, p)) break;
+      if (f.battle.visibleCells().has(p.x + ',' + p.y) && hasLineOfSight(st, s.pos, p, 'player')) break;
     }
     expect(f.battle.visibleCells().has(a.pos.x + ',' + a.pos.y)).toBe(true);
-    expect(hasLineOfSight(st, s.pos, a.pos)).toBe(true);
+    expect(hasLineOfSight(st, s.pos, a.pos, 'player')).toBe(true);
     clickAt(f, s.pos.x, s.pos.y); // вибрати бійця
     return { f, s, a };
   }
@@ -1313,7 +1330,7 @@ describe('п16.4: дія ролі (плитка «Роль», клавіша R)'
       const p = { x: s.pos.x + dx, y: s.pos.y + dy };
       if (st.units.some((u) => u.alive && u.pos.x === p.x && u.pos.y === p.y) || st.map.blocked.has(p.x + ',' + p.y)) continue;
       a.pos = p;
-      if (f.battle.visibleCells().has(p.x + ',' + p.y) && hasLineOfSight(st, s.pos, p)) break;
+      if (f.battle.visibleCells().has(p.x + ',' + p.y) && hasLineOfSight(st, s.pos, p, 'player')) break;
     }
     clickAt(f, s.pos.x, s.pos.y);
     return { f, s, mate, a };

@@ -327,7 +327,7 @@ describe('критерій 2 П13.3: події логу і детермінов
       units: [
         makeUnit({ id: 'p1', side: 'player', pos: { x: 5, y: 5 }, hp: 5, maxAp: 200, firingAccuracy: 0.95 }),
         makeUnit({ id: 'a1', side: 'alien', pos: { x: 6, y: 6 }, hp: 100 }),
-        makeUnit({ id: 'a2', side: 'alien', pos: { x: 7, y: 7 }, hp: 1 }),
+        makeUnit({ id: 'a2', side: 'alien', pos: { x: 7, y: 5 }, hp: 1 }), // п17.4: поза лінією p1→a1 — юніти закривають вогонь,
       ],
     });
     resolveAttack(manual, 'p1', 'a1', 'snap'); // постріл по живому

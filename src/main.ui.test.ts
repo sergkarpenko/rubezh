@@ -2521,8 +2521,9 @@ describePage('Т.69: рядок #fighter-last лишається після пр
     expect(mission!.disabled).toBe(false);
     mission!.click();
     expect($('battle-panel').classList.contains('hidden')).toBe(false);
-    // 4. авто-бій до результату — поразка (сід 36, пресет «складний»)
-    await runAutoBattle();
+    // 4. загін лише закінчує хід — демони добивають його до поразки. п17.4 (ADR-0151): з туманом
+    // із блокуванням авто-бій першої місії тут виграє (сід 36 і всі сіди 37–379, де сценарій доходить до бою), тож поразка — без дій гравця
+    for (let i = 0; i < 200 && $('bresult').textContent === ''; i++) btn('btn-end').click();
     expect($('bresult').textContent).toContain('ЗАГІН ВТРАЧЕНО');
     // 5. уже на картці результату (finish перемальовує панелі): зонд лишився в списку, рядок на панелі — той самий, один
     expect(document.querySelectorAll('#ufos .ufo')).toHaveLength(1);

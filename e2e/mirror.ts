@@ -31,7 +31,7 @@ import { DemoSteps, aliensTurn } from '../src/core/ai-bot';
 import { awaitingRole, newCareer, RANK_NAMES, rankOf, type SoldierRole } from '../src/core/career';
 import type { DifficultyPreset } from '../src/core/campaign';
 import { advanceTime, detectedUfos, geoClock, missionTargets, type Ufo } from '../src/core/geo';
-import { computeVisibleCells, findPath, pathApCost } from '../src/core/map';
+import { findPath, pathApCost, sideVisibleCells } from '../src/core/map';
 import { completeMission, createMission, missionOutcome, type Mission, type MissionOutcome } from '../src/core/mission';
 import { createParty, type Party } from '../src/core/save';
 import { applyMissionResult, chooseRole, deployRoles, hospitalTick, missionSquad, readySoldiers } from '../src/core/squad';
@@ -296,9 +296,7 @@ export class CoreMirror {
   // Клітинки, які бачить загін (battle.ts visibleCells) — за ними ввід бою
   // планує шлях: юніт у тумані шляху не перекриває (ADR-0081).
   seen(): Set<string> {
-    const cells = new Set<string>();
-    for (const s of this.squad()) for (const k of computeVisibleCells(this.state, s.pos)) cells.add(k);
-    return cells;
+    return sideVisibleCells(this.state, 'player'); // п17.4: туман сторони, як battle.ts
   }
 
   // Туман не видає демона (ADR-0081): клітинка першого невидимого демона і
@@ -341,7 +339,7 @@ export class CoreMirror {
       for (const target of this.state.units) {
         if (target.side !== 'alien' || !target.alive || !this.sees(target)) continue;
         if (distance(shooter.pos, target.pos) > shooter.weapon.range) continue;
-        if (!hasLineOfSight(this.state, shooter.pos, target.pos)) continue;
+        if (!hasLineOfSight(this.state, shooter.pos, target.pos, shooter.side)) continue;
         return { shooter, target, chancePct: Math.round(calculateHitChance(shooter, mode) * 100) };
       }
     }

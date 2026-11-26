@@ -99,7 +99,7 @@ describe('A*: перешкоди і недосяжність', () => {
 describe('туман війни', () => {
   it('радіус видимості: у кутку квадрат дальності обрізаний межами мапи', () => {
     const g = setupGame();
-    const vis = computeVisibleCells(g, { x: 2, y: 2 }, 5);
+    const vis = computeVisibleCells(g, { x: 2, y: 2 }, 'player', 5);
     expect(vis.size).toBe(64); // 8×8 після обрізання
     expect(vis.has('5,2')).toBe(true);
     expect(vis.has('0,0')).toBe(true);
@@ -107,13 +107,13 @@ describe('туман війни', () => {
   });
 
   it('з центру мапи — повний квадрат (2×5+1)²', () => {
-    const g = setupGame();
-    expect(computeVisibleCells(g, { x: 10, y: 10 }, 5).size).toBe(121);
+    const g = setupGame([], { x: 19, y: 19 }); // п17.4: демон поза квадратом огляду — юніти закривають
+    expect(computeVisibleCells(g, { x: 10, y: 10 }, 'player', 5).size).toBe(121);
   });
 
   it('стіна видима сама, але ховає клітинки за нею', () => {
     const g = setupGame(['4,2']);
-    const vis = computeVisibleCells(g, { x: 2, y: 2 }, 5);
+    const vis = computeVisibleCells(g, { x: 2, y: 2 }, 'player', 5);
     expect(vis.has('3,2')).toBe(true); // перед стіною
     expect(vis.has('4,2')).toBe(true); // сама стіна
     expect(vis.has('5,2')).toBe(false); // за стіною
@@ -231,7 +231,7 @@ describe('Т.44: reachableCells — зона ходу', () => {
           makeUnit({ id: 'a2', side: 'alien', pos: { x: 17, y: 2 } }),
         ],
       });
-      for (const seen of [undefined, computeVisibleCells(g, from, 3)]) {
+      for (const seen of [undefined, computeVisibleCells(g, from, 'player', 3)]) {
         // довжина найкоротшого шляху до кожної клітинки — один раз на мапу
         const cost = new Map<string, number>();
         for (let y = 0; y < 20; y++)

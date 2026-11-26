@@ -13,6 +13,7 @@ import {
   calculateHitChance,
   distance,
   hasLineOfSight,
+  hasTerrainLine,
   type GameState,
   type ShotMode,
   type Unit,
@@ -70,7 +71,7 @@ export function enemyMenuView(state: GameState, target: Unit, shooter: Unit | un
   };
   if (shooter === undefined) return view;
   const dist = distance(shooter.pos, target.pos);
-  const los = hasLineOfSight(state, shooter.pos, target.pos);
+  const los = hasLineOfSight(state, shooter.pos, target.pos, shooter.side);
   const shots = MENU_SHOTS.map((mode): EnemyMenuShot => {
     const p = shooter.weapon.modes[mode];
     // порядок причин — як у assertCanFire: дальність, лінія, AP
@@ -91,7 +92,7 @@ export function enemyMenuView(state: GameState, target: Unit, shooter: Unit | un
       ? 'ap'
       : dist > GRENADE_RANGE
         ? 'range'
-        : !los
+        : !hasTerrainLine(state, shooter.pos, target.pos) // п17.4: лінія кидка — лише рельєф
           ? 'los'
           : null;
   view.shooter = { dist, shots, grenade };

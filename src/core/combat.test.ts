@@ -75,13 +75,13 @@ describe('формула влучності', () => {
 
 describe('лінія вогню', () => {
   it('відкрита місцевість — видно', () => {
-    expect(hasLineOfSight(setupGame(), { x: 2, y: 2 }, { x: 8, y: 2 })).toBe(true);
+    expect(hasLineOfSight(setupGame(), { x: 2, y: 2 }, { x: 8, y: 2 }, 'player')).toBe(true);
   });
 
   it('стіна між — не видно', () => {
     const g = setupGame(alwaysHit, ['5,2']);
-    expect(hasLineOfSight(g, { x: 2, y: 2 }, { x: 8, y: 2 })).toBe(false);
-    expect(hasLineOfSight(g, { x: 2, y: 2 }, { x: 3, y: 2 })).toBe(true);
+    expect(hasLineOfSight(g, { x: 2, y: 2 }, { x: 8, y: 2 }, 'player')).toBe(false);
+    expect(hasLineOfSight(g, { x: 2, y: 2 }, { x: 3, y: 2 }, 'player')).toBe(true);
   });
 });
 
@@ -92,34 +92,34 @@ describe('лінія вогню симетрична (Т.18, ADR-0087)', () => {
 
   it('стіна лише на лінії A→B — видно в обидва боки', () => {
     const g = setupGame(alwaysHit, ['1,0']);
-    expect(hasLineOfSight(g, A, B)).toBe(true);
-    expect(hasLineOfSight(g, B, A)).toBe(true);
+    expect(hasLineOfSight(g, A, B, 'player')).toBe(true);
+    expect(hasLineOfSight(g, B, A, 'player')).toBe(true);
   });
 
   it('стіна лише на лінії B→A — видно в обидва боки', () => {
     const g = setupGame(alwaysHit, ['1,1']);
-    expect(hasLineOfSight(g, A, B)).toBe(true);
-    expect(hasLineOfSight(g, B, A)).toBe(true);
+    expect(hasLineOfSight(g, A, B, 'player')).toBe(true);
+    expect(hasLineOfSight(g, B, A, 'player')).toBe(true);
   });
 
   it('кінці лінії не перевіряються: між двома стінами видно в обидва боки', () => {
     const g = setupGame(alwaysHit, ['2,0', '0,1']);
-    expect(hasLineOfSight(g, A, B)).toBe(true);
-    expect(hasLineOfSight(g, B, A)).toBe(true);
+    expect(hasLineOfSight(g, A, B, 'player')).toBe(true);
+    expect(hasLineOfSight(g, B, A, 'player')).toBe(true);
   });
 
   it('стіни на обох лініях — не видно в жоден бік', () => {
     const g = setupGame(alwaysHit, ['1,0', '1,1']);
-    expect(hasLineOfSight(g, A, B)).toBe(false);
-    expect(hasLineOfSight(g, B, A)).toBe(false);
+    expect(hasLineOfSight(g, A, B, 'player')).toBe(false);
+    expect(hasLineOfSight(g, B, A, 'player')).toBe(false);
   });
 });
 
 describe('лінія вогню по вертикалі (Т.11)', () => {
   it('стіна між стрільцем і ціллю в одній колонці — не видно', () => {
     const g = setupGame(alwaysHit, ['2,5']);
-    expect(hasLineOfSight(g, { x: 2, y: 2 }, { x: 2, y: 8 })).toBe(false);
-    expect(hasLineOfSight(g, { x: 2, y: 2 }, { x: 2, y: 4 })).toBe(true);
+    expect(hasLineOfSight(g, { x: 2, y: 2 }, { x: 2, y: 8 }, 'player')).toBe(false);
+    expect(hasLineOfSight(g, { x: 2, y: 2 }, { x: 2, y: 4 }, 'player')).toBe(true);
   });
 });
 
@@ -546,7 +546,7 @@ function itemsGame(items?: Record<string, UnitItems>, blocked: string[] = [], rn
     items,
     units: [
       makeUnit({ id: 's1', side: 'player', pos: { x: 2, y: 2 } }),
-      makeUnit({ id: 's2', side: 'player', pos: { x: 3, y: 2 }, hp: 4, maxHp: 10 }),
+      makeUnit({ id: 's2', side: 'player', pos: { x: 3, y: 3 }, hp: 4, maxHp: 10 }),
       makeUnit({ id: 'a1', side: 'alien', pos: { x: 8, y: 2 }, hp: 10, maxHp: 10 }),
       makeUnit({ id: 'a2', side: 'alien', pos: { x: 8, y: 3 }, hp: 10, maxHp: 10 }),
     ],
@@ -573,8 +573,14 @@ describe('П11.4: лікування (аптечка)', () => {
   });
 
   it('діагональний сусід (Чебишев ≤1) — валідна ціль', () => {
+    const g = itemsGame({ s1: { medkit: true, grenade: false } }); // п17.4: s2 у фікстурі — (3,3), діагональ від s1 (2,2)
+    useMedkit(g, 's1', 's2');
+    expect(g.units[1].hp).toBe(7);
+  });
+
+  it('сусід по горизонталі — валідна ціль', () => {
     const g = itemsGame({ s1: { medkit: true, grenade: false } });
-    g.units[1].pos = { x: 3, y: 3 }; // діагональ від s1 (2,2) — відстань Чебишева 1
+    g.units[1].pos = { x: 3, y: 2 };
     useMedkit(g, 's1', 's2');
     expect(g.units[1].hp).toBe(7);
   });
@@ -755,7 +761,7 @@ describe('П11.4: ізоляція (критерій 1: бій без предм
     const play = (items?: Record<string, UnitItems>) => {
       const g = itemsGame(items, ['5,4'], mulberry32(42));
       resolveAttack(g, 's1', 'a1', 'auto');
-      moveUnit(g, 's1', [{ x: 2, y: 3 }]);
+      moveUnit(g, 's1', [{ x: 2, y: 1 }]);
       resolveAttack(g, 's1', 'a2', 'snap');
       endTurn(g);
       resolveAttack(g, 'a1', 's1', 'aimed');

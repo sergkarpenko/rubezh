@@ -213,8 +213,9 @@ function minDistance(pos: Vec2, enemies: Unit[]): number {
 }
 
 // Чи може юніт з клітинки pos вистрілити хоч в одного видимого ворога (дальність і лінія).
+// п17.4: лінія — із закривачами сторони, без власної клітинки юніта (він піде з неї).
 function canShootFrom(state: GameState, u: Unit, pos: Vec2, enemies: Unit[]): boolean {
-  return enemies.some((e) => distance(pos, e.pos) <= u.weapon.range && hasLineOfSight(state, pos, e.pos));
+  return enemies.some((e) => distance(pos, e.pos) <= u.weapon.range && hasLineOfSight(state, pos, e.pos, u.side, u.pos));
 }
 
 // Око (ADR-0149 п. 13): найближчий видимий ближче за EYE_KEEP_DISTANCE і є відхід
