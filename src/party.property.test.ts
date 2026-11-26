@@ -131,13 +131,14 @@ function tick(p: Party): void {
 }
 
 // п18.4: бій кампанії від запуску до підсумку — у тому порядку, що й src/ui/battle.ts (finish).
-function campaignBattle(p: Party, op: 'штурм' | 'брама'): void {
+// п18.6 (ADR-0158): hold — бот тримає позицію в дозорі, як політика кампанії бота партії.
+function campaignBattle(p: Party, op: 'штурм' | 'брама', hold = false): void {
   const squad = missionSquad(p.roster);
   const roles = deployRoles(p.roster, squad) ?? undefined;
   const opts = { squad, items: deployConsumables(p.workshop, squad), ...(roles ? { roles } : {}) };
   const m = op === 'штурм' ? createAssault(p, opts) : createGateMission(p, opts);
   if (op === 'штурм') expect(m.state.units.filter((u) => u.turret).length, 'турелі штурму').toBe(gateKeyDone(p) ? 2 : 0);
-  const fought = autoBattle(m.state).outcome;
+  const fought = autoBattle(m.state, undefined, undefined, hold).outcome;
   const outcome = fought === 'триває' ? 'поразка' : fought;
   const aftermath = applyMissionResult(p.roster, m.state);
   assignBotRoles(p.roster);
@@ -174,7 +175,7 @@ function mission(p: Party, i: number): void {
   const avail = kindsForThreat(p.campaign.threat);
   for (const u of m.state.units)
     if (u.side === 'alien') expect(avail.includes(enemyKind(u)), 'склад за загрозою ' + p.campaign.threat).toBe(true);
-  const fought = autoBattle(m.state).outcome;
+  const fought = autoBattle(m.state, undefined, undefined, i % 2 === 1).outcome; // п18.6: непарний i — дозор бота
   const outcome = fought === 'триває' ? 'поразка' : fought;
   const aftermath = applyMissionResult(p.roster, m.state);
   assignBotRoles(p.roster);
@@ -256,7 +257,7 @@ function apply(p: Party, c: Cmd): Party {
     round: () => round(CHOICES[c.i % CHOICES.length]),
     repair: () => startRepair(intercept, geo, econ),
     mission: () => mission(p, c.i),
-    gate: () => campaignBattle(p, 'брама'), // п18.4: фінал; брама закрита — відмова ядра
+    gate: () => campaignBattle(p, 'брама', c.i % 2 === 1), // п18.4: фінал; брама закрита — відмова ядра; п18.6: непарний i — дозор
     unlock: () => {
       for (const d of KEY_PROJECTS) {
         research.completed.push(d.id);

@@ -12,6 +12,7 @@ import {
   GRENADE_AP_COST,
   GRENADE_RANGE,
   HEAL_AP_COST,
+  OVERWATCH_AP_COST,
   type GameEvent,
   type GameState,
   type Unit,
@@ -529,5 +530,77 @@ describe('Т.142: ходи, ліміти і запобіжники циклів'
     expect(acted[60]).toBe(false);
     expect(g.activeSide).toBe('player');
     expect(burstsBy(g, 'a1')).toBe(60);
+  });
+});
+
+// п18.6 (ADR-0158): дозор бота партії — тримати позицію в дозорі замість наступу (hold).
+describe('п18.6: дозор бота (hold)', () => {
+  function holdGame(alienPos: { x: number; y: number }, blocked: string[] = []): GameState {
+    return createGame({
+      map: { width: 20, height: 20, blocked: new Set(blocked) },
+      rng: mulberry32(42),
+      units: [
+        makeUnit({ id: 's1', side: 'player', pos: { x: 2, y: 2 } }),
+        makeUnit({ id: 's2', side: 'player', pos: { x: 2, y: 6 } }),
+        makeUnit({ id: 'a1', side: 'alien', pos: alienPos }),
+      ],
+    });
+  }
+  const players = (g: GameState) => g.units.filter((u) => u.side === 'player');
+
+  it('ворога не видно: кожен стає в дозор і лишається на місці; без hold — іде назустріч', () => {
+    const g = holdGame({ x: 19, y: 19 });
+    const acts = botTurn(g, undefined, true);
+    expect(acts).toBe(2);
+    expect(players(g).map((u) => [u.id, u.pos.x, u.pos.y, u.overwatch, u.maxAp - u.ap])).toEqual([
+      ['s1', 2, 2, true, OVERWATCH_AP_COST],
+      ['s2', 2, 6, true, OVERWATCH_AP_COST],
+    ]);
+    expect(g.activeSide).toBe('alien');
+    const h = holdGame({ x: 19, y: 19 });
+    botTurn(h);
+    expect(h.log.some((e) => e.type === 'move')).toBe(true);
+    expect(h.log.some((e) => e.type === 'overwatch')).toBe(false);
+  });
+
+  it(`AP менше за ${OVERWATCH_AP_COST} — без дії і без помилки; рівно ${OVERWATCH_AP_COST} — дозор`, () => {
+    const g = holdGame({ x: 19, y: 19 });
+    players(g)[0].ap = OVERWATCH_AP_COST - 1;
+    players(g)[1].ap = OVERWATCH_AP_COST;
+    expect(botTurn(g, undefined, true)).toBe(1);
+    expect(players(g).map((u) => u.overwatch)).toEqual([false, true]);
+    expect(g.log.some((e) => e.type === 'move')).toBe(false);
+  });
+
+  it('ціль на лінії вогню — стріляє, як без hold', () => {
+    const g = holdGame({ x: 8, y: 2 });
+    const h = holdGame({ x: 8, y: 2 });
+    botTurn(g, undefined, true);
+    botTurn(h);
+    expect(g.log[0]).toMatchObject({ type: 'shot', shooterId: 's1', targetId: 'a1' });
+    expect(g.log[0]).toEqual(h.log[0]);
+  });
+
+  it('ворога бачить сторона, а в бійця лінії немає — дозор замість руху до цілі', () => {
+    // стіна закриває a1 від s1; s2 бачить a1 і стріляє, s1 без hold пішов би до цілі
+    const wall = ['5,1', '5,2', '5,3'];
+    const g = holdGame({ x: 8, y: 2 }, wall);
+    const h = holdGame({ x: 8, y: 2 }, wall);
+    botTurn(g, undefined, true);
+    botTurn(h);
+    expect(h.log.some((e) => e.type === 'move' && e.unitId === 's1')).toBe(true);
+    expect(g.log.some((e) => e.type === 'move' && e.unitId === 's1')).toBe(false);
+    expect(players(g)[0].overwatch).toBe(true);
+  });
+
+  it('без hold авто-бій байт-у-байт як до п18.6; з hold бій закінчується — ворог іде до зони висадки', () => {
+    const a = mkMission('h1');
+    const b = mkMission('h1');
+    expect(autoBattle(a.state)).toEqual(autoBattle(b.state, 240, undefined, false));
+    expect(JSON.stringify(a.state.log)).toBe(JSON.stringify(b.state.log));
+    const c = mkMission('h1');
+    const r = autoBattle(c.state, 240, undefined, true);
+    expect(r.outcome).not.toBe('триває');
+    expect(c.state.log.some((e) => e.type === 'overwatch')).toBe(true);
   });
 });

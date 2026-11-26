@@ -27,7 +27,9 @@ import {
   fieldAid,
   preciseShot,
   roleActionBlock,
+  setOverwatch,
   useDash,
+  OVERWATCH_AP_COST,
   EVAC_AP_COST,
   GRENADE_RANGE,
   HEAL_AP_COST,
@@ -93,7 +95,16 @@ function retreatStep(state: GameState, u: Unit): boolean | null {
 // (аптечка, собі), граната при скупченні ворогів (≥2 у зоні вибуху і жодного
 // союзника — бот не платить дружнім вогнем). Рішення без RNG, порядок фіксований.
 // Т.76: з політикою евакуації — відступ після аптечки (лікування першим).
-function soldierStep(state: GameState, u: Unit, evac?: EvacPolicy): boolean {
+// п18.6 (ADR-0158): тримати позицію в дозорі — ворога не видно або пострілу немає: не йти назустріч,
+// а стати в дозор (3 AP); уже в дозорі чи AP замало — кінець дій. Ворог сам іде до зони висадки
+// (patrol aiStep), тож бій не стоїть. Без hold — логіка байт-у-байт як до п18.6.
+function holdStep(state: GameState, u: Unit): boolean {
+  if (u.overwatch || u.ap < OVERWATCH_AP_COST) return false;
+  setOverwatch(state, u.id);
+  return true;
+}
+
+function soldierStep(state: GameState, u: Unit, evac?: EvacPolicy, hold = false): boolean {
   if (!u.alive || u.ap <= 0) return false;
   const aid = aidTarget(state, u);
   if (aid) {
@@ -119,6 +130,7 @@ function soldierStep(state: GameState, u: Unit, evac?: EvacPolicy): boolean {
   }
   if (enemies.length === 0) {
     if (u.turret) return false; // п18.4 (ADR-0156): турель нерухома — чекає ворога
+    if (hold) return holdStep(state, u);
     // Рух до зони НЛО (дзеркало patrolStep, але без резерву на дозор:
     // демо має досягти швидкого контакту). п18.4: у брамі зона ворогів — своя (state.enemyZone).
     const step = bestPathToNeighbors(state, u, state.enemyZone ?? ALIEN_SPAWN, u.ap);
@@ -144,6 +156,7 @@ function soldierStep(state: GameState, u: Unit, evac?: EvacPolicy): boolean {
     return true;
   }
   if (u.turret) return false; // п18.4: турель не підходить до цілі
+  if (hold) return holdStep(state, u);
   const step = pathToward(state, u, target);
   if (step) {
     moveUnit(state, u.id, step);
@@ -189,12 +202,13 @@ function grenadeTarget(state: GameState, u: Unit, enemies: Unit[]): Vec2 | null 
 // Т.76: evac — політика евакуації (без неї бот не евакуює). Евакуйований
 // зникає з units, але лишається в знімку циклу, і AP у нього ще є (евакуація
 // знімає лише 2) — повторну дію зупиняє перевірка state.units.includes(u).
-export function botTurn(state: GameState, evac?: EvacPolicy): number {
+// п18.6: hold — тримати позицію в дозорі (holdStep), для бота партії.
+export function botTurn(state: GameState, evac?: EvacPolicy, hold = false): number {
   if (state.activeSide !== 'player') throw new Error('botTurn: зараз не хід гравця');
   let actions = 0;
   for (const u of state.units.filter((x) => x.side === 'player' && x.alive)) {
     let guard = 0;
-    while (u.alive && u.ap > 0 && guard++ < 60 && state.units.includes(u) && soldierStep(state, u, evac)) actions++;
+    while (u.alive && u.ap > 0 && guard++ < 60 && state.units.includes(u) && soldierStep(state, u, evac, hold)) actions++;
   }
   endTurn(state);
   return actions;
@@ -215,11 +229,12 @@ export function aliensTurn(state: GameState): number {
 export function autoBattle(
   state: GameState,
   maxHalfTurns = 240,
-  evac?: EvacPolicy
+  evac?: EvacPolicy,
+  hold = false
 ): { outcome: ReturnType<typeof missionOutcome>; halfTurns: number } {
   let halfTurns = 0;
   while (missionOutcome(state) === 'триває' && halfTurns < maxHalfTurns) {
-    if (state.activeSide === 'player') botTurn(state, evac);
+    if (state.activeSide === 'player') botTurn(state, evac, hold);
     else aliensTurn(state);
     halfTurns++;
   }
