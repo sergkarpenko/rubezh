@@ -2,9 +2,10 @@
 // закінчується банкрутством. Повторює цикл simulateParty (src/core/party-bot.ts)
 // тими самими кроками бота і пише, з якими грошима і яким загоном запущено
 // кожну місію та в якому стані настало банкрутство. Ядро не змінюється;
-// `--verify` звіряє кожну партію із simulateParty (результат, тіки, число місій).
+// `--verify` звіряє кожну партію із simulateParty (результат, тіки, число місій і спроб фіналу).
 // Поза CI, як sim-p11.8.ts:
 //   node scripts/run-ts.mjs scripts/trace-party.ts -- --policy science --seeds 480
+//   … --policy campaign --days 60  — політика кампанії (п18.6, CAMPAIGN_POLICY); горизонт — діб (типово 30)
 //   … --variant guard+repairfix    — варіанти політики бота (константи гри ті самі)
 //   … --no-bankrupt                — грати далі після банкрутства (контрфакт)
 //   … --out dist/trace.json        — записи партій у файл
@@ -28,7 +29,9 @@ import { workshopTick } from '../src/core/workshop';
 import {
   DEFAULT_PARTY_POLICY,
   SCIENCE_POLICY,
+  CAMPAIGN_POLICY,
   TICKS_PER_DAY,
+  partyBotGateStep,
   partyBotHireStep,
   partyBotAirBattle,
   partyBotInterceptStep,
@@ -37,12 +40,13 @@ import {
   simulateParty,
   partyBotAssaultStep,
 } from '../src/core/party-bot';
-const HORIZON_DAYS = 30; // п18.3 (ADR-0155): VICTORY_DAY прибрано — горизонт виміру 30 діб, як у звітах фаз 8–17
-
 function arg(flag: string, def: string): string {
   const i = process.argv.indexOf(flag);
   return i !== -1 && process.argv[i + 1] ? process.argv[i + 1] : def;
 }
+// п18.3 (ADR-0155): VICTORY_DAY прибрано — горизонт виміру типово 30 діб, як у звітах фаз 8–17;
+// партія кампанії до Брами — ≈ 38–39 діб (p19.6-balance.md), тож для неї — `--days 60` і більше (Т.210).
+const HORIZON_DAYS = Math.max(1, Number(arg('--days', '30')) || 30);
 const policyName = arg('--policy', 'science');
 const preset = arg('--preset', 'норма') as DifficultyPreset;
 const seedCount = Math.max(1, Number(arg('--seeds', '120')) || 120);
@@ -51,7 +55,9 @@ const out = arg('--out', '');
 const verify = process.argv.includes('--verify');
 const noBankrupt = process.argv.includes('--no-bankrupt');
 const flags = new Set(variant.split('+'));
-const policy = policyName === 'science' ? SCIENCE_POLICY : DEFAULT_PARTY_POLICY;
+const POLICIES = { default: DEFAULT_PARTY_POLICY, science: SCIENCE_POLICY, campaign: CAMPAIGN_POLICY } as const;
+if (!(policyName in POLICIES)) throw new Error(`Невідома політика: ${policyName} (default, science, campaign)`);
+const policy = POLICIES[policyName as keyof typeof POLICIES];
 
 interface MissionRec {
   tick: number;
@@ -82,11 +88,12 @@ interface Rec {
   endMoney: number;
   bust?: Bust;
   endTick?: number; // п18.3: тік кінця партії (поразка за загрозою)
+  gateAttempts: number; // Т.210: спроби фіналу «Брама Розриву» (partyBotGateStep, як simulateParty)
 }
 
 function run(seed: number): Rec {
   const party = createParty(seed, preset);
-  const rec: Rec = { seed, won: false, missions: [], moneyByDay: [], aliveByDay: [], endMoney: 0 };
+  const rec: Rec = { seed, won: false, missions: [], moneyByDay: [], aliveByDay: [], endMoney: 0, gateAttempts: 0 };
   const spent: Bust['spent48'][] = [];
   const hire = hirePrice(preset);
   let lastDay = geoDay(party.geo);
@@ -112,8 +119,9 @@ function run(seed: number): Rec {
     const mA = party.econ.money; // аудит PR #515: утрата 30 % кредитів — окремо від найму
     partyBotHireStep(party, policy);
     const m4 = party.econ.money;
-    partyBotScienceStep(party, policy);
+    partyBotScienceStep(party, policy); // разом із купівлею перехоплювача (partyBotFleetStep, п19.6)
     const m5 = party.econ.money;
+    if (partyBotGateStep(party, policy).fought) rec.gateAttempts += 1; // Т.210: фінал перед місією — як simulateParty
     spent.push({ repair: Math.max(0, m0 - m1), salary: m2 - m3, assault: m3 - mA, hire: mA - m4, science: m4 - m5 });
     const readyBefore = readySoldiers(party.roster).length;
     const skip = flags.has('nomissions') || (flags.has('guard') && readyBefore === 3 && m5 < hire);
@@ -176,13 +184,19 @@ for (let seed = 1; seed <= seedCount; seed++) {
   if (!verify) continue;
   const ref = simulateParty(seed, preset, { policy, maxDays: HORIZON_DAYS });
   const ticks = r.bust ? r.bust.tick + 1 : (r.endTick ?? HORIZON_DAYS * TICKS_PER_DAY);
-  if ((ref.outcome === 'перемога') !== r.won || ref.ticks !== ticks || ref.missionsLaunched !== r.missions.length) {
+  if (
+    (ref.outcome === 'перемога') !== r.won ||
+    ref.ticks !== ticks ||
+    ref.missionsLaunched !== r.missions.length ||
+    ref.gateAttempts !== r.gateAttempts
+  ) {
     mismatch += 1;
     console.log(`розбіжність із simulateParty: сід ${seed}`);
   }
 }
 
-const median = (a: number[]): number => (a.length ? [...a].sort((x, y) => x - y)[a.length >> 1] : NaN);
+// Порожній набір (немає перемог, банкрутств) — «—», а не NaN (кандидат 182 (б), Т.210).
+const median = (a: number[]): number | string => (a.length ? [...a].sort((x, y) => x - y)[a.length >> 1] : '—');
 const pct = (n: number, d: number): string => (d ? ((100 * n) / d).toFixed(1) : '—');
 const busts = recs.flatMap((r) => (r.bust ? [r.bust] : []));
 const missions = recs.flatMap((r) => r.missions);
@@ -196,10 +210,12 @@ const defeats = recs.filter((r) => r.endTick !== undefined && !r.won).length; //
 const wins = recs.filter((r) => r.won);
 
 console.log(
-  `# ${policyName} / ${preset} / ${variant}${noBankrupt ? ' / гра після банкрутства' : ''}, сідів ${recs.length}, поразок за загрозою ${defeats}`
+  `# ${policyName} / ${preset} / ${variant}${noBankrupt ? ' / гра після банкрутства' : ''}, сідів ${recs.length}, діб ${HORIZON_DAYS}, поразок за загрозою ${defeats}`
 );
 if (verify) console.log(`звірка із simulateParty: розбіжностей ${mismatch}`);
-console.log(`виграних партій: ${wins.length} (${pct(wins.length, recs.length)} %); банкрутств: ${busts.length}`);
+console.log(
+  `виграних партій: ${wins.length} (${pct(wins.length, recs.length)} %); банкрутств: ${busts.length}; спроб фіналу на партію: ${(recs.reduce((a, r) => a + r.gateAttempts, 0) / recs.length).toFixed(1)}`
+);
 console.log(`місій на партію: ${(missions.length / recs.length).toFixed(1)}; на прожиту добу: ${(missions.length / days).toFixed(2)}`);
 console.log(
   `програно місій: ${pct(missions.filter((m) => !m.won).length, missions.length)} %; із них загинув увесь загін: ${pct(missions.filter((m) => !m.won && m.lost === 3).length, missions.filter((m) => !m.won).length)} %`
@@ -211,7 +227,7 @@ console.log(
   `фатальних місій на 100 запущених: ${pct(fatal.length, missions.length)}; медіана грошей перед місією: ${median(missions.map((m) => m.moneyBefore))}`
 );
 console.log(
-  `виграно місій на партію: ${(missions.filter((m) => m.won).length / recs.length).toFixed(1)}; гроші переможців на 30-ту добу, медіана: ${median(wins.map((r) => r.endMoney))}`
+  `виграно місій на партію: ${(missions.filter((m) => m.won).length / recs.length).toFixed(1)}; гроші переможців наприкінці партії, медіана: ${median(wins.map((r) => r.endMoney))}`
 );
 if (busts.length) {
   const s = (k: keyof Bust['spent48']): string => (busts.reduce((a, b) => a + b.spent48[k], 0) / busts.length).toFixed(0);
@@ -227,7 +243,7 @@ if (busts.length) {
   if (noBankrupt) {
     const rec48 = busts.filter((b) => b.recoverTicks !== undefined && b.recoverTicks <= TICKS_PER_DAY).length;
     console.log(
-      `  гра далі: умова банкрутства зникла за добу — ${rec48}; виграно ще хоч одну місію — ${busts.filter((b) => b.wonAfter > 0).length}; гроші на 30-ту добу, медіана ${median(recs.filter((r) => r.bust).map((r) => r.endMoney))}`
+      `  гра далі: умова банкрутства зникла за добу — ${rec48}; виграно ще хоч одну місію — ${busts.filter((b) => b.wonAfter > 0).length}; гроші наприкінці партії, медіана ${median(recs.filter((r) => r.bust).map((r) => r.endMoney))}`
     );
   }
 }
