@@ -21,7 +21,7 @@ import {
   researchTick,
   startProject,
 } from './core/research';
-import { ENEMY_ORDER, makeEnemy } from './core/enemies';
+import { ENEMY_ORDER, enemyKind, kindsForThreat, makeEnemy } from './core/enemies';
 import {
   ARMOR_MAX_HP_BONUS,
   ITEM_IDS,
@@ -121,6 +121,10 @@ function mission(p: Party, i: number): void {
     roles,
     threat: p.campaign.threat, // п18.3: склад ворогів за загрозою — як src/ui/battle.ts
   });
+  // п18.3: склад ворогів — лише з типів, доступних на загрозі партії
+  const avail = kindsForThreat(p.campaign.threat);
+  for (const u of m.state.units)
+    if (u.side === 'alien') expect(avail.includes(enemyKind(u)), 'склад за загрозою ' + p.campaign.threat).toBe(true);
   const fought = autoBattle(m.state).outcome;
   const outcome = fought === 'триває' ? 'поразка' : fought;
   const aftermath = applyMissionResult(p.roster, m.state);

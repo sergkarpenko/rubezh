@@ -445,6 +445,7 @@ function parseSave(json: string): SaveData {
   // П8.2 (ADR-0033): поле campaign опційне (старі сейви) — але якщо є, має бути коректним.
   // П10.3: третій пресет «складний»; старі сейви без поля — «норма» (deserialize нижче).
   const ccsv = st.campaign;
+  if (ccsv === null || (ccsv !== undefined && typeof ccsv !== 'object')) fail('Пошкоджені дані збереження: кампанія'); // аудит PR #514
   if (
     ccsv !== undefined &&
     ((ccsv.status !== 'триває' && ccsv.status !== 'перемога' && (ccsv.status !== 'поразка' || data.version !== SAVE_VERSION)) ||
@@ -462,7 +463,11 @@ function parseSave(json: string): SaveData {
       !Number.isInteger(ccsv.threatCursor) ||
       (ccsv.threatCursor as number) < 0 ||
       (ccsv.threatCursor as number) > st.geo.log.length ||
-      (ccsv.defeatDay !== null && !Number.isInteger(ccsv.defeatDay)))
+      (ccsv.defeatDay !== null && (!Number.isInteger(ccsv.defeatDay) || (ccsv.defeatDay as number) < 1)) ||
+      // узгодженість (аудит PR #514): «поразка» — рівно на 100 з добою поразки; «триває» — нижче 100
+      (ccsv.status === 'поразка') !== (ccsv.threat === THREAT_MAX && ccsv.defeatDay !== null) ||
+      (ccsv.status !== 'поразка' && ccsv.defeatDay !== null) ||
+      (ccsv.status === 'триває' && ccsv.threat === THREAT_MAX))
   ) {
     fail('Пошкоджені дані збереження: загроза кампанії');
   }

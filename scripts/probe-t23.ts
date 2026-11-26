@@ -251,6 +251,7 @@ function run(name: string, v: Variant, preset: DifficultyPreset, seed: number): 
     rec.spentSalary += m0 - party.econ.money;
     workshopTick(party.workshop);
     hospitalTick(party.roster);
+    campaignTick({ geo: party.geo, roster: party.roster, econ: party.econ }, party.campaign); // п18.3: загроза до місії — як кінець partyTick (main.ts)
     rec.hired += partyBotHireStep(party, policy);
     const m1 = party.econ.money;
     const done = v.fire && sci.projects.every((id) => party.research.completed.includes(id));

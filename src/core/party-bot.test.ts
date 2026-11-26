@@ -327,6 +327,8 @@ describe('П11.8: політика науки — повний флоу (фік�
     // Т.28 (ADR-0091): зарплата 10 — спіраль настає лише за восьми техномантів, усіх
     // протоколів і без звільнення після завершення; сід 54 (probe; до Т.28 — сід 42, штат 5).
     // п17.4 (туман із блокуванням): на сіді 54 штат наприкінці знову 8 — сід 66 (скан 50–80).
+    // п18.3: сід 66 програє за загрозою на 16-й добі з одним днем невиплати — сід 54 (скан 40–140:
+    // два і більше звільнень — сіди 54 і 94), поразка на 15-й добі.
     const heavy: PartyBotPolicy = {
       ...SCIENCE_POLICY,
       name: 'sci-heavy',
@@ -334,11 +336,10 @@ describe('П11.8: політика науки — повний флоу (фік�
       projects: ['medkit', 'optics', 'armor', 'gun-module', 'grenade', 'lab-extension'],
       fireScientistsWhenDone: false,
     };
-    const r = simulateParty(66, 'норма', { policy: heavy });
-    // п18.3: бідна партія без місій програє за загрозою на 16-й добі — один день невиплати
+    const r = simulateParty(54, 'норма', { policy: heavy });
     expect(r.outcome).toBe('поразка');
-    expect(r.salaryShortfallDays).toBe(1);
-    expect(r.scientistsFired).toBe(1);
+    expect(r.salaryShortfallDays).toBe(3);
+    expect(r.scientistsFired).toBe(3);
     // штат просідає 8 → 7 (наймані поверх звільнених) — метрики бачать спіраль
     expect(Math.max(...r.scientistsByDay)).toBe(8);
     expect(r.scientistsByDay[r.scientistsByDay.length - 1]).toBe(7);

@@ -573,7 +573,7 @@ export function createPanels(deps: PanelsDeps): Panels {
     }
   }
 
-  // П8.3: чипи кампанії у топбарі + екран перемоги (статус кампанії, доба N/30).
+  // П8.3: чипи кампанії у топбарі + екран перемоги (статус кампанії, доба N; п18.3 — без «/30»).
   function renderCampaign(): void {
     const party = deps.getParty();
     el('campaign-status').textContent = 'кампанія: ' + party.campaign.status;

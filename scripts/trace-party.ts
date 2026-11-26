@@ -102,6 +102,7 @@ function run(seed: number): Rec {
     const m3 = party.econ.money;
     workshopTick(party.workshop);
     hospitalTick(party.roster);
+    campaignTick({ geo: party.geo, roster: party.roster, econ: party.econ }, party.campaign); // п18.3: загроза до місії — як кінець partyTick (main.ts)
     partyBotHireStep(party, policy);
     const m4 = party.econ.money;
     partyBotScienceStep(party, policy);
@@ -179,10 +180,16 @@ const busts = recs.flatMap((r) => (r.bust ? [r.bust] : []));
 const missions = recs.flatMap((r) => r.missions);
 const lastSquad = missions.filter((m) => m.readyBefore === 3);
 const fatal = missions.filter((m) => !m.won && m.readyAfter === 0 && m.moneyAfter < hirePrice(preset));
-const days = recs.reduce((a, r) => a + (r.bust ? r.bust.tick / TICKS_PER_DAY : HORIZON_DAYS), 0);
+const days = recs.reduce(
+  (a, r) => a + (r.bust ? r.bust.tick / TICKS_PER_DAY : r.endTick !== undefined ? r.endTick / TICKS_PER_DAY : HORIZON_DAYS),
+  0
+);
+const defeats = recs.filter((r) => r.endTick !== undefined && !r.won).length; // п18.3: поразки за загрозою
 const wins = recs.filter((r) => r.won);
 
-console.log(`# ${policyName} / ${preset} / ${variant}${noBankrupt ? ' / гра після банкрутства' : ''}, сідів ${recs.length}`);
+console.log(
+  `# ${policyName} / ${preset} / ${variant}${noBankrupt ? ' / гра після банкрутства' : ''}, сідів ${recs.length}, поразок за загрозою ${defeats}`
+);
 if (verify) console.log(`звірка із simulateParty: розбіжностей ${mismatch}`);
 console.log(`виграних партій: ${wins.length} (${pct(wins.length, recs.length)} %); банкрутств: ${busts.length}`);
 console.log(`місій на партію: ${(missions.length / recs.length).toFixed(1)}; на прожиту добу: ${(missions.length / days).toFixed(2)}`);

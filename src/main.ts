@@ -243,7 +243,7 @@ const OVERLAY_ESC_CLOSE: Record<string, string> = {
 };
 // Т.75: елементи, на які Tab ставить фокус (пастка фокусу у вікні)
 const FOCUSABLE = 'button, input, select, textarea, a[href], [tabindex]:not([tabindex="-1"])';
-let gameOver = false; // банкрутство (ADR-0021): боєготових немає і грошей на найм немає
+let gameOver = false; // банкрутство (ADR-0021): боєготових немає і грошей на найм немає; п18.3 — і поразка за загрозою
 let partyOnScreen = false; // Т.58: партію показано (не стартовий екран) — лише тоді ambient-цикл стартує
 let victoryDismissed = false; // П8.3a: endless — гравець закрив екран перемоги і продовжує гру
 // П12.2 (ADR-0065): партія створюється лише вибором гравця на стартовому

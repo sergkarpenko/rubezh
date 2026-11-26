@@ -585,6 +585,8 @@ describe('save: Т.12 — кожне поле сейву перевіряєть�
       ['log', {}],
     ].map(([f, v]) => ['state.econ.' + f, v, 'економіка']),
     ['state.campaign.status', 'нічия', 'кампанія'],
+    ['state.campaign', null, 'кампанія'],
+    ['state.campaign', 5, 'кампанія'],
     // п18.3 (ADR-0153 п. 18): загроза v3 — ціле 0–100, курсор у межах журналу, доба поразки — null чи ціле
     ...[
       ['threat', -1],
@@ -595,6 +597,7 @@ describe('save: Т.12 — кожне поле сейву перевіряєть�
       ['threatCursor', 1e9],
       ['threatCursor', '0'],
       ['defeatDay', 'x'],
+      ['defeatDay', -5],
     ].map(([f, v]) => ['state.campaign.' + f, v, 'загроза кампанії']),
     ['state.campaign.preset', 'жорсткий', 'кампанія'],
     ['state.hints', null, 'підказки'],
@@ -623,9 +626,25 @@ describe('save: Т.12 — кожне поле сейву перевіряєть�
     expect(deserializeParty(corrupt('state.geo.spawnChance', 0.5)).geo.spawnChance).toBe(0.5);
     expect(deserializeParty(corrupt('state.campaign.status', 'перемога')).campaign.status).toBe('перемога');
     expect(deserializeParty(corrupt('state.campaign.preset', 'легкий')).campaign.preset).toBe('легкий');
-    expect(deserializeParty(corrupt('state.campaign.status', 'поразка')).campaign.status).toBe('поразка'); // п18.3: лише v3
-    expect(deserializeParty(corrupt('state.campaign.threat', 100)).campaign.threat).toBe(100);
-    expect(deserializeParty(corrupt('state.campaign.defeatDay', 61)).campaign.defeatDay).toBe(61);
+    expect(deserializeParty(corrupt('state.campaign.threat', 99)).campaign.threat).toBe(99);
+  });
+
+  it('п18.3 (аудит PR #514): загроза, статус і доба поразки узгоджені — «поразка» рівно на 100 з добою', () => {
+    const withCampaign = (c: Record<string, unknown>): string => {
+      const json = JSON.parse(serializeParty(createParty(42)));
+      Object.assign(json.state.campaign, c);
+      return JSON.stringify(json);
+    };
+    const score = { ufosShotDown: 0, missionsWon: 0, veteransAlive: 6, moneyLeft: 300, total: 375 };
+    expect(deserializeParty(withCampaign({ status: 'поразка', threat: 100, defeatDay: 61, score })).campaign.defeatDay).toBe(61);
+    for (const bad of [
+      { status: 'триває', threat: 100 },
+      { status: 'поразка', threat: 99, defeatDay: 61 },
+      { status: 'поразка', threat: 100, defeatDay: null },
+      { status: 'триває', defeatDay: 5 },
+      { status: 'перемога', defeatDay: 5 },
+    ])
+      expect(() => deserializeParty(withCampaign(bad)), JSON.stringify(bad)).toThrow('Пошкоджені дані збереження: загроза кампанії');
   });
 
   it('п18.3: у v3 без поля campaign чи defeatDay — відмова «загроза кампанії»', () => {

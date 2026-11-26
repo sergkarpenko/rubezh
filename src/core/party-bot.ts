@@ -1,6 +1,6 @@
 // src/core/party-bot.ts — бот-гравець наскрізного циклу партії (П8.5).
-// Оркеструє ПОВНУ партію «Рубіжа» від createParty(seed, preset) до перемоги на
-// межі 30-ї доби (ADR-0033) або банкрутства (ADR-0021): тіки геоцени →
+// Оркеструє ПОВНУ партію «Рубіжа» від createParty(seed, preset) до поразки за
+// загрозою (п18.3, ADR-0155), перемоги або банкрутства (ADR-0021): тіки геоцени →
 // перехоплення НЛО → тактичні місії → найм/лікування/ремонт.
 //
 // ADR-0002: чисте ядро без DOM/Canvas — лише публічне API наявних модулів
@@ -354,6 +354,7 @@ export interface MissionStepInfo {
 export function partyBotMissionStep(party: Party, policy: PartyBotPolicy): MissionStepInfo {
   const info: MissionStepInfo = { launched: false, outcome: null, lost: 0, wounded: 0, evacuated: 0 };
   if (!policy.missions) return info;
+  if (party.campaign.status !== 'триває') return info; // п18.3: кінець партії — місій немає (gameOver у main.ts)
   if (readySoldiers(party.roster).length < policy.missionSquadSize) return info;
   // Т.22 (ADR-0089): запобіжник останнього загону — без грошей на найм
   // останні боєготові в бій не йдуть (розгром був би банкрутством).
@@ -469,6 +470,9 @@ export function simulateParty(seed: number, preset: DifficultyPreset = DEFAULT_P
     researchTick(party.research, party.econ, party.geo, party.campaign.preset);
     workshopTick(party.workshop);
     hospitalTick(party.roster);
+    // п18.3 (аудит PR #514): загроза — наприкінці тіку, до рішень гравця, як partyTick у main.ts:
+    // склад місії цього тіку бачить події доби й відльотів цього тіку; поразка — місій немає.
+    campaignTick({ geo: party.geo, roster: party.roster, econ: party.econ }, party.campaign);
 
     // Фаза 3: найм (перед місіями — загін має бути повним).
     res.hiredTotal += partyBotHireStep(party, policy);
@@ -540,7 +544,8 @@ export function simulateParty(seed: number, preset: DifficultyPreset = DEFAULT_P
       break;
     }
 
-    // п18.3: загроза кампанії — поразка на 100 (перемога — фінальна місія, п18.4).
+    // п18.3: загроза кампанії — поразка на 100 (перемога — фінальна місія, п18.4); події місії
+    // цього тіку враховує вже цей виклик (у main.ts — наступний partyTick; послідовність загрози та сама).
     campaignTick({ geo: party.geo, roster: party.roster, econ: party.econ }, party.campaign);
     if (party.campaign.status !== 'триває') {
       res.outcome = party.campaign.status;

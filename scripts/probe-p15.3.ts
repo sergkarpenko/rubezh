@@ -44,6 +44,7 @@ function missionStep(party: Party): { evacUnits: number } {
   const policy = DEFAULT_PARTY_POLICY;
   let evacUnits = 0;
   if (!policy.missions) return { evacUnits };
+  if (party.campaign.status !== 'триває') return { evacUnits }; // п18.3: як partyBotMissionStep
   if (readySoldiers(party.roster).length < policy.missionSquadSize) return { evacUnits };
   const target = missionTargets(party.geo)[0];
   if (!target) return { evacUnits };
@@ -81,6 +82,7 @@ function replay(seed: number, preset: DifficultyPreset): { save: string; evacUni
     researchTick(party.research, party.econ, party.geo, party.campaign.preset);
     workshopTick(party.workshop);
     hospitalTick(party.roster);
+    campaignTick({ geo: party.geo, roster: party.roster, econ: party.econ }, party.campaign); // п18.3: загроза до місії — як кінець partyTick (main.ts)
     partyBotHireStep(party, policy);
     partyBotScienceStep(party, policy);
     evacUnits += missionStep(party).evacUnits;
