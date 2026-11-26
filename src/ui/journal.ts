@@ -118,9 +118,11 @@ export function createJournal(deps: JournalDeps): Journal {
   // шляхи, якими умова стає істинною: виявлення НЛО, завершення ремонту,
   // завантаження сейву. Туман не порушуємо: умови лише за виявленими НЛО.
   function maybeHints(p: Party): void {
-    const f = p.intercept.fighters[0];
-    // «Можна перехопити»: виявлений НЛО у повітрі + боєготовий винищувач
-    if (f.status === 'на базі' && f.hp === FIGHTER_MAX_HP && p.geo.ufos.some((u) => u.detected && u.status === 'летить')) {
+    // «Можна перехопити»: виявлений НЛО у повітрі + боєготовий винищувач (п19.4: будь-який)
+    if (
+      p.intercept.fighters.some((f) => f.status === 'на базі' && f.hp === FIGHTER_MAX_HP) &&
+      p.geo.ufos.some((u) => u.detected && u.status === 'летить')
+    ) {
       if (claimHint(p.hints, 'intercept')) {
         journal(
           'Підказка: виявлений зонд Розриву у повітрі можна перехопити — кнопка «Перехопити» на вкладці «Вузол», панель «Сенсорна сітка».'

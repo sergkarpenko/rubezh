@@ -390,10 +390,8 @@ const savePanel = createSavePanel({
     checkpoint = party === null ? null : serializeParty(party);
   },
   inBattle: () => ui.mission !== null,
-  interceptBusy: () => {
-    const f = activeParty().intercept.fighters[0];
-    return f.status === 'погоня' || f.status === 'бій';
-  },
+  // п19.4: будь-який перехоплювач у погоні чи бою (аудит PR #522)
+  interceptBusy: () => activeParty().intercept.fighters.some((f) => f.status === 'погоня' || f.status === 'бій'),
   isGameOver: () => gameOver,
   journal,
   renderAll,
@@ -437,7 +435,16 @@ const researchPanel = createResearchPanel({
   renderAll,
   // T.39: смуга кроків панелі «Дослідження» — чиста навігація (стан гри не змінюється)
   scrollToResearch: () => el('research').scrollIntoView({ block: 'nearest' }),
-  scrollToWorkshop: () => el('workshop').scrollIntoView({ block: 'nearest' }),
+  // п19.4: «Кузня» з рядком перехоплювача буває вища за колонку — тоді її верх під вкладками
+  // (block 'start' і scroll-margin-top панелей колонки, index.html), а не низ
+  scrollToWorkshop: () => {
+    const w = el('workshop');
+    // аудит PR #523: колонка, що прокручується, — #status (≥ 1181 px) або #side (900–1180 px)
+    let col = w.parentElement;
+    while (col !== null && !['auto', 'scroll'].includes(getComputedStyle(col).overflowY)) col = col.parentElement;
+    const tall = col !== null && w.getBoundingClientRect().height > col.clientHeight;
+    w.scrollIntoView({ block: tall ? 'start' : 'nearest' });
+  },
   showSquadTab: () => statusTabs?.set('squad'),
 });
 
@@ -618,6 +625,7 @@ function renderAll(): void {
   panels.renderGeo();
   panels.renderUfos();
   panels.renderFighter();
+  panels.renderRegions(); // п19.4: панель «Регіони» середньої колонки
   panels.renderFinances();
   panels.renderRoster();
   researchPanel.render(); // П11.6: панель «Дослідження» (лише геосцена — кнопки вимкнені в бою)

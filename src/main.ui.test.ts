@@ -1875,14 +1875,19 @@ describePage('П12.4: вкладки статус-колонки «Загін»/
       .filter(visible)
       .map((p) => p.querySelector('h2')!.textContent ?? '');
 
-  it('розмітка: скелет #status-tabs у колонці, 6 панелей з data-tab; «Загін» — фінанси/ростер, «База» — сканери/винищувач/дослідження/цех (рішення власника П12.4); «Збереження» — вікно поза колонкою (Т.128)', () => {
+  it('розмітка: скелет #status-tabs у колонці, 5 панелей з data-tab (п19.4); «Загін» — фінанси/ростер, «База» — сканери/винищувач/дослідження/цех (рішення власника П12.4); «Збереження» — вікно поза колонкою (Т.128)', () => {
     const col = htmlRaw.match(/<aside id="status">[\s\S]*?<\/aside>/)![0];
     expect(col).toContain('<div id="status-tabs"></div>'); // скелет — контент генерує модуль
-    expect((col.match(/data-tab="/g) ?? []).length).toBe(7); // усі панелі колонки розподілені (п18.5: + «Мета кампанії»)
+    expect((col.match(/data-tab="/g) ?? []).length).toBe(5); // усі панелі колонки розподілені (п19.4: «Мета кампанії» і перехоплювачі — у #mid)
     const byTab = (tab: string): number =>
       (col.match(new RegExp('<section class="panel" data-tab="' + tab + '">[\\s\\S]*?</section>', 'g')) ?? []).length;
     expect(byTab('squad')).toBe(2); // фінанси + ростер (ADR-0065)
-    expect(byTab('base')).toBe(5); // дослідження + цех (ADR-0065) + сканери + винищувач (рішення власника) + мета кампанії (п18.5)
+    expect(byTab('base')).toBe(3); // дослідження + цех (ADR-0065) + сканери (рішення власника); п19.4: мета й перехоплювачі — у #mid
+    // п19.4 (ADR-0159 п. 15): середня колонка — три панелі без вкладок
+    const mid = htmlRaw.match(/<aside id="mid">[\s\S]*?<\/aside>/)![0];
+    expect((mid.match(/<section class="panel">/g) ?? []).length).toBe(3);
+    for (const id of ['campaign-goal', 'regions', 'fighter']) expect(mid).toContain('<div id="' + id + '"></div>');
+    expect(mid).not.toContain('data-tab');
     expect(byTab('system')).toBe(0); // Т.128: «Збереження» — вікно з «Меню»
     expect(col).not.toContain('save-panel');
     expect($('save-dialog').contains($('save-panel'))).toBe(true);
@@ -1894,13 +1899,13 @@ describePage('П12.4: вкладки статус-колонки «Загін»/
     expect(document.getElementById('status-tab-system')).toBeNull();
   });
 
-  it('флоу: перемикання вкладок показує всі 6 панелей, панелі лишаються в DOM, вибір персиститься поза сейвом', () => {
+  it('флоу: перемикання вкладок показує всі 5 панелей (п19.4), панелі лишаються в DOM, вибір персиститься поза сейвом', () => {
     startParty();
-    expect(colPanels().length).toBe(7); // жодна панель не втрачена (критерій 1; п18.5 — «Мета кампанії»)
+    expect(colPanels().length).toBe(5); // жодна панель не втрачена (критерій 1; п19.4 — дві панелі в #mid)
     btn('status-tab-squad').click();
     expect(visibleTitles()).toEqual(['Фінанси', 'Ростер загону']);
     btn('status-tab-base').click();
-    expect(visibleTitles()).toEqual(['Мета кампанії', 'Сенсорна сітка', 'Перехоплювач', 'Дослідження', 'Кузня']);
+    expect(visibleTitles()).toEqual(['Сенсорна сітка', 'Дослідження', 'Кузня']); // п19.4
     // приховані панелі зберігають контент у DOM (контракти не послаблюються)
     expect($('roster').textContent).toContain('оперативник');
     expect($('money-card').textContent).not.toBe('');
@@ -2219,7 +2224,8 @@ describePage('Т.43: «До події», зупинки «+1 доба» і пр
     expect(tab('roster')).toBe('squad');
     expect(tab('ufos')).toBe('base');
     expect(tab('workshop')).toBe('base');
-    expect(tab('fighter')).toBe('base');
+    expect(tab('fighter')).toBeUndefined(); // п19.4: «Перехоплювачі» — середня колонка без вкладки (ціль tab: null)
+    expect($('fighter').closest('#mid')).not.toBeNull();
     expect(document.getElementById('btn-event')?.closest('#topbar')).not.toBeNull();
     // Т.80: рядок — у заголовку «Геосцени» поруч із «Геосцена», не в шапці
     expect($('next-step').closest('#topbar')).toBeNull();
@@ -3455,11 +3461,12 @@ describePage('Т.128: «Збереження» — вікно з «Меню» (A
 
   it('іконки: заголовки шести панелей колонки, вікна «Збереження», пункт меню і дві кнопки вербування; підписи кнопок без змін', () => {
     startParty('42');
-    const heads = [...document.querySelectorAll('#status section.panel h2, #save-dialog h2')];
+    const heads = [...document.querySelectorAll('#mid section.panel h2, #status section.panel h2, #save-dialog h2')];
     expect(heads.map((h) => h.textContent)).toEqual([
       'Мета кампанії',
+      'Регіони', // п19.4: середня колонка
+      'Перехоплювачі',
       'Сенсорна сітка',
-      'Перехоплювач',
       'Фінанси',
       'Дослідження',
       'Кузня',

@@ -239,7 +239,7 @@ describe('Т.80: гарматний модуль на складі — «вст�
     const p = createParty(42);
     p.workshop.store['gun-module'] = 1;
     expect(text(p)).toBe('Наступний крок: гарматний модуль на складі — встановіть на перехоплювач');
-    expect(nextStep(p, GEO)?.target).toEqual({ tab: 'base', id: 'btn-gun-install' });
+    expect(nextStep(p, GEO)?.target).toEqual({ tab: null, id: 'btn-gun-install' }); // п19.4: середня колонка
     p.intercept.fighters[0].status = 'ремонт';
     expect(text(p)).toBe(NEXT_STEP.time);
     p.intercept.fighters[0].status = 'на базі';
@@ -337,7 +337,7 @@ describe('Т.79: куди веде клік по рядку', () => {
         p.workshop.store['gun-module'] = 1;
         return p;
       },
-      target: () => ({ tab: 'base', id: 'btn-gun-install' }),
+      target: () => ({ tab: null, id: 'btn-gun-install' }),
     },
     repair: {
       party: () => {
@@ -345,7 +345,7 @@ describe('Т.79: куди веде клік по рядку', () => {
         p.intercept.fighters[0].hp = 1;
         return p;
       },
-      target: () => ({ tab: 'base', id: 'btn-repair' }),
+      target: () => ({ tab: null, id: 'btn-repair' }),
     },
     time: { party: () => createParty(42), target: () => ({ tab: null, id: 'btn-event' }) },
     refill: {

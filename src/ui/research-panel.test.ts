@@ -353,13 +353,13 @@ describe('T.39: кнопка «Замовити в «Кузні»» на кар�
     expect(c).toContain('На складі: 2 — видайте на вкладці «Загін»');
   });
 
-  it('Т.78: гарматний модуль на складі — підказка встановити в панелі «Перехоплювач»', () => {
+  it('Т.78: гарматний модуль на складі — підказка встановити в панелі «Перехоплювачі»', () => {
     party.research.completed.push('gun-module');
     party.workshop.store['gun-module'] = 1;
     createResearchPanel(makeDeps()).render();
     expect(el('btn-forge-gun-module')).not.toBeNull();
     const c = card('Гарматний модуль перехоплювача').textContent!;
-    expect(c).toContain('На складі: 1 — встановіть у панелі «Перехоплювач»');
+    expect(c).toContain('На складі: 1 — встановіть у панелі «Перехоплювачі»');
     expect(c).not.toContain('Загін'); // модуль не видається оперативникам
   });
 

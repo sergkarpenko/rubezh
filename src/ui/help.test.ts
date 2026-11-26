@@ -70,7 +70,13 @@ describe('П9.1: екран «Як грати» — контент з конст
     expect(text).toContain('Рахунок: 100 за зонд · 150 за місію · 50 за живого · 0,25 за кредит.');
     expect(text).toContain('ремонт, штурм), «+1 доба» — коли зонд виявлено чи приземлився або почався штурм.');
     // Числа економіки (П8.6): дотація 75, премії 110/170
-    expect(text).toContain('дотація 75/добу');
+    expect(text).toContain('дотація до 75/добу'); // п19.4 (рішення власника Т.207): дотація — за довірою регіонів
+    expect(text).toContain('ремонт перехоплювача 50 · перехоплювач 200.');
+    // п19.4: рядок «Регіони» — числа з констант ядра
+    expect(text).toContain(
+      'Регіони: довіра −30 / −15 за зонд, що відлетів без бою (виявлений / ні), +10 за виграну місію; дотація — за довірою, на 0 регіон виходить.'
+    );
+    expect(text).toContain('там же — до 3 перехоплювачів, в ангар обраного регіону.');
     expect(text).toContain('110 (розвідник) / 170 (збирач)');
     // Керування: тулбар дій (П13.2) + тап-тап + гарячі клавіші 1/2/3/O/M/G/V/E/Esc (урок П11.9)
     expect(text).toContain('плитки тулбара збоку');
@@ -89,12 +95,12 @@ describe('П9.1: екран «Як грати» — контент з конст
     const text = $('help-screen').textContent ?? '';
     expect(text).toContain('Наука і спорядження');
     expect(text).toContain('Техноманти');
-    expect(text).toContain('1 очко потоку за добу і коштує ' + SCIENTIST_SALARY + ' кр. за добу');
-    expect(text).toContain('у роботі — до ' + BASE_LAB_SLOTS + ' протоколів одночасно');
+    // п19.4 (рішення власника Т.207 «А»): «Техноманти» і «Протокол» — один рядок
+    expect(text).toContain('1 очко потоку і ' + SCIENTIST_SALARY + ' кр. за добу кожен; до ' + BASE_LAB_SLOTS + ' протоколів одночасно');
     expect(text).toContain('«Кузня»');
     expect(text).toContain('Видача');
     expect(text).toContain('на вкладці «Загін»');
-    expect(text).toContain('Гель, граната й заряд витрачаються в бою, броня й око — ні');
+    expect(text).toContain('видайте на вкладці «Загін»; гель, граната й заряд витрачаються в бою, броня й око — ні'); // п19.4: коротший рядок
   });
   it('П10.2: показує версію гри зі зборки (vite define ← package.json)', () => {
     freshHelp();
@@ -109,12 +115,12 @@ describe('Т.49: слово «перехоплювач» без друкарсь
   it('довідка і розмітка сторінки: «перехоплювач», а не «перехоплюач»', () => {
     freshHelp();
     const text = $('help-screen').textContent ?? '';
-    expect(text).toContain('перехоплювач і загін живуть у ньому');
+    expect(text).toContain('загін і перший перехоплювач живуть у ньому'); // п19.4
     expect(text).toContain('перехоплювач атакує зонд у повітрі');
     expect(text).toContain('ремонт перехоплювача');
     expect(text).not.toContain('ерехоплюач');
     expect(htmlRaw).toContain('Перехоплювач: <b id="ictx-fighter">');
-    expect(htmlRaw).toContain('<h2 data-icon="fighter">Перехоплювач</h2>'); // Т.128: іконка заголовка
+    expect(htmlRaw).toContain('<h2 data-icon="fighter">Перехоплювачі</h2>'); // Т.128: іконка заголовка
     expect(htmlRaw).not.toContain('ерехоплюач');
   });
 });

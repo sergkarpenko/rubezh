@@ -8,7 +8,21 @@
 // геосцені (прецедент панелі збереження, П5.3): у бою кнопки вимкнені.
 // Детермінізм: панель лише читає стан ядра, жодного RNG.
 
-import { ITEM_IDS, WORKSHOP_CATALOG, itemName, itemUnlocked, orderItem, orderName, type ItemId } from '../core/workshop';
+import {
+  INTERCEPTOR_COST,
+  INTERCEPTOR_TICKS,
+  ITEM_IDS,
+  WORKSHOP_CATALOG,
+  interceptorCount,
+  itemName,
+  itemUnlocked,
+  orderInterceptor,
+  orderItem,
+  orderName,
+  type ItemId,
+} from '../core/workshop';
+import { MAX_FIGHTERS } from '../core/intercept';
+import { REGION_IDS, REGION_NAMES } from '../core/regions';
 import { sciencePrice } from '../core/campaign';
 import { missingTrophies } from '../core/research';
 
@@ -135,6 +149,67 @@ export function createWorkshopPanel(deps: WorkshopPanelDeps): WorkshopPanel {
       catalog.appendChild(row);
     }
     box.appendChild(catalog);
+    box.appendChild(interceptorRow(party, busy));
+  }
+
+  // п19.4 (ADR-0159 п. 4, 13; ADR-0161): купівля перехоплювача — рядок «Кузні» з вибором ангара:
+  // кнопка на кожен регіон (і той, що вийшов — рішення власника п19.3); разом із замовленими — до трьох.
+  function interceptorRow(party: Party, busy: boolean): HTMLElement {
+    const row = document.createElement('div');
+    row.className = 'ufo';
+    row.id = 'interceptor-order';
+    row.style.marginBottom = '4px';
+    const price = sciencePrice(INTERCEPTOR_COST, party.campaign.preset);
+    const count = interceptorCount(party.workshop, party.intercept);
+    const info = document.createElement('div');
+    info.innerHTML =
+      'Перехоплювач · ' +
+      price +
+      ' · ' +
+      ticksText(INTERCEPTOR_TICKS) +
+      '<span class="meta"> · є ' +
+      count +
+      ' з ' +
+      MAX_FIGHTERS +
+      ' · ангар:</span>';
+    info.title = 'Перехоплювачів разом із замовленими в «Кузні» — не більше ' + MAX_FIGHTERS; // аудит PR #523
+    row.appendChild(info);
+    const full = count >= MAX_FIGHTERS;
+    const poor = party.econ.money < price;
+    const why = full
+      ? 'Перехоплювачів уже ' + MAX_FIGHTERS + ' разом із замовленими'
+      : poor
+        ? 'Недостатньо кредитів (ціна ' + price + ')'
+        : null;
+    const line = document.createElement('span');
+    line.className = 'order-line';
+    for (const r of REGION_IDS) {
+      const b = document.createElement('button');
+      b.id = 'btn-order-interceptor-' + r;
+      b.className = 'research';
+      b.textContent = REGION_NAMES[r] + (party.campaign.regions[r].out ? ' ✗' : '');
+      b.disabled = busy || why !== null;
+      b.title =
+        why ??
+        'Замовити перехоплювач в ангар «' + REGION_NAMES[r] + '» (−' + price + ', готовність через ' + ticksText(INTERCEPTOR_TICKS) + ')';
+      b.onclick = () => {
+        try {
+          orderInterceptor(party.econ, party.workshop, party.intercept, r, party.campaign.preset);
+        } catch (e) {
+          deps.journal('✗ ' + (e as Error).message, 'lose', 'base');
+        }
+        deps.renderAll();
+      };
+      line.appendChild(b);
+    }
+    row.appendChild(line);
+    if (why !== null) {
+      const w = document.createElement('div');
+      w.className = 'btn-why'; // Т.43: причина — тим самим стилем, що під кнопками (одна на рядок)
+      w.textContent = why;
+      row.appendChild(w);
+    }
+    return row;
   }
 
   return { render: renderWorkshopPanel };

@@ -208,7 +208,7 @@ describe('Т.43: причина під «Замовити» в «Кузні»', 
   it('Т.80: кнопка і причина — разом у групі .order-line, остання в рядку каталогу', () => {
     party = createParty(42);
     createWorkshopPanel(makeDeps()).render();
-    const rows = document.querySelectorAll('#workshop .ufo');
+    const rows = document.querySelectorAll('#workshop .ufo:not(#interceptor-order)'); // п19.4: рядок перехоплювача — окремий тест
     expect(rows.length).toBeGreaterThan(0);
     for (const row of rows) {
       const line = row.lastElementChild!;

@@ -9,6 +9,7 @@ import type { GameEvent } from '../core/combat';
 import type { EconomyEvent } from '../core/economy';
 import type { ResearchEvent } from '../core/research';
 import type { WorkshopEvent } from '../core/workshop';
+import { addFighter } from '../core/intercept';
 import { createParty } from '../core/save';
 import {
   battleEventText,
@@ -537,6 +538,17 @@ describe('Journal: підказки по ходу (П9.2, один раз за �
     j.drainGeo();
     expect([...document.querySelectorAll('#log li')].filter((li) => li.textContent?.startsWith('Підказка'))).toHaveLength(0);
     expect(p.hints.intercept).toBe(false);
+  });
+
+  // п19.4: перший пошкоджений, другий боєготовий — підказка є (умова — будь-який перехоплювач)
+  it('«Можна перехопити» з двома: боєготовий другий — підказка показується', () => {
+    const p = createParty(42);
+    addFighter(p.intercept, p.geo, 'east');
+    p.intercept.fighters[0].hp = 2;
+    flyingUfo(p, 'u1');
+    const j = createJournal(makeDeps({ party: () => p, geoLog: () => p.geo.log }));
+    j.drainGeo();
+    expect(p.hints.intercept).toBe(true);
   });
 
   it('«Доступна місія»: приземлений виявлений НЛО — підказка один раз', () => {
