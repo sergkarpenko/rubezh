@@ -517,22 +517,22 @@ describe('П14.4: тряска вибуху — амплітуда ×2 від п
   });
 });
 
-describe('позафазна лінія «візуальні порівняння» (кандидат А «нічний супутник», 2026-10-22; скориговано 2026-10-23 ×2): розклад 9×16 ВИВЕДЕНО З КАРТИНИ — константа, без geo.rng', () => {
+describe('п19.5 (ADR-0163): розклад 9×16 ВИВЕДЕНО З КАРТИНИ «Живі береги» — константа, без geo.rng', () => {
   // Розклад виведено скриптом scripts/geo-layout.py з assets-src/geo-map2.jpg
   // (медіани яскравості клітинок 70×70 вікна «сюди», поріг 16.5;
   // фідбек власника 2026-10-23 ×4: вказівка «сюди» — клітинка бази на
   // яскравому мисі-«острові» південного узбережжя материка, медіана
   // бази 35.6 — без відхилень). Байти фіксуються тут: L — суша, B — база.
   const MAP = [
-    '......LLLLLL....',
-    '...LLLLLLLLLLL..',
-    '..LLLLLLLLLLLL..',
-    '...LLLLLLLLLLL..',
-    '......LLBL......',
-    '................',
-    '................',
-    '...........L....',
-    '.........L......',
+    '.L.......LL..L..',
+    '.L.L..LLLLL..LL.',
+    '.LLL..LLLLL..LLL',
+    '.LL...LLLLL..LLL',
+    '.LL....LBLLL.LLL',
+    'LLLL..L..L...LLL',
+    'LLLL..LLLLLL.LL.',
+    '.LLLL.LLLLLL.LL.',
+    '.L.......L...L..',
   ];
   const layout = GEO_LAND_ROWS;
 
@@ -591,29 +591,37 @@ describe('позафазна лінія «візуальні порівнянн�
     expect(calls).toBe(before); // 0 викликів geo.rng (критерій фідбеку)
   });
 
-  it('пропорції: суша 46/144 (31.9%) — в орієнтирі 30–40%; материк з мисом бази + південні острови (фідбек «сюди» 2026-10-23)', () => {
-    expect(landCount(layout)).toBe(46); // 31.9% (WORLD_H 9: 16×9)
-    const comps = components(layout).sort((a, b) => b - a);
-    // материк 44 (рядки 0..4: північний масив + південне узбережжя з
-    // мисом-«островом» бази), південні острови (11,7) і (9,8) — поодинокі
-    // (розклад виведено з картини, не рукотворний)
-    expect(comps).toEqual([44, 1, 1]);
+  it('пропорції: суша 80/144 (55,6 %); дві маси клітинок — Захід зі Сходом через край (43) і Північ з Півднем (37)', () => {
+    expect(landCount(layout)).toBe(80);
+    // на сітці 16 × 9 протоки вужчі за клітинку: Захід і Схід — сусіди через край (ADR-0159 п. 9),
+    // Північ і Південь торкаються стовпцями 6 і 9 (на картині між ними протока)
+    expect(components(layout).sort((a, b) => b - a)).toEqual([43, 37]);
   });
 
-  it('жорстка перевірка (а): клітинка бази (8,4) — суша (яскравий мис-«острів» під радаром, медіана 35.6; геометрія радара без змін)', () => {
-    expect(geoIsLand(layout, 8, 4)).toBe(true); // база-радар — на мисі
+  it('перевірка конвертера: вузол (8,4), Брама (9,4) і ангари (2,4), (13,4), (8,7) — суша; у кожному регіоні є суша', () => {
+    for (const [x, y] of [
+      [8, 4],
+      [9, 4],
+      [2, 4],
+      [13, 4],
+      [8, 7],
+    ] as const)
+      expect(geoIsLand(layout, x, y)).toBe(true);
+    const region = (x: number, y: number): string => (x <= 4 ? 'west' : x >= 12 ? 'east' : y <= 4 ? 'north' : 'south');
+    const withLand = new Set<string>();
+    for (let y = 0; y < 9; y++) for (let x = 0; x < 16; x++) if (geoIsLand(layout, x, y)) withLand.add(region(x, y));
+    expect([...withLand].sort()).toEqual(['east', 'north', 'south', 'west']);
   });
 
-  it('жорстка перевірка (б): суша не торкається лівого/правого краю — суцільний океан, wrap без шва', () => {
+  it('циліндр по X: клітинки за краєм (wrap) — ті самі, що з другого боку; поза рядками 0..8 — океан', () => {
     for (let y = 0; y < 9; y++) {
-      expect(geoIsLand(layout, 0, y)).toBe(false); // лівий край — океан (темна рамка сирця)
-      expect(geoIsLand(layout, 15, y)).toBe(false); // правий край — океан (паддінг-рамка)
-      // циліндр по X: клітинки за краєм (wrap) — океан, шва зшивання нема
-      expect(geoIsLand(layout, -1, y)).toBe(false);
-      expect(geoIsLand(layout, 16, y)).toBe(false);
-      for (let x = 0; x < 16; x++) {
-        expect(geoIsLand(layout, x + 16, y)).toBe(geoIsLand(layout, x, y)); // wrap-ідентичність
-      }
+      expect(geoIsLand(layout, -1, y)).toBe(geoIsLand(layout, 15, y));
+      expect(geoIsLand(layout, 16, y)).toBe(geoIsLand(layout, 0, y));
+      for (let x = 0; x < 16; x++) expect(geoIsLand(layout, x + 16, y)).toBe(geoIsLand(layout, x, y));
+    }
+    for (let x = 0; x < 16; x++) {
+      expect(geoIsLand(layout, x, -1)).toBe(false);
+      expect(geoIsLand(layout, x, 9)).toBe(false);
     }
   });
 });

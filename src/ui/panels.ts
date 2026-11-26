@@ -43,7 +43,15 @@ import { missionRisksBankruptcy, readySoldiers } from '../core/squad';
 import { SQUAD_SPAWN } from '../core/mission';
 import type { Party } from '../core/save';
 import { gunModuleEffect, itemEffect } from './effects';
-import { drawAnimFrame, drawFighterSprite, drawGatePortal, drawGeoBaseSprite, drawGeoTerrain, drawUfoSprite } from '../render';
+import {
+  drawAnimFrame,
+  drawFighterSprite,
+  drawGatePortal,
+  drawGeoBaseSprite,
+  drawGeoTerrain,
+  drawHangarSprite,
+  drawUfoSprite,
+} from '../render';
 import type { Anim } from '../core/render-core';
 import { el, setWhy } from './dom';
 import { setIconText } from './icons';
@@ -239,12 +247,18 @@ export function createPanels(deps: PanelsDeps): Panels {
     }
     // П7.5 (ADR-0032): маркер винищувача на геосцені — лише поза базою (на базі він у
     // спрайті бази; погоня/бій — дельта-крило поруч із позначкою НЛО).
-    // п19.4: кожен перехоплювач; на базі в ангарі іншого регіону, ніж вузол, — крило на клітинці ангара
-    // (позиція — з ангара, а не pos: до першого вильоту pos може бути (0, 0), кандидат 196 г).
+    // п19.5 (ADR-0163): ангар регіону з перехоплювачем (крім «Півночі» — там ангар у вузлі) — значок
+    // на клітинці ангара; перехоплювач на базі чи в ремонті — «в ангарі» (як у вузлі), крило — лише в погоні й бою
+    // (позиція бою — pos; ангар — з hangarPos, а не pos: до першого вильоту pos може бути (0, 0), кандидат 196 г).
+    const hangars = new Set<string>(party.intercept.fighters.map((f) => f.region).filter((r) => r !== 'north'));
+    for (const r of REGION_IDS) {
+      if (!hangars.has(r)) continue;
+      const h = hangarPos(r, party.geo);
+      drawHangarSprite(ctx, { cx: h.x * GCELL + GCELL / 2, cy: h.y * GCELL + GCELL / 2 });
+    }
     for (const fgt of party.intercept.fighters) {
-      const at =
-        fgt.status === 'погоня' || fgt.status === 'бій' ? fgt.pos : fgt.region !== 'north' ? hangarPos(fgt.region, party.geo) : null;
-      if (at !== null) drawFighterSprite(ctx, { cx: at.x * GCELL + GCELL / 2, cy: at.y * GCELL + GCELL / 2 });
+      if (fgt.status === 'погоня' || fgt.status === 'бій')
+        drawFighterSprite(ctx, { cx: fgt.pos.x * GCELL + GCELL / 2, cy: fgt.pos.y * GCELL + GCELL / 2 });
     }
 
     // П6.9 (ADR-0029): анімаційний шар геосцени — пульс радара поверх статичного

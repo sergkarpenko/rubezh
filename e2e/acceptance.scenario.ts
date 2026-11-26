@@ -527,6 +527,26 @@ test('сценарій приймання ADR-0030: партія → місія 
     await page.setViewportSize(vp);
   });
 
+  // п19.5 (ADR-0163; EARS 9): картина світу і аркуш значків — ассети збірки: сторінка їх запитала,
+  // і вони декодуються в розмірах конвертера (1120 × 630 і 576 × 96, шість клітинок 96 × 96)
+  await test.step('п19.5: картина світу і аркуш значків геосцени', async () => {
+    const sizes = await page.evaluate(async () => {
+      const urls = performance
+        .getEntriesByType('resource')
+        .map((e) => e.name)
+        .filter((n) => /geo-(map|icons)/.test(n));
+      const out: Record<string, [number, number]> = {};
+      for (const u of urls) {
+        const img = new Image();
+        img.src = u;
+        await img.decode();
+        out[/geo-map/.test(u) ? 'map' : 'icons'] = [img.naturalWidth, img.naturalHeight];
+      }
+      return out;
+    });
+    expect(sizes, 'ассети геосцени п19.5').toEqual({ map: [1120, 630], icons: [576, 96] });
+  });
+
   // Т.31: геосцена, журнал і колонка стану — в одному екрані; сторінка не
   // прокручується на жодній вкладці, журнал видно і він розгортається в межах вікна.
   await test.step('геосцена: екран без прокрутки, журнал у вікні', async () => {

@@ -43,6 +43,9 @@ import {
   GEO_CELL_A,
   GEO_CELL_B,
   GEO_GRID_COLOR,
+  GEO_ICON_CELL,
+  GEO_ICON_ORDER,
+  GEO_ICON_PX,
   GRID_COLOR,
   NIGHT_BG,
   animT,
@@ -56,6 +59,7 @@ import {
   visibleKeys,
   wallQuads,
   type Anim,
+  type GeoIcon,
   type TerrainCell,
 } from './core/render-core';
 // П14.5: розмір світу для замикання скан-зони по X (куля; як RADAR_RANGE у geo.ts).
@@ -85,6 +89,7 @@ import metroBgUrl from '../assets/metro-bg.webp';
 import metroTilesUrl from '../assets/metro-tiles.png';
 import geoMapUrl from '../assets/geo-map.webp';
 import radarTowerUrl from '../assets/radar-tower.png';
+import geoIconsUrl from '../assets/geo-icons.png';
 
 const SELECT_RING = '#9adfff'; // П12.7: рамка вибору — гама ціану «Рубіжу» (ADR-0064)
 const UFO_SOFT_ALPHA = 0.85;
@@ -399,6 +404,31 @@ export function isGeoTowerReady(): boolean {
   return geoTowerImg !== null;
 }
 
+// п19.5 (ADR-0163): аркуш значків геосцени (assets/geo-icons.png, шість клітинок 96 × 96 —
+// зонд-розвідник, зонд-збирач, перехоплювач, вузол, ангар, Брама) — ліниве завантаження, як карта;
+// без аркуша — чинні значки кодом (ADR-0072).
+let geoIconsImg: CanvasImageSource | null = null;
+
+export function initGeoIcons(load: LoadGeoAsset): void {
+  geoIconsImg = null;
+  load(geoIconsUrl, (img) => {
+    geoIconsImg = img;
+  });
+}
+
+export function isGeoIconsReady(): boolean {
+  return geoIconsImg !== null;
+}
+
+// Значок аркуша по центру (cx, cy), сторона side (типово — GEO_ICON_PX); false — аркуша немає.
+function drawGeoIcon(ctx: CanvasRenderingContext2D, icon: GeoIcon, cx: number, cy: number, side: number = GEO_ICON_PX[icon]): boolean {
+  if (geoIconsImg === null) return false;
+  const sx = GEO_ICON_ORDER.indexOf(icon) * GEO_ICON_CELL;
+  ctx.imageSmoothingEnabled = true; // мальований значок, масштаб 96 → 34–48 не цілий
+  ctx.drawImage(geoIconsImg, sx, 0, GEO_ICON_CELL, GEO_ICON_CELL, Math.round(cx - side / 2), Math.round(cy - side / 2), side, side);
+  return true;
+}
+
 // Кадр з атласа: 96 × 96 → UNIT_DRAW × UNIT_DRAW (Т.132, ADR-0121), ноги на UNIT_FEET_DY
 // нижче центру; згладжування увімкнене — масштаб 68/96 не цілий, без нього пікселі рвуться.
 // П14.3: двокадрова ходьба — step 2 обирає колонку walk2; фліп за напрямком
@@ -651,6 +681,7 @@ export function drawBaseSprite(ctx: CanvasRenderingContext2D, b: BaseSprite): vo
 // піксельний спрайт ADR-0031 (drawBaseSprite); тести від ассета не
 // залежать.
 export function drawGeoBaseSprite(ctx: CanvasRenderingContext2D, b: BaseSprite): void {
+  if (drawGeoIcon(ctx, 'node', b.cx, b.cy, b.size)) return; // п19.5: значок вузла з аркуша
   if (geoTowerImg === null) {
     drawBaseSprite(ctx, b);
     return;
@@ -669,6 +700,10 @@ export const GATE_COLOR = '#c45cff';
 export function drawGatePortal(ctx: CanvasRenderingContext2D, g: { cx: number; cy: number; size: number; open: boolean }): void {
   const r = g.size * 0.34;
   ctx.globalAlpha = g.open ? 1 : 0.45;
+  if (drawGeoIcon(ctx, 'gate', g.cx, g.cy)) {
+    ctx.globalAlpha = 1; // п19.5: значок Брами з аркуша, приглушення — те саме
+    return;
+  }
   ctx.fillStyle = 'rgba(196,92,255,0.18)';
   ctx.beginPath();
   ctx.ellipse(g.cx, g.cy, r, r * 1.15, 0, 0, Math.PI * 2);
@@ -689,14 +724,51 @@ export function drawGatePortal(ctx: CanvasRenderingContext2D, g: { cx: number; c
 }
 
 export function drawFighterSprite(ctx: CanvasRenderingContext2D, f: FighterSprite): void {
+  if (drawGeoIcon(ctx, 'interceptor', f.cx, f.cy)) return; // п19.5: значок перехоплювача з аркуша
   drawPixelSprite(ctx, FIGHTER_SPRITE, f.cx, f.cy, SPRITE_SCALE);
 }
 
+// п19.5: приземлений зонд зі значком — кільце посадки під ним і приглушений значок.
+export const UFO_LANDED_RING = 'rgba(255,46,136,0.75)';
+export const UFO_LANDED_ALPHA = 0.8;
+
 export function drawUfoSprite(ctx: CanvasRenderingContext2D, u: UfoSprite): void {
+  if (geoIconsImg !== null) {
+    if (u.landed) {
+      ctx.strokeStyle = UFO_LANDED_RING;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.ellipse(u.cx, u.cy + 10, 16, 6, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.lineWidth = 1;
+      ctx.globalAlpha = UFO_LANDED_ALPHA;
+    }
+    drawGeoIcon(ctx, u.kind === 'розвідник' ? 'scout' : 'harvester', u.cx, u.cy);
+    ctx.globalAlpha = 1;
+    return;
+  }
   ctx.globalAlpha = UFO_SOFT_ALPHA;
   const def = u.landed ? UFO_LANDED_SPRITE : u.kind === 'розвідник' ? UFO_SCOUT_SPRITE : UFO_HARVESTER_SPRITE;
   drawPixelSprite(ctx, def, u.cx, u.cy, SPRITE_SCALE); // П13.5: 12×12 → 24px у клітинці GCELL 44
   ctx.globalAlpha = 1;
+}
+
+// п19.5 (ADR-0163): ангар регіону, де стоїть перехоплювач, — значок з аркуша; без аркуша — кодом:
+// темне півкругле склепіння з ціановою смугою над воротами.
+export const HANGAR_FILL = '#1c2633';
+export const HANGAR_LIGHT = '#00e5ff';
+export function drawHangarSprite(ctx: CanvasRenderingContext2D, h: FighterSprite): void {
+  if (drawGeoIcon(ctx, 'hangar', h.cx, h.cy)) return;
+  ctx.fillStyle = HANGAR_FILL;
+  ctx.beginPath();
+  ctx.arc(h.cx, h.cy + 8, 15, Math.PI, 0);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(154,223,255,0.55)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  ctx.fillStyle = HANGAR_LIGHT;
+  ctx.fillRect(Math.round(h.cx - 7), Math.round(h.cy + 1), 14, 2);
 }
 
 // --- П6.13: нічна палітра бойовища — терен, сітка, м'який край туману ---
