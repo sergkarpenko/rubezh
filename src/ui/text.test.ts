@@ -33,6 +33,7 @@ describe('рід за іменем: пул імен ядра (SOLDIER_NAMES)', (
   it('розбиття пулу на жіночі й чоловічі імена — повне і явне', () => {
     expect(SOLDIER_NAMES.filter(isFeminineName)).toEqual(['Олена', 'Марія', 'Софія', 'Ярина', 'Наталія', 'Віра']);
     expect(SOLDIER_NAMES.filter((n) => !isFeminineName(n))).toEqual(['Іван', 'Тарас', 'Богдан', 'Дмитро', 'Орест', 'Андрій']);
+    expect([isFeminineName('Турель 1'), isFeminineName('Демон 1')]).toEqual([true, false]); // п18.4: «Турель 1 загинула»
   });
 
   it('друге коло найму («Олена 2») — рід за першим словом; демон — чоловічий', () => {

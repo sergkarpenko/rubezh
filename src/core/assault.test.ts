@@ -400,6 +400,26 @@ describe('п18.4: сейв v3 — штурми і брама необов’яз
     expect(() => deserializeParty(JSON.stringify(raw))).toThrow('Пошкоджені дані збереження: штурми і брама');
   });
 
+  it.each(['assaults', 'assaultPending', 'gateReadyAt'])('сейв v2 з полем %s — відмова (поля лише у v3)', (key) => {
+    const raw = JSON.parse(serializeParty(createParty(42)));
+    raw.version = 2;
+    raw.state.campaign[key] = key === 'assaultPending' ? false : 1;
+    expect(() => deserializeParty(JSON.stringify(raw))).toThrow('штурми і брама');
+  });
+
+  it('міграція v2: пороги, які загроза вже перейшла, — минулі (штурмів заднім числом немає)', () => {
+    const raw = JSON.parse(serializeParty(createParty(42)));
+    raw.version = 2;
+    for (const k of ['threat', 'threatCursor', 'defeatDay']) delete raw.state.campaign[k];
+    expect('assaults' in deserializeParty(JSON.stringify(raw)).campaign).toBe(false); // доба 1 — загроза 0
+    raw.state.geo.minute = 1440 * 39; // доба 40: 2 × 39 = 78 — пороги 60 і 75 минули
+    const p = deserializeParty(JSON.stringify(raw));
+    expect(p.campaign.threat).toBe(78);
+    expect(p.campaign.assaults).toBe(2);
+    tick(p);
+    expect(p.campaign.assaultPending).toBeUndefined();
+  });
+
   it('штурм чекає без жодного спрацьованого порога — відмова', () => {
     const raw = JSON.parse(serializeParty(createParty(42)));
     raw.state.campaign.assaultPending = true;

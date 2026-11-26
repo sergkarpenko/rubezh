@@ -247,6 +247,14 @@ interface CampaignSave {
   gateReadyAt?: number;
 }
 
+// п18.3 (ADR-0153 п. 18): кампанія v1 / v2 → v3. п18.4 (аудит PR #515): пороги штурму, які
+// мігрована загроза вже перейшла, вважаються минулими — старий сейв не отримує штурми заднім числом.
+function migratedCampaign(geo: GeoState): Pick<CampaignState, 'defeatDay' | 'threat' | 'threatCursor' | 'assaults'> {
+  const threat = migrateThreat(geo);
+  const assaults = ASSAULT_THRESHOLDS.filter((t) => threat >= t).length;
+  return { defeatDay: null, threat, threatCursor: geo.log.length, ...(assaults > 0 ? { assaults } : {}) };
+}
+
 // п18.4: поля штурмів і брами — копія лише заданих (сейв без них — як у п18.3).
 function campaignBattleFields(c: Pick<CampaignSave, 'assaults' | 'assaultPending' | 'gateReadyAt'>): Partial<CampaignSave> {
   return {
@@ -606,7 +614,7 @@ export function deserializeParty(json: string): Party {
             threatCursor: cc.threatCursor as number,
             ...campaignBattleFields(cc),
           }
-        : { defeatDay: null, threat: migrateThreat(geo), threatCursor: geo.log.length }),
+        : migratedCampaign(geo)),
     },
     // П9.2: відсутнє поле hints (старі сейви) = усі підказки ще не показано.
     hints: { ...defaultHints(), ...(data.state.hints ?? {}) },

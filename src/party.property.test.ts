@@ -150,7 +150,7 @@ function campaignBattle(p: Party, op: 'штурм' | 'брама'): void {
 
 // Штурм бази одразу, як startPendingAssault у src/main.ts; без боєготових — програно без бою. true — бій був.
 function assault(p: Party): boolean {
-  if (p.campaign.status !== 'триває' || !p.campaign.assaultPending) return false;
+  if (p.campaign.status !== 'триває' || !p.campaign.assaultPending || p.intercept.fighter.status === 'бій') return false;
   if (readySoldiers(p.roster).length === 0) {
     completeAssault(p, 'поразка');
     return false;
@@ -435,7 +435,8 @@ function broken(p: Party): string[] {
     'штурми: ' + JSON.stringify(assaults) + ', очікує ' + campaign.assaultPending
   );
   must(!roster.soldiers.some((s) => /^t\d+$/.test(s.id)), 'турель у ростері');
-  must((campaign.gateReadyAt ?? 0) <= geo.minute + GATE_RETRY_MINUTES, 'пауза брами довша за добу');
+  const gateLost = geo.log.filter((e) => e.type === 'gate_lost').at(-1);
+  must((campaign.gateReadyAt ?? 0) === (gateLost ? gateLost.minute + GATE_RETRY_MINUTES : 0), 'пауза брами — не доба після gate_lost');
   must(
     (campaign.status === 'перемога') === geo.log.some((e) => e.type === 'campaign_victory') &&
       (campaign.status !== 'перемога' || (gateKeyDone(p) && campaign.victoryDay !== null)),

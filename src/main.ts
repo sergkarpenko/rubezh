@@ -576,7 +576,9 @@ function partyTick(): void {
 // час стоїть (runTime зупиняється на ui.mission); без боєготових — програно без бою.
 // Рядки журналу — з подій геоцени (base_assault, assault_lost; geoEventText). true — бій почато.
 function startPendingAssault(p: Party): boolean {
-  if (gameOver || !p.campaign.assaultPending || ui.mission !== null) return false;
+  // аудит PR #515: у повітряному бою (interceptTick цього ж тіку) наземний бій не відкриваємо —
+  // штурм чекає кінця повітряного і починається на початку наступного partyTick
+  if (gameOver || !p.campaign.assaultPending || ui.mission !== null || inAirCombat(p)) return false;
   if (readySoldiers(p.roster).length === 0) {
     completeAssault(p, 'поразка');
     return false;

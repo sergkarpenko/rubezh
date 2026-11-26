@@ -15,7 +15,7 @@ import { equipKeyItem, itemName, type WorkshopEvent } from '../core/workshop';
 import { EVAC_AP_COST, type GameEvent, type ShotMode } from '../core/combat';
 import { claimHint, type Party } from '../core/save';
 import { el } from './dom';
-import { byGender, ticksText } from './text';
+import { byGender, plural, ticksText } from './text';
 
 // Підписи режимів пострілу (спільні для журналу і панелі керування боєм).
 export const MODE_LABEL: Record<ShotMode, string> = { snap: 'швидкий', aimed: 'прицільний', auto: 'черга' };
@@ -305,7 +305,13 @@ export function geoEventText(e: GeoEvent, knownDetected: ReadonlySet<string>): {
     case 'assault_won':
       return { text: 'Штурм бази відбито ✓', cls: 'win' };
     case 'assault_lost':
-      return { text: 'Штурм бази не відбито ✗ — втрачено ' + e.money + ' кредитів і половину складу, загроза +10', cls: 'lose' };
+      return {
+        text:
+          'Штурм бази не відбито ✗ — втрачено ' +
+          (e.money > 0 ? plural(e.money, 'кредит', 'кредити', 'кредитів') + ' і ' : '') +
+          'половину складу, загроза +10',
+        cls: 'lose',
+      };
     case 'gate_lost':
       return { text: 'Брама Розриву встояла ✗ — загроза +10, повтор через добу', cls: 'lose' };
     case 'campaign_victory':

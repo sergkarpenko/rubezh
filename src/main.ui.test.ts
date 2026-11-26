@@ -1629,8 +1629,23 @@ describeScenario('п18.4: штурм бази і «Брама Розриву»',
     expect($('log').textContent).toContain('⚠ Штурм вузла «Рубіж»: загроза 60 — демони атакують базу.');
     expect($('battle-panel').classList.contains('hidden')).toBe(true);
     btn('btn-tick').click(); // подію поразки журнал виводить наступним дренажем
-    expect($('log').textContent).toMatch(/Штурм бази не відбито ✗ — втрачено \d+ кредитів і половину складу, загроза \+10/);
+    expect($('log').textContent).toMatch(/Штурм бази не відбито ✗ — втрачено \d+ кредит\S* і половину складу, загроза \+10/);
     expect(Number($('money').textContent)).toBeLessThan(money);
+  });
+
+  step('штурм у сейві (чекає бою) — перший «+1 тік» відкриває бій замість тіку, годинник стоїть', () => {
+    btn('btn-play-again').click();
+    saveEdit((st) => {
+      st.campaign.threat = 60;
+      st.campaign.assaults = 1;
+      st.campaign.assaultPending = true;
+    });
+    const clock = $('clock').textContent;
+    expect($('battle-panel').classList.contains('hidden')).toBe(true);
+    btn('btn-tick').click();
+    expect($('battle-panel').classList.contains('hidden')).toBe(false);
+    expect($('bctx-kind').textContent).toBe('штурм бази');
+    expect($('clock').textContent).toBe(clock);
   });
 
   step('після «Ключа брами» — турелі в штурмі: картка «Турель 1», рух турелі — підказка, без ходу', () => {

@@ -316,6 +316,7 @@ describe('battle: флоу місії (запуск/закриття/завер�
     expect(f.party.econ.money).toBe(money); // премії за штурм немає
     expect(f.party.geo.log.at(-1)!.type).toBe('assault_won');
     expect(document.getElementById('bresult')!.textContent).toContain('ШТУРМ ВІДБИТО ✓');
+    expect(document.getElementById('bresult')!.textContent).toMatch(/Премія\s*немає/); // картка — премії немає (аудит PR #515)
   });
 
   it('п18.4: програний штурм — −30 % кредитів і банер; фінал: поразка — gate_lost, перемога — «перемога» партії', () => {
