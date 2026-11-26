@@ -8,7 +8,7 @@
 // геосцені (прецедент панелі збереження, П5.3): у бою кнопки вимкнені.
 // Детермінізм: панель лише читає стан ядра, жодного RNG.
 
-import { ITEM_IDS, WORKSHOP_CATALOG, itemName, itemUnlocked, orderItem, type ItemId } from '../core/workshop';
+import { ITEM_IDS, WORKSHOP_CATALOG, itemName, itemUnlocked, orderItem, orderName, type ItemId } from '../core/workshop';
 import { sciencePrice } from '../core/campaign';
 import { missingTrophies } from '../core/research';
 
@@ -76,7 +76,7 @@ export function createWorkshopPanel(deps: WorkshopPanelDeps): WorkshopPanel {
     queue.style.marginBottom = '4px';
     queue.innerHTML =
       'Активне замовлення: <b>' +
-      (active ? itemName(active.id) + ' — ' + ticksText(active.ticksLeft) : '—') +
+      (active ? orderName(active) + ' — ' + ticksText(active.ticksLeft) : '—') +
       '</b>' +
       (w.queue.length > 1 ? ' · у черзі ще ' + (w.queue.length - 1) : '');
     box.appendChild(queue);

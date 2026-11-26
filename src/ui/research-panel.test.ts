@@ -366,7 +366,7 @@ describe('T.39: кнопка «Замовити в «Кузні»» на кар�
   it('Т.78 (аудит): модуль уже встановлено, другий на складі — лише «На складі: N», без підказки встановити', () => {
     party.research.completed.push('gun-module');
     party.workshop.store['gun-module'] = 1;
-    party.intercept.fighter.gunModule = true;
+    party.intercept.fighters[0].gunModule = true;
     createResearchPanel(makeDeps()).render();
     const c = card('Гарматний модуль перехоплювача').textContent!;
     expect(c).toContain('На складі: 1');

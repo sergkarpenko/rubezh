@@ -5,7 +5,7 @@
 // кеп 80, фільтри) і seen-трекінг прочитаних подів (drain*). Стан
 // застосунку (party/mission) модуль знає лише через Deps-інтерфейс.
 
-import { REGION_NAMES } from '../core/regions';
+import { REGION_NAMES, type RegionId } from '../core/regions';
 import type { GeoEvent } from '../core/geo';
 import { missionTargets } from '../core/geo';
 import { FIGHTER_MAX_HP, FIGHTER_REPAIR_COST } from '../core/intercept';
@@ -118,7 +118,7 @@ export function createJournal(deps: JournalDeps): Journal {
   // шляхи, якими умова стає істинною: виявлення НЛО, завершення ремонту,
   // завантаження сейву. Туман не порушуємо: умови лише за виявленими НЛО.
   function maybeHints(p: Party): void {
-    const f = p.intercept.fighter;
+    const f = p.intercept.fighters[0];
     // «Можна перехопити»: виявлений НЛО у повітрі + боєготовий винищувач
     if (f.status === 'на базі' && f.hp === FIGHTER_MAX_HP && p.geo.ufos.some((u) => u.detected && u.status === 'летить')) {
       if (claimHint(p.hints, 'intercept')) {
@@ -262,6 +262,16 @@ export function battleEventText(
   return null; // move / turn / overwatch — не для журналу бою
 }
 
+// п19.3: « N» — номер перехоплювача з поля fighter події (є, коли перехоплювачів ≥ 2), інакше порожньо.
+function num(e: { fighter?: number }): string {
+  return e.fighter !== undefined ? ' ' + e.fighter : '';
+}
+
+// п19.3: назва ангара (регіону) події вильоту чи повернення; без поля — «Північ» (вузол).
+function hangarName(e: { region?: RegionId }): string {
+  return REGION_NAMES[e.region ?? 'north'];
+}
+
 // П7: чистий фільтр туману; knownDetected веде викликаючий (ufo_detected
 // додається до набору ДО перевірки ufo_landed/ufo_left у тому ж batch).
 export function geoEventText(e: GeoEvent, knownDetected: ReadonlySet<string>): { text: string; cls: string } | null {
@@ -280,30 +290,49 @@ export function geoEventText(e: GeoEvent, knownDetected: ReadonlySet<string>): {
       return { text: 'Загін евакуйовано ⇧', cls: '' };
     case 'mission_lost':
       return { text: 'Загін втрачено ✗', cls: 'lose' };
+    // п19.3 (ADR-0161; рішення власника «А. Номер»): з полем fighter (перехоплювачів ≥ 2) — номер
+    // і ангар; без нього — рядки як у v0.10.0.
     case 'intercept_start':
-      return { text: '✦ Перехоплення: перехоплювач піднявся на зонд Розриву ' + e.ufoId, cls: '' };
+      return e.fighter !== undefined
+        ? {
+            text: '✦ Перехоплювач ' + e.fighter + ' піднявся з ангара «' + hangarName(e) + '» на зонд Розриву ' + e.ufoId,
+            cls: '',
+          }
+        : { text: '✦ Перехоплення: перехоплювач піднявся на зонд Розриву ' + e.ufoId, cls: '' };
     case 'intercept_engage':
-      return { text: '✦ Перехоплювач зблизився із зондом Розриву ' + e.ufoId + ' — повітряний бій', cls: '' };
+      return { text: '✦ Перехоплювач' + num(e) + ' зблизився із зондом Розриву ' + e.ufoId + ' — повітряний бій', cls: '' };
     case 'intercept_break_off':
-      return { text: '✦ Розрив контакту — перехоплювач повернувся у вузол «Рубіж»', cls: '' };
-    case 'intercept_aborted':
+      return e.fighter !== undefined
+        ? { text: '✦ Розрив контакту — перехоплювач ' + e.fighter + ' повертається в ангар', cls: '' }
+        : { text: '✦ Розрив контакту — перехоплювач повернувся у вузол «Рубіж»', cls: '' };
+    case 'intercept_aborted': {
+      const by = e.fighter !== undefined ? ' (перехоплювач ' + e.fighter + ')' : '';
       return {
         text:
           e.reason === 'fighter_damaged'
-            ? '✦ Перехоплювач пошкоджений — вимушене переривання бою'
+            ? '✦ Перехоплювач' + num(e) + ' пошкоджений — вимушене переривання бою'
             : e.reason === 'ufo_landed'
-              ? '✦ Зонд Розриву ' + e.ufoId + ' приземлився — перехоплення перервано' // Т.49: текст власника з номером зонда
-              : '✦ Зонд Розриву ' + e.ufoId + ' зник з трекінгу — перехоплення перервано',
+              ? '✦ Зонд Розриву ' + e.ufoId + ' приземлився — перехоплення перервано' + by // Т.49: текст власника з номером зонда
+              : '✦ Зонд Розриву ' + e.ufoId + ' зник з трекінгу — перехоплення перервано' + by,
         cls: e.reason === 'fighter_damaged' ? 'lose' : '',
       };
+    }
     case 'ufo_shot_down':
       return { text: '✦ Зонд Розриву ' + e.ufoId + ' збитий! На місці падіння — місія', cls: 'win' };
     case 'fighter_returned':
-      return { text: '✦ Перехоплювач повернувся у вузол «Рубіж»', cls: '' };
+      return e.fighter !== undefined
+        ? { text: '✦ Перехоплювач ' + e.fighter + ' повернувся в ангар «' + hangarName(e) + '»', cls: '' }
+        : { text: '✦ Перехоплювач повернувся у вузол «Рубіж»', cls: '' };
     case 'fighter_repair_start':
-      return { text: '✦ Ремонт перехоплювача оплачено (−' + FIGHTER_REPAIR_COST + ')', cls: 'lose' };
+      return { text: '✦ Ремонт перехоплювача' + num(e) + ' оплачено (−' + FIGHTER_REPAIR_COST + ')', cls: 'lose' };
     case 'fighter_repair_done':
-      return { text: '✦ Ремонт перехоплювача завершено — знову боєготовий', cls: 'win' };
+      return { text: '✦ Ремонт перехоплювача' + num(e) + ' завершено — знову боєготовий', cls: 'win' };
+    // п19.3 (рішення власника «А. Кілька в одному»)
+    case 'fighter_assigned':
+      return {
+        text: '✦ Перехоплювач' + num(e) + ' перебазовано: ангар «' + REGION_NAMES[e.from] + '» → «' + REGION_NAMES[e.to] + '»',
+        cls: '',
+      };
     // п18.4 (ADR-0156; рішення власника «А. Мінімум»): штурм бази і фінал «Брама Розриву»
     case 'base_assault':
       return { text: '⚠ Штурм вузла «Рубіж»: загроза ' + e.threshold + ' — демони атакують базу.', cls: 'lose' };
@@ -409,9 +438,14 @@ export function workshopEventText(e: WorkshopEvent): { text: string; cls: string
         cls: '',
       };
     case 'gun_module_installed':
-      return { text: '⚑ Кузня: гарматний модуль встановлено на перехоплювач', cls: '' };
+      return { text: '⚑ Кузня: гарматний модуль встановлено на перехоплювач' + num(e), cls: '' };
     case 'gun_module_removed':
-      return { text: '⚑ Кузня: гарматний модуль знято з перехоплювача → склад', cls: '' };
+      return { text: '⚑ Кузня: гарматний модуль знято з перехоплювача' + num(e) + ' → склад', cls: '' };
+    // п19.3 (ADR-0161; рішення власника «А. З ангаром»)
+    case 'interceptor_order':
+      return { text: '⚑ Кузня: замовлено «Перехоплювач» для ангара «' + REGION_NAMES[e.region] + '» — ' + ticksText(e.ticks), cls: '' };
+    case 'interceptor_produced':
+      return { text: '⚑ Кузня: перехоплювач ' + e.fighter + ' виготовлено → ангар «' + REGION_NAMES[e.region] + '» ✓', cls: 'win' };
     case 'store_lost':
       return null; // п18.4: утрату складу називає рядок штурму (geoEventText, assault_lost)
   }

@@ -63,7 +63,7 @@ function canOrderNew(party: Party, id: ItemId): boolean {
   if (!itemUnlocked(party.research, id)) return false;
   if (w.store[id] > 0 || w.queue.some((o) => o.id === id)) return false;
   if (id === 'gun-module') {
-    if (party.intercept.fighter.gunModule) return false;
+    if (party.intercept.fighters[0].gunModule) return false;
   } else if (party.roster.soldiers.some((s) => w.equipped[s.id]?.[SoldierItemIdOf(id)] === true)) return false;
   return party.econ.money >= sciencePrice(WORKSHOP_CATALOG[id].cost, party.campaign.preset);
 }
@@ -126,7 +126,7 @@ export function nextStep(party: Party, ctx: NextStepContext): NextStep | null {
   if (ctx.inBattle || ctx.gameOver || inAirCombat(party) || party.campaign.status !== 'триває') return null;
   if (isBankrupt(party.econ, party.roster, party.campaign.preset)) return null;
   const ready = readySoldiers(party.roster).length;
-  const fighter = party.intercept.fighter;
+  const fighter = party.intercept.fighters[0];
   const targets = missionTargets(party.geo);
   if (ready > 0) {
     const landed = targets.filter((u) => u.status === 'приземлився');

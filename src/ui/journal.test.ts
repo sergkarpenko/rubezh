@@ -111,6 +111,72 @@ describe('п19.2: geoEventText — довіра і вихід регіону', (
   });
 });
 
+// п19.3 (ADR-0161; рішення власника «А. Номер», «А. З ангаром», «А. Кілька в одному»): з полем
+// fighter — номер і ангар; без нього (один перехоплювач) — рядки v0.10.0.
+describe('п19.3: geoEventText і workshopEventText — кілька перехоплювачів', () => {
+  const none = new Set<string>();
+  const p = { pos: { x: 13, y: 4 }, minute: 0 };
+  it.each([
+    [
+      { type: 'intercept_start', ufoId: 'ufo7', ...p, fighter: 2, region: 'east' },
+      '✦ Перехоплювач 2 піднявся з ангара «Схід» на зонд Розриву ufo7',
+      '',
+    ],
+    [{ type: 'intercept_start', ufoId: 'ufo7', ...p }, '✦ Перехоплення: перехоплювач піднявся на зонд Розриву ufo7', ''],
+    [
+      { type: 'intercept_engage', ufoId: 'ufo7', ...p, fighter: 3 },
+      '✦ Перехоплювач 3 зблизився із зондом Розриву ufo7 — повітряний бій',
+      '',
+    ],
+    [{ type: 'intercept_engage', ufoId: 'ufo7', ...p }, '✦ Перехоплювач зблизився із зондом Розриву ufo7 — повітряний бій', ''],
+    [{ type: 'intercept_break_off', ufoId: 'ufo7', minute: 0, fighter: 2 }, '✦ Розрив контакту — перехоплювач 2 повертається в ангар', ''],
+    [{ type: 'intercept_break_off', ufoId: 'ufo7', minute: 0 }, '✦ Розрив контакту — перехоплювач повернувся у вузол «Рубіж»', ''],
+    [
+      { type: 'intercept_aborted', ufoId: 'ufo7', reason: 'fighter_damaged', ...p, fighter: 2 },
+      '✦ Перехоплювач 2 пошкоджений — вимушене переривання бою',
+      'lose',
+    ],
+    [
+      { type: 'intercept_aborted', ufoId: 'ufo7', reason: 'ufo_landed', ...p, fighter: 1 },
+      '✦ Зонд Розриву ufo7 приземлився — перехоплення перервано (перехоплювач 1)',
+      '',
+    ],
+    [
+      { type: 'intercept_aborted', ufoId: 'ufo7', reason: 'ufo_lost', ...p, fighter: 3 },
+      '✦ Зонд Розриву ufo7 зник з трекінгу — перехоплення перервано (перехоплювач 3)',
+      '',
+    ],
+    [
+      { type: 'intercept_aborted', ufoId: 'ufo7', reason: 'ufo_lost', ...p },
+      '✦ Зонд Розриву ufo7 зник з трекінгу — перехоплення перервано',
+      '',
+    ],
+    [{ type: 'fighter_returned', ...p, fighter: 2, region: 'east' }, '✦ Перехоплювач 2 повернувся в ангар «Схід»', ''],
+    [{ type: 'fighter_returned', ...p, fighter: 1, region: 'north' }, '✦ Перехоплювач 1 повернувся в ангар «Північ»', ''],
+    [{ type: 'fighter_returned', ...p }, '✦ Перехоплювач повернувся у вузол «Рубіж»', ''],
+    [{ type: 'fighter_repair_start', minute: 0, fighter: 2 }, '✦ Ремонт перехоплювача 2 оплачено (−50)', 'lose'],
+    [{ type: 'fighter_repair_done', minute: 0, fighter: 2 }, '✦ Ремонт перехоплювача 2 завершено — знову боєготовий', 'win'],
+    [{ type: 'fighter_repair_done', minute: 0 }, '✦ Ремонт перехоплювача завершено — знову боєготовий', 'win'],
+    [
+      { type: 'fighter_assigned', from: 'east', to: 'south', minute: 0, fighter: 2 },
+      '✦ Перехоплювач 2 перебазовано: ангар «Схід» → «Південь»',
+      '',
+    ],
+    [{ type: 'fighter_assigned', from: 'north', to: 'west', minute: 0 }, '✦ Перехоплювач перебазовано: ангар «Північ» → «Захід»', ''],
+  ] as const)('%o', (e, text, cls) => {
+    expect(geoEventText(evGeo(e), none)).toEqual({ text, cls });
+  });
+
+  it.each([
+    [{ type: 'interceptor_order', region: 'east', ticks: 48 }, '⚑ Кузня: замовлено «Перехоплювач» для ангара «Схід» — 48 тіків', ''],
+    [{ type: 'interceptor_produced', fighter: 2, region: 'east' }, '⚑ Кузня: перехоплювач 2 виготовлено → ангар «Схід» ✓', 'win'],
+    [{ type: 'gun_module_installed', fighter: 2 }, '⚑ Кузня: гарматний модуль встановлено на перехоплювач 2', ''],
+    [{ type: 'gun_module_removed', fighter: 3 }, '⚑ Кузня: гарматний модуль знято з перехоплювача 3 → склад', ''],
+  ] as const)('%o', (e, text, cls) => {
+    expect(workshopEventText(evWorkshop(e))).toEqual({ text, cls });
+  });
+});
+
 describe('geoEventText: фільтр туману стратегічного журналу (4.2)', () => {
   const known = new Set(['u1']);
 
@@ -465,7 +531,7 @@ describe('Journal: підказки по ходу (П9.2, один раз за �
 
   it('«Можна перехопити» не показується, поки винищувач не боєготовий', () => {
     const p = createParty(42);
-    p.intercept.fighter.hp = 2; // пошкоджений — перехоплення недоступне
+    p.intercept.fighters[0].hp = 2; // пошкоджений — перехоплення недоступне
     flyingUfo(p, 'u1');
     const j = createJournal(makeDeps({ party: () => p, geoLog: () => p.geo.log }));
     j.drainGeo();

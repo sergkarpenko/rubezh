@@ -280,10 +280,10 @@ describe('інтеграція П7.3: перехоплення → збиття 
     startIntercept(ic, geo, ufoId);
     let guard = 0;
     while (guard++ < 500) {
-      if (ic.fighter.status === 'погоня') {
+      if (ic.fighters[0].status === 'погоня') {
         geoTick(geo);
         interceptTick(ic, geo);
-      } else if (ic.fighter.status === 'бій') {
+      } else if (ic.fighters[0].status === 'бій') {
         interceptRound(ic, geo, 'впритул');
       } else {
         break;
@@ -291,7 +291,7 @@ describe('інтеграція П7.3: перехоплення → збиття 
     }
     // винищувач міг піти в ремонт (пошкодження) — тоді збиття не сталося; для
     // наскрізного сценарію гарантуємо збиття: боєготовий б'є поки не зіб'є
-    if (ic.fighter.status !== 'на базі' || !geo.ufos.some((u) => u.id === ufoId && u.status === 'збитий')) {
+    if (ic.fighters[0].status !== 'на базі' || !geo.ufos.some((u) => u.id === ufoId && u.status === 'збитий')) {
       throw new Error('сценарій не привів до збиття — перевірити константи/сід');
     }
     const shotDown = geo.ufos.find((u) => u.id === ufoId)!;

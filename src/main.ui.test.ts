@@ -2171,7 +2171,7 @@ describePage('Т.43: «До події», зупинки «+1 доба» і пр
       econ: { money: number };
       research: { completed: string[] };
       workshop: { store: Record<string, number>; log: { type: string; id: string }[] };
-      intercept: { fighter: { hp: number } };
+      intercept: { fighters: { hp: number }[] };
       roster: { soldiers: { id: string }[] };
     };
     const load = (edit: (s: S) => void): void => {
@@ -2187,7 +2187,7 @@ describePage('Т.43: «До події», зупинки «+1 доба» і пр
       ['order', (s) => s.research.completed.push('optics'), 'btn-order-optics'],
       ['issue', (s) => (s.workshop.store.grenade = 1), 'btn-equip-' + first + '-grenade'],
       ['install', (s) => (s.workshop.store['gun-module'] = 1), 'btn-gun-install'],
-      ['repair', (s) => (s.intercept.fighter.hp = 1), 'btn-repair'],
+      ['repair', (s) => (s.intercept.fighters[0].hp = 1), 'btn-repair'],
       [
         'refill',
         (s) => {
@@ -3216,7 +3216,7 @@ describePage('Т.99: зупинки «До події» на сторінці і
       completed: string[];
     };
     workshop: { queue: { id: string; ticksLeft: number }[] };
-    intercept: { fighter: { hp: number; status: string; repairTicksLeft?: number } };
+    intercept: { fighters: { hp: number; status: string; repairTicksLeft?: number }[] };
   };
   // збереження поточного стану і завантаження його правленої копії; повертає незмінений сейв (контроль)
   const saveBase = (): string => {
@@ -3283,9 +3283,9 @@ describePage('Т.99: зупинки «До події» на сторінці і
     startParty();
     const base = saveBase();
     const repair = (s: S): void => {
-      s.intercept.fighter.hp = 1;
-      s.intercept.fighter.status = 'ремонт';
-      s.intercept.fighter.repairTicksLeft = 2;
+      s.intercept.fighters[0].hp = 1;
+      s.intercept.fighters[0].status = 'ремонт';
+      s.intercept.fighters[0].repairTicksLeft = 2;
     };
     load(base, repair);
     btn('btn-event').click();

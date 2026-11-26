@@ -91,7 +91,7 @@ function run(seed: number): Rec {
   let lastDay = geoDay(party.geo);
   let prevReady = readySoldiers(party.roster).length;
   for (let t = 0; t < HORIZON_DAYS * TICKS_PER_DAY; t++) {
-    const f = party.intercept.fighter;
+    const f = party.intercept.fighters[0];
     const wouldRepair = f.status === 'на базі' && f.hp < FIGHTER_MAX_HP && !f.repairTicksLeft;
     const m0 = party.econ.money;
     if (!(flags.has('repairfix') && wouldRepair && prevReady === 0)) partyBotInterceptStep(party, policy.intercept);
@@ -103,7 +103,7 @@ function run(seed: number): Rec {
     const m2 = party.econ.money;
     researchTick(party.research, party.econ, party.geo, preset);
     const m3 = party.econ.money;
-    workshopTick(party.workshop);
+    workshopTick(party.workshop, party.intercept, party.geo);
     hospitalTick(party.roster);
     campaignTick({ geo: party.geo, roster: party.roster, econ: party.econ }, party.campaign); // п18.3: загроза до місії — як кінець partyTick (main.ts)
     const assault = partyBotAssaultStep(party, policy); // п18.4 (ADR-0156): штурм бази — як simulateParty

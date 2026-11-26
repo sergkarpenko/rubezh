@@ -22,7 +22,9 @@ import { spend, type EconomyState } from './economy';
 import { type DifficultyPreset, DEFAULT_PRESET, sciencePrice } from './campaign';
 import { missingTrophies, spendTrophies, type KeyProjectId, type ProjectId, type ResearchState, type TrophyCost } from './research';
 import { HIT_CHANCE_CAP, type Unit, type UnitItems } from './combat';
-import type { InterceptState } from './intercept';
+import { addFighter, fighterById, MAX_FIGHTERS, type InterceptState } from './intercept';
+import type { GeoState } from './geo';
+import type { RegionId } from './regions';
 
 // Предмети «Кузні» — завершені протоколи науки, крім «Розширення лабораторії».
 // П12.6 (ADR-0064): ключі англійські (стабільні, збігаються з ProjectId),
@@ -71,10 +73,21 @@ export function itemName(id: ItemId): string {
   return WORKSHOP_CATALOG[id]?.name ?? id;
 }
 
+// п19.3: назва замовлення черги «Кузні» (перехоплювач — не предмет каталогу).
+export function orderName(o: Pick<WorkshopOrder, 'id'>): string {
+  return o.id === 'interceptor' ? 'Перехоплювач' : itemName(o.id);
+}
+
 // Предмети, що екіпіруються на оперативника ростеру (ADR-0058). Гарматний
 // модуль — озброєння перехоплювача, на оперативникові він не носиться
 // (встановлення — intercept).
 export type SoldierItemId = Exclude<ItemId, 'gun-module'>;
+
+// п19.3 (ADR-0159 п. 13, ADR-0161): перехоплювач — замовлення в черзі «Кузні» поруч із предметами
+// (одне активне); ціна — 200 × множник науки пресета (sciencePrice), виготовлення — 48 тіків (1 доба);
+// після виготовлення — в ангар обраного регіону, не на склад. Дослідження не потрібне.
+export const INTERCEPTOR_COST = 200;
+export const INTERCEPTOR_TICKS = 48;
 
 export const ARMOR_MAX_HP_BONUS = 2; // «Композитна броня»: +2 maxHp (ADR-0058)
 export const OPTICS_ACCURACY_BONUS = 0.05; // «Кібернетичне око»: +0.05 точності (кап 0.95, ADR-0004)
@@ -86,13 +99,16 @@ export type WorkshopEvent =
   | { type: 'unequip'; soldierId: string; id: SoldierItemId } // предмет з солдата назад на склад
   | { type: 'equipment_lost'; soldierId: string; items: (keyof SoldierEquipment)[] } // витратники загиблого зникли (до Т.28 — усі предмети)
   | { type: 'equipment_returned'; soldierId: string; items: ('armor' | 'optics')[] } // броня й око загиблого — на склад (ADR-0091)
-  | { type: 'gun_module_installed' } // модуль зі складу на винищувач
-  | { type: 'gun_module_removed' } // модуль з винищувача назад на склад
+  | { type: 'gun_module_installed'; fighter?: number } // модуль зі складу на винищувач (п19.3: id — коли їх ≥ 2)
+  | { type: 'gun_module_removed'; fighter?: number } // модуль з винищувача назад на склад
+  | { type: 'interceptor_order'; region: RegionId; ticks: number } // п19.3: перехоплювач замовлено
+  | { type: 'interceptor_produced'; fighter: number; region: RegionId } // п19.3: перехоплювач — в ангарі
   | { type: 'store_lost'; lost: Partial<Record<ItemId, number>> }; // п18.4: половина складу — у програному штурмі бази
 
 export interface WorkshopOrder {
-  id: ItemId;
+  id: ItemId | 'interceptor'; // п19.3: 'interceptor' — перехоплювач (region — ангар призначення)
   ticksLeft: number; // тики геосцени до готовності
+  region?: RegionId; // п19.3: лише для 'interceptor'
 }
 
 // Екіпірування солдата ростеру (ADR-0058): броня і оптика — постійні
@@ -158,15 +174,49 @@ export function orderItem(
   return order;
 }
 
+// п19.3 (ADR-0161): перехоплювачів разом із замовленими в «Кузні» — не більше MAX_FIGHTERS.
+export function interceptorCount(workshop: WorkshopState, intercept: InterceptState): number {
+  return intercept.fighters.length + workshop.queue.filter((o) => o.id === 'interceptor').length;
+}
+
+// п19.3 (ADR-0159 п. 4, 13): замовлення перехоплювача в ангар регіону region — оплата одразу
+// (sciencePrice, у мінус неможливо), у кінець черги; регіон — будь-який, і той, що вийшов
+// (рішення власника «А. Кілька в одному»). Порушення → throw, стан не змінюється.
+export function orderInterceptor(
+  econ: EconomyState,
+  workshop: WorkshopState,
+  intercept: InterceptState,
+  region: RegionId,
+  preset: DifficultyPreset = DEFAULT_PRESET
+): WorkshopOrder {
+  if (interceptorCount(workshop, intercept) >= MAX_FIGHTERS) {
+    throw new Error('Перехоплювачів уже ' + MAX_FIGHTERS + ' разом із замовленими: більше не буває');
+  }
+  spend(econ, sciencePrice(INTERCEPTOR_COST, preset));
+  const order: WorkshopOrder = { id: 'interceptor', ticksLeft: INTERCEPTOR_TICKS, region };
+  workshop.queue.push(order);
+  workshop.log.push({ type: 'interceptor_order', region, ticks: INTERCEPTOR_TICKS });
+  return order;
+}
+
 // Тік цеху разом із геосценою (прецедент repairTick): 1 виклик = 1 тік
 // геосцени. Активне замовлення (перше в черзі) добирає тик; нуль →
 // предмет на склад, наступне замовлення стає активним з наступного
 // тіку. Без замовлень — no-op. Детермінізм: порядок фіксований, жодного RNG.
-export function workshopTick(workshop: WorkshopState): void {
+// п19.3: готовий перехоплювач — в ангар регіону замовлення (потрібні intercept і geo; без
+// замовлень перехоплювача виклик без них — як до п19.3).
+export function workshopTick(workshop: WorkshopState, intercept?: InterceptState, geo?: GeoState): void {
   const active = workshop.queue[0];
   if (!active) return;
   active.ticksLeft -= 1;
   if (active.ticksLeft <= 0) {
+    if (active.id === 'interceptor') {
+      if (!intercept || !geo) throw new Error('workshopTick: для перехоплювача потрібні стан перехоплення і геосцена');
+      workshop.queue.shift();
+      const f = addFighter(intercept, geo, active.region!);
+      workshop.log.push({ type: 'interceptor_produced', fighter: f.id, region: f.region });
+      return;
+    }
     workshop.queue.shift();
     workshop.store[active.id] += 1;
     workshop.log.push({ type: 'produced', id: active.id });
@@ -270,31 +320,38 @@ function equipmentOf(workshop: WorkshopState, soldierId: string): SoldierEquipme
 // (застосовує interceptRound; зняття повертає модуль на склад). Модуль
 // ставиться/знімається лише у вузлі «Рубіж» — перехоплювач у погоні, бою
 // чи ремонті недоступний для обслуговування.
-export function installGunModule(workshop: WorkshopState, intercept: InterceptState): void {
-  if (intercept.fighter.status !== 'на базі') {
+// п19.3: модуль — на кожен перехоплювач окремо (fighterId; без нього — перший).
+function moduleTag(intercept: InterceptState, id: number): { fighter?: number } {
+  return intercept.fighters.length >= 2 ? { fighter: id } : {};
+}
+
+export function installGunModule(workshop: WorkshopState, intercept: InterceptState, fighterId?: number): void {
+  const f = fighterById(intercept, fighterId);
+  if (f.status !== 'на базі') {
     throw new Error('Модуль встановлюється лише у вузлі «Рубіж»: перехоплювач у польоті');
   }
-  if (intercept.fighter.gunModule) {
+  if (f.gunModule) {
     throw new Error('Гарматний модуль перехоплювача уже встановлено');
   }
   if (workshop.store['gun-module'] <= 0) {
     throw new Error('Предмета немає на складі: Гарматний модуль перехоплювача');
   }
   workshop.store['gun-module'] -= 1;
-  intercept.fighter.gunModule = true;
-  workshop.log.push({ type: 'gun_module_installed' });
+  f.gunModule = true;
+  workshop.log.push({ type: 'gun_module_installed', ...moduleTag(intercept, f.id) });
 }
 
-export function removeGunModule(workshop: WorkshopState, intercept: InterceptState): void {
-  if (intercept.fighter.status !== 'на базі') {
+export function removeGunModule(workshop: WorkshopState, intercept: InterceptState, fighterId?: number): void {
+  const f = fighterById(intercept, fighterId);
+  if (f.status !== 'на базі') {
     throw new Error('Модуль знімається лише у вузлі «Рубіж»: перехоплювач у польоті');
   }
-  if (!intercept.fighter.gunModule) {
+  if (!f.gunModule) {
     throw new Error('Гарматний модуль перехоплювача не встановлено');
   }
-  intercept.fighter.gunModule = false;
+  f.gunModule = false;
   workshop.store['gun-module'] += 1;
-  workshop.log.push({ type: 'gun_module_removed' });
+  workshop.log.push({ type: 'gun_module_removed', ...moduleTag(intercept, f.id) });
 }
 
 // П11.4 (ADR-0058): витратники загону на місію — копія екіпірування в стан

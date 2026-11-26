@@ -260,19 +260,19 @@ describe('Т.22: запобіжник останнього загону і ре�
 
   it('пошкоджений перехоплювач без боєготових не ремонтується; з одним боєготовим — ремонтується', () => {
     const p = createParty(42, 'норма');
-    p.intercept.fighter.hp = 1;
+    p.intercept.fighters[0].hp = 1;
     const money = p.econ.money;
     const all = p.roster.soldiers.map((s) => s.id);
     for (const id of all) p.roster.hospital[id] = 10; // боєготових немає
     partyBotInterceptStep(p, BALANCED_POLICY);
     expect(p.econ.money).toBe(money);
-    expect(p.intercept.fighter.status).toBe('на базі');
-    expect(p.intercept.fighter.repairTicksLeft).toBeUndefined();
+    expect(p.intercept.fighters[0].status).toBe('на базі');
+    expect(p.intercept.fighters[0].repairTicksLeft).toBeUndefined();
 
     delete p.roster.hospital[all[0]];
     partyBotInterceptStep(p, BALANCED_POLICY);
     expect(p.econ.money).toBe(money - 50);
-    expect(p.intercept.fighter.repairTicksLeft).toBeGreaterThan(0);
+    expect(p.intercept.fighters[0].repairTicksLeft).toBeGreaterThan(0);
   });
 });
 
@@ -463,20 +463,20 @@ describe('П11.8: partyBotScienceStep — детерміновані рішен�
     const first = readySoldiers(p.roster)[0];
     expect(p.workshop.equipped[first.id]?.armor).toBe(true);
     expect(first.maxHp).toBe(12); // 10 + 2 (ADR-0058)
-    expect(p.intercept.fighter.gunModule).toBe(true);
+    expect(p.intercept.fighters[0].gunModule).toBe(true);
     expect(p.workshop.store['gun-module']).toBe(0);
     // повторний крок: предмет уже при солдатові/винищувачі — без змін і винятків
     partyBotScienceStep(p, { ...NO_SCIENCE_BASE, scientistsUpTo: 0, equip: true });
     expect(first.maxHp).toBe(12);
-    expect(p.intercept.fighter.gunModule).toBe(true);
+    expect(p.intercept.fighters[0].gunModule).toBe(true);
   });
 
   it('гарматний модуль не ставиться поза базою (винищувач у польоті)', () => {
     const p = createParty(42, 'норма');
     p.workshop.store['gun-module'] = 1;
-    p.intercept.fighter.status = 'ремонт';
+    p.intercept.fighters[0].status = 'ремонт';
     partyBotScienceStep(p, { ...NO_SCIENCE_BASE, scientistsUpTo: 0, equip: true });
-    expect(p.intercept.fighter.gunModule).toBeFalsy(); // гейт «лише на базі» (ADR-0058; поле опційне)
+    expect(p.intercept.fighters[0].gunModule).toBeFalsy(); // гейт «лише на базі» (ADR-0058; поле опційне)
     expect(p.workshop.store['gun-module']).toBe(1);
   });
 });

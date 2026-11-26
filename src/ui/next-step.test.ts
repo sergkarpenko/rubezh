@@ -68,7 +68,7 @@ describe('Т.43: вісім рядків «Наступний крок» — д�
 
   it('7. перехоплювач пошкоджений і кредитів на ремонт вистачає (50); без кредитів — рядок 8', () => {
     const p = createParty(42);
-    p.intercept.fighter.hp = 1;
+    p.intercept.fighters[0].hp = 1;
     p.econ.money = 50;
     expect(text(p)).toBe('Наступний крок: перехоплювач пошкоджений — замовте ремонт');
     p.econ.money = 49;
@@ -99,12 +99,12 @@ describe('Т.43: пріоритети і межі умов', () => {
   it('зонд у повітрі з пошкодженим або зайнятим перехоплювачем — не рядок 3', () => {
     const p = createParty(42);
     addUfo(p, 'летить');
-    p.intercept.fighter.hp = 1;
+    p.intercept.fighters[0].hp = 1;
     expect(text(p)).toContain('замовте ремонт');
-    p.intercept.fighter.status = 'ремонт';
+    p.intercept.fighters[0].status = 'ремонт';
     expect(text(p)).toContain('рухайте час');
-    p.intercept.fighter.status = 'погоня';
-    p.intercept.fighter.hp = 4; // повний HP, але перехоплювач не на базі
+    p.intercept.fighters[0].status = 'погоня';
+    p.intercept.fighters[0].hp = 4; // повний HP, але перехоплювач не на базі
     expect(text(p)).toContain('рухайте час');
   });
 
@@ -117,7 +117,7 @@ describe('Т.43: пріоритети і межі умов', () => {
 
   it('порядок: замовити → видати → ремонт', () => {
     const p = createParty(42);
-    p.intercept.fighter.hp = 1;
+    p.intercept.fighters[0].hp = 1;
     p.workshop.store.armor = 1;
     expect(text(p)).toContain('видайте оперативникам');
     p.research.completed.push('medkit');
@@ -133,12 +133,12 @@ describe('Т.43: пріоритети і межі умов', () => {
     p.research.completed.push('optics', 'gun-module');
     expect(text(p)).toContain('замовте предмет');
     p.workshop.queue.push({ id: 'optics', ticksLeft: 5 });
-    p.intercept.fighter.gunModule = true;
+    p.intercept.fighters[0].gunModule = true;
     expect(text(p)).toContain('рухайте час');
     p.workshop.queue = [];
     p.workshop.equipped[p.roster.soldiers[0].id] = { armor: false, optics: true, medkit: false, grenade: false };
     expect(text(p)).toContain('рухайте час');
-    p.intercept.fighter.gunModule = false;
+    p.intercept.fighters[0].gunModule = false;
     expect(text(p)).toContain('замовте предмет');
   });
 
@@ -146,7 +146,7 @@ describe('Т.43: пріоритети і межі умов', () => {
     const p = createParty(42);
     woundAll(p);
     p.econ.money = 10_000;
-    p.intercept.fighter.hp = 1;
+    p.intercept.fighters[0].hp = 1;
     p.workshop.store.armor = 1;
     p.research.completed.push('medkit');
     addUfo(p, 'збитий');
@@ -175,9 +175,9 @@ describe('Т.43: пріоритети і межі умов', () => {
     const p = createParty(42);
     expect(nextStepText(p, { inBattle: true, gameOver: false })).toBeNull();
     expect(nextStepText(p, { inBattle: false, gameOver: true })).toBeNull();
-    p.intercept.fighter.status = 'бій';
+    p.intercept.fighters[0].status = 'бій';
     expect(text(p)).toBeNull();
-    p.intercept.fighter.status = 'на базі';
+    p.intercept.fighters[0].status = 'на базі';
     p.campaign.status = 'перемога';
     expect(text(p)).toBeNull();
   });
@@ -217,9 +217,9 @@ describe('Т.79: витратник закінчився — окремий те
     p.research.completed = ['medkit'];
     expect(text(p)).toBe(NEXT_STEP.issue);
     p.workshop.store.optics = 0;
-    p.intercept.fighter.hp = 1;
+    p.intercept.fighters[0].hp = 1;
     expect(text(p)).toBe(NEXT_STEP.repair);
-    p.intercept.fighter.hp = FIGHTER_MAX_HP;
+    p.intercept.fighters[0].hp = FIGHTER_MAX_HP;
     expect(text(p)).toBe(NEXT_STEP.refill);
   });
   it('модуль і постійні предмети «поповніть» не дають навіть після виготовлення', () => {
@@ -240,10 +240,10 @@ describe('Т.80: гарматний модуль на складі — «вст�
     p.workshop.store['gun-module'] = 1;
     expect(text(p)).toBe('Наступний крок: гарматний модуль на складі — встановіть на перехоплювач');
     expect(nextStep(p, GEO)?.target).toEqual({ tab: 'base', id: 'btn-gun-install' });
-    p.intercept.fighter.status = 'ремонт';
+    p.intercept.fighters[0].status = 'ремонт';
     expect(text(p)).toBe(NEXT_STEP.time);
-    p.intercept.fighter.status = 'на базі';
-    p.intercept.fighter.gunModule = true;
+    p.intercept.fighters[0].status = 'на базі';
+    p.intercept.fighters[0].gunModule = true;
     expect(text(p)).toBe(NEXT_STEP.time);
   });
   it('порядок: «видайте» → «встановіть» → «ремонт» → «поповніть»', () => {
@@ -253,13 +253,13 @@ describe('Т.80: гарматний модуль на складі — «вст�
     p.workshop.store.optics = 1;
     expect(text(p)).toBe(NEXT_STEP.issue);
     p.workshop.store.optics = 0;
-    p.intercept.fighter.hp = 1;
+    p.intercept.fighters[0].hp = 1;
     p.research.completed.push('medkit');
     p.workshop.log.push({ type: 'produced', id: 'medkit' });
     expect(text(p)).toBe(NEXT_STEP.install);
     p.workshop.store['gun-module'] = 0;
     expect(text(p)).toBe(NEXT_STEP.repair);
-    p.intercept.fighter.hp = FIGHTER_MAX_HP;
+    p.intercept.fighters[0].hp = FIGHTER_MAX_HP;
     expect(text(p)).toBe(NEXT_STEP.refill);
   });
   it('новий протокол («замовте») — раніше за «встановіть»', () => {
@@ -342,7 +342,7 @@ describe('Т.79: куди веде клік по рядку', () => {
     repair: {
       party: () => {
         const p = ready();
-        p.intercept.fighter.hp = 1;
+        p.intercept.fighters[0].hp = 1;
         return p;
       },
       target: () => ({ tab: 'base', id: 'btn-repair' }),

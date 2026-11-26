@@ -82,7 +82,7 @@ function replay(seed: number, preset: DifficultyPreset): { save: string; evacUni
     advanceTime(party.geo, 1, radarRange(party.research));
     economyTick(party.econ, party.geo, party.campaign.preset, totalTrust(party.campaign.regions)); // п19.2: дотація з довір
     researchTick(party.research, party.econ, party.geo, party.campaign.preset);
-    workshopTick(party.workshop);
+    workshopTick(party.workshop, party.intercept, party.geo);
     hospitalTick(party.roster);
     campaignTick({ geo: party.geo, roster: party.roster, econ: party.econ }, party.campaign); // п18.3: загроза до місії — як кінець partyTick (main.ts)
     partyBotAssaultStep(party, policy); // п18.4 (ADR-0156): штурм бази — як simulateParty

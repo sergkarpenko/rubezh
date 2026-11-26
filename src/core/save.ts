@@ -19,10 +19,18 @@ import { createGeoGame, geoDay, type GeoEvent, type GeoState, type Ufo } from '.
 import { createRoster, type Roster } from './squad';
 import { applyRankBonus, newCareer, rankOf, type SoldierCareer, type SoldierRole } from './career';
 import { createEconomy, type EconomyEvent, type EconomyState } from './economy';
-import { createIntercept, interceptRngState, type Fighter, type InterceptEvent, type InterceptState } from './intercept';
+import {
+  createIntercept,
+  FIGHTER_MAX_HP,
+  interceptRngState,
+  MAX_FIGHTERS,
+  type Fighter,
+  type InterceptEvent,
+  type InterceptState,
+} from './intercept';
 import { createCampaign, DEFAULT_PRESET, THREAT_MAX, ASSAULT_THRESHOLDS, type CampaignState, type DifficultyPreset } from './campaign';
 import { ENEMY_ORDER } from './enemies';
-import { createRegions, REGION_IDS, TRUST_MAX, type Regions } from './regions';
+import { createRegions, REGION_IDS, TRUST_MAX, type RegionId, type Regions } from './regions';
 import {
   createResearch,
   emptyTrophies,
@@ -225,9 +233,12 @@ interface EconSave {
 }
 // П7.4 (ADR-0032): стан перехоплення в сейві; відсутнє поле (старі сейви) =
 // «боєготовий на базі» — версія формату не зростає.
+// п19.3 (ADR-0161): сейв v4 пише перелік `fighters`; `fighter` — один перехоплювач сейвів v1–v3
+// і v4 до п19.3 (без id і регіону): мігрує в перелік з одного (id 1, регіон «Північ»).
 interface InterceptSave {
   rngState: number;
-  fighter: Fighter;
+  fighter?: Omit<Fighter, 'id' | 'region'> & Partial<Pick<Fighter, 'id' | 'region'>>;
+  fighters?: Fighter[];
   ufoHp: Record<string, number>;
   activeUfoId: string | null;
   round: number;
@@ -338,7 +349,7 @@ interface ResearchSave {
 // П12.6: id/store — ключі каталогу; у сейвах ≤0.3.0 — старі українські
 // значення (мігруються на вході).
 interface WorkshopSave {
-  queue: { id: string; ticksLeft: number }[];
+  queue: { id: string; ticksLeft: number; region?: RegionId }[]; // п19.3: region — лише 'interceptor'
   store: Record<string, number>;
   equipped?: Record<string, SoldierEquipment>; // П11.3 екіпірування (старіші сейви — порожньо)
   log: WorkshopEvent[];
@@ -399,7 +410,7 @@ export function serializeParty(party: Party, savedAt: string = ''): string {
       },
       intercept: {
         rngState: interceptRngState(party.intercept),
-        fighter: { ...party.intercept.fighter, pos: { ...party.intercept.fighter.pos } },
+        fighters: party.intercept.fighters.map((f) => ({ ...f, pos: { ...f.pos } })), // п19.3
         ufoHp: { ...party.intercept.ufoHp },
         activeUfoId: party.intercept.activeUfoId,
         round: party.intercept.round,
@@ -511,7 +522,12 @@ function parseSave(json: string): SaveData {
   }
   // П7.4 (ADR-0032): поле intercept опційне (старі сейви) — але якщо є, мусить бути цілим
   const icsv = st.intercept;
-  if (icsv !== undefined && (!Number.isInteger(icsv.rngState) || typeof icsv.fighter !== 'object')) {
+  if (
+    icsv !== undefined &&
+    (icsv === null ||
+      !Number.isInteger(icsv.rngState) ||
+      (icsv.fighters !== undefined ? !validFighters(icsv.fighters) : icsv.fighter === null || typeof icsv.fighter !== 'object'))
+  ) {
     fail('Пошкоджені дані збереження: перехоплення');
   }
   // П8.2 (ADR-0033): поле campaign опційне (старі сейви) — але якщо є, має бути коректним.
@@ -595,11 +611,39 @@ function parseSave(json: string): SaveData {
       wsv.store === null ||
       typeof wsv.store !== 'object' ||
       !Array.isArray(wsv.log) ||
-      (wsv.equipped !== undefined && (typeof wsv.equipped !== 'object' || wsv.equipped === null)))
+      (wsv.equipped !== undefined && (typeof wsv.equipped !== 'object' || wsv.equipped === null)) ||
+      !validInterceptorOrders(wsv.queue, savedFighters(icsv, data.version), data.version))
   ) {
     fail('Пошкоджені дані збереження: Кузня');
   }
   return data;
+}
+
+// п19.3 (ADR-0161): перелік перехоплювачів — 1..MAX_FIGHTERS, id цілі за зростанням, відомий
+// регіон і стан, HP 0..макс., у бою — не більше одного.
+const FIGHTER_STATUSES: readonly string[] = ['на базі', 'погоня', 'бій', 'ремонт'];
+function validFighters(list: unknown): boolean {
+  if (!Array.isArray(list) || list.length < 1 || list.length > MAX_FIGHTERS) return false;
+  let prev = 0;
+  for (const f of list as Fighter[]) {
+    if (f === null || typeof f !== 'object' || !Number.isInteger(f.id) || f.id <= prev) return false;
+    if (!(REGION_IDS as readonly string[]).includes(f.region) || !FIGHTER_STATUSES.includes(f.status)) return false;
+    if (!Number.isInteger(f.hp) || f.hp < 0 || f.hp > FIGHTER_MAX_HP || f.pos === null || typeof f.pos !== 'object') return false;
+    prev = f.id;
+  }
+  return (list as Fighter[]).filter((f) => f.status === 'бій').length <= 1;
+}
+
+// п19.3: замовлення перехоплювача в черзі «Кузні» — з відомим регіоном (лише v4), а перехоплювачів
+// разом із замовленими — не більше MAX_FIGHTERS.
+function validInterceptorOrders(queue: { id: string; region?: unknown }[], fighters: number, version: number): boolean {
+  const orders = queue.filter((o) => o?.id === 'interceptor');
+  if (orders.length > 0 && version !== SAVE_VERSION) return false;
+  return orders.every((o) => (REGION_IDS as readonly string[]).includes(o.region as string)) && fighters + orders.length <= MAX_FIGHTERS;
+}
+// (поле fighters у v1–v3 не читається — для ліміту там рахується один перехоплювач)
+function savedFighters(icsv: InterceptSave | undefined, version: number): number {
+  return version === SAVE_VERSION && icsv?.fighters ? icsv.fighters.length : 1;
 }
 
 // п18.2: трофеї в сейві — об'єкт лише з відомими типами і цілими ≥ 0.
@@ -634,7 +678,14 @@ export function deserializeParty(json: string): Party {
   const sv = data.state.intercept;
   const ic = sv !== undefined ? createIntercept({ rng: mulberry32(sv.rngState) }) : createIntercept(data.seed);
   if (sv !== undefined) {
-    ic.fighter = { ...sv.fighter, pos: { ...sv.fighter.pos } };
+    // п19.3 (ADR-0161): v4 — перелік; один перехоплювач старих сейвів — id 1, регіон «Північ» (вузол)
+    // (у v1–v3 переліку не буває: поле не читається, крім першого запису за відсутності fighter — урок Т.205)
+    if (sv.fighters && data.version === SAVE_VERSION) {
+      ic.fighters = sv.fighters.map((f) => ({ ...f, pos: { ...f.pos } }));
+    } else {
+      const one = sv.fighter ?? sv.fighters![0];
+      ic.fighters = [{ ...one, id: 1, region: 'north', pos: { ...one.pos } }];
+    }
     ic.ufoHp = { ...sv.ufoHp };
     ic.activeUfoId = sv.activeUfoId;
     ic.round = sv.round;
@@ -709,7 +760,11 @@ export function deserializeParty(json: string): Party {
     workshop:
       wsv !== undefined
         ? {
-            queue: wsv.queue.map((o) => ({ id: migrateItemKey(o.id), ticksLeft: o.ticksLeft })),
+            queue: wsv.queue.map((o) =>
+              o.id === 'interceptor'
+                ? { id: 'interceptor' as const, ticksLeft: o.ticksLeft, region: o.region }
+                : { id: migrateItemKey(o.id), ticksLeft: o.ticksLeft }
+            ),
             store: {
               ...emptyStore(),
               ...Object.fromEntries(Object.entries(wsv.store).map(([k, v]) => [migrateItemKey(k), v])),
