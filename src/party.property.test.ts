@@ -9,7 +9,16 @@ import fc from 'fast-check';
 import type { Vec2 } from './core/combat';
 import { WORLD_H, WORLD_W, advanceTime, geoDay, missionTargets, type Ufo } from './core/geo';
 import { createEconomy, creditMissionBonus, economyTick } from './core/economy';
-import { applyMissionResult, assignBotRoles, deployRoles, hireSoldier, hospitalTick, isBankrupt, missionSquad } from './core/squad';
+import {
+  applyMissionResult,
+  assignBotRoles,
+  deployRoles,
+  hireSoldier,
+  hospitalTick,
+  isBankrupt,
+  missionSquad,
+  readySoldiers,
+} from './core/squad';
 import {
   KEY_PROJECTS,
   PROJECTS,
@@ -49,7 +58,8 @@ import {
   startIntercept,
   startRepair,
 } from './core/intercept';
-import { DIFFICULTY_MULTIPLIERS, THREAT_MAX, campaignTick, threatDelta, type DifficultyPreset } from './core/campaign';
+import { ASSAULT_THRESHOLDS, DIFFICULTY_MULTIPLIERS, THREAT_MAX, campaignTick, threatDelta, type DifficultyPreset } from './core/campaign';
+import { GATE_RETRY_MINUTES, completeAssault, completeGate, createAssault, createGateMission, gateKeyDone } from './core/assault';
 import { completeMission, createMission } from './core/mission';
 import { autoBattle } from './core/ai-bot';
 import { createParty, deserializeParty, serializeParty, type Party } from './core/save';
@@ -76,8 +86,10 @@ const WEIGHTS = {
   equip: 3,
   unequip: 2,
   loot: 2,
+  key: 1,
+  unlock: 0, // лише в дебюті OPENING_GATE
 } as const;
-const WEIGHTS_AIR = { gun: 1, intercept: 3, round: 1, repair: 2, mission: 3, reload: 2 } as const;
+const WEIGHTS_AIR = { gun: 1, intercept: 3, round: 1, repair: 2, mission: 3, reload: 2, gate: 2 } as const;
 type Kind = keyof typeof WEIGHTS | keyof typeof WEIGHTS_AIR;
 const cmdArb = fc.record({
   t: fc.constantFrom(...Object.entries({ ...WEIGHTS, ...WEIGHTS_AIR }).flatMap(([kind, weight]) => Array<Kind>(weight).fill(kind as Kind))),
@@ -94,11 +106,18 @@ const OPENING = ['scientist', 'project', 'days', 'scientist', 'days', 'scientist
 // типу, далі той самий дебют — п'ятий відкритий протокол «Анатомія Розриву», замовлення і
 // видача — «Пробивний заряд» (єдиний відкритий предмет).
 const OPENING_CHARGE = ['loot', 'loot', ...OPENING] as const;
+// п18.4: номер протоколу 5 — дебют із відкритою брамою. Ланцюжок ключових протоколів командами
+// не встигає до загрози 100 (вимір: 90 точок — ≈ 30 діб трьох техномантів, партія без місій
+// програє на ≈ 12-й добі), тож «unlock» записує ланцюжок узгоджено з обліком (точки і трофеї —
+// подіями журналу науки); далі — атака брами і випадкові команди (штурми — з турелями).
+const OPENING_GATE = ['unlock', 'gate', 'days', 'gate'] as const;
 
 // Один тік партії — у тому порядку, що й partyTick шару відображення (src/main.ts).
 // Т.16: у повітряному бою час заморожено — тік нічого не робить, як і в partyTick.
+// п18.4 (ADR-0156): штурм, що чекає бою, — бій замість тіку; поріг на цьому тіку — бій одразу.
 function tick(p: Party): void {
   if (p.intercept.fighter.status === 'бій') return;
+  if (assault(p)) return;
   const preset = p.campaign.preset;
   advanceTime(p.geo, 1, radarRange(p.research)); // п18.2
   economyTick(p.econ, p.geo, preset);
@@ -108,6 +127,36 @@ function tick(p: Party): void {
   interceptTick(p.intercept, p.geo);
   repairTick(p.intercept, p.geo);
   campaignTick({ geo: p.geo, roster: p.roster, econ: p.econ }, p.campaign);
+  assault(p);
+}
+
+// п18.4: бій кампанії від запуску до підсумку — у тому порядку, що й src/ui/battle.ts (finish).
+function campaignBattle(p: Party, op: 'штурм' | 'брама'): void {
+  const squad = missionSquad(p.roster);
+  const roles = deployRoles(p.roster, squad) ?? undefined;
+  const opts = { squad, items: deployConsumables(p.workshop, squad), ...(roles ? { roles } : {}) };
+  const m = op === 'штурм' ? createAssault(p, opts) : createGateMission(p, opts);
+  if (op === 'штурм') expect(m.state.units.filter((u) => u.turret).length, 'турелі штурму').toBe(gateKeyDone(p) ? 2 : 0);
+  const fought = autoBattle(m.state).outcome;
+  const outcome = fought === 'триває' ? 'поразка' : fought;
+  const aftermath = applyMissionResult(p.roster, m.state);
+  assignBotRoles(p.roster);
+  removeLostEquipment(p.workshop, aftermath.lost);
+  settleConsumables(p.workshop, aftermath.survivors, m.state.items);
+  if (op === 'штурм') completeAssault(p, outcome === 'перемога' ? 'перемога' : 'поразка');
+  else completeGate(p, outcome);
+  awardTrophies(p.research, m.state, outcome);
+}
+
+// Штурм бази одразу, як startPendingAssault у src/main.ts; без боєготових — програно без бою. true — бій був.
+function assault(p: Party): boolean {
+  if (p.campaign.status !== 'триває' || !p.campaign.assaultPending || p.intercept.fighter.status === 'бій') return false;
+  if (readySoldiers(p.roster).length === 0) {
+    completeAssault(p, 'поразка');
+    return false;
+  }
+  campaignBattle(p, 'штурм');
+  return true;
 }
 
 // Місія від запуску до підсумку — у тому порядку, що й src/ui/battle.ts; бій веде авто-бій.
@@ -170,6 +219,7 @@ function apply(p: Party, c: Cmd): Party {
     for (let k = 0; k < count && !until(); k++) tick(p);
   };
   const finished = research.completed.length + workshop.queue.length;
+  const started = [...research.active.map((a) => a.id), ...research.completed];
   // Раунд повітряного бою з ростером партії (як panels.ts і бот). Т.26 (ADR-0090):
   // ремонт, що стартував сам у цьому раунді, не робить партію банкрутом.
   const round = (choice: (typeof CHOICES)[number]): void => {
@@ -206,6 +256,15 @@ function apply(p: Party, c: Cmd): Party {
     round: () => round(CHOICES[c.i % CHOICES.length]),
     repair: () => startRepair(intercept, geo, econ),
     mission: () => mission(p, c.i),
+    gate: () => campaignBattle(p, 'брама'), // п18.4: фінал; брама закрита — відмова ядра
+    unlock: () => {
+      for (const d of KEY_PROJECTS) {
+        research.completed.push(d.id);
+        research.log.push({ type: 'points', day: geoDay(geo), amount: d.points }, { type: 'trophies', gained: { ...d.trophies } });
+      }
+    },
+    // п18.4: наступний ключовий протокол ланцюжка (гравець обирає його в панелі «Дослідження»)
+    key: () => startProject(econ, research, (KEY_PROJECTS.find((d) => !started.includes(d.id)) ?? KEY_PROJECTS[0]).id, preset),
     // п18.2 (аудит PR #513): трофеї з випадкових місій рідко доходять до ключових протоколів —
     // команда нараховує їх тим самим awardTrophies, як за виграний бій з 1–4 ворогами кожного типу
     loot: () =>
@@ -315,7 +374,9 @@ function broken(p: Party): string[] {
         ? Number(p.intercept.fighter.gunModule ?? false)
         : Object.values(workshop.equipped).filter((eq) => eq[slot]).length;
     const lost = workshop.log.filter((e) => e.type === 'equipment_lost' && e.items.includes(slot)).length;
-    const kept = workshop.store[id] + worn + lost;
+    // п18.4: програний штурм бази забирає половину складу — подія store_lost
+    const raided = workshop.log.reduce((sum, e) => sum + (e.type === 'store_lost' ? (e.lost[id] ?? 0) : 0), 0);
+    const kept = workshop.store[id] + worn + lost + raided;
     const usedUp = id === 'medkit' || id === 'grenade' || id === 'breach-charge';
     must(workshop.store[id] >= 0 && (usedUp ? kept <= made : kept === made), id + ': виготовлено ' + made + ', на обліку ' + kept);
   }
@@ -362,6 +423,26 @@ function broken(p: Party): string[] {
       f.pos.y
   );
 
+  // п18.4 (ADR-0156): штурм відбувся одразу (жодного очікування між командами), порогів не більше трьох
+  // і в порядку 60 / 75 / 90; турель — поза ростером; пауза брами — не довше доби; перемога — лише
+  // з подією фіналу після «Ключа брами».
+  const assaults = geo.log.filter((e) => e.type === 'base_assault').map((e) => (e as { threshold: number }).threshold);
+  must(
+    campaign.assaultPending !== true &&
+      (campaign.assaults ?? 0) === assaults.length &&
+      assaults.every((t, i) => t === ASSAULT_THRESHOLDS[i]) &&
+      geo.log.filter((e) => e.type === 'assault_won' || e.type === 'assault_lost').length === assaults.length,
+    'штурми: ' + JSON.stringify(assaults) + ', очікує ' + campaign.assaultPending
+  );
+  must(!roster.soldiers.some((s) => /^t\d+$/.test(s.id)), 'турель у ростері');
+  const gateLost = geo.log.filter((e) => e.type === 'gate_lost').at(-1);
+  must((campaign.gateReadyAt ?? 0) === (gateLost ? gateLost.minute + GATE_RETRY_MINUTES : 0), 'пауза брами — не доба після gate_lost');
+  must(
+    (campaign.status === 'перемога') === geo.log.some((e) => e.type === 'campaign_victory') &&
+      (campaign.status !== 'перемога' || (gateKeyDone(p) && campaign.victoryDay !== null)),
+    'перемога без фіналу'
+  );
+
   // п18.3 (ADR-0153 п. 13, 15): перемоги до фінальної місії (п18.4) немає; загроза — ціле 0–100 і
   // дорівнює повтору threatDelta по врахованих подіях журналу (межі 0 і 100, зупинка на 100);
   // поразка — рівно на 100; рахунок і доба поразки — лише з кінцем партії.
@@ -369,8 +450,7 @@ function broken(p: Party): string[] {
   for (let i = 0; i < campaign.threatCursor && replay < THREAT_MAX; i++)
     replay = Math.max(0, Math.min(THREAT_MAX, replay + threatDelta(geo.log, i)));
   must(
-    campaign.status !== 'перемога' &&
-      Number.isInteger(campaign.threat) &&
+    Number.isInteger(campaign.threat) &&
       campaign.threat === replay &&
       campaign.threatCursor <= geo.log.length &&
       (campaign.status === 'поразка') === (campaign.threat === THREAT_MAX) &&
@@ -406,12 +486,12 @@ const partyArb = fc
     fc.nat(),
     fc.constantFrom<DifficultyPreset>('легкий', 'норма', 'складний'),
     fc.nat(OPENING_CHARGE.length),
-    fc.nat(4),
+    fc.nat(5),
     fc.array(cmdArb, { maxLength: 80, size: 'max' })
   )
   .map(([seed, preset, length, protocol, cmds]): [number, DifficultyPreset, Cmd[]] => {
-    const opening = (protocol === 4 ? OPENING_CHARGE : OPENING)
-      .slice(0, length)
+    const opening = (protocol === 5 ? OPENING_GATE : protocol === 4 ? OPENING_CHARGE : OPENING)
+      .slice(0, protocol === 5 ? OPENING_GATE.length : length)
       .map((t) => ({ t, n: protocol === 4 ? 3 : 0, i: protocol }));
     return [seed, preset, [...opening, ...cmds]];
   });

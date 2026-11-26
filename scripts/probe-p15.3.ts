@@ -17,6 +17,7 @@ import {
   partyBotInterceptStep,
   partyBotScienceStep,
   simulateParty,
+  partyBotAssaultStep,
 } from '../src/core/party-bot';
 import { createParty, serializeParty, type Party } from '../src/core/save';
 import { advanceTime, missionTargets } from '../src/core/geo';
@@ -83,6 +84,7 @@ function replay(seed: number, preset: DifficultyPreset): { save: string; evacUni
     workshopTick(party.workshop);
     hospitalTick(party.roster);
     campaignTick({ geo: party.geo, roster: party.roster, econ: party.econ }, party.campaign); // п18.3: загроза до місії — як кінець partyTick (main.ts)
+    partyBotAssaultStep(party, policy); // п18.4 (ADR-0156): штурм бази — як simulateParty
     partyBotHireStep(party, policy);
     partyBotScienceStep(party, policy);
     evacUnits += missionStep(party).evacUnits;

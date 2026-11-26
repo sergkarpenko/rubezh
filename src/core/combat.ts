@@ -66,6 +66,9 @@ export interface Unit {
   overwatch: boolean; // дозор: реакційний вогонь під час ходу ворога
   kind?: EnemyKind; // п17.2 (ADR-0149 п. 9): тип ворога; відсутній — демон (і оперативник)
   armor?: number; // п17.2 (ADR-0149 п. 5, 11): мінус від кожного влучання пострілу
+  // п18.4 (ADR-0153 п. 16, ADR-0156): турель бази — нерухомий юніт сторони загону
+  // (стріляє і стає в дозор, рухатись не може; поза ростером і досвідом).
+  turret?: boolean;
 }
 
 // П11.4 (ADR-0058): витратники юніта в цьому бою. «По одній на місцію»:
@@ -125,6 +128,9 @@ export interface GameState {
   // Стан бою (сейв у бою недоступний, ADR-0026): формат сейву не змінюється.
   evacuated?: Unit[];
   roles?: Record<string, UnitRole>; // п16.3: ролі оперативників у цьому бою (id → роль)
+  // п18.4 (ADR-0156): зона ворогів, до якої йде бот загону, поки ворога не видно
+  // (фінал «Брама Розриву» — свій кут мапи); без поля — ALIEN_SPAWN, як досі.
+  enemyZone?: Vec2[];
 }
 
 export const MOVE_AP_PER_CELL = 1;
@@ -392,6 +398,7 @@ export interface CreateGameOptions {
   items?: Record<string, UnitItems>; // П11.4: витратники юнітів у цьому бою
   evacZone?: Vec2[]; // П15.2 (ADR-0075): зона висадки для евакуації (mission.ts)
   roles?: Record<string, UnitRole>; // п16.3: ролі оперативників (deployRoles у squad.ts)
+  enemyZone?: Vec2[]; // п18.4: зона ворогів для бота загону (брама)
 }
 
 export function createGame(opts: CreateGameOptions): GameState {
@@ -408,6 +415,7 @@ export function createGame(opts: CreateGameOptions): GameState {
   };
   // п16.3: копія — бій змінює used, переданий об'єкт лишається як був; без ролей — стан як до п16.3
   if (opts.roles) state.roles = Object.fromEntries(Object.entries(opts.roles).map(([id, r]) => [id, { ...r }]));
+  if (opts.enemyZone) state.enemyZone = opts.enemyZone.map((c) => ({ ...c })); // п18.4: без поля — стан як досі
   for (const u of state.units) if (u.side === state.activeSide) u.ap = u.maxAp;
   return state;
 }
@@ -457,6 +465,7 @@ function assertStep(state: GameState, u: Unit, step: Vec2): void {
 export function moveUnit(state: GameState, unitId: string, path: Vec2[], stopAtUnit = false): Unit | undefined {
   const u = getUnit(state, unitId);
   requireActive(state, u);
+  if (u.turret) throw new Error('Турель нерухома');
   for (const step of path) {
     const blocker = stopAtUnit ? unitAt(state, step) : undefined;
     if (blocker !== undefined) return blocker;

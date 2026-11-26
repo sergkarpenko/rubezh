@@ -86,6 +86,8 @@ export class CoreMirror {
   tick(ticks = 1): void {
     for (let i = 0; i < ticks; i++) {
       if (this.party.campaign.status === 'поразка') return; // п18.3: на поразці сторінка зупиняє час (gameOver)
+      // п18.4 (ADR-0156): штурм бази сторінка відкриває боєм — дзеркало його не веде, сценарій до загрози 60 не доходить
+      if (this.party.campaign.assaultPending) throw new Error('Дзеркало: штурм бази поза сценарієм');
       advanceTime(this.party.geo, 1, radarRange(this.party.research));
       hospitalTick(this.party.roster);
       // п18.3: загроза кампанії — склад ворогів місії (як кінець partyTick у main.ts)

@@ -67,6 +67,7 @@ import {
   partyBotScienceStep,
   simulateParty,
   type PartyBotPolicy,
+  partyBotAssaultStep,
 } from '../src/core/party-bot';
 const HORIZON_DAYS = 30; // п18.3 (ADR-0155): VICTORY_DAY прибрано — горизонт виміру 30 діб, як у звітах фаз 8–17
 
@@ -252,6 +253,7 @@ function run(name: string, v: Variant, preset: DifficultyPreset, seed: number): 
     workshopTick(party.workshop);
     hospitalTick(party.roster);
     campaignTick({ geo: party.geo, roster: party.roster, econ: party.econ }, party.campaign); // п18.3: загроза до місії — як кінець partyTick (main.ts)
+    partyBotAssaultStep(party, policy); // п18.4 (ADR-0156): штурм бази — як simulateParty
     rec.hired += partyBotHireStep(party, policy);
     const m1 = party.econ.money;
     const done = v.fire && sci.projects.every((id) => party.research.completed.includes(id));

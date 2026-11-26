@@ -56,6 +56,31 @@ beforeEach(() => {
   setupDom();
 });
 
+// п18.4 (ADR-0156; рішення власника «А. Мінімум»): рядки штурму бази і фіналу
+describe('п18.4: geoEventText — штурм бази і «Брама Розриву»', () => {
+  const none = new Set<string>();
+  it.each([
+    [{ type: 'base_assault', threshold: 75, minute: 0 }, '⚠ Штурм вузла «Рубіж»: загроза 75 — демони атакують базу.', 'lose'],
+    [{ type: 'assault_won', minute: 0 }, 'Штурм бази відбито ✓', 'win'],
+    [
+      { type: 'assault_lost', money: 42, minute: 0 },
+      'Штурм бази не відбито ✗ — втрачено 42 кредити і половину складу, загроза +10',
+      'lose',
+    ],
+    [{ type: 'assault_lost', money: 1, minute: 0 }, 'Штурм бази не відбито ✗ — втрачено 1 кредит і половину складу, загроза +10', 'lose'],
+    [
+      { type: 'assault_lost', money: 95, minute: 0 },
+      'Штурм бази не відбито ✗ — втрачено 95 кредитів і половину складу, загроза +10',
+      'lose',
+    ],
+    [{ type: 'assault_lost', money: 0, minute: 0 }, 'Штурм бази не відбито ✗ — втрачено половину складу, загроза +10', 'lose'],
+    [{ type: 'gate_lost', minute: 0 }, 'Брама Розриву встояла ✗ — загроза +10, повтор через добу', 'lose'],
+    [{ type: 'campaign_victory', day: 40, score: 777, minute: 0 }, '★ Браму Розриву закрито — перемога (рахунок 777)', 'win'],
+  ] as const)('%o', (e, text, cls) => {
+    expect(geoEventText(evGeo(e), none)).toEqual({ text, cls });
+  });
+});
+
 describe('geoEventText: фільтр туману стратегічного журналу (4.2)', () => {
   const known = new Set(['u1']);
 

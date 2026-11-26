@@ -33,6 +33,7 @@ import {
   partyBotMissionStep,
   partyBotScienceStep,
   simulateParty,
+  partyBotAssaultStep,
 } from '../src/core/party-bot';
 const HORIZON_DAYS = 30; // п18.3 (ADR-0155): VICTORY_DAY прибрано — горизонт виміру 30 діб, як у звітах фаз 8–17
 
@@ -65,7 +66,8 @@ interface Bust {
   money: number;
   alive: number;
   afterRepair: boolean; // боєготових не було, гроші на найм були — їх забрав ремонт
-  spent48: { hire: number; science: number; salary: number; repair: number }; // витрати за останню добу
+  afterAssault: boolean; // п18.4: у тік банкрутства був штурм бази (програний забирає 30 % кредитів)
+  spent48: { hire: number; science: number; salary: number; repair: number; assault: number }; // витрати за останню добу
   recoverTicks?: number; // --no-bankrupt: через скільки тіків умова банкрутства зникла
   wonAfter: number; // --no-bankrupt: виграно місій після банкрутства
 }
@@ -103,11 +105,13 @@ function run(seed: number): Rec {
     workshopTick(party.workshop);
     hospitalTick(party.roster);
     campaignTick({ geo: party.geo, roster: party.roster, econ: party.econ }, party.campaign); // п18.3: загроза до місії — як кінець partyTick (main.ts)
+    const assault = partyBotAssaultStep(party, policy); // п18.4 (ADR-0156): штурм бази — як simulateParty
+    const mA = party.econ.money; // аудит PR #515: утрата 30 % кредитів — окремо від найму
     partyBotHireStep(party, policy);
     const m4 = party.econ.money;
     partyBotScienceStep(party, policy);
     const m5 = party.econ.money;
-    spent.push({ repair: Math.max(0, m0 - m1), salary: m2 - m3, hire: m3 - m4, science: m4 - m5 });
+    spent.push({ repair: Math.max(0, m0 - m1), salary: m2 - m3, assault: m3 - mA, hire: mA - m4, science: m4 - m5 });
     const readyBefore = readySoldiers(party.roster).length;
     const skip = flags.has('nomissions') || (flags.has('guard') && readyBefore === 3 && m5 < hire);
     const ms = skip ? { launched: false, outcome: null, lost: 0 } : partyBotMissionStep(party, policy);
@@ -133,14 +137,15 @@ function run(seed: number): Rec {
     lastDay = day;
     const bankrupt = isBankrupt(party.econ, party.roster, preset);
     if (bankrupt && !rec.bust) {
-      const spent48 = { hire: 0, science: 0, salary: 0, repair: 0 };
+      const spent48 = { hire: 0, science: 0, salary: 0, repair: 0, assault: 0 };
       for (const s of spent.slice(-TICKS_PER_DAY)) for (const k of Object.keys(s) as (keyof typeof s)[]) spent48[k] += s[k];
       rec.bust = {
         tick: t,
         day,
         money: party.econ.money,
         alive: party.roster.soldiers.length,
-        afterRepair: !ms.launched,
+        afterRepair: !ms.launched && !assault.fought,
+        afterAssault: assault.fought,
         spent48,
         wonAfter: 0,
       };
@@ -208,7 +213,7 @@ console.log(
 if (busts.length) {
   const s = (k: keyof Bust['spent48']): string => (busts.reduce((a, b) => a + b.spent48[k], 0) / busts.length).toFixed(0);
   console.log(
-    `банкрутства: після програної місії ${busts.filter((b) => !b.afterRepair).length}, після оплати ремонту ${busts.filter((b) => b.afterRepair).length}`
+    `банкрутства: після програної місії ${busts.filter((b) => !b.afterRepair && !b.afterAssault).length}, після оплати ремонту ${busts.filter((b) => b.afterRepair).length}, після штурму бази ${busts.filter((b) => b.afterAssault).length}`
   );
   console.log(
     `  гроші в мить банкрутства: ${Math.min(...busts.map((b) => b.money))}–${Math.max(...busts.map((b) => b.money))}, медіана ${median(busts.map((b) => b.money))}; живих у ростері 0: ${busts.filter((b) => b.alive === 0).length}`

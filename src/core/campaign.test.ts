@@ -162,8 +162,11 @@ describe('п18.3: campaignTick — шкала загрози (ADR-0153 п. 13)',
     }
     expect(c.threat).toBe(t);
     expect(c.status).toBe(t >= THREAT_MAX ? 'поразка' : 'триває');
-    expect(geoA.log.findIndex((e) => e.type === 'campaign_defeat')).toBe(t >= THREAT_MAX ? at + 1 : -1);
-    const strip = (log: typeof geoA.log) => log.filter((e) => e.type !== 'campaign_defeat');
+    // п18.4: поріг 60 дає подію штурму (бою тут ніхто не грає — штурм лишається в очікуванні)
+    const noAssault = geoA.log.filter((e) => e.type !== 'base_assault');
+    expect(geoA.log.filter((e) => e.type === 'base_assault').length).toBe(t >= 60 ? 1 : 0);
+    expect(noAssault.findIndex((e) => e.type === 'campaign_defeat')).toBe(t >= THREAT_MAX ? at + 1 : -1);
+    const strip = (log: typeof geoA.log) => log.filter((e) => e.type !== 'campaign_defeat' && e.type !== 'base_assault');
     expect(strip(geoA.log)).toEqual(geoB.log);
     expect(geoA.ufos).toEqual(geoB.ufos);
   });

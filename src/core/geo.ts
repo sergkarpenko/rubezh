@@ -95,7 +95,13 @@ export type GeoEvent =
   // geoTick про кампанію не знає (ADR-0002), а журнал — спільний для шарів.
   | { type: 'campaign_victory'; day: number; score: number; minute: number }
   // п18.3 (ADR-0153 п. 13): поразка партії — загроза досягла 100 (записує campaign.ts).
-  | { type: 'campaign_defeat'; day: number; score: number; minute: number };
+  | { type: 'campaign_defeat'; day: number; score: number; minute: number }
+  // п18.4 (ADR-0153 п. 16–17, ADR-0156): штурм бази (поріг загрози), його результат і програний
+  // фінал «Брама Розриву» (записують campaign.ts і assault.ts; +10 загрози — threatDelta).
+  | { type: 'base_assault'; threshold: number; minute: number }
+  | { type: 'assault_won'; minute: number }
+  | { type: 'assault_lost'; money: number; minute: number }
+  | { type: 'gate_lost'; minute: number };
 
 export interface GeoState {
   minute: number; // хвилини від старту; 0 = 00:00 дня 1

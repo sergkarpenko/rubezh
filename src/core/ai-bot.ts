@@ -118,9 +118,10 @@ function soldierStep(state: GameState, u: Unit, evac?: EvacPolicy): boolean {
     }
   }
   if (enemies.length === 0) {
+    if (u.turret) return false; // п18.4 (ADR-0156): турель нерухома — чекає ворога
     // Рух до зони НЛО (дзеркало patrolStep, але без резерву на дозор:
-    // демо має досягти швидкого контакту).
-    const step = bestPathToNeighbors(state, u, ALIEN_SPAWN, u.ap);
+    // демо має досягти швидкого контакту). п18.4: у брамі зона ворогів — своя (state.enemyZone).
+    const step = bestPathToNeighbors(state, u, state.enemyZone ?? ALIEN_SPAWN, u.ap);
     if (step) {
       moveUnit(state, u.id, step);
       return true;
@@ -142,6 +143,7 @@ function soldierStep(state: GameState, u: Unit, evac?: EvacPolicy): boolean {
     resolveAttack(state, u.id, target.id, mode);
     return true;
   }
+  if (u.turret) return false; // п18.4: турель не підходить до цілі
   const step = pathToward(state, u, target);
   if (step) {
     moveUnit(state, u.id, step);

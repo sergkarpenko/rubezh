@@ -1523,21 +1523,42 @@ describeScenario('п18.3: загроза 100 — поразка; перемог�
   });
 
   step(
-    'без місій: межа 30-ї доби — без перемоги; загроза 100 — поразка, рядок журналу, час зупинено',
-    () => {
-      for (let i = 0; i < 30; i++) passDay();
-      expect($('campaign-status').textContent).not.toBe('кампанія: перемога');
+    'без місій: поріг 60 — штурм бази одразу (бій, рядок журналу, час стоїть); межа 30-ї доби — без перемоги',
+    async () => {
+      // п18.4 (ADR-0156; рішення власника «А. Мінімум»): штурм починається сам — вкладка бою, час стоїть
       let d = 0;
-      while ($('campaign-status').textContent === 'кампанія: триває' && d++ < 40) passDay();
-      expect($('campaign-status').textContent).toBe('кампанія: поразка');
-      expect($('campaign-victory').classList.contains('hidden')).toBe(true);
-      expect($('log').textContent).toContain('✗ Загроза Розриву досягла 100 — партію програно.');
+      while ($('battle-panel').classList.contains('hidden') && d++ < 40) passDay();
+      expect($('battle-panel').classList.contains('hidden')).toBe(false);
+      expect($('log').textContent).toContain('⚠ Штурм вузла «Рубіж»: загроза 60 — демони атакують базу.');
+      expect($('bctx-kind').textContent).toBe('штурм бази');
+      expect(btn('btn-evac').hidden).toBe(true); // евакуації в штурмі немає (рішення власника «А»)
       const clock = $('clock').textContent;
       passDay();
-      expect($('clock').textContent).toBe(clock); // гру закінчено (gameOver), як банкрутство
+      expect($('clock').textContent).toBe(clock); // у бою час стоїть
+      await runAutoBattle();
+      expect($('bresult').textContent).toMatch(/ШТУРМ (ВІДБИТО ✓|НЕ ВІДБИТО ✗)/);
+      closeBattle();
+      expect($('battle-panel').classList.contains('hidden')).toBe(true);
+      for (let i = 0; i < 30; i++) passDay();
+      expect($('campaign-status').textContent).not.toBe('кампанія: перемога');
     },
     60_000
   );
+
+  step('загроза 100 — поразка, рядок журналу, час зупинено', () => {
+    btn('btn-play-again').click();
+    saveWithCampaign((c) => {
+      c.threat = 98; // два очки — одна доба
+      c.assaults = 3; // усі пороги штурму вже минули
+    });
+    passDay();
+    expect($('campaign-status').textContent).toBe('кампанія: поразка');
+    expect($('campaign-victory').classList.contains('hidden')).toBe(true);
+    expect($('log').textContent).toContain('✗ Загроза Розриву досягла 100 — партію програно.');
+    const clock = $('clock').textContent;
+    passDay();
+    expect($('clock').textContent).toBe(clock); // гру закінчено (gameOver), як банкрутство
+  });
 
   step('сейв зі статусом «поразка»: гру закінчено одразу після завантаження — час не йде', () => {
     btn('btn-play-again').click();
@@ -1577,6 +1598,103 @@ describeScenario('п18.3: загроза 100 — поразка; перемог�
     expect($('campaign-status').textContent).toBe('кампанія: триває');
     expect($('campaign-victory').classList.contains('hidden')).toBe(true);
   });
+});
+
+// п18.4 (ADR-0156; рішення власника «А. Мінімум»): штурм без боєготових, турелі після «Ключа брами»,
+// фінал «Брама Розриву» кнопкою панелі зондів; перемога — чинний екран перемоги.
+type SaveState = {
+  campaign: Record<string, unknown>;
+  research: { completed: string[] };
+  roster: { soldiers: { id: string }[]; hospital: Record<string, number> };
+};
+const saveEdit = (edit: (st: SaveState) => void): void => {
+  btn('btn-save-1').click();
+  const raw = JSON.parse(localStorage.getItem('rubezh.save.1')!) as { state: SaveState };
+  edit(raw.state);
+  localStorage.setItem('rubezh.save.1', JSON.stringify(raw));
+  btn('btn-load-1').click();
+};
+
+describeScenario('п18.4: штурм бази і «Брама Розриву»', (step) => {
+  step('штурм без боєготових — програно без бою: рядок журналу, бій не відкрито, кредити −30 %', () => {
+    startParty();
+    saveEdit((st) => {
+      st.campaign.threat = 59;
+      for (const s of st.roster.soldiers) st.roster.hospital[s.id] = 500;
+    });
+    const money = Number($('money').textContent);
+    btn('btn-tick').click(); // ще не доба — загроза 59
+    let i = 0;
+    while (!$('log').textContent!.includes('⚠ Штурм вузла') && i++ < 48) btn('btn-tick').click();
+    expect($('log').textContent).toContain('⚠ Штурм вузла «Рубіж»: загроза 60 — демони атакують базу.');
+    expect($('battle-panel').classList.contains('hidden')).toBe(true);
+    btn('btn-tick').click(); // подію поразки журнал виводить наступним дренажем
+    expect($('log').textContent).toMatch(/Штурм бази не відбито ✗ — втрачено \d+ кредит\S* і половину складу, загроза \+10/);
+    expect(Number($('money').textContent)).toBeLessThan(money);
+  });
+
+  step('штурм у сейві (чекає бою) — перший «+1 тік» відкриває бій замість тіку, годинник стоїть', () => {
+    btn('btn-play-again').click();
+    saveEdit((st) => {
+      st.campaign.threat = 60;
+      st.campaign.assaults = 1;
+      st.campaign.assaultPending = true;
+    });
+    const clock = $('clock').textContent;
+    expect($('battle-panel').classList.contains('hidden')).toBe(true);
+    btn('btn-tick').click();
+    expect($('battle-panel').classList.contains('hidden')).toBe(false);
+    expect($('bctx-kind').textContent).toBe('штурм бази');
+    expect($('clock').textContent).toBe(clock);
+  });
+
+  step('після «Ключа брами» — турелі в штурмі: картка «Турель 1», рух турелі — підказка, без ходу', () => {
+    btn('btn-play-again').click();
+    saveEdit((st) => {
+      st.campaign.threat = 59;
+      st.research.completed.push('gate-key');
+    });
+    let i = 0;
+    while ($('battle-panel').classList.contains('hidden') && i++ < 48) btn('btn-tick').click();
+    expect($('bctx-kind').textContent).toBe('штурм бази');
+    const card = document.querySelector<HTMLButtonElement>('#bsquad [data-unit="t1"]')!;
+    expect(card.getAttribute('aria-label')).toContain('Турель 1');
+    card.click();
+    $('battle').dispatchEvent(new MouseEvent('click', { clientX: 5 * 48 + 24, clientY: 5 * 48 + 24 }));
+    expect($('binfo').textContent).toBe('Турель нерухома — лише вогонь і дозор.');
+    // наведення на клітинку — без прев'ю шляху (рядок не стає «Шлях: N AP»)
+    $('battle').dispatchEvent(new MouseEvent('mousemove', { clientX: 6 * 48 + 24, clientY: 5 * 48 + 24 }));
+    expect($('binfo').textContent).toBe('Турель нерухома — лише вогонь і дозор.');
+  });
+
+  step(
+    'штурм авто-боєм до кінця; брама — кнопкою панелі зондів, бій з евакуацією; поразка — повтор через добу',
+    async () => {
+      await runAutoBattle();
+      expect($('bresult').textContent).toMatch(/ШТУРМ (ВІДБИТО ✓|НЕ ВІДБИТО ✗)/);
+      closeBattle();
+      btn('btn-play-again').click();
+      saveEdit((st) => {
+        st.research.completed.push('gate-key');
+      });
+      const gate = btn('btn-gate');
+      expect(gate.textContent).toBe('▶ Атакувати Браму Розриву');
+      gate.click();
+      expect($('battle-panel').classList.contains('hidden')).toBe(false);
+      expect($('bctx-kind').textContent).toBe('Брама Розриву');
+      expect(btn('btn-evac').hidden).toBe(false);
+      expect($('log').textContent).toContain('▶ Брама Розриву: загін висаджено біля брами');
+      await runAutoBattle();
+      // сід 42: загін авто-бою браму не бере — гілка поразки (перемога й екран — battle.test.ts і сейвом у п18.3)
+      expect($('bresult').textContent).toContain('БРАМА РОЗРИВУ ВСТОЯЛА ✗ — повтор через добу');
+      closeBattle();
+      expect($('log').textContent).toContain('Брама Розриву встояла ✗ — загроза +10, повтор через добу');
+      expect(document.getElementById('btn-gate')).toBeNull(); // повтор — через добу
+      passDay();
+      expect(document.getElementById('btn-gate')).not.toBeNull();
+    },
+    60_000
+  );
 });
 
 // П11.6 (Фаза 11, ADR-0058/0013): критичний флоу «дослідити → виробити →
