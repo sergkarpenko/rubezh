@@ -439,7 +439,9 @@ const researchPanel = createResearchPanel({
   // (block 'start' і scroll-margin-top панелей колонки, index.html), а не низ
   scrollToWorkshop: () => {
     const w = el('workshop');
-    const col = w.closest<HTMLElement>('#status');
+    // аудит PR #523: колонка, що прокручується, — #status (≥ 1181 px) або #side (900–1180 px)
+    let col = w.parentElement;
+    while (col !== null && !['auto', 'scroll'].includes(getComputedStyle(col).overflowY)) col = col.parentElement;
     const tall = col !== null && w.getBoundingClientRect().height > col.clientHeight;
     w.scrollIntoView({ block: tall ? 'start' : 'nearest' });
   },

@@ -433,6 +433,8 @@ export function createPanels(deps: PanelsDeps): Panels {
 
   // п19.4 (ADR-0159 п. 15): перехоплювачі, що показують кнопки регіонів «Призначити» (розгорнуто кліком).
   const assignOpen = new Set<number>();
+  let assignParty: Party | null = null; // аудит PR #523: нова партія чи сейв — розгорнуті ряди скидаються
+  let shownBattle: string | null = null; // аудит PR #523: бій, до картки якого вже прокручено
 
   // П7.4 (ADR-0032): панель винищувача — статус/HP; кнопки дій залежно від стану: «Ремонт (50)»
   // (пошкоджений на базі), дистанції бою (стан «бій» — рішення гравця кожен раунд).
@@ -441,6 +443,12 @@ export function createPanels(deps: PanelsDeps): Panels {
   // модуль і «Призначити» (лише на базі). Рядок останнього переривання — над картками, як і досі.
   function renderFighter(): void {
     const party = deps.getParty();
+    if (assignParty !== party) {
+      assignParty = party;
+      assignOpen.clear();
+    }
+    // аудит PR #523: «Призначити» — лише на базі; після вильоту розгорнутий ряд не повертається сам
+    for (const f of party.intercept.fighters) if (f.status !== 'на базі') assignOpen.delete(f.id);
     const box = el('fighter');
     box.innerHTML = '';
     renderInterceptCtx(); // П7.5: контекст-стрічка повітряного бою у фокусній зоні
@@ -470,6 +478,13 @@ export function createPanels(deps: PanelsDeps): Panels {
       box.appendChild(note);
     }
     for (const f of party.intercept.fighters) box.appendChild(fighterCard(party, f));
+    // аудит PR #523: сигналу вкладки на повітряний бій немає (дистанції — у середній колонці) — на початку
+    // бою картку того, хто б'ється, прокручено у видиму частину колонки (раз на бій)
+    const fighting = fighterInBattle(party.intercept);
+    const key = fighting === null ? null : fighting.id + ':' + String(party.intercept.activeUfoId);
+    if (key !== null && key !== shownBattle)
+      document.getElementById('fighter-card-' + fighting!.id)?.scrollIntoView?.({ block: 'nearest' });
+    shownBattle = key;
   }
 
   function fighterCard(party: Party, f: Fighter): HTMLElement {

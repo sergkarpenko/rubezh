@@ -172,6 +172,7 @@ export function createWorkshopPanel(deps: WorkshopPanelDeps): WorkshopPanel {
       ' з ' +
       MAX_FIGHTERS +
       ' · ангар:</span>';
+    info.title = 'Перехоплювачів разом із замовленими в «Кузні» — не більше ' + MAX_FIGHTERS; // аудит PR #523
     row.appendChild(info);
     const full = count >= MAX_FIGHTERS;
     const poor = party.econ.money < price;

@@ -152,7 +152,6 @@ describe('п19.4: «Перехоплювачі» — картки', () => {
     const party = createParty(42);
     addFighter(party.intercept, party.geo, 'south');
     party.intercept.fighters[1]!.hp = 2;
-    party.workshop.store['gun-module'] = 1;
     party.intercept.fighters[0]!.gunModule = true;
     party.workshop.store['gun-module'] = 1;
     const f = makeFixture(party);
@@ -204,11 +203,80 @@ describe('п19.4: «Перехоплювачі» — картки', () => {
   });
 });
 
-describe('п19.4: «Перехопити» в «Сенсорній сітці» — найближчий боєготовий', () => {
-  it('ангар, ближчий до зонда, піднімається; перший у погоні — кнопка лишається для другого', () => {
+describe('аудит PR #523: стан панелі і прокрутка до бою', () => {
+  it('розгорнутий «Призначити» скидається з новою партією і після вильоту', () => {
     const { party, ufo } = flyingParty();
-    addFighter(party.intercept, party.geo, ufo.pos.x <= 4 ? 'west' : ufo.pos.x >= 12 ? 'east' : 'south');
+    const f = makeFixture(party);
+    f.panels.renderFighter();
+    btn('btn-assign-1').click();
+    f.panels.renderFighter();
+    expect(document.querySelector('#fighter-card-1 .assign-row')).not.toBeNull();
+    startIntercept(party.intercept, party.geo, ufo.id);
+    f.panels.renderFighter();
+    party.intercept.fighters[0]!.status = 'на базі'; // повернувся — ряд не розгортається сам
+    f.panels.renderFighter();
+    expect(document.querySelector('#fighter-card-1 .assign-row')).toBeNull();
+    btn('btn-assign-1').click();
+    let current = party;
+    const g = makeFixture(party, { getParty: () => current });
+    g.panels.renderFighter();
+    btn('btn-assign-1').click();
+    g.panels.renderFighter();
+    expect(document.querySelector('#fighter-card-1 .assign-row')).not.toBeNull();
+    current = createParty(7); // нова партія — той самий id перехоплювача
+    g.panels.renderFighter();
+    expect(document.querySelector('#fighter-card-1 .assign-row')).toBeNull();
+  });
+
+  it("початок повітряного бою — картка того, хто б'ється, прокручується у видиму частину (раз на бій)", () => {
+    const { party, ufo } = flyingParty();
+    addFighter(party.intercept, party.geo, 'east');
+    const spy = vi.fn();
+    (HTMLElement.prototype as unknown as { scrollIntoView: unknown }).scrollIntoView = spy;
+    const f = makeFixture(party);
+    f.panels.renderFighter();
+    expect(spy).not.toHaveBeenCalled();
+    startIntercept(party.intercept, party.geo, ufo.id, 2);
+    party.intercept.fighters[1]!.status = 'бій';
+    party.intercept.activeUfoId = ufo.id;
+    f.panels.renderFighter();
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(spy.mock.contexts[0]).toBe(document.getElementById('fighter-card-2'));
+    f.panels.renderFighter(); // наступні раунди — без прокрутки
+    expect(spy).toHaveBeenCalledTimes(1);
+  });
+
+  it('маркер мапи — і в погоні другого (крило в клітинці погоні, а не в ангарі)', () => {
+    const { party, ufo } = flyingParty();
+    const f = makeFixture(party);
+    const wings = (): string[] => {
+      f.panels.renderGeo();
+      ops.length = 0;
+      f.panels.renderGeo();
+      return ops.filter((o) => o.startsWith('drawImage('));
+    };
+    const base = wings().length;
+    addFighter(party.intercept, party.geo, 'south');
+    expect(wings().length).toBe(base + 1);
+    startIntercept(party.intercept, party.geo, ufo.id, 2);
+    party.intercept.fighters[1]!.pos = { x: 3, y: 3 };
+    const chase = wings();
+    expect(chase.length).toBe(base + 1);
+    expect(chase.some((o) => o.includes(',' + (3 * 48 + 24 - 12) + ','))).toBe(true); // центр клітинки (3, 3), спрайт 24 px
+  });
+});
+
+describe('п19.4: «Перехопити» в «Сенсорній сітці» — найближчий боєготовий', () => {
+  // аудит PR #523: зонд ставимо явно ближче до ангара «Захід» (2, 4), ніж до вузла (8, 4) — інакше нічия
+  it('ангар, ближчий до зонда, піднімається; за рівної відстані — менший id', () => {
+    const { party, ufo } = flyingParty();
+    addFighter(party.intercept, party.geo, 'west');
+    ufo.pos = { x: 1, y: 4 };
     const pick = nearestReady(party, ufo)!;
+    expect(pick.id).toBe(2);
+    ufo.pos = { x: 5, y: 4 }; // 3 від обох ангарів
+    expect(nearestReady(party, ufo)!.id).toBe(1);
+    ufo.pos = { x: 1, y: 4 };
     const f = makeFixture(party);
     f.panels.renderUfos();
     const ib = document.querySelector<HTMLButtonElement>('#ufos button.intercept')!;
