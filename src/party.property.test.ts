@@ -44,6 +44,8 @@ import {
   orderItem,
   removeGunModule,
   removeLostEquipment,
+  interceptorCount,
+  orderInterceptor,
   settleConsumables,
   unequipItem,
   workshopTick,
@@ -53,6 +55,10 @@ import {
 import {
   FIGHTER_MAX_HP,
   FIGHTER_REPAIR_TICKS,
+  MAX_FIGHTERS,
+  assignFighter,
+  fighterInBattle,
+  hangarPos,
   interceptRound,
   interceptTick,
   repairTick,
@@ -90,7 +96,8 @@ const WEIGHTS = {
   key: 1,
   unlock: 0, // лише в дебюті OPENING_GATE
 } as const;
-const WEIGHTS_AIR = { gun: 1, intercept: 3, round: 1, repair: 2, mission: 3, reload: 2, gate: 2 } as const;
+// п19.3: buy — замовлення перехоплювача в «Кузні», assign — перепризначення ангара.
+const WEIGHTS_AIR = { gun: 1, intercept: 3, round: 1, repair: 2, mission: 3, reload: 2, gate: 2, buy: 1, assign: 1 } as const;
 type Kind = keyof typeof WEIGHTS | keyof typeof WEIGHTS_AIR;
 const cmdArb = fc.record({
   t: fc.constantFrom(...Object.entries({ ...WEIGHTS, ...WEIGHTS_AIR }).flatMap(([kind, weight]) => Array<Kind>(weight).fill(kind as Kind))),
@@ -117,13 +124,13 @@ const OPENING_GATE = ['unlock', 'gate', 'days', 'gate'] as const;
 // Т.16: у повітряному бою час заморожено — тік нічого не робить, як і в partyTick.
 // п18.4 (ADR-0156): штурм, що чекає бою, — бій замість тіку; поріг на цьому тіку — бій одразу.
 function tick(p: Party): void {
-  if (p.intercept.fighter.status === 'бій') return;
+  if (fighterInBattle(p.intercept)) return; // п19.3: бій будь-якого перехоплювача
   if (assault(p)) return;
   const preset = p.campaign.preset;
   advanceTime(p.geo, 1, radarRange(p.research)); // п18.2
   economyTick(p.econ, p.geo, preset);
   researchTick(p.research, p.econ, p.geo, preset);
-  workshopTick(p.workshop);
+  workshopTick(p.workshop, p.intercept, p.geo);
   hospitalTick(p.roster);
   interceptTick(p.intercept, p.geo);
   repairTick(p.intercept, p.geo);
@@ -152,7 +159,7 @@ function campaignBattle(p: Party, op: 'штурм' | 'брама', hold = false)
 
 // Штурм бази одразу, як startPendingAssault у src/main.ts; без боєготових — програно без бою. true — бій був.
 function assault(p: Party): boolean {
-  if (p.campaign.status !== 'триває' || !p.campaign.assaultPending || p.intercept.fighter.status === 'бій') return false;
+  if (p.campaign.status !== 'триває' || !p.campaign.assaultPending || fighterInBattle(p.intercept)) return false;
   if (readySoldiers(p.roster).length === 0) {
     completeAssault(p, 'поразка');
     return false;
@@ -243,20 +250,36 @@ function apply(p: Party, c: Cmd): Party {
     order: () => orderItem(econ, workshop, research, item(researched), preset),
     equip: () => fighter && equipItem(workshop, fighter, item(inStore)),
     unequip: () => equipped && unequipItem(workshop, equipped, item(wears)),
-    gun: () => (intercept.fighter.gunModule ? removeGunModule : installGunModule)(workshop, intercept),
+    gun: () => {
+      const f = pick(intercept.fighters, intercept.fighters, c.n)!; // п19.3: модуль — на обраний перехоплювач
+      (f.gunModule ? removeGunModule : installGunModule)(workshop, intercept, f.id);
+    },
+    buy: () => orderInterceptor(econ, workshop, intercept, REGION_IDS[c.n % REGION_IDS.length], preset),
+    assign: () => assignFighter(intercept, geo, pick(intercept.fighters, intercept.fighters, c.n)!.id, REGION_IDS[c.i % REGION_IDS.length]),
     // три рази з чотирьох — «полювання»: «+1 тік», доки радар не покаже зонд у повітрі
     // (не довше двох діб), запуск, погоня до зустрічі і до п'яти раундів бою
     intercept: () => {
-      const f = intercept.fighter;
+      // п19.3: перехоплювач — за номером команди; полюють на зонд, за яким ще ніхто не летить
+      const f = pick(intercept.fighters, intercept.fighters, c.n)!;
+      const free = (): Ufo[] => flying().filter((u) => !intercept.fighters.some((x) => x.targetId === u.id));
       const hunt = c.n % 4 !== 3 && f.status === 'на базі' && f.hp === FIGHTER_MAX_HP;
-      if (hunt) ticks(96, () => flying().length > 0);
-      if (hunt && flying().length === 0) return;
-      startIntercept(intercept, geo, (hunt ? flying()[0] : pick(flying(), geo.ufos))?.id ?? '');
-      if (hunt) ticks(12, () => f.status !== 'погоня');
-      for (let k = c.n % 6; hunt && k > 0 && f.status === 'бій'; k--) round(CHOICES[c.i % 3]);
+      // п19.3 (аудит PR #522): за c.i % 3 === 2 і вільного другого — чекати двох зондів і підняти обидва
+      const g = intercept.fighters.find((x) => x !== f && x.status === 'на базі' && x.hp === FIGHTER_MAX_HP);
+      const pair = hunt && c.i % 3 === 2 && g !== undefined;
+      if (hunt) ticks(96, () => free().length > (pair ? 1 : 0));
+      if (hunt && free().length === 0) return;
+      const second = pair ? free()[1] : undefined;
+      startIntercept(intercept, geo, (hunt ? free()[0] : pick(flying(), geo.ufos))?.id ?? '', f.id);
+      if (second && g) {
+        startIntercept(intercept, geo, second.id, g.id);
+        ticks(6); // обидва в повітрі: бій одного — погоня другого чекає
+      }
+      // за c.i % 3 === 2 погоня лишається в повітрі — наступні команди йдуть під час неї
+      if (hunt && c.i % 3 !== 2) ticks(12, () => f.status !== 'погоня');
+      for (let k = c.n % 6; hunt && c.i % 3 !== 2 && k > 0 && f.status === 'бій'; k--) round(CHOICES[c.i % 3]);
     },
     round: () => round(CHOICES[c.i % CHOICES.length]),
-    repair: () => startRepair(intercept, geo, econ),
+    repair: () => startRepair(intercept, geo, econ, pick(intercept.fighters, intercept.fighters, c.n)!.id),
     mission: () => mission(p, c.i),
     gate: () => campaignBattle(p, 'брама', c.i % 2 === 1), // п18.4: фінал; брама закрита — відмова ядра; п18.6: непарний i — дозор
     unlock: () => {
@@ -373,7 +396,7 @@ function broken(p: Party): string[] {
     const slot = slotOf(id);
     const worn =
       id === 'gun-module'
-        ? Number(p.intercept.fighter.gunModule ?? false)
+        ? p.intercept.fighters.filter((f) => f.gunModule).length
         : Object.values(workshop.equipped).filter((eq) => eq[slot]).length;
     const lost = workshop.log.filter((e) => e.type === 'equipment_lost' && e.items.includes(slot)).length;
     // п18.4: програний штурм бази забирає половину складу — подія store_lost
@@ -405,13 +428,38 @@ function broken(p: Party): string[] {
     must(research.trophies[k] >= 0 && research.trophies[k] === gained - spentP - spentW, 'трофеї ' + k + ': ' + research.trophies[k]);
   }
 
+  // п19.3: перехоплювачі — 1..3 разом із замовленими, id за зростанням, у бою — не більше одного,
+  // на один зонд — один; на базі й у ремонті — в клітинці ангара свого регіону.
+  const fs = p.intercept.fighters;
+  must(
+    fs.length >= 1 && interceptorCount(workshop, p.intercept) <= MAX_FIGHTERS && fs.every((x, i) => i === 0 || x.id > fs[i - 1].id),
+    'перехоплювачі: ' + fs.map((x) => x.id).join(',')
+  );
+  const battling = fs.filter((x) => x.status === 'бій');
+  const chased = fs.filter((x) => x.targetId !== null).map((x) => x.targetId);
+  must(battling.length <= 1 && new Set(chased).size === chased.length, 'перехоплювачі: бій або ціль удвох');
+  must(
+    workshop.log.filter((e) => e.type === 'interceptor_produced').length === fs.length - 1,
+    'перехоплювачі: виготовлено ' + workshop.log.filter((e) => e.type === 'interceptor_produced').length
+  );
+  for (const x of fs) {
+    const home = hangarPos(x.region, geo);
+    if (x.status === 'на базі' || x.status === 'ремонт')
+      must(
+        (x.pos.x === home.x && x.pos.y === home.y) || (x.id === 1 && x.pos.x === 0 && x.pos.y === 0),
+        'перехоплювач ' + x.id + ' не в ангарі'
+      );
+  }
   // Перехоплювач: статус, ціль і ремонт узгоджені.
-  const f = p.intercept.fighter;
-  must(f.hp >= 0 && f.hp <= FIGHTER_MAX_HP && inWorld(f.pos), 'перехоплювач: hp ' + f.hp);
-  const inAir = f.status === 'погоня' || f.status === 'бій';
-  must(inAir === (f.targetId !== null) && (f.status === 'бій') === (p.intercept.activeUfoId !== null), 'перехоплювач: ' + f.status);
-  const left = f.repairTicksLeft;
-  must(f.status === 'ремонт' ? left !== undefined && left >= 1 && left <= FIGHTER_REPAIR_TICKS : left === undefined, 'ремонт: ' + left);
+  const f = battling[0] ?? fs[0];
+  for (const x of fs) {
+    must(x.hp >= 0 && x.hp <= FIGHTER_MAX_HP && inWorld(x.pos), 'перехоплювач: hp ' + x.hp);
+    const inAir = x.status === 'погоня' || x.status === 'бій';
+    must(inAir === (x.targetId !== null), 'перехоплювач ' + x.id + ': ' + x.status);
+    const left = x.repairTicksLeft;
+    must(x.status === 'ремонт' ? left !== undefined && left >= 1 && left <= FIGHTER_REPAIR_TICKS : left === undefined, 'ремонт: ' + left);
+  }
+  must((battling.length === 1) === (p.intercept.activeUfoId !== null), 'перехоплювач у бою і активний зонд');
   for (const u of geo.ufos) must((u.status === 'збитий') === (p.intercept.ufoHp[u.id] === 0), 'зонд ' + u.id + ': статус і HP у повітрі');
   // Т.16: бій іде там, де зустрілись, — перехоплювач у клітинці зонда, зонд у повітрі.
   const target = geo.ufos.find((u) => u.id === p.intercept.activeUfoId);

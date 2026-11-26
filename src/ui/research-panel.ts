@@ -313,7 +313,7 @@ export function createResearchPanel(deps: ResearchPanelDeps): ResearchPanel {
             const hint =
               itemId !== 'gun-module'
                 ? ' — видайте на вкладці «Загін»'
-                : party.intercept.fighter.gunModule
+                : party.intercept.fighters[0].gunModule
                   ? ''
                   : ' — встановіть у панелі «Перехоплювач»';
             notes.push('На складі: ' + onStore + hint);

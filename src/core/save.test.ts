@@ -183,8 +183,8 @@ describe('save: зіпсовані дані (критерій П5.2)', () => {
     const legacy = JSON.parse(serializeParty(p, 'T')) as Record<string, unknown>;
     delete (legacy.state as Record<string, unknown>).intercept; // сейв до П7.4
     const restored = deserializeParty(JSON.stringify(legacy));
-    expect(restored.intercept.fighter.status).toBe('на базі');
-    expect(restored.intercept.fighter.hp).toBe(4);
+    expect(restored.intercept.fighters[0].status).toBe('на базі');
+    expect(restored.intercept.fighters[0].hp).toBe(4);
     expect(restored.intercept.activeUfoId).toBeNull();
   });
 });
@@ -507,11 +507,11 @@ describe('save: цех (П11.3, ADR-0026)', () => {
     p.workshop.store['gun-module'] = 1;
     installGunModule(p.workshop, p.intercept);
     const restored = deserializeParty(serializeParty(p, 'T'));
-    expect(restored.intercept.fighter.gunModule).toBe(true);
+    expect(restored.intercept.fighters[0].gunModule).toBe(true);
     // модуль можна зняти після відновлення — повертається на склад
     removeGunModule(restored.workshop, restored.intercept);
     expect(restored.workshop.store['gun-module']).toBe(1);
-    expect(restored.intercept.fighter.gunModule).toBe(false);
+    expect(restored.intercept.fighters[0].gunModule).toBe(false);
   });
 });
 
@@ -671,7 +671,7 @@ describe('save: Т.12 — кожне поле сейву перевіряєть�
   it('round-trip стану не за замовчуванням: лікарня, погоня винищувача, НЛО в бою, рахунок кампанії', () => {
     const p = createParty(42);
     p.roster.hospital = { s2: 5 };
-    p.intercept.fighter = { ...p.intercept.fighter, pos: { x: 3, y: 2 }, status: 'погоня', targetId: 'ufo1' };
+    p.intercept.fighters[0] = { ...p.intercept.fighters[0], pos: { x: 3, y: 2 }, status: 'бій', targetId: 'ufo1' }; // аудит PR #522: «бій» ⇔ активний зонд
     p.intercept.ufoHp = { ufo1: 2 };
     p.intercept.activeUfoId = 'ufo1';
     p.intercept.round = 2;
@@ -680,7 +680,7 @@ describe('save: Т.12 — кожне поле сейву перевіряєть�
     const r = deserializeParty(serializeParty(p, 'T'));
     expect(r.intercept.rng()).toBe(p.intercept.rng());
     expect(r.roster.hospital).toEqual({ s2: 5 });
-    expect(r.intercept.fighter).toEqual(p.intercept.fighter);
+    expect(r.intercept.fighters[0]).toEqual(p.intercept.fighters[0]);
     expect(r.intercept.ufoHp).toEqual({ ufo1: 2 });
     expect(r.intercept.activeUfoId).toBe('ufo1');
     expect(r.intercept.round).toBe(2);

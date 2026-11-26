@@ -73,25 +73,30 @@ export type GeoEvent =
   // П7.3 (ADR-0032): події перехоплення — в журналі геосцени (туман: події лише
   // про виявлені НЛО, бо запуск перехоплення можливий лише на виявлений).
   // Записує модуль intercept.ts; geoTick про винищувача не знає (ADR-0002/0032).
-  | { type: 'intercept_start'; ufoId: string; pos: Vec2; minute: number }
-  | { type: 'intercept_move'; from: Vec2; to: Vec2; minute: number }
-  | { type: 'intercept_engage'; ufoId: string; pos: Vec2; minute: number }
-  | {
-      type: 'intercept_round';
-      round: number;
-      choice: 'далека' | 'середня' | 'впритул' | 'відступ';
-      fighterHit: boolean;
-      fighterDamage: number;
-      ufoHit: boolean;
-      ufoDamage: number;
-      minute: number;
-    }
-  | { type: 'intercept_break_off'; ufoId: string; minute: number }
-  | { type: 'intercept_aborted'; ufoId: string; reason: 'ufo_lost' | 'ufo_landed' | 'fighter_damaged'; pos: Vec2; minute: number }
-  | { type: 'ufo_shot_down'; ufoId: string; pos: Vec2; minute: number }
-  | { type: 'fighter_returned'; pos: Vec2; minute: number }
-  | { type: 'fighter_repair_start'; minute: number } // П7.4: ремонт оплачемо
-  | { type: 'fighter_repair_done'; minute: number }
+  // п19.3 (ADR-0161): поле fighter (id перехоплювача) — лише коли перехоплювачів два і більше,
+  // region — ангар вильоту й повернення; fighter_assigned — перепризначення в інший ангар.
+  | ((
+      | { type: 'intercept_start'; ufoId: string; pos: Vec2; minute: number }
+      | { type: 'intercept_move'; from: Vec2; to: Vec2; minute: number }
+      | { type: 'intercept_engage'; ufoId: string; pos: Vec2; minute: number }
+      | {
+          type: 'intercept_round';
+          round: number;
+          choice: 'далека' | 'середня' | 'впритул' | 'відступ';
+          fighterHit: boolean;
+          fighterDamage: number;
+          ufoHit: boolean;
+          ufoDamage: number;
+          minute: number;
+        }
+      | { type: 'intercept_break_off'; ufoId: string; minute: number }
+      | { type: 'intercept_aborted'; ufoId: string; reason: 'ufo_lost' | 'ufo_landed' | 'fighter_damaged'; pos: Vec2; minute: number }
+      | { type: 'ufo_shot_down'; ufoId: string; pos: Vec2; minute: number }
+      | { type: 'fighter_returned'; pos: Vec2; minute: number }
+      | { type: 'fighter_repair_start'; minute: number } // П7.4: ремонт оплачемо
+      | { type: 'fighter_repair_done'; minute: number }
+      | { type: 'fighter_assigned'; from: RegionId; to: RegionId; minute: number }
+    ) & { fighter?: number; region?: RegionId })
   // П8.2 (ADR-0033): подію перемоги кампанії записує campaign.ts (п18.3: межі 30-ї доби немає — фінал п18.4);
   // geoTick про кампанію не знає (ADR-0002), а журнал — спільний для шарів.
   | { type: 'campaign_victory'; day: number; score: number; minute: number }

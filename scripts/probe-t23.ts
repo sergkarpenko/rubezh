@@ -174,7 +174,7 @@ function scienceTail(party: ReturnType<typeof createParty>, policy: PartyBotPoli
       if (!itemUnlocked(party.research, id)) continue;
       const lacking =
         id === 'gun-module'
-          ? party.intercept.fighter.gunModule
+          ? party.intercept.fighters[0].gunModule
             ? 0
             : 1
           : squad.filter((s) => !w.equipped[s.id]?.[SoldierItemIdOf(id)]).length;
@@ -192,7 +192,7 @@ function scienceTail(party: ReturnType<typeof createParty>, policy: PartyBotPoli
       equipItem(w, soldier, id);
     }
   }
-  if (party.intercept.fighter.status === 'на базі' && !party.intercept.fighter.gunModule && w.store['gun-module'] > 0) {
+  if (party.intercept.fighters[0].status === 'на базі' && !party.intercept.fighters[0].gunModule && w.store['gun-module'] > 0) {
     installGunModule(w, party.intercept);
   }
 }
@@ -251,7 +251,7 @@ function run(name: string, v: Variant, preset: DifficultyPreset, seed: number): 
     const m0 = party.econ.money;
     researchTick(party.research, party.econ, party.geo, preset);
     rec.spentSalary += m0 - party.econ.money;
-    workshopTick(party.workshop);
+    workshopTick(party.workshop, party.intercept, party.geo);
     hospitalTick(party.roster);
     campaignTick({ geo: party.geo, roster: party.roster, econ: party.econ }, party.campaign); // п18.3: загроза до місії — як кінець partyTick (main.ts)
     partyBotAssaultStep(party, policy); // п18.4 (ADR-0156): штурм бази — як simulateParty

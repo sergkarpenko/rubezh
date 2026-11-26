@@ -12,6 +12,7 @@ import {
   FIGHTER_REPAIR_COST,
   GUN_MODULE_DAMAGE,
   RANGE_PROFILES,
+  fighterInBattle,
   interceptRound,
   startIntercept,
   repairRisksBankruptcy,
@@ -95,12 +96,12 @@ export function readyToIssue(party: Party): number {
 // installGunModule і в активній кнопці «Встановити модуль»). Спільна умова
 // сигналу вкладки «Вузол» (nodeActions) і поради «Наступний крок».
 export function gunModuleReady(party: Party): boolean {
-  const f = party.intercept.fighter;
+  const f = party.intercept.fighters[0];
   return !f.gunModule && party.workshop.store['gun-module'] > 0 && f.status === 'на базі';
 }
 
 export function inAirCombat(party: Party): boolean {
-  return party.intercept.fighter.status === 'бій';
+  return fighterInBattle(party.intercept) !== null; // п19.3: бій одночасно — один, будь-якого перехоплювача
 }
 
 export interface PanelsDeps {
@@ -141,7 +142,7 @@ export interface Panels {
 // П7.4 (ADR-0032): «Перехопити» — лише для зонда в повітрі, коли перехоплювач
 // на базі. Спільна умова кнопки (renderUfos) і сигналу вкладки (nodeActions, Т.7).
 function canIntercept(party: Party, u: Ufo): boolean {
-  return u.status === 'летить' && party.intercept.fighter.status === 'на базі';
+  return u.status === 'летить' && party.intercept.fighters[0].status === 'на базі';
 }
 
 export function createPanels(deps: PanelsDeps): Panels {
@@ -188,7 +189,7 @@ export function createPanels(deps: PanelsDeps): Panels {
     }
     // П7.5 (ADR-0032): маркер винищувача на геосцені — лише поза базою (на базі він у
     // спрайті бази; погоня/бій — дельта-крило поруч із позначкою НЛО).
-    const fgt = party.intercept.fighter;
+    const fgt = party.intercept.fighters[0];
     if (fgt.status === 'погоня' || fgt.status === 'бій') {
       drawFighterSprite(ctx, { cx: fgt.pos.x * GCELL + GCELL / 2, cy: fgt.pos.y * GCELL + GCELL / 2 });
     }
@@ -226,7 +227,7 @@ export function createPanels(deps: PanelsDeps): Panels {
     if (deps.inBattle() || deps.isGameOver()) return 0;
     const party = deps.getParty();
     const targets = new Set(missionTargets(party.geo).map((u) => u.id));
-    let n = party.intercept.fighter.status === 'бій' ? 1 : 0;
+    let n = inAirCombat(party) ? 1 : 0;
     if (gunModuleReady(party)) n++; // Т.80: модуль на складі чекає встановлення
     if (gateOpen(party) && readySoldiers(party.roster).length > 0) n++; // п18.4: брама чекає атаки
     for (const u of detectedUfos(party.geo)) {
@@ -278,7 +279,7 @@ export function createPanels(deps: PanelsDeps): Panels {
         const ib = document.createElement('button');
         ib.className = 'intercept';
         ib.textContent = '✦ Перехопити';
-        const readyFighter = party.intercept.fighter.hp === FIGHTER_MAX_HP;
+        const readyFighter = party.intercept.fighters[0].hp === FIGHTER_MAX_HP;
         ib.disabled = deps.inBattle() || deps.isGameOver() || !readyFighter;
         ib.title = !readyFighter ? 'Перехоплювач пошкоджений — спочатку ремонт' : 'Підняти перехоплювач на перехоплення';
         ib.onclick = () => {
@@ -359,7 +360,7 @@ export function createPanels(deps: PanelsDeps): Panels {
   // під час погоні/бою (на базі/ремонті джерело правди — панель «Винищувач» у колонці стану).
   function renderInterceptCtx(): void {
     const party = deps.getParty();
-    const f = party.intercept.fighter;
+    const f = party.intercept.fighters[0];
     const active = f.status === 'погоня' || f.status === 'бій';
     el('ictx').classList.toggle('hidden', !active);
     if (!active) return;
@@ -378,7 +379,7 @@ export function createPanels(deps: PanelsDeps): Panels {
     const party = deps.getParty();
     const box = el('fighter');
     box.innerHTML = '';
-    const f = party.intercept.fighter;
+    const f = party.intercept.fighters[0];
     renderInterceptCtx(); // П7.5: контекст-стрічка повітряного бою у фокусній зоні
     const statusText =
       f.status === 'ремонт'
@@ -493,7 +494,7 @@ export function createPanels(deps: PanelsDeps): Panels {
   // «Рубіж» (статус «на базі», правило ядра installGunModule/removeGunModule).
   function renderGunModule(box: HTMLElement): void {
     const party = deps.getParty();
-    const f = party.intercept.fighter;
+    const f = party.intercept.fighters[0];
     const onStore = party.workshop.store['gun-module'];
     if (!f.gunModule && onStore <= 0) return;
     const atBase = f.status === 'на базі';

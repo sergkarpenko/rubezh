@@ -21,6 +21,7 @@ import { creditShotDownBonus, hirePrice, spend, type EconomyState } from './econ
 import { WORLD_W, chebyshevWrap, type GeoEvent, type GeoState } from './geo';
 import { DEFAULT_PRESET, type DifficultyPreset } from './campaign';
 import { readySoldiers, type Roster } from './squad';
+import { REGION_NAMES, type RegionId } from './regions';
 
 export const FIGHTER_MAX_HP = 4; // MVP: один винищувач, без озброєння/досліджень
 export const FIGHTER_STEPS_PER_TICK = 2; // до 2 клітин за тік — швидший за будь-який НЛО (1 кл./тік)
@@ -51,9 +52,34 @@ export const RANGE_PROFILES: Record<InterceptRange, RangeProfile> = {
 
 export const UFO_INTERCEPT_HP = { розвідник: 3, збирач: 5 } as const; // HP НЛО у повітряному бою
 
+// п19.3 (ADR-0159 п. 4, 13; ADR-0161): до трьох перехоплювачів, кожен — в ангарі свого регіону.
+// Перший (id 1) — безкоштовний, регіон «Північ», ангар — вузол «Рубіж» (`geo.base`), тож без
+// купівлі погоні, бої й журнал перехоплень — байт-у-байт як у v0.10.0. Ангари решти регіонів —
+// константи (власні числа, без імпорту regions.ts — цикл імпортів, урок Т.205).
+export const MAX_FIGHTERS = 3;
+export const HANGARS: Record<RegionId, Vec2> = {
+  west: { x: 2, y: 4 },
+  north: { x: 8, y: 4 }, // = вузол «Рубіж» (geo.base) — тест звіряє
+  east: { x: 13, y: 4 },
+  south: { x: 8, y: 7 },
+};
+
+// п19.3 (аудит PR #522): де стоїть перехоплювач — для текстів відмов: «Північ» — «у вузлі «Рубіж»»
+// (як до п19.3), решта — «в ангарі «Схід»».
+export function baseWhere(f: Pick<Fighter, 'region'>): string {
+  return f.region === 'north' ? 'у вузлі «Рубіж»' : 'в ангарі «' + REGION_NAMES[f.region] + '»';
+}
+
+// Клітинка ангара регіону: «Північ» — вузол «Рубіж» (geo.base), решта — HANGARS.
+export function hangarPos(region: RegionId, geo: GeoState): Vec2 {
+  return region === 'north' ? { ...geo.base } : { ...HANGARS[region] };
+}
+
 export type FighterStatus = 'на базі' | 'погоня' | 'бій' | 'ремонт';
 
 export interface Fighter {
+  id: number; // п19.3: 1..3, порядок кидків RNG і обробки в тіку — за id
+  region: RegionId; // п19.3: регіон ангара (погоня стартує з ангара, повернення — туди)
   hp: number;
   pos: Vec2;
   status: FighterStatus;
@@ -64,7 +90,14 @@ export interface Fighter {
 
 export type InterceptChoice = InterceptRange | 'відступ';
 
-export type InterceptEvent =
+// п19.3: поле `fighter` (id перехоплювача) — лише коли перехоплювачів два і більше на момент
+// події (з одним журнал байт-у-байт як у v0.10.0); `region` — ангар у рядках вильоту й повернення.
+export interface FighterTag {
+  fighter?: number;
+  region?: RegionId;
+}
+
+export type InterceptEvent = (
   | { type: 'intercept_start'; ufoId: string; pos: Vec2; minute: number }
   | { type: 'intercept_move'; from: Vec2; to: Vec2; minute: number }
   | { type: 'intercept_engage'; ufoId: string; pos: Vec2; minute: number }
@@ -83,13 +116,16 @@ export type InterceptEvent =
   | { type: 'ufo_shot_down'; ufoId: string; pos: Vec2; minute: number }
   | { type: 'fighter_returned'; pos: Vec2; minute: number }
   | { type: 'fighter_repair_start'; minute: number }
-  | { type: 'fighter_repair_done'; minute: number };
+  | { type: 'fighter_repair_done'; minute: number }
+  | { type: 'fighter_assigned'; from: RegionId; to: RegionId; minute: number } // п19.3: перепризначення
+) &
+  FighterTag;
 
 export interface InterceptState {
-  rng: RNG; // окремий від geo.rng (ADR-0003/0032)
-  fighter: Fighter;
+  rng: RNG; // окремий від geo.rng (ADR-0003/0032); спільний для всіх перехоплювачів (п19.3)
+  fighters: Fighter[]; // п19.3: 1..MAX_FIGHTERS за зростанням id; [0] — перший (id 1)
   ufoHp: Record<string, number>; // HP НЛО у повітряному бою (погоня не змінює geo)
-  activeUfoId: string | null; // НЛО активного бою (стан «бій»)
+  activeUfoId: string | null; // НЛО активного бою (стан «бій»; бій одночасно — один, п19.3)
   round: number; // номер раунду активного бою (1..)
   log: InterceptEvent[];
 }
@@ -103,7 +139,7 @@ export function createIntercept(seedOrOpts: number | { seed?: number; rng?: RNG 
   const opts = typeof seedOrOpts === 'number' ? { seed: seedOrOpts } : seedOrOpts;
   return {
     rng: opts.rng ?? mulberry32(opts.seed ?? 4242),
-    fighter: { hp: FIGHTER_MAX_HP, pos: { x: 0, y: 0 }, status: 'на базі', targetId: null },
+    fighters: [{ id: 1, region: 'north', hp: FIGHTER_MAX_HP, pos: { x: 0, y: 0 }, status: 'на базі', targetId: null }],
     ufoHp: {},
     activeUfoId: null,
     round: 0,
@@ -119,6 +155,57 @@ function geoLog(state: InterceptState, geo: GeoState, e: InterceptEvent): void {
   geo.log.push(e as GeoEvent);
 }
 
+// п19.3: позначка перехоплювача в події — лише коли їх два і більше (з одним — байт-у-байт).
+function tag(state: InterceptState, f: Fighter, withRegion = false): FighterTag {
+  if (state.fighters.length < 2) return {};
+  return withRegion ? { fighter: f.id, region: f.region } : { fighter: f.id };
+}
+
+// п19.3: перехоплювач за id; без id — перший (виклики до п19.3 без змін).
+export function fighterById(state: InterceptState, fighterId?: number): Fighter {
+  const f = fighterId === undefined ? state.fighters[0] : state.fighters.find((x) => x.id === fighterId);
+  if (!f) throw new Error('Немає перехоплювача ' + String(fighterId));
+  return f;
+}
+
+// п19.3: перехоплювач у повітряному бою (бій одночасно — один) або null.
+export function fighterInBattle(state: InterceptState): Fighter | null {
+  return state.fighters.find((f) => f.status === 'бій') ?? null;
+}
+
+// п19.3: перехоплювач, що вже веде погоню чи бій за цим зондом (двоє на один зонд — ні).
+function chaserOf(state: InterceptState, ufoId: string): Fighter | null {
+  return state.fighters.find((f) => (f.status === 'погоня' || f.status === 'бій') && f.targetId === ufoId) ?? null;
+}
+
+// п19.3 (ADR-0161): новий перехоплювач (після виготовлення в «Кузні») — у стані «на базі»
+// в ангарі регіону, повний HP, без модуля; id — наступний за найбільшим.
+export function addFighter(state: InterceptState, geo: GeoState, region: RegionId): Fighter {
+  if (state.fighters.length >= MAX_FIGHTERS) {
+    throw new Error('Перехоплювачів уже ' + MAX_FIGHTERS + ': більше не буває');
+  }
+  const id = Math.max(...state.fighters.map((f) => f.id)) + 1;
+  const f: Fighter = { id, region, hp: FIGHTER_MAX_HP, pos: hangarPos(region, geo), status: 'на базі', targetId: null };
+  state.fighters.push(f);
+  return f;
+}
+
+// п19.3 (ADR-0159 п. 4; рішення власника «А. Кілька в одному»): перепризначення — лише «на базі»,
+// миттєве, у будь-який регіон (і той, що вийшов); у ангарі може стояти кілька перехоплювачів.
+export function assignFighter(state: InterceptState, geo: GeoState, fighterId: number, region: RegionId): void {
+  const f = fighterById(state, fighterId);
+  if (f.status !== 'на базі') {
+    throw new Error('Перепризначити можна лише перехоплювач на базі');
+  }
+  if (f.region === region) {
+    throw new Error('Перехоплювач уже в цьому ангарі');
+  }
+  const from = f.region;
+  f.region = region;
+  f.pos = hangarPos(region, geo);
+  geoLog(state, geo, { type: 'fighter_assigned', from, to: region, minute: geo.minute, ...tag(state, f) });
+}
+
 // Позначити збитий НЛО у геосцені (П7.3, ADR-0032): НЛО сідає на місці падіння
 // зі статусом «збитий» і стає місією через missionTargets (правила mission.ts
 // не змінюються — воно, як і раніше, шукає приземлених/збитих за статусом).
@@ -132,22 +219,27 @@ function markShotDown(geo: GeoState, ufoId: string): void {
 
 // Запуск перехоплення: лише виявлений НЛО у стані «летить» (ADR-0006); винищувач
 // боєготовий (на базі, повний HP — ремонт блокує запуск, П7.4).
-export function startIntercept(state: InterceptState, geo: GeoState, ufoId: string): void {
-  if (state.fighter.status !== 'на базі') {
-    throw new Error('Перехоплювач не у вузлі «Рубіж»: перехоплення неможливе');
+// п19.3: fighterId — обраний перехоплювач (без нього — перший); погоня стартує з його ангара.
+export function startIntercept(state: InterceptState, geo: GeoState, ufoId: string, fighterId?: number): void {
+  const f = fighterById(state, fighterId);
+  if (f.status !== 'на базі') {
+    throw new Error('Перехоплювач не ' + baseWhere(f) + ': перехоплення неможливе');
   }
-  if (state.fighter.hp < FIGHTER_MAX_HP) {
+  if (f.hp < FIGHTER_MAX_HP) {
     throw new Error('Перехоплювач пошкоджений: спочатку ремонт');
   }
   const ufo = geo.ufos.find((u) => u.id === ufoId);
   if (!ufo || !ufo.detected || ufo.status !== 'летить') {
     throw new Error('Перехоплення можливе лише на виявлений зонд Розриву у повітрі');
   }
-  state.fighter.status = 'погоня';
-  state.fighter.targetId = ufoId;
-  state.fighter.pos = { ...geo.base };
+  if (chaserOf(state, ufoId)) {
+    throw new Error('Цей зонд уже переслідує інший перехоплювач');
+  }
+  f.status = 'погоня';
+  f.targetId = ufoId;
+  f.pos = hangarPos(f.region, geo);
   state.ufoHp[ufoId] = state.ufoHp[ufoId] ?? UFO_INTERCEPT_HP[ufo.kind];
-  geoLog(state, geo, { type: 'intercept_start', ufoId, pos: { ...ufo.pos }, minute: geo.minute });
+  geoLog(state, geo, { type: 'intercept_start', ufoId, pos: { ...ufo.pos }, minute: geo.minute, ...tag(state, f, true) });
 }
 
 // Крок погоні до НЛО за Чебишевим з замиканням по X (куля по горизонталі, як радар).
@@ -166,14 +258,22 @@ function stepTowardWrap(pos: Vec2, target: Vec2): Vec2 {
 // Погоня: зближення; НЛО сів чи зник з трекінгу до завершення погоні — переривання,
 // винищувач повертається на базу (EARS, ADR-0032). Виявлений НЛО продовжує рух
 // у geoTick як завжди — траєкторія геосцени не залежить від перехоплення.
+// п19.3: перехоплювачі — за зростанням id; бій одночасно — один: поки хтось у бою, решта погонь
+// цього і наступних тіків чекає на місці (без руху й переривань), доки бій не скінчиться.
 export function interceptTick(state: InterceptState, geo: GeoState): void {
-  const f = state.fighter;
-  if (f.status !== 'погоня') return;
+  for (const f of state.fighters) {
+    if (f.status !== 'погоня') continue;
+    if (fighterInBattle(state)) return;
+    chaseTick(state, geo, f);
+  }
+}
+
+function chaseTick(state: InterceptState, geo: GeoState, f: Fighter): void {
   const ufo = geo.ufos.find((u) => u.id === f.targetId);
   if (!ufo || !ufo.detected || ufo.status !== 'летить') {
     const reason = !ufo || !ufo.detected ? 'ufo_lost' : 'ufo_landed';
-    geoLog(state, geo, { type: 'intercept_aborted', ufoId: f.targetId!, reason, pos: { ...f.pos }, minute: geo.minute });
-    returnToBase(state, geo);
+    geoLog(state, geo, { type: 'intercept_aborted', ufoId: f.targetId!, reason, pos: { ...f.pos }, minute: geo.minute, ...tag(state, f) });
+    returnToBase(state, geo, f);
     return;
   }
   for (let step = 0; step < FIGHTER_STEPS_PER_TICK; step++) {
@@ -181,19 +281,19 @@ export function interceptTick(state: InterceptState, geo: GeoState): void {
       f.status = 'бій';
       state.activeUfoId = ufo.id;
       state.round = 0;
-      geoLog(state, geo, { type: 'intercept_engage', ufoId: ufo.id, pos: { ...ufo.pos }, minute: geo.minute });
+      geoLog(state, geo, { type: 'intercept_engage', ufoId: ufo.id, pos: { ...ufo.pos }, minute: geo.minute, ...tag(state, f) });
       return;
     }
     const from = { ...f.pos };
     f.pos = stepTowardWrap(f.pos, ufo.pos);
-    geoLog(state, geo, { type: 'intercept_move', from, to: { ...f.pos }, minute: geo.minute });
+    geoLog(state, geo, { type: 'intercept_move', from, to: { ...f.pos }, minute: geo.minute, ...tag(state, f) });
   }
   // фінальна перевірка: другим кроком досягли клітинки НЛО — бій з цього ж тіку
   if (chebyshevWrap(f.pos, ufo.pos) === 0) {
     f.status = 'бій';
     state.activeUfoId = ufo.id;
     state.round = 0;
-    geoLog(state, geo, { type: 'intercept_engage', ufoId: ufo.id, pos: { ...ufo.pos }, minute: geo.minute });
+    geoLog(state, geo, { type: 'intercept_engage', ufoId: ufo.id, pos: { ...ufo.pos }, minute: geo.minute, ...tag(state, f) });
   }
 }
 
@@ -211,14 +311,21 @@ export function interceptRound(
   preset: DifficultyPreset = DEFAULT_PRESET,
   roster?: Roster
 ): void {
-  const f = state.fighter;
-  if (f.status !== 'бій') {
+  const f = fighterInBattle(state); // п19.3: бій одночасно — один
+  if (!f) {
     throw new Error('Активний бій відсутній: раунд неможливий');
   }
   const ufo = geo.ufos.find((u) => u.id === state.activeUfoId);
   if (!ufo) {
-    geoLog(state, geo, { type: 'intercept_aborted', ufoId: state.activeUfoId!, reason: 'ufo_lost', pos: { ...f.pos }, minute: geo.minute });
-    returnToBase(state, geo);
+    geoLog(state, geo, {
+      type: 'intercept_aborted',
+      ufoId: state.activeUfoId!,
+      reason: 'ufo_lost',
+      pos: { ...f.pos },
+      minute: geo.minute,
+      ...tag(state, f),
+    });
+    returnToBase(state, geo, f);
     return;
   }
   state.round += 1;
@@ -232,9 +339,10 @@ export function interceptRound(
       ufoHit: false,
       ufoDamage: 0,
       minute: geo.minute,
+      ...tag(state, f),
     });
-    geoLog(state, geo, { type: 'intercept_break_off', ufoId: ufo.id, minute: geo.minute });
-    returnToBase(state, geo);
+    geoLog(state, geo, { type: 'intercept_break_off', ufoId: ufo.id, minute: geo.minute, ...tag(state, f) });
+    returnToBase(state, geo, f);
     return;
   }
   const p = RANGE_PROFILES[choice];
@@ -257,18 +365,26 @@ export function interceptRound(
     ufoHit,
     ufoDamage,
     minute: geo.minute,
+    ...tag(state, f),
   });
   if (state.ufoHp[ufo.id] === 0) {
-    geoLog(state, geo, { type: 'ufo_shot_down', ufoId: ufo.id, pos: { ...ufo.pos }, minute: geo.minute });
+    geoLog(state, geo, { type: 'ufo_shot_down', ufoId: ufo.id, pos: { ...ufo.pos }, minute: geo.minute, ...tag(state, f) });
     markShotDown(geo, ufo.id);
-    returnToBase(state, geo);
+    returnToBase(state, geo, f);
     // П7.6: премія за збиття у повітрі — одразу після бою (економічна крива П7.6, ADR-0021).
     if (econ) creditShotDownBonus(econ, ufo.kind, preset);
     return;
   }
   if (f.hp === 0) {
-    geoLog(state, geo, { type: 'intercept_aborted', ufoId: ufo.id, reason: 'fighter_damaged', pos: { ...f.pos }, minute: geo.minute });
-    returnToBase(state, geo);
+    geoLog(state, geo, {
+      type: 'intercept_aborted',
+      ufoId: ufo.id,
+      reason: 'fighter_damaged',
+      pos: { ...f.pos },
+      minute: geo.minute,
+      ...tag(state, f),
+    });
+    returnToBase(state, geo, f);
     // П7.4: ремонт платний; за наявності грошей стартує автоматично (досвід X-COM),
     // без грошей — винищувач чекає пошкоджений, ремонт можна оплатити пізніше.
     // Неспроможність перехоплення — не провал (ADR-0021).
@@ -276,7 +392,7 @@ export function interceptRound(
     // не лишиться на найм — інакше ядро саме доводить партію до банкрутства
     // (третій шлях Т.22). Пізніше сам не стартує: оплата кнопкою або ботом.
     if (econ && econ.money >= FIGHTER_REPAIR_COST && !(roster && repairRisksBankruptcy(econ, roster, preset))) {
-      startRepair(state, geo, econ);
+      startRepair(state, geo, econ, f.id);
     }
   }
 }
@@ -290,39 +406,48 @@ export function repairRisksBankruptcy(econ: EconomyState, roster: Roster, preset
 }
 
 // Повернення на базу: миттєве (MVP-спрощення ADR-0032: без окремої фази дороги додому).
-function returnToBase(state: InterceptState, geo: GeoState): void {
-  state.fighter.status = 'на базі';
-  state.fighter.pos = { ...geo.base };
-  state.fighter.targetId = null;
-  state.activeUfoId = null;
-  state.round = 0;
-  geoLog(state, geo, { type: 'fighter_returned', pos: { ...geo.base }, minute: geo.minute });
+// п19.3: в ангар свого регіону; бій скидається, лише якщо повертається той, хто бився.
+function returnToBase(state: InterceptState, geo: GeoState, f: Fighter): void {
+  const wasInBattle = f.status === 'бій';
+  f.status = 'на базі';
+  f.pos = hangarPos(f.region, geo);
+  f.targetId = null;
+  if (wasInBattle) {
+    state.activeUfoId = null;
+    state.round = 0;
+  }
+  geoLog(state, geo, { type: 'fighter_returned', pos: hangarPos(f.region, geo), minute: geo.minute, ...tag(state, f, true) });
 }
 
 // Ремонт (гроші — П7.4, тут тіки): пошкоджений винищувач йде в ремонт і не може
 // стартувати нове перехоплення до завершення (EARS, ADR-0032).
-export function startRepair(state: InterceptState, geo: GeoState, econ: EconomyState): void {
-  if (state.fighter.status !== 'на базі') {
-    throw new Error('Ремонт можливий лише у вузлі «Рубіж»');
+// п19.3: ремонт — на кожен перехоплювач окремо, в його ангарі; без fighterId — перший.
+export function startRepair(state: InterceptState, geo: GeoState, econ: EconomyState, fighterId?: number): void {
+  const f = fighterById(state, fighterId);
+  if (f.status !== 'на базі') {
+    throw new Error('Ремонт можливий лише ' + baseWhere(f));
   }
-  if (state.fighter.hp >= FIGHTER_MAX_HP) {
+  if (f.hp >= FIGHTER_MAX_HP) {
     throw new Error('Перехоплювач не потребує ремонту');
   }
   spend(econ, FIGHTER_REPAIR_COST); // П7.4: гроші + тіки, патерн лікарні (ADR-0021)
-  state.fighter.status = 'ремонт';
-  state.fighter.pos = { ...geo.base };
-  state.fighter.repairTicksLeft = FIGHTER_REPAIR_TICKS;
-  geoLog(state, geo, { type: 'fighter_repair_start', minute: geo.minute });
+  f.status = 'ремонт';
+  f.pos = hangarPos(f.region, geo);
+  f.repairTicksLeft = FIGHTER_REPAIR_TICKS;
+  geoLog(state, geo, { type: 'fighter_repair_start', minute: geo.minute, ...tag(state, f) });
 }
 
+// п19.3: ремонт усіх перехоплювачів — за зростанням id.
 export function repairTick(state: InterceptState, geo: GeoState): void {
-  if (state.fighter.status !== 'ремонт') return;
-  state.fighter.repairTicksLeft! -= 1;
-  if (state.fighter.repairTicksLeft! <= 0) {
-    state.fighter.hp = FIGHTER_MAX_HP;
-    state.fighter.status = 'на базі';
-    delete state.fighter.repairTicksLeft;
-    geoLog(state, geo, { type: 'fighter_repair_done', minute: geo.minute });
+  for (const f of state.fighters) {
+    if (f.status !== 'ремонт') continue;
+    f.repairTicksLeft! -= 1;
+    if (f.repairTicksLeft! <= 0) {
+      f.hp = FIGHTER_MAX_HP;
+      f.status = 'на базі';
+      delete f.repairTicksLeft;
+      geoLog(state, geo, { type: 'fighter_repair_done', minute: geo.minute, ...tag(state, f) });
+    }
   }
 }
 

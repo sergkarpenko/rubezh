@@ -228,7 +228,7 @@ function detectedFlyingUfo(geo: GeoState): Ufo | null {
 // премії за збиття береться з party.campaign.preset (прецедент panels.ts, П8.4a).
 export function partyBotInterceptStep(party: Party, policy: InterceptPolicy): void {
   const ic = party.intercept;
-  const f = ic.fighter;
+  const f = ic.fighters[0];
   if (f.status === 'на базі' && f.hp === FIGHTER_MAX_HP) {
     const target = detectedFlyingUfo(party.geo);
     if (target && policy.shouldLaunch(target.kind, chebyshevWrap(party.geo.base, target.pos))) {
@@ -282,7 +282,7 @@ function presetPrice(base: number, preset: DifficultyPreset): number {
 // (для гарматного модуля — один на винищувач). Порядок — за ростером
 // (ветерани перші, прецедент missionSquad), жодного RNG.
 function workshopDeficit(party: Party, id: ItemId): number {
-  if (id === 'gun-module') return party.intercept.fighter.gunModule ? 0 : 1;
+  if (id === 'gun-module') return party.intercept.fighters[0].gunModule ? 0 : 1;
   const key: keyof SoldierEquipment = soldierEquipKey(id);
   const lacking = readySoldiers(party.roster).filter((s) => !party.workshop.equipped[s.id]?.[key]).length;
   const supply = party.workshop.store[id] + party.workshop.queue.filter((o) => o.id === id).length;
@@ -369,7 +369,11 @@ export function partyBotScienceStep(party: Party, policy: PartyBotPolicy): void 
     }
   }
   // 5) гарматний модуль: зі складу на перехоплювач, лише у вузлі (ADR-0058).
-  if (party.intercept.fighter.status === 'на базі' && !party.intercept.fighter.gunModule && party.workshop.store['gun-module'] > 0) {
+  if (
+    party.intercept.fighters[0].status === 'на базі' &&
+    !party.intercept.fighters[0].gunModule &&
+    party.workshop.store['gun-module'] > 0
+  ) {
     installGunModule(party.workshop, party.intercept);
   }
 }
@@ -595,7 +599,7 @@ export function simulateParty(seed: number, preset: DifficultyPreset = DEFAULT_P
     advanceTime(party.geo, 1, radarRange(party.research)); // п18.2 (ADR-0153 п. 12)
     economyTick(party.econ, party.geo, party.campaign.preset, totalTrust(party.campaign.regions)); // п19.2
     researchTick(party.research, party.econ, party.geo, party.campaign.preset);
-    workshopTick(party.workshop);
+    workshopTick(party.workshop, party.intercept, party.geo);
     hospitalTick(party.roster);
     // п18.3 (аудит PR #514): загроза — наприкінці тіку, до рішень гравця, як partyTick у main.ts:
     // склад місії цього тіку бачить події доби й відльотів цього тіку; поразка — місій немає.

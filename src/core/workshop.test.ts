@@ -370,7 +370,7 @@ describe('гарматний модуль винищувача (ADR-0058: оди
     workshop.store['gun-module'] = 1;
     const ic = createIntercept(11);
     installGunModule(workshop, ic);
-    expect(ic.fighter.gunModule).toBe(true);
+    expect(ic.fighters[0].gunModule).toBe(true);
     expect(workshop.store['gun-module']).toBe(0);
     expect(workshop.log.at(-1)).toEqual({ type: 'gun_module_installed' });
   });
@@ -379,7 +379,7 @@ describe('гарматний модуль винищувача (ADR-0058: оди
     const workshop = createWorkshop();
     const ic = createIntercept(11);
     expect(() => installGunModule(workshop, ic)).toThrow('Предмета немає на складі: Гарматний модуль перехоплювача');
-    expect(ic.fighter.gunModule).toBeUndefined();
+    expect(ic.fighters[0].gunModule).toBeUndefined();
   });
 
   it('подвійне встановлення — throw', () => {
@@ -395,7 +395,7 @@ describe('гарматний модуль винищувача (ADR-0058: оди
     const workshop = stockedWorkshop();
     workshop.store['gun-module'] = 1;
     const ic = createIntercept(11);
-    ic.fighter.status = 'погоня';
+    ic.fighters[0].status = 'погоня';
     expect(() => installGunModule(workshop, ic)).toThrow('лише у вузлі «Рубіж»');
     expect(() => removeGunModule(workshop, ic)).toThrow('лише у вузлі «Рубіж»');
   });
@@ -406,7 +406,7 @@ describe('гарматний модуль винищувача (ADR-0058: оди
     const ic = createIntercept(11);
     installGunModule(workshop, ic);
     removeGunModule(workshop, ic);
-    expect(ic.fighter.gunModule).toBe(false);
+    expect(ic.fighters[0].gunModule).toBe(false);
     expect(workshop.store['gun-module']).toBe(1);
     expect(workshop.log.at(-1)).toEqual({ type: 'gun_module_removed' });
   });

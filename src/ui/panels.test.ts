@@ -136,7 +136,7 @@ describe('renderGeo: годинник, кнопки часу, анімаційн
 describe('Т.16: повітряний бій заморожує час геосцени', () => {
   it('перехоплювач у бою — кнопки часу вимкнені; у погоні й на базі — активні', () => {
     const f = makeFixture();
-    const fighter = f.party.intercept.fighter;
+    const fighter = f.party.intercept.fighters[0];
     const buttons = (): boolean[] => ['btn-tick', 'btn-day'].map((id) => (document.getElementById(id) as HTMLButtonElement).disabled);
     fighter.status = 'бій';
     expect(inAirCombat(f.party)).toBe(true);
@@ -165,14 +165,14 @@ describe('renderUfos: сканери НЛО', () => {
     const ib = document.querySelector('button.intercept') as HTMLButtonElement;
     expect(ib).not.toBeNull();
     ib.click();
-    expect(f.party.intercept.fighter.status).toBe('погоня');
+    expect(f.party.intercept.fighters[0].status).toBe('погоня');
     expect(f.deps.renderAll).toHaveBeenCalled();
   });
 
   it('пошкоджений винищувач — перехоплення недоступне (підказка про ремонт)', () => {
     const f = makeFixture();
     expect(tickUntil(f.party, () => detectedUfos(f.party.geo).some((u) => u.status === 'летить'))).toBe(true);
-    f.party.intercept.fighter.hp = 2;
+    f.party.intercept.fighters[0].hp = 2;
     f.panels.renderUfos();
     const ib = document.querySelector('button.intercept') as HTMLButtonElement;
     expect(ib.disabled).toBe(true);
@@ -296,7 +296,7 @@ describe('Т.7: nodeActions — дії, що чекають на вкладці 
     expect(tickUntil(f.party, () => missionTargets(f.party.geo).length > 0)).toBe(true);
     const base = f.panels.nodeActions();
     expect(base).toBeGreaterThanOrEqual(missionTargets(f.party.geo).length);
-    f.party.intercept.fighter.status = 'бій';
+    f.party.intercept.fighters[0].status = 'бій';
     const flying = detectedUfos(f.party.geo).filter((u) => u.status === 'летить').length;
     expect(f.panels.nodeActions()).toBe(base - flying + 1);
   });
@@ -317,14 +317,14 @@ describe('Т.80: гарматний модуль на складі — дія н
     f.party.workshop.store['gun-module'] = 1;
     expect(gunModuleReady(f.party)).toBe(true);
     expect(f.panels.nodeActions()).toBe(1);
-    f.party.intercept.fighter.status = 'ремонт';
+    f.party.intercept.fighters[0].status = 'ремонт';
     expect(gunModuleReady(f.party)).toBe(false); // не «на базі» — кнопка неактивна
     expect(f.panels.nodeActions()).toBe(0);
-    f.party.intercept.fighter.status = 'на базі';
-    f.party.intercept.fighter.gunModule = true; // уже встановлено (другий на складі не ставиться)
+    f.party.intercept.fighters[0].status = 'на базі';
+    f.party.intercept.fighters[0].gunModule = true; // уже встановлено (другий на складі не ставиться)
     expect(gunModuleReady(f.party)).toBe(false);
     expect(f.panels.nodeActions()).toBe(0);
-    f.party.intercept.fighter.gunModule = false;
+    f.party.intercept.fighters[0].gunModule = false;
     f.party.workshop.store['gun-module'] = 0;
     expect(gunModuleReady(f.party)).toBe(false);
   });
@@ -386,7 +386,7 @@ describe('renderInterceptCtx: контекст-стрічка повітряно
     expect(document.getElementById('ictx-target')!.textContent).toBe(ufo.id);
     expect(document.getElementById('ictx-round')!.textContent).toBe('—');
     // штучний стан «бій» (гілка раунду і HP) — відображення, ядро не викликаємо
-    f.party.intercept.fighter.status = 'бій';
+    f.party.intercept.fighters[0].status = 'бій';
     f.party.intercept.activeUfoId = ufo.id;
     f.party.intercept.round = 3;
     f.party.intercept.ufoHp[ufo.id] = 5;
@@ -416,7 +416,7 @@ describe('renderFighter: панель винищувача (П7.4)', () => {
     expect(b.textContent).toBe('Встановити модуль (+2 пошк.)');
     expect(b.disabled).toBe(false);
     b.click();
-    expect(f.party.intercept.fighter.gunModule).toBe(true);
+    expect(f.party.intercept.fighters[0].gunModule).toBe(true);
     expect(f.party.workshop.store['gun-module']).toBe(0);
     expect(f.party.econ.money).toBe(money);
     expect(f.party.workshop.log.at(-1)?.type).toBe('gun_module_installed');
@@ -429,13 +429,13 @@ describe('renderFighter: панель винищувача (П7.4)', () => {
 
   it('Т.78: модуль встановлено — «Зняти модуль» повертає його на склад', () => {
     const f = makeFixture();
-    f.party.intercept.fighter.gunModule = true;
+    f.party.intercept.fighters[0].gunModule = true;
     f.panels.renderFighter();
     const b = document.getElementById('btn-gun-remove') as HTMLButtonElement;
     expect(b.textContent).toBe('Зняти модуль');
     expect(b.disabled).toBe(false);
     b.click();
-    expect(f.party.intercept.fighter.gunModule).toBe(false);
+    expect(f.party.intercept.fighters[0].gunModule).toBe(false);
     expect(f.party.workshop.store['gun-module']).toBe(1);
     expect(f.party.workshop.log.at(-1)?.type).toBe('gun_module_removed');
   });
@@ -443,9 +443,9 @@ describe('renderFighter: панель винищувача (П7.4)', () => {
   it('Т.78: перехоплювач не на базі (погоня, бій, ремонт) — кнопка неактивна з причиною рядком; модуль лишається', () => {
     for (const status of ['погоня', 'бій', 'ремонт'] as const) {
       const f = makeFixture();
-      f.party.intercept.fighter.gunModule = true;
-      f.party.intercept.fighter.status = status;
-      f.party.intercept.fighter.repairTicksLeft = 3;
+      f.party.intercept.fighters[0].gunModule = true;
+      f.party.intercept.fighters[0].status = status;
+      f.party.intercept.fighters[0].repairTicksLeft = 3;
       f.panels.renderFighter();
       const b = document.getElementById('btn-gun-remove') as HTMLButtonElement;
       expect(b.disabled).toBe(true);
@@ -491,19 +491,19 @@ describe('renderFighter: панель винищувача (П7.4)', () => {
 
   it('пошкоджений на базі — кнопка ремонту; клік стартує ремонт (ядро) і renderAll', () => {
     const f = makeFixture();
-    f.party.intercept.fighter.hp = 3;
+    f.party.intercept.fighters[0].hp = 3;
     f.panels.renderFighter();
     const b = document.getElementById('btn-repair') as HTMLButtonElement;
     expect(b).not.toBeNull();
     expect(b.disabled).toBe(false);
     b.click();
-    expect(f.party.intercept.fighter.status).toBe('ремонт');
+    expect(f.party.intercept.fighters[0].status).toBe('ремонт');
     expect(f.deps.renderAll).toHaveBeenCalled();
   });
 
   it('Т.26: боєготових немає, після ремонту бракує на вербування — рядок-попередження, кнопка активна', () => {
     const f = makeFixture();
-    f.party.intercept.fighter.hp = 0;
+    f.party.intercept.fighters[0].hp = 0;
     f.party.econ.money = 149; // «норма»: ремонт 50 + вербування 100
     f.panels.renderFighter();
     expect(document.getElementById('repair-warn')).toBeNull(); // боєготові є — авторемонт не відкладається
@@ -522,15 +522,15 @@ describe('renderFighter: панель винищувача (П7.4)', () => {
     f.party.econ.money = 149;
     f.panels.renderFighter();
     (document.getElementById('btn-repair') as HTMLButtonElement).click();
-    expect(f.party.intercept.fighter.status).toBe('ремонт');
+    expect(f.party.intercept.fighters[0].status).toBe('ремонт');
     f.panels.renderFighter();
     expect(document.getElementById('repair-warn')).toBeNull();
   });
 
   it('ремонт — статус з тіками, кнопки дій нема', () => {
     const f = makeFixture();
-    f.party.intercept.fighter.status = 'ремонт';
-    f.party.intercept.fighter.repairTicksLeft = 2;
+    f.party.intercept.fighters[0].status = 'ремонт';
+    f.party.intercept.fighters[0].repairTicksLeft = 2;
     f.panels.renderFighter();
     expect(document.getElementById('fighter')!.textContent).toContain('ремонт: 2 тіки');
     expect(document.getElementById('fighter')!.querySelectorAll('button').length).toBe(0);
@@ -540,7 +540,7 @@ describe('renderFighter: панель винищувача (П7.4)', () => {
     const f = makeFixture({ inBattle: () => true });
     expect(tickUntil(f.party, () => detectedUfos(f.party.geo).length > 0)).toBe(true);
     const ufo = detectedUfos(f.party.geo)[0]!;
-    f.party.intercept.fighter.status = 'бій';
+    f.party.intercept.fighters[0].status = 'бій';
     f.party.intercept.activeUfoId = ufo.id;
     f.party.intercept.ufoHp[ufo.id] = 7;
     f.party.intercept.round = 1;
@@ -804,7 +804,7 @@ describe('Т.43: причини під неактивними кнопками �
     f.panels.renderUfos();
     expect(ib().title).toBe('Підняти перехоплювач на перехоплення');
     expect(why(ib())).toBeNull();
-    f.party.intercept.fighter.hp = 1;
+    f.party.intercept.fighters[0].hp = 1;
     f.panels.renderUfos();
     expect(ib().disabled).toBe(true);
     expect(why(ib())).toBe('Перехоплювач пошкоджений — спочатку ремонт');
@@ -814,7 +814,7 @@ describe('Т.43: причини під неактивними кнопками �
   it('«Ремонт»: без кредитів — рядок = title; з кредитами — рядка немає', () => {
     const f = easy();
     const rb = (): HTMLButtonElement => document.getElementById('btn-repair') as HTMLButtonElement;
-    f.party.intercept.fighter.hp = 1;
+    f.party.intercept.fighters[0].hp = 1;
     f.party.econ.money = 49;
     f.panels.renderFighter();
     expect(why(rb())).toBe('Недостатньо кредитів (ціна ремонту 50)');
@@ -858,13 +858,13 @@ describe('Т.43: причини під неактивними кнопками �
     f.panels.renderFighter();
     expect(last()).toBeNull();
     f.party.geo.log.push({ type: 'intercept_aborted', ufoId: 'ufo3', reason: 'fighter_damaged', pos, minute: 120 });
-    f.party.intercept.fighter.hp = 1;
+    f.party.intercept.fighters[0].hp = 1;
     f.panels.renderFighter();
     expect(last()).toBe('✦ Перехоплювач пошкоджений — вимушене переривання бою');
-    f.party.intercept.fighter.hp = FIGHTER_MAX_HP; // пошкодження вже відремонтовано — рядок застарів
+    f.party.intercept.fighters[0].hp = FIGHTER_MAX_HP; // пошкодження вже відремонтовано — рядок застарів
     f.panels.renderFighter();
     expect(last()).toBeNull();
-    f.party.intercept.fighter.hp = 1;
+    f.party.intercept.fighters[0].hp = 1;
     f.party.geo.log.push({ type: 'intercept_break_off', ufoId: 'ufo3', minute: 150 });
     f.panels.renderFighter();
     expect(last()).toBeNull();
@@ -921,7 +921,7 @@ describe('Т.51: #fighter-last при відсутньому зонді поді
 
   it('Т.51.4: fighter_damaged при HP < FIGHTER_MAX_HP і відсутньому зонді — рядок є', () => {
     const f = makeFixture();
-    f.party.intercept.fighter.hp = 1;
+    f.party.intercept.fighters[0].hp = 1;
     f.party.geo.log.push({ type: 'intercept_aborted', ufoId: 'ufo7', reason: 'fighter_damaged', pos, minute: 30 });
     f.panels.renderFighter();
     expect(last()).toBe('✦ Перехоплювач пошкоджений — вимушене переривання бою');
@@ -1003,7 +1003,7 @@ describe('issue #385: hirePrice(preset) у попередженнях — пре
   ];
   it.each(repairWarn)('Т.26: #repair-warn — пресет "$preset", грошей $money', ({ preset, money, expected }) => {
     const f = withPreset(preset);
-    f.party.intercept.fighter.hp = 0;
+    f.party.intercept.fighters[0].hp = 0;
     for (const s of f.party.roster.soldiers) f.party.roster.hospital[s.id] = 3; // ready = 0
     f.party.econ.money = money;
     f.panels.renderFighter();

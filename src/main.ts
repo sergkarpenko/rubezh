@@ -18,7 +18,7 @@ import { totalTrust } from './core/regions';
 import { radarRange, researchTick } from './core/research';
 // П11.3 (ADR-0058): тік цеху — разом із тіком геосцени; без замовлень — no-op.
 import { workshopTick } from './core/workshop';
-import { interceptTick, repairTick, type InterceptEvent } from './core/intercept';
+import { fighterInBattle, interceptTick, repairTick, type InterceptEvent } from './core/intercept';
 // П13.3 (ADR-0067): драйвер авто-бою — модуль src/ui/auto-battle.ts
 // (переробка демо-драйвера пR.2: «Авто»/«Стоп», політика ядра party-bot).
 import { AutoBattleDriver } from './ui/auto-battle';
@@ -391,7 +391,7 @@ const savePanel = createSavePanel({
   },
   inBattle: () => ui.mission !== null,
   interceptBusy: () => {
-    const f = activeParty().intercept.fighter;
+    const f = activeParty().intercept.fighters[0];
     return f.status === 'погоня' || f.status === 'бій';
   },
   isGameOver: () => gameOver,
@@ -522,7 +522,7 @@ function interceptAnims(e: InterceptEvent): Anim[] {
   const p = party;
   const ufo = p.geo.ufos.find((u) => u.id === p.intercept.activeUfoId);
   if (!ufo) return [];
-  const fpos = p.intercept.fighter.pos;
+  const fpos = (fighterInBattle(p.intercept) ?? p.intercept.fighters[0]).pos; // п19.3: той, хто в бою
   const anims: Anim[] = [];
   if (e.fighterHit) anims.push(makeTracerAnim('player', { ...fpos }, { ...ufo.pos }, true));
   if (e.ufoHit) anims.push(makeTracerAnim('alien', { ...ufo.pos }, { ...fpos }, true));
@@ -548,7 +548,7 @@ function partyTick(): void {
   researchTick(p.research, p.econ, p.geo, p.campaign.preset);
   // П11.3 (ADR-0058): виробництво — тіками геосцени (1 виклик = 1 тік);
   // без замовлень — no-op (партії без цеху не змінюються).
-  workshopTick(p.workshop);
+  workshopTick(p.workshop, p.intercept, p.geo);
   hospitalTick(p.roster);
   // П7.4 (ADR-0032): погоня й ремонт живуть тіками геосцени разом з партією
   interceptTick(p.intercept, p.geo);

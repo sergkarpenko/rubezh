@@ -89,7 +89,7 @@ export interface InterceptSimResult {
 // Один «хід» бот-гравця перехопленням: запуски за політикою, погоня, бій, ремонт.
 // Викликати після кожного geoTick разом із interceptTick/repairTick (шар застосунку П7.5).
 export function interceptBotStep(ic: InterceptState, geo: GeoState, econ: EconomyState, policy: InterceptPolicy): void {
-  const f = ic.fighter;
+  const f = ic.fighters[0];
   if (f.status === 'на базі' && f.hp === FIGHTER_MAX_HP) {
     const target = detectedFlyingUfo(geo);
     if (target && policy.shouldLaunch(target.kind, chebyshevWrap(geo.base, target.pos))) {
@@ -135,7 +135,7 @@ export function simulateInterceptCampaign(seed: number, policy: InterceptPolicy,
     ticks: 0,
   };
   const ticks = days * 48;
-  let prevStatus = ic.fighter.status;
+  let prevStatus = ic.fighters[0].status;
   let econCursor = 0;
   for (let t = 0; t < ticks; t++) {
     const before = ic.log.length;
@@ -171,10 +171,10 @@ export function simulateInterceptCampaign(seed: number, policy: InterceptPolicy,
       if (e.type === 'shot_down_bonus') res.bonusEarned += e.amount;
     }
     econCursor = econ.log.length;
-    if (ic.fighter.status === 'на базі' && prevStatus !== 'на базі' && ic.fighter.hp < FIGHTER_MAX_HP) {
+    if (ic.fighters[0].status === 'на базі' && prevStatus !== 'на базі' && ic.fighters[0].hp < FIGHTER_MAX_HP) {
       res.damages++;
     }
-    prevStatus = ic.fighter.status;
+    prevStatus = ic.fighters[0].status;
     res.ticks = t + 1;
   }
   return res;
