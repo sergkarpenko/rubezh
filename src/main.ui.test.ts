@@ -2278,7 +2278,7 @@ describePage('Т.98: гарячі клавіші геосцени D / T / N', ()
 
   it('підказки кнопок і «Як грати» називають клавіші', () => {
     expect(btn('btn-tick').title).toBe('Час іде на 30 хв (T)');
-    expect(btn('btn-day').title).toBe('Час іде добу; стає раніше, коли зонд виявлено або він приземлився (D)');
+    expect(btn('btn-day').title).toBe('Час іде добу; стає раніше, коли зонд виявлено чи приземлився або почався штурм (D)');
     expect(btn('next-step').title).toBe('Показати кнопку дії (N)');
     btn('btn-help').click();
     expect($('help-screen').textContent).toContain('«+1 тік (30 хв)» (T)');
