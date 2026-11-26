@@ -148,8 +148,8 @@ describe('save: зіпсовані дані (критерій П5.2)', () => {
   it('невідома/майбутня версія — throw українською', () => {
     const p = createParty(42);
     const json = serializeParty(p, 'T');
-    const v3 = JSON.stringify({ ...JSON.parse(json), version: 3 });
-    expect(() => deserializeParty(v3)).toThrow('Невідома версія збереження: 3');
+    const v4 = JSON.stringify({ ...JSON.parse(json), version: 4 });
+    expect(() => deserializeParty(v4)).toThrow('Невідома версія збереження: 4');
     const vStr = JSON.stringify({ ...JSON.parse(json), version: '1' });
     expect(() => deserializeParty(vStr)).toThrow('Невідома версія збереження');
   });
@@ -312,6 +312,7 @@ describe('save: пресети партії (П8.4a)', () => {
     expect(restored.campaign.preset).toBe('складний');
     // прецедент П9.2: старий сейв без поля campaign — пресет «норма», версія формату не зросла
     const json = JSON.parse(serializeParty(createParty(12)));
+    json.version = 2; // п18.3: у v3 поле campaign обов'язкове
     delete json.state.campaign; // сейв до П8.2 (прецедент сейв-сумісності Фази 10)
     const old = deserializeParty(JSON.stringify(json));
     expect(old.campaign.preset).toBe('норма');
@@ -537,7 +538,7 @@ describe('save: П15.2 — «евакуйовано» (EARS 7)', () => {
     }
     completeMission(p.geo, 'uV1', 'евакуйовано');
     const json = serializeParty(p, 'T');
-    expect(SAVE_VERSION).toBe(2); // п16.2 (ADR-0147 п. 15): v2 — кар'єри; П15.2 формат не міняв
+    expect(SAVE_VERSION).toBe(3); // п16.2: v2 — кар'єри; п18.3: v3 — загроза; П15.2 формат не міняв
     expect(json.includes('mission_evacuated')).toBe(true);
     expect(json.includes('evacuated') === json.includes('mission_evacuated')).toBe(true); // стан бою поза сейвом
     const restored = deserializeParty(json);
@@ -583,7 +584,18 @@ describe('save: Т.12 — кожне поле сейву перевіряєть�
       ['lastAllowanceDay', '3'],
       ['log', {}],
     ].map(([f, v]) => ['state.econ.' + f, v, 'економіка']),
-    ['state.campaign.status', 'поразка', 'кампанія'],
+    ['state.campaign.status', 'нічия', 'кампанія'],
+    // п18.3 (ADR-0153 п. 18): загроза v3 — ціле 0–100, курсор у межах журналу, доба поразки — null чи ціле
+    ...[
+      ['threat', -1],
+      ['threat', 101],
+      ['threat', 1.5],
+      ['threat', null],
+      ['threatCursor', -1],
+      ['threatCursor', 1e9],
+      ['threatCursor', '0'],
+      ['defeatDay', 'x'],
+    ].map(([f, v]) => ['state.campaign.' + f, v, 'загроза кампанії']),
     ['state.campaign.preset', 'жорсткий', 'кампанія'],
     ['state.hints', null, 'підказки'],
     ...[
@@ -611,11 +623,30 @@ describe('save: Т.12 — кожне поле сейву перевіряєть�
     expect(deserializeParty(corrupt('state.geo.spawnChance', 0.5)).geo.spawnChance).toBe(0.5);
     expect(deserializeParty(corrupt('state.campaign.status', 'перемога')).campaign.status).toBe('перемога');
     expect(deserializeParty(corrupt('state.campaign.preset', 'легкий')).campaign.preset).toBe('легкий');
+    expect(deserializeParty(corrupt('state.campaign.status', 'поразка')).campaign.status).toBe('поразка'); // п18.3: лише v3
+    expect(deserializeParty(corrupt('state.campaign.threat', 100)).campaign.threat).toBe(100);
+    expect(deserializeParty(corrupt('state.campaign.defeatDay', 61)).campaign.defeatDay).toBe(61);
+  });
+
+  it('п18.3: у v3 без поля campaign чи defeatDay — відмова «загроза кампанії»', () => {
+    for (const drop of ['campaign', 'defeatDay']) {
+      const json = JSON.parse(serializeParty(createParty(42)));
+      if (drop === 'campaign') delete json.state.campaign;
+      else delete json.state.campaign.defeatDay;
+      expect(() => deserializeParty(JSON.stringify(json))).toThrow('Пошкоджені дані збереження: загроза кампанії');
+    }
+  });
+
+  it('п18.3: «поразка» у сейві v2 — відмова «кампанія»', () => {
+    const json = JSON.parse(serializeParty(createParty(42)));
+    json.version = 2;
+    json.state.campaign.status = 'поразка';
+    expect(() => deserializeParty(JSON.stringify(json))).toThrow('Пошкоджені дані збереження: кампанія');
   });
 
   it('тексти відмов називають причину: некоректний JSON, очікувана версія', () => {
     expect(() => deserializeParty('{не json')).toThrow('Пошкоджені дані збереження: некоректний JSON');
-    expect(() => deserializeParty(corrupt('version', 3))).toThrow(`Невідома версія збереження: 3 (очікується ${SAVE_VERSION})`);
+    expect(() => deserializeParty(corrupt('version', 4))).toThrow(`Невідома версія збереження: 4 (очікується ${SAVE_VERSION})`);
   });
 
   it('round-trip стану не за замовчуванням: лікарня, погоня винищувача, НЛО в бою, рахунок кампанії', () => {

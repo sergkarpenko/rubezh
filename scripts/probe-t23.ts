@@ -42,7 +42,7 @@ import { advanceTime, geoDay, missionTargets } from '../src/core/geo';
 import { economyTick, hirePrice } from '../src/core/economy';
 import { hospitalTick, isBankrupt, missionRisksBankruptcy, readySoldiers } from '../src/core/squad';
 import { interceptTick, repairTick } from '../src/core/intercept';
-import { VICTORY_DAY, sciencePrice, campaignScore, campaignTick, type DifficultyPreset } from '../src/core/campaign';
+import { sciencePrice, campaignScore, campaignTick, type DifficultyPreset } from '../src/core/campaign';
 import { createParty } from '../src/core/save';
 import { PROJECT_CATALOG, fireScientist, radarRange, researchTick, type ProjectId } from '../src/core/research';
 import {
@@ -68,6 +68,7 @@ import {
   simulateParty,
   type PartyBotPolicy,
 } from '../src/core/party-bot';
+const HORIZON_DAYS = 30; // п18.3 (ADR-0155): VICTORY_DAY прибрано — горизонт виміру 30 діб, як у звітах фаз 8–17
 
 function arg(flag: string, def: string): string {
   const i = process.argv.indexOf(flag);
@@ -235,7 +236,7 @@ function run(name: string, v: Variant, preset: DifficultyPreset, seed: number): 
     missionsFirstHalf: 0,
   };
   let lastDay = geoDay(party.geo);
-  for (let t = 0; t < VICTORY_DAY * TICKS_PER_DAY; t++) {
+  for (let t = 0; t < HORIZON_DAYS * TICKS_PER_DAY; t++) {
     // Наука ввімкнена: варіант із наукою і минуло afterDay завершених діб.
     const on = v.science && rec.moneyByDay.length >= v.afterDay;
     const policy = on ? sci : DEFAULT_PARTY_POLICY;
@@ -288,8 +289,8 @@ function run(name: string, v: Variant, preset: DifficultyPreset, seed: number): 
     }
     if (isBankrupt(party.econ, party.roster, preset)) break;
     campaignTick({ geo: party.geo, roster: party.roster, econ: party.econ }, party.campaign);
-    if (party.campaign.status === 'перемога') {
-      rec.won = true;
+    if (party.campaign.status !== 'триває') {
+      rec.won = party.campaign.status === 'перемога';
       break;
     }
   }
@@ -339,7 +340,7 @@ for (const name of variants) {
       rs.push(r);
       if (!verify) continue;
       if (name !== 'none' && name !== 'sci2') throw new Error('--verify — лише для варіантів none і sci2');
-      const ref = simulateParty(seed, preset, { policy: name === 'none' ? DEFAULT_PARTY_POLICY : SCIENCE_POLICY });
+      const ref = simulateParty(seed, preset, { policy: name === 'none' ? DEFAULT_PARTY_POLICY : SCIENCE_POLICY, maxDays: HORIZON_DAYS });
       const same =
         (ref.outcome === 'перемога') === r.won &&
         ref.ticks === r.ticks &&
@@ -357,12 +358,12 @@ for (const name of variants) {
       }
     }
     all.push(...rs);
-    const at30 = rs.filter((r) => r.moneyByDay.length >= VICTORY_DAY);
+    const at30 = rs.filter((r) => r.moneyByDay.length >= HORIZON_DAYS);
     const days = rs.reduce((a, r) => a + r.readyByDay.length, 0);
     const noFull = rs.reduce((a, r) => a + r.readyByDay.filter((n) => n < MISSION_SQUAD_SIZE).length, 0);
     const missions = rs.reduce((a, r) => a + r.missions, 0);
     const wonM = rs.reduce((a, r) => a + r.missionsWon, 0);
-    const money = at30.map((r) => r.moneyByDay[VICTORY_DAY - 1]);
+    const money = at30.map((r) => r.moneyByDay[HORIZON_DAYS - 1]);
     console.log(
       `| ${name} / ${preset} | ${f1((100 * rs.filter((r) => r.won).length) / rs.length)} | ${f1(wonM / rs.length)} | ${f1((100 * wonM) / missions)} | ${(missions / days).toFixed(2)} | ${f1((100 * noFull) / days)} | ${at30.length} | ${median(money)} (${quantile(money, 0.25)}–${quantile(money, 0.75)}) | ${median(at30.map((r) => r.roster))} | ${f1(mean(rs.map((r) => r.lost)))} | ${f1(mean(rs.map((r) => r.projects)))} | ${f1(rs.reduce((a, r) => a + r.scientistDays, 0) / days)} | ${Math.round(mean(rs.map((r) => r.spentScience)))} / ${Math.round(mean(rs.map((r) => r.spentSalary)))} | ${median(rs.map((r) => r.score))} |${verify ? ` звірка: розбіжностей ${mismatch}` : ''}`
     );
@@ -385,7 +386,7 @@ if (out) {
       r.lost,
       r.hired,
       r.readyByDay.filter((n) => n < MISSION_SQUAD_SIZE).length,
-      r.moneyByDay[VICTORY_DAY - 1] ?? '',
+      r.moneyByDay[HORIZON_DAYS - 1] ?? '',
       r.roster,
       r.score,
       r.projects,

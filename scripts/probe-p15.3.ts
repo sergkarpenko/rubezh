@@ -25,9 +25,10 @@ import { applyMissionResult, hospitalTick, isBankrupt, missionSquad, readySoldie
 import { interceptTick, repairTick } from '../src/core/intercept';
 import { awardTrophies, radarRange, researchTick } from '../src/core/research';
 import { deployConsumables, removeLostEquipment, settleConsumables, workshopTick } from '../src/core/workshop';
-import { campaignTick, VICTORY_DAY, type DifficultyPreset } from '../src/core/campaign';
+import { campaignTick, type DifficultyPreset } from '../src/core/campaign';
 import { autoBattle } from '../src/core/ai-bot';
 import { completeMission, createMission } from '../src/core/mission';
+const HORIZON_DAYS = 30; // п18.3 (ADR-0155): VICTORY_DAY прибрано — горизонт виміру 30 діб, як у звітах фаз 8–17
 
 const PRESETS: DifficultyPreset[] = ['легкий', 'норма', 'складний'];
 const SEEDS = [1, 2, 3, 42, 45, 7]; // 6 сідів × 3 пресети, повний горизонт
@@ -49,7 +50,11 @@ function missionStep(party: Party): { evacUnits: number } {
   const squad = missionSquad(party.roster, policy.missionSquadSize);
   const consumables = deployConsumables(party.workshop, squad);
   const hasItems = Object.keys(consumables).length > 0;
-  const mission = createMission(party.geo, target.id, hasItems ? { squad, items: consumables } : { squad });
+  const mission = createMission(party.geo, target.id, {
+    squad,
+    ...(hasItems ? { items: consumables } : {}),
+    threat: party.campaign.threat,
+  });
   const battle = autoBattle(mission.state);
   const outcome: 'перемога' | 'поразка' = battle.outcome === 'перемога' ? 'перемога' : 'поразка';
   completeMission(party.geo, mission.briefing.ufoId, outcome);
@@ -67,7 +72,7 @@ function replay(seed: number, preset: DifficultyPreset): { save: string; evacUni
   const policy = DEFAULT_PARTY_POLICY;
   const party = createParty(seed, preset);
   let evacUnits = 0;
-  for (let t = 0; t < VICTORY_DAY * TICKS_PER_DAY; t++) {
+  for (let t = 0; t < HORIZON_DAYS * TICKS_PER_DAY; t++) {
     partyBotInterceptStep(party, policy.intercept);
     interceptTick(party.intercept, party.geo);
     repairTick(party.intercept, party.geo);
@@ -81,7 +86,7 @@ function replay(seed: number, preset: DifficultyPreset): { save: string; evacUni
     evacUnits += missionStep(party).evacUnits;
     if (isBankrupt(party.econ, party.roster, party.campaign.preset)) break;
     campaignTick({ geo: party.geo, roster: party.roster, econ: party.econ }, party.campaign);
-    if (party.campaign.status === 'перемога') break;
+    if (party.campaign.status !== 'триває') break;
   }
   const evacMissions = party.geo.log.filter((e) => e.type === 'mission_evacuated').length;
   return { save: serializeParty(party, 'probe'), evacUnits, evacMissions };
@@ -99,7 +104,7 @@ interface Snapshot {
 const out: Snapshot[] = [];
 for (const preset of PRESETS) {
   for (const seed of SEEDS) {
-    const sim = JSON.stringify(simulateParty(seed, preset));
+    const sim = JSON.stringify(simulateParty(seed, preset, { maxDays: HORIZON_DAYS }));
     const rep = replay(seed, preset);
     out.push({ seed, preset, sim, save: rep.save, evacUnits: rep.evacUnits, evacMissions: rep.evacMissions });
     process.stderr.write(`seed ${seed} ${preset}: evacUnits=${rep.evacUnits} evacMissions=${rep.evacMissions}\n`);

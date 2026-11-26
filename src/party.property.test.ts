@@ -49,7 +49,7 @@ import {
   startIntercept,
   startRepair,
 } from './core/intercept';
-import { DIFFICULTY_MULTIPLIERS, VICTORY_DAY, campaignTick, type DifficultyPreset } from './core/campaign';
+import { DIFFICULTY_MULTIPLIERS, THREAT_MAX, campaignTick, threatDelta, type DifficultyPreset } from './core/campaign';
 import { completeMission, createMission } from './core/mission';
 import { autoBattle } from './core/ai-bot';
 import { createParty, deserializeParty, serializeParty, type Party } from './core/save';
@@ -119,6 +119,7 @@ function mission(p: Party, i: number): void {
     squad,
     items: deployConsumables(p.workshop, squad),
     roles,
+    threat: p.campaign.threat, // п18.3: склад ворогів за загрозою — як src/ui/battle.ts
   });
   const fought = autoBattle(m.state).outcome;
   const outcome = fought === 'триває' ? 'поразка' : fought;
@@ -357,10 +358,22 @@ function broken(p: Party): string[] {
       f.pos.y
   );
 
-  // Кампанія: перемога — рівно з 31-ї доби, рахунок є лише з перемогою.
+  // п18.3 (ADR-0153 п. 13, 15): перемоги до фінальної місії (п18.4) немає; загроза — ціле 0–100 і
+  // дорівнює повтору threatDelta по врахованих подіях журналу (межі 0 і 100, зупинка на 100);
+  // поразка — рівно на 100; рахунок і доба поразки — лише з кінцем партії.
+  let replay = 0;
+  for (let i = 0; i < campaign.threatCursor && replay < THREAT_MAX; i++)
+    replay = Math.max(0, Math.min(THREAT_MAX, replay + threatDelta(geo.log, i)));
   must(
-    (campaign.status === 'перемога') === day > VICTORY_DAY && (campaign.score !== null) === day > VICTORY_DAY,
-    'кампанія на добу ' + day
+    campaign.status !== 'перемога' &&
+      Number.isInteger(campaign.threat) &&
+      campaign.threat === replay &&
+      campaign.threatCursor <= geo.log.length &&
+      (campaign.status === 'поразка') === (campaign.threat === THREAT_MAX) &&
+      (campaign.score !== null) === (campaign.status !== 'триває') &&
+      (campaign.defeatDay !== null) === (campaign.status === 'поразка') &&
+      (campaign.defeatDay === null || campaign.defeatDay <= day),
+    'кампанія на добу ' + day + ': загроза ' + campaign.threat + ' (повтор ' + replay + '), ' + campaign.status
   );
   return bad;
 }

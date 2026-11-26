@@ -7,18 +7,19 @@
 // партія продовжує траєкторію оригіналу байт-у-байт.
 // ADR-0026: активна місія не зберігається (кнопки активні лише на геосцені);
 // метадані слоту — похідні від збереженого стану.
-// Формат: { version: 2, seed, savedAt, state } (п16.2, ADR-0147 п. 15: v2 —
-// кар'єри оперативників roster.careers; сейв v1 мігрує на вході, migrateCareers). Невідома версія або пошкоджений
+// Формат: { version: 3, seed, savedAt, state } (п16.2, ADR-0147 п. 15: v2 —
+// кар'єри оперативників roster.careers; сейв v1 мігрує на вході, migrateCareers;
+// п18.3, ADR-0153 п. 18: v3 — загроза кампанії, сейви v1 і v2 мігрують, migrateThreat). Невідома версія або пошкоджений
 // JSON — throw з українським текстом, без часткового стану. Зміни схеми —
 // новою версією + міграцією на вході.
 
 import { mulberry32, type StatefulRng, type Unit, type Vec2 } from './combat';
-import { createGeoGame, type GeoEvent, type GeoState, type Ufo } from './geo';
+import { createGeoGame, geoDay, type GeoEvent, type GeoState, type Ufo } from './geo';
 import { createRoster, type Roster } from './squad';
 import { applyRankBonus, newCareer, rankOf, type SoldierCareer, type SoldierRole } from './career';
 import { createEconomy, type EconomyEvent, type EconomyState } from './economy';
 import { createIntercept, interceptRngState, type Fighter, type InterceptEvent, type InterceptState } from './intercept';
-import { createCampaign, DEFAULT_PRESET, type CampaignState, type DifficultyPreset } from './campaign';
+import { createCampaign, DEFAULT_PRESET, THREAT_MAX, type CampaignState, type DifficultyPreset } from './campaign';
 import { ENEMY_ORDER } from './enemies';
 import {
   createResearch,
@@ -39,7 +40,9 @@ import {
   type WorkshopState,
 } from './workshop';
 
-export const SAVE_VERSION = 2;
+export const SAVE_VERSION = 3;
+// п18.3 (ADR-0153 п. 18): сейв v2 (Фази 16–17) вантажиться з міграцією загрози.
+export const SAVE_VERSION_V2 = 2;
 // п16.2 (ADR-0147 п. 15): сейв v1 (до Фази 16) вантажиться з міграцією кар'єр.
 export const SAVE_VERSION_V1 = 1;
 export const SAVE_SLOTS = 3; // ADR-0026: три слоти, ключі rubezh.save.1..3 у main.ts
@@ -190,6 +193,13 @@ function validCareer(c: unknown, kills: number): boolean {
 // старого сейву: досвід = kills (вбивства вже зараховано), місій 0, позивний і
 // біографія з пулів за порядковим номером найму (id «sN» → номер N − 1), без
 // ролі; звання з досвіду — прирости в запис юніта (soldiers — уже копії).
+// п18.3 (ADR-0153 п. 18): загроза сейва v1 / v2 — min(99, 2 × (доба − 1)) мінус виграні
+// місії з журналу, не менше 0; події, що вже були, загрозу більше не змінюють (курсор — кінець журналу).
+export function migrateThreat(geo: GeoState): number {
+  const won = geo.log.filter((e) => e.type === 'mission_won').length;
+  return Math.max(0, Math.min(THREAT_MAX - 1, 2 * (geoDay(geo) - 1)) - won);
+}
+
 function migrateCareers(soldiers: Unit[]): Record<string, SoldierCareer> {
   const out: Record<string, SoldierCareer> = {};
   for (const s of soldiers) {
@@ -223,10 +233,14 @@ interface InterceptSave {
 // П8.2 (ADR-0033): стан кампанії в сейві; відсутні поля (старі сейви) = «триває»
 // і пресет «норма» (версія формату не зростає).
 interface CampaignSave {
-  status: 'триває' | 'перемога';
+  status: CampaignState['status']; // «поразка» — лише у v3
   preset: DifficultyPreset;
   score: CampaignState['score'];
   victoryDay: number | null;
+  // п18.3 (ADR-0153 п. 18): у v3 — обов'язкові; у v1 / v2 їх немає (migrateThreat)
+  defeatDay?: number | null;
+  threat?: number;
+  threatCursor?: number;
 }
 
 // П9.2: прапорці підказок у сейві; відсутнє поле (старі сейви) = усі false.
@@ -332,6 +346,9 @@ export function serializeParty(party: Party, savedAt: string = ''): string {
         preset: party.campaign.preset,
         score: party.campaign.score ? { ...party.campaign.score } : null,
         victoryDay: party.campaign.victoryDay,
+        defeatDay: party.campaign.defeatDay,
+        threat: party.campaign.threat,
+        threatCursor: party.campaign.threatCursor,
       },
       hints: { ...party.hints },
       research: {
@@ -372,7 +389,7 @@ function parseSave(json: string): SaveData {
   if (data === null || typeof data !== 'object' || Array.isArray(data)) {
     fail('Пошкоджені дані збереження: очікувався об’єкт');
   }
-  if (data.version !== SAVE_VERSION && data.version !== SAVE_VERSION_V1) {
+  if (data.version !== SAVE_VERSION && data.version !== SAVE_VERSION_V2 && data.version !== SAVE_VERSION_V1) {
     fail('Невідома версія збереження: ' + String(data.version) + ' (очікується ' + SAVE_VERSION + ')');
   }
   if (!Number.isInteger(data.seed)) {
@@ -406,8 +423,8 @@ function parseSave(json: string): SaveData {
   ) {
     fail('Пошкоджені дані збереження: ростер');
   }
-  // п16.2 (ADR-0147): у v2 кар'єра — у кожного оперативника ростеру.
-  if (data.version === SAVE_VERSION) {
+  // п16.2 (ADR-0147): з v2 кар'єра — у кожного оперативника ростеру.
+  if (data.version !== SAVE_VERSION_V1) {
     const cs = st.roster.careers;
     if (
       cs === null ||
@@ -430,10 +447,24 @@ function parseSave(json: string): SaveData {
   const ccsv = st.campaign;
   if (
     ccsv !== undefined &&
-    ((ccsv.status !== 'триває' && ccsv.status !== 'перемога') ||
+    ((ccsv.status !== 'триває' && ccsv.status !== 'перемога' && (ccsv.status !== 'поразка' || data.version !== SAVE_VERSION)) ||
       (ccsv.preset !== 'легкий' && ccsv.preset !== 'норма' && ccsv.preset !== 'складний'))
   ) {
     fail('Пошкоджені дані збереження: кампанія');
+  }
+  // п18.3 (ADR-0153 п. 18): у v3 кампанія обов'язкова, загроза 0–100, курсор — у межах журналу геоцени.
+  if (
+    data.version === SAVE_VERSION &&
+    (ccsv === undefined ||
+      !Number.isInteger(ccsv.threat) ||
+      (ccsv.threat as number) < 0 ||
+      (ccsv.threat as number) > THREAT_MAX ||
+      !Number.isInteger(ccsv.threatCursor) ||
+      (ccsv.threatCursor as number) < 0 ||
+      (ccsv.threatCursor as number) > st.geo.log.length ||
+      (ccsv.defeatDay !== null && !Number.isInteger(ccsv.defeatDay)))
+  ) {
+    fail('Пошкоджені дані збереження: загроза кампанії');
   }
   // П9.2: поле hints опційне (старі сейви) — але якщо є, має бути об'єктом.
   if (data.state.hints !== undefined && (typeof data.state.hints !== 'object' || data.state.hints === null)) {
@@ -513,7 +544,7 @@ export function deserializeParty(json: string): Party {
   const cc = ccsv ?? { status: 'триває' as const, preset: DEFAULT_PRESET, score: null, victoryDay: null };
   const soldiers = data.state.roster.soldiers.map((s) => ({ ...s, pos: { ...s.pos } }));
   // п16.2 (ADR-0147 п. 15): v1 — міграція кар'єр, v2 — копія (parseSave перевірив).
-  const careersSv = data.version === SAVE_VERSION ? data.state.roster.careers : undefined;
+  const careersSv = data.version !== SAVE_VERSION_V1 ? data.state.roster.careers : undefined;
   return {
     seed: data.seed,
     geo,
@@ -535,6 +566,10 @@ export function deserializeParty(json: string): Party {
       preset: cc.preset,
       score: cc.score ? { ...cc.score } : null,
       victoryDay: cc.victoryDay,
+      // п18.3 (ADR-0153 п. 18): v3 — копія; v1 / v2 — загроза з доби й виграних місій
+      ...(data.version === SAVE_VERSION
+        ? { defeatDay: cc.defeatDay ?? null, threat: cc.threat as number, threatCursor: cc.threatCursor as number }
+        : { defeatDay: null, threat: migrateThreat(geo), threatCursor: geo.log.length }),
     },
     // П9.2: відсутнє поле hints (старі сейви) = усі підказки ще не показано.
     hints: { ...defaultHints(), ...(data.state.hints ?? {}) },

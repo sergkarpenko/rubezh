@@ -18,7 +18,7 @@
 //   висадки — інакше місію фізично неможливо виграти. Перший сід, що підійшов,
 //   детермінований для даної місії.
 // - Розвідник → 2 прибульці, збирач → 3 (баланс підбере ітерація 6); п17.2 (ADR-0149):
-//   склад за добою — enemyMix (src/core/enemies.ts), доби 1–5 — лише демони.
+//   склад за загрозою кампанії (п18.3) — enemyMix(kindsForThreat(threat)), загроза < 8 — лише демони.
 // - Перемога = усі прибульці мертві → НЛО зникає з геосцени («зачищено»).
 // - Поразка = увесь загін мертвий → НЛО лишається до кінця вікна; загін
 //   втрачено (перма-смерть). П15.2 (ADR-0075): третій результат «евакуйовано» —
@@ -42,8 +42,8 @@ import {
   type Vec2,
 } from './combat';
 import { makeTestMap } from './map';
-import { geoDay, missionTargets, type GeoState, type Ufo, type UfoKind } from './geo';
-import { enemyMix, makeEnemies } from './enemies';
+import { missionTargets, type GeoState, type Ufo, type UfoKind } from './geo';
+import { enemyMix, kindsForThreat, makeEnemies } from './enemies';
 
 export const MISSION_MAP_W = 20;
 export const MISSION_MAP_H = 20;
@@ -128,6 +128,9 @@ export interface CreateMissionOptions {
   squad?: Unit[]; // свій загін (максимум 3 — розмір зони висадки)
   items?: Record<string, UnitItems>; // П11.4 (ADR-0058): витратники загону в бою (deployConsumables)
   roles?: Record<string, UnitRole>; // п16.3 (ADR-0147 п. 11): ролі загону в бою (deployRoles, squad.ts)
+  // п18.3 (ADR-0153 п. 14): загроза кампанії — склад ворогів; без поля — 0 (лише демони).
+  // Виклики застосунку, бота, дзеркала e2e і probe передають campaign.threat.
+  threat?: number;
 }
 
 // Пошук цілі місії з валідацією: лише приземлений виявлений НЛО.
@@ -154,11 +157,11 @@ export function createMission(geo: GeoState, ufoId: string, opts: CreateMissionO
     u.pos = { ...SQUAD_SPAWN[i] };
   });
 
-  // п17.2 (ADR-0149 п. 3, 8, 12): склад за добою кампанії окремим генератором від сіду
-  // місії — бойовий RNG не зсувається; доби 1–5 — лише демони, як до фази 17.
+  // п17.2 (ADR-0149 п. 8, 12): склад окремим генератором від сіду місії — бойовий RNG
+  // не зсувається; п18.3 (ADR-0153 п. 14): доступні типи — за загрозою, а не за добою.
   // П12.6 (ADR-0064): «демон Розриву», не «прибулець».
   const n = ALIENS_PER_KIND[ufo.kind];
-  const aliens: Unit[] = makeEnemies(enemyMix(geoDay(geo), n, seed), ALIEN_SPAWN);
+  const aliens: Unit[] = makeEnemies(enemyMix(kindsForThreat(opts.threat ?? 0), n, seed), ALIEN_SPAWN);
 
   const state = createGame({ map, units: [...squad, ...aliens], rng, items: opts.items, evacZone: SQUAD_SPAWN, roles: opts.roles });
   return { briefing: { ufoId: ufo.id, kind: ufo.kind, aliens: n, minute: geo.minute }, state };

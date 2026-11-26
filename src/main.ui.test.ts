@@ -1502,37 +1502,73 @@ describePage('П7.5: повітряний бій — контекст-стріч
   });
 });
 
-describeScenario('П8.3a: перемога кампанії — 30 діб → екран → «Грати далі» (endless), рахунок зафіксований', (step) => {
-  step('підготовка: нова партія — екрана перемоги нема, кампанія «триває»', () => {
+// п18.3 (ADR-0153 п. 13, 15; рішення власника «А. Мінімум»): таймера 30 діб немає — без
+// місій загроза доходить до 100, гру зупинено, як банкрутство; екран перемоги (П8.3a, endless) —
+// сейвом зі статусом «перемога» (перемогу дає фінальна місія, п18.4).
+const saveWithCampaign = (edit: (c: Record<string, unknown>) => void): void => {
+  btn('btn-save-1').click();
+  const raw = JSON.parse(localStorage.getItem('rubezh.save.1')!) as { state: { campaign: Record<string, unknown> } };
+  edit(raw.state.campaign);
+  localStorage.setItem('rubezh.save.1', JSON.stringify(raw));
+  btn('btn-load-1').click();
+};
+
+describeScenario('п18.3: загроза 100 — поразка; перемога (сейв) → екран → «Грати далі» (endless)', (step) => {
+  step('підготовка: нова партія — екрана перемоги нема, кампанія «триває», чип доби без «/30»', () => {
     startParty();
     expect($('clock').textContent).toBe('Д1 00:00');
     expect($('campaign-status').textContent).toBe('кампанія: триває');
-    expect($('campaign-progress').textContent).toBe('Д1/30');
+    expect($('campaign-progress').textContent).toBe('Д1'); // п18.3: без «/30»
     expect($('campaign-victory').classList.contains('hidden')).toBe(true);
   });
 
   step(
-    '30 діб: настала доба 31 — екран перемоги з підсумковим рахунком',
+    'без місій: межа 30-ї доби — без перемоги; загроза 100 — поразка, рядок журналу, час зупинено',
     () => {
       for (let i = 0; i < 30; i++) passDay();
-      expect($('clock').textContent).toBe('Д31 00:00');
-      expect($('campaign-status').textContent).toBe('кампанія: перемога');
-      expect($('campaign-victory').classList.contains('hidden')).toBe(false);
-      expect($('campaign-score').textContent).toMatch(/^\d+$/); // рахунок зафіксовано на межі 30-ї доби (П8.2)
+      expect($('campaign-status').textContent).not.toBe('кампанія: перемога');
+      let d = 0;
+      while ($('campaign-status').textContent === 'кампанія: триває' && d++ < 40) passDay();
+      expect($('campaign-status').textContent).toBe('кампанія: поразка');
+      expect($('campaign-victory').classList.contains('hidden')).toBe(true);
+      expect($('log').textContent).toContain('✗ Загроза Розриву досягла 100 — партію програно.');
+      const clock = $('clock').textContent;
+      passDay();
+      expect($('clock').textContent).toBe(clock); // гру закінчено (gameOver), як банкрутство
     },
-    30_000
-  ); // Т.43: 1440 кліків «+1 тік» замість 30 кліків «+1 доба» — явний тайм-аут
+    60_000
+  );
 
-  step('«Грати далі» (endless): екран зникає, час іде далі, рахунок не змінюється', () => {
-    const score = $('campaign-score').textContent;
+  step('сейв зі статусом «поразка»: гру закінчено одразу після завантаження — час не йде', () => {
+    btn('btn-play-again').click();
+    saveWithCampaign((c) => {
+      c.status = 'поразка';
+      c.threat = 100;
+      c.defeatDay = 1;
+      c.score = { ufosShotDown: 0, missionsWon: 0, veteransAlive: 6, moneyLeft: 300, total: 375 };
+    });
+    expect($('campaign-status').textContent).toBe('кампанія: поразка');
+    passDay();
+    expect($('clock').textContent).toBe('Д1 00:00');
+  });
+
+  step('сейв зі статусом «перемога»: екран перемоги; «Грати далі» — екран зникає, час іде, рахунок не змінюється', () => {
+    btn('btn-play-again').click();
+    saveWithCampaign((c) => {
+      c.status = 'перемога';
+      c.victoryDay = 1;
+      c.score = { ufosShotDown: 0, missionsWon: 0, veteransAlive: 6, moneyLeft: 300, total: 375 };
+    });
+    expect($('campaign-status').textContent).toBe('кампанія: перемога');
+    expect($('campaign-victory').classList.contains('hidden')).toBe(false);
+    expect($('campaign-score').textContent).toBe('375');
     btn('btn-continue').click();
     expect($('campaign-victory').classList.contains('hidden')).toBe(true);
     expect($('log').textContent).toContain('Партію продовжено');
-    // партія жива після перемоги: тік часу працює, статус і рахунок зафіксовані (EARS Фази 8)
     passDay();
-    expect($('clock').textContent).toBe('Д32 00:00');
+    expect($('clock').textContent).toBe('Д2 00:00');
     expect($('campaign-status').textContent).toBe('кампанія: перемога');
-    expect($('campaign-score').textContent).toBe(score);
+    expect($('campaign-score').textContent).toBe('375');
   });
 
   step('«Грати знов»: рестарт — нова кампанія «триває», екран приховано', () => {
@@ -1560,6 +1596,13 @@ describePage('П11.6: критичний флоу «дослідити → ви�
   it('дослідити → виробити → екіпірувати → граната і лікування в бою', () => {
     // чиста партія: сід 42, «норма» (баланс 300, ростер 6)
     startParty();
+    // п18.3: 36 діб без місій — загроза 100 і поразка; флоу науки — у партії після перемоги
+    // (endless, ADR-0033: загроза не росте), як після «Грати далі»
+    saveWithCampaign((c) => {
+      c.status = 'перемога';
+      c.score = { ufosShotDown: 0, missionsWon: 0, veteransAlive: 6, moneyLeft: 300, total: 375 };
+    });
+    btn('btn-continue').click();
 
     // 1. ДОСЛІДИТИ: 2 вчених, старт «аптечки» (каталог: індекс 2), доби до завершення
     btn('btn-hire-scientist').click();

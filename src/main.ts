@@ -470,7 +470,8 @@ const geoAnim = new AnimEngine({
 // серіалізація (незбережених змін на цей момент немає).
 function adoptParty(p: Party): Party {
   journalUI.adopt(p);
-  gameOver = isBankrupt(p.econ, p.roster, p.campaign.preset);
+  // п18.3: поразка за загрозою (сейв) — гру закінчено, як банкрутство
+  gameOver = isBankrupt(p.econ, p.roster, p.campaign.preset) || p.campaign.status === 'поразка';
   victoryDismissed = false; // П8.3a: нова/завантажена партія — екран перемоги показується знову
   checkpoint = serializeParty(p);
   partyOnScreen = true; // Т.58: до ambient.start — гейт active
@@ -558,8 +559,13 @@ function partyTick(): void {
     journal('✗ Банкрутство: немає боєготових оперативників і кредитів на вербування — партію програно.', 'lose', 'econ');
   }
 
-  // П8.3: перевірка кампанії на межі 30-ї доби
+  // п18.3 (ADR-0153 п. 13): загроза кампанії; 100 — поразка, гру зупинено, як банкрутство
+  // (рішення власника «А. Мінімум»: шкала й екран поразки — п18.5).
   campaignTick({ geo: p.geo, roster: p.roster, econ: p.econ }, p.campaign);
+  if (!gameOver && p.campaign.status === 'поразка') {
+    gameOver = true;
+    journal('✗ Загроза Розриву досягла 100 — партію програно.', 'lose');
+  }
 }
 
 // --- пR.2 (ADR-0037): панелі стану і топбара — модуль src/ui/panels.ts ---

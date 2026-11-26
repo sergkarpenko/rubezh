@@ -10,7 +10,7 @@ import { ALIEN_CUTTER, makeUnit, mulberry32, type ShotProfile, type Unit, type V
 
 export type EnemyKind = 'demon' | 'hound' | 'golem' | 'eye';
 
-// Порядок — порядок появи за добою (ADR-0149 п. 3); вибір складу йде цим порядком.
+// Порядок — порядок появи за загрозою (ADR-0149 п. 3, ADR-0153 п. 14); вибір складу йде цим порядком.
 export const ENEMY_ORDER: readonly EnemyKind[] = ['demon', 'hound', 'golem', 'eye'];
 
 // Один профіль на всі три режими: у зброї з `only` профілі недоступних режимів
@@ -57,16 +57,16 @@ export interface EnemyKindDef {
   accuracy: readonly number[]; // за порядком серед свого типу, циклічно
   weapon: Weapon;
   armor: number; // мінус від кожного влучання пострілу (ADR-0149 п. 5)
-  fromDay: number; // доба кампанії, з якої тип з'являється
+  fromThreat: number; // п18.3 (ADR-0153 п. 14): загроза кампанії, з якої тип з'являється
 }
 
 // Числа — ADR-0149 п. 2 («Помітна різниця»); probe п17.6 може їх змінити рішенням власника.
 // Точність демона — баланс 3.6 (.50/.45/.40), циклічно за порядком серед демонів.
 export const ENEMY_KINDS: Record<EnemyKind, EnemyKindDef> = {
-  demon: { name: 'Демон', hp: 10, ap: 10, accuracy: [0.5, 0.45, 0.4], weapon: ALIEN_CUTTER, armor: 0, fromDay: 1 },
-  hound: { name: 'Гончак', hp: 7, ap: 14, accuracy: [0.85], weapon: HOUND_CLAWS, armor: 0, fromDay: 6 },
-  golem: { name: 'Голем', hp: 16, ap: 8, accuracy: [0.4], weapon: GOLEM_CANNON, armor: 2, fromDay: 12 },
-  eye: { name: 'Око', hp: 8, ap: 10, accuracy: [0.65], weapon: EYE_BEAM, armor: 0, fromDay: 18 },
+  demon: { name: 'Демон', hp: 10, ap: 10, accuracy: [0.5, 0.45, 0.4], weapon: ALIEN_CUTTER, armor: 0, fromThreat: 0 },
+  hound: { name: 'Гончак', hp: 7, ap: 14, accuracy: [0.85], weapon: HOUND_CLAWS, armor: 0, fromThreat: 8 },
+  golem: { name: 'Голем', hp: 16, ap: 8, accuracy: [0.4], weapon: GOLEM_CANNON, armor: 2, fromThreat: 17 },
+  eye: { name: 'Око', hp: 8, ap: 10, accuracy: [0.65], weapon: EYE_BEAM, armor: 0, fromThreat: 27 },
 };
 
 export const GOLEM_LIMIT = 1; // голем — не більше одного на місію (ADR-0149 п. 8)
@@ -78,16 +78,17 @@ export function enemyKind(u: Pick<Unit, 'kind'>): EnemyKind {
   return u.kind ?? 'demon';
 }
 
-// Типи, доступні на цю добу.
-export function kindsForDay(day: number): EnemyKind[] {
-  return ENEMY_ORDER.filter((k) => ENEMY_KINDS[k].fromDay <= day);
+// п18.3 (ADR-0153 п. 14): типи, доступні на цій загрозі (пороги-кандидати 8 / 17 / 27,
+// за темпом ≈ 1,6 на добу — ≈ 6 / 12 / 18-та доба, як ADR-0149 п. 3; перемір — п18.6).
+export function kindsForThreat(threat: number): EnemyKind[] {
+  return ENEMY_ORDER.filter((k) => ENEMY_KINDS[k].fromThreat <= threat);
 }
 
 // Склад місії з n ворогів (ADR-0149 п. 8): перший — демон, решта — випадково
-// з доступних на добу; голем, що вже є, — перевибір з решти доступних.
-// Генератор окремий від бойового RNG; доби 1–5 — лише демони без витягання чисел.
-export function enemyMix(day: number, n: number, seed: number): EnemyKind[] {
-  const avail = kindsForDay(day);
+// з доступних типів avail (п18.3: набір — параметром, kindsForThreat); голем, що вже є, —
+// перевибір з решти доступних. Генератор окремий від бойового RNG; лише демони —
+// без витягання чисел.
+export function enemyMix(avail: readonly EnemyKind[], n: number, seed: number): EnemyKind[] {
   const kinds: EnemyKind[] = [];
   if (n <= 0) return kinds;
   kinds.push('demon');

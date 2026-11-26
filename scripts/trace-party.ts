@@ -20,7 +20,7 @@ import { advanceTime, geoDay } from '../src/core/geo';
 import { economyTick, hirePrice } from '../src/core/economy';
 import { hospitalTick, isBankrupt, readySoldiers } from '../src/core/squad';
 import { FIGHTER_MAX_HP, interceptTick, repairTick } from '../src/core/intercept';
-import { VICTORY_DAY, campaignTick, type DifficultyPreset } from '../src/core/campaign';
+import { campaignTick, type DifficultyPreset } from '../src/core/campaign';
 import { createParty } from '../src/core/save';
 import { radarRange, researchTick } from '../src/core/research';
 import { workshopTick } from '../src/core/workshop';
@@ -34,6 +34,7 @@ import {
   partyBotScienceStep,
   simulateParty,
 } from '../src/core/party-bot';
+const HORIZON_DAYS = 30; // п18.3 (ADR-0155): VICTORY_DAY прибрано — горизонт виміру 30 діб, як у звітах фаз 8–17
 
 function arg(flag: string, def: string): string {
   const i = process.argv.indexOf(flag);
@@ -76,6 +77,7 @@ interface Rec {
   aliveByDay: number[];
   endMoney: number;
   bust?: Bust;
+  endTick?: number; // п18.3: тік кінця партії (поразка за загрозою)
 }
 
 function run(seed: number): Rec {
@@ -85,7 +87,7 @@ function run(seed: number): Rec {
   const hire = hirePrice(preset);
   let lastDay = geoDay(party.geo);
   let prevReady = readySoldiers(party.roster).length;
-  for (let t = 0; t < VICTORY_DAY * TICKS_PER_DAY; t++) {
+  for (let t = 0; t < HORIZON_DAYS * TICKS_PER_DAY; t++) {
     const f = party.intercept.fighter;
     const wouldRepair = f.status === 'на базі' && f.hp < FIGHTER_MAX_HP && !f.repairTicksLeft;
     const m0 = party.econ.money;
@@ -147,8 +149,9 @@ function run(seed: number): Rec {
     }
     prevReady = ready;
     campaignTick({ geo: party.geo, roster: party.roster, econ: party.econ }, party.campaign);
-    if (party.campaign.status === 'перемога') {
-      rec.won = !rec.bust;
+    if (party.campaign.status !== 'триває') {
+      rec.won = !rec.bust && party.campaign.status === 'перемога';
+      rec.endTick = t + 1;
       break;
     }
   }
@@ -162,8 +165,8 @@ for (let seed = 1; seed <= seedCount; seed++) {
   const r = run(seed);
   recs.push(r);
   if (!verify) continue;
-  const ref = simulateParty(seed, preset, { policy });
-  const ticks = r.bust ? r.bust.tick + 1 : VICTORY_DAY * TICKS_PER_DAY;
+  const ref = simulateParty(seed, preset, { policy, maxDays: HORIZON_DAYS });
+  const ticks = r.bust ? r.bust.tick + 1 : (r.endTick ?? HORIZON_DAYS * TICKS_PER_DAY);
   if ((ref.outcome === 'перемога') !== r.won || ref.ticks !== ticks || ref.missionsLaunched !== r.missions.length) {
     mismatch += 1;
     console.log(`розбіжність із simulateParty: сід ${seed}`);
@@ -176,7 +179,7 @@ const busts = recs.flatMap((r) => (r.bust ? [r.bust] : []));
 const missions = recs.flatMap((r) => r.missions);
 const lastSquad = missions.filter((m) => m.readyBefore === 3);
 const fatal = missions.filter((m) => !m.won && m.readyAfter === 0 && m.moneyAfter < hirePrice(preset));
-const days = recs.reduce((a, r) => a + (r.bust ? r.bust.tick / TICKS_PER_DAY : VICTORY_DAY), 0);
+const days = recs.reduce((a, r) => a + (r.bust ? r.bust.tick / TICKS_PER_DAY : HORIZON_DAYS), 0);
 const wins = recs.filter((r) => r.won);
 
 console.log(`# ${policyName} / ${preset} / ${variant}${noBankrupt ? ' / гра після банкрутства' : ''}, сідів ${recs.length}`);

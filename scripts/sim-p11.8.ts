@@ -24,8 +24,9 @@
 
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { DEFAULT_PARTY_POLICY, MISSION_SQUAD_SIZE, SCIENCE_POLICY, simulateParty, type PartySimResult } from '../src/core/party-bot';
-import { VICTORY_DAY, type DifficultyPreset } from '../src/core/campaign';
+import type { DifficultyPreset } from '../src/core/campaign';
 import { PROJECTS, projectName } from '../src/core/research';
+const HORIZON_DAYS = 30; // п18.3 (ADR-0155): VICTORY_DAY прибрано — горизонт виміру 30 діб, як у звітах фаз 8–17
 
 const ALL_PRESETS: DifficultyPreset[] = ['легкий', 'норма', 'складний'];
 const ALL_POLICIES = { default: DEFAULT_PARTY_POLICY, science: SCIENCE_POLICY } as const;
@@ -84,13 +85,13 @@ interface BalanceNumbers {
 }
 
 function balanceOf(r: PartySimResult): BalanceNumbers {
-  const reached = r.moneyByDay.length >= VICTORY_DAY;
+  const reached = r.moneyByDay.length >= HORIZON_DAYS;
   return {
     missionsWon: r.missionsWon,
     days: r.readyByDay.length,
     daysNoFullSquad: r.readyByDay.filter((n) => n < MISSION_SQUAD_SIZE).length,
-    money30: reached ? r.moneyByDay[VICTORY_DAY - 1] : null,
-    ready30: reached ? r.readyByDay[VICTORY_DAY - 1] : null,
+    money30: reached ? r.moneyByDay[HORIZON_DAYS - 1] : null,
+    ready30: reached ? r.readyByDay[HORIZON_DAYS - 1] : null,
     roster30: reached ? r.score.veteransAlive : null,
   };
 }
@@ -107,7 +108,7 @@ for (const policyName of POLICIES) {
   for (const preset of PRESETS) {
     const results: PartySimResult[] = [];
     for (const seed of seeds) {
-      results.push(simulateParty(seed, preset, { policy }));
+      results.push(simulateParty(seed, preset, { policy, maxDays: HORIZON_DAYS }));
     }
     byCell.set(`${policyName}/${preset}`, results);
   }
@@ -165,11 +166,11 @@ for (const policyName of POLICIES) {
 out.push('## Числа балансу (Т.21)');
 out.push('');
 out.push(
-  `Виграні місії і доби без повного загону — за всіма партіями; гроші й ростер на ${VICTORY_DAY}-ту добу — за партіями, що до неї дожили (медіана, у дужках p25–p75).`
+  `Виграні місії і доби без повного загону — за всіма партіями; гроші й ростер на ${HORIZON_DAYS}-ту добу — за партіями, що до неї дожили (медіана, у дужках p25–p75).`
 );
 out.push('');
 out.push(
-  `| Політика/Пресет | Виграно місій / партію (медіана) | Дожили до ${VICTORY_DAY}-ї доби | Гроші на ${VICTORY_DAY}-ту добу | Ростер на ${VICTORY_DAY}-ту добу | із них боєготових | Діб без повного загону, % |`
+  `| Політика/Пресет | Виграно місій / партію (медіана) | Дожили до ${HORIZON_DAYS}-ї доби | Гроші на ${HORIZON_DAYS}-ту добу | Ростер на ${HORIZON_DAYS}-ту добу | із них боєготових | Діб без повного загону, % |`
 );
 out.push('| --- | --- | --- | --- | --- | --- | --- |');
 for (const policyName of POLICIES) {

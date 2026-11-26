@@ -93,7 +93,9 @@ export type GeoEvent =
   | { type: 'fighter_repair_done'; minute: number }
   // П8.2 (ADR-0033): подію перемоги кампанії записує campaign.ts на межі 30-ї доби;
   // geoTick про кампанію не знає (ADR-0002), а журнал — спільний для шарів.
-  | { type: 'campaign_victory'; day: number; score: number; minute: number };
+  | { type: 'campaign_victory'; day: number; score: number; minute: number }
+  // п18.3 (ADR-0153 п. 13): поразка партії — загроза досягла 100 (записує campaign.ts).
+  | { type: 'campaign_defeat'; day: number; score: number; minute: number };
 
 export interface GeoState {
   minute: number; // хвилини від старту; 0 = 00:00 дня 1

@@ -1,6 +1,6 @@
 // src/core/campaign.test.ts
-// Ітерація П8.2: тести ядра кампанії (ADR-0033) — стан, перемога на межі 30-ї доби,
-// підсумковий рахунок, геосценна подія перемоги, geo.rng не викликається.
+// Ітерація П8.2: тести ядра кампанії (ADR-0033) — стан, підсумковий рахунок, geo.rng не викликається.
+// п18.3 (ADR-0153 п. 13, 15; ADR-0155): перемоги на межі 30-ї доби немає — шкала загрози, поразка на 100.
 import { describe, expect, it } from 'vitest';
 import {
   campaignScore,
@@ -12,8 +12,13 @@ import {
   SCORE_PER_MISSION_WON,
   SCORE_PER_UFO_SHOT_DOWN,
   SCORE_PER_VETERAN_ALIVE,
-  VICTORY_DAY,
   sciencePrice,
+  THREAT_MAX,
+  THREAT_MISSION_WON,
+  THREAT_PER_DAY,
+  THREAT_UFO_LEFT_DETECTED,
+  THREAT_UFO_LEFT_UNDETECTED,
+  threatDelta,
   type CampaignContext,
 } from './campaign';
 import { createGeoGame, TICK_MINUTES, type GeoState } from './geo';
@@ -23,11 +28,6 @@ import { createParty, deserializeParty, serializeParty } from './save';
 
 function ctxOf(geo: GeoState, roster: Roster = createRoster(), econ: EconomyState = createEconomy()): CampaignContext {
   return { geo, roster, econ };
-}
-
-// Доба N завершується на хвилині N * 1440 (48 тіків по TICK_MINUTES).
-function minuteOfDay(day: number): number {
-  return day * 1440;
 }
 
 describe('campaign — початковий стан (ADR-0033)', () => {
@@ -55,69 +55,116 @@ describe('campaign — початковий стан (ADR-0033)', () => {
   });
 });
 
-describe('campaignTick — межа 30-ї доби', () => {
-  it('до 30-ї доби: no-op, стан «триває», журнал без подій перемоги', () => {
+describe('п18.3: campaignTick — шкала загрози (ADR-0153 п. 13)', () => {
+  const day = (d: number) => ({ type: 'day' as const, day: d, minute: (d - 1) * 1440 });
+
+  it('числа-кандидати ADR-0153 п. 13', () => {
+    expect([THREAT_PER_DAY, THREAT_UFO_LEFT_DETECTED, THREAT_UFO_LEFT_UNDETECTED, THREAT_MISSION_WON, THREAT_MAX]).toEqual([
+      2, 6, 2, -1, 100,
+    ]);
+    expect(createCampaign()).toMatchObject({ threat: 0, threatCursor: 0, defeatDay: null });
+  });
+
+  it('доба +2, виграна місія −1 (не нижче 0); курсор — кінець журналу', () => {
     const geo = createGeoGame({ seed: 1 });
     const c = createCampaign();
-    geo.minute = minuteOfDay(29);
+    geo.log.push({ type: 'mission_won', ufoId: 'u0', minute: 1 }); // 0 − 1 → межа 0
+    geo.log.push(day(2), day(3), { type: 'mission_won', ufoId: 'u1', minute: 2 });
     campaignTick(ctxOf(geo), c);
-    expect(c.status).toBe('триває');
-    expect(c.score).toBeNull();
-    expect(geo.log.filter((e) => e.type === 'campaign_victory')).toHaveLength(0);
+    expect(c.threat).toBe(3);
+    expect(c.threatCursor).toBe(geo.log.length);
+    campaignTick(ctxOf(geo), c); // ті самі події вдруге не рахуються
+    expect(c.threat).toBe(3);
   });
 
-  it('на межі 30-ї доби (1440 хв * 30): перемога, рахунок зафіксовано, подія в журналі', () => {
+  it('зонд відлетів: виявлений без бою +6, невиявлений +2, після поразки чи евакуації — 0', () => {
     const geo = createGeoGame({ seed: 2 });
-    geo.minute = minuteOfDay(VICTORY_DAY);
+    const pos = { x: 1, y: 1 };
+    const spawn = (id: string) => ({ type: 'ufo_spawned' as const, ufoId: id, kind: 'розвідник' as const, pos, minute: 0 });
+    geo.log.push(spawn('a'), { type: 'ufo_detected', ufoId: 'a', pos, minute: 1 }, { type: 'ufo_left', ufoId: 'a', minute: 2 });
+    geo.log.push(spawn('b'), { type: 'ufo_left', ufoId: 'b', minute: 3 });
+    geo.log.push(
+      spawn('c'),
+      { type: 'ufo_detected', ufoId: 'c', pos, minute: 1 },
+      { type: 'mission_lost', ufoId: 'c', minute: 2 },
+      { type: 'ufo_left', ufoId: 'c', minute: 4 }
+    );
+    geo.log.push(
+      spawn('d'),
+      { type: 'ufo_detected', ufoId: 'd', pos, minute: 1 },
+      { type: 'mission_evacuated', ufoId: 'd', minute: 2 },
+      { type: 'ufo_left', ufoId: 'd', minute: 5 }
+    );
+    const lefts = geo.log.flatMap((e, i) => (e.type === 'ufo_left' ? [threatDelta(geo.log, i)] : []));
+    expect(lefts).toEqual([6, 2, 0, 0]);
     const c = createCampaign();
     campaignTick(ctxOf(geo), c);
-    expect(c.status).toBe('перемога');
-    expect(c.victoryDay).toBe(VICTORY_DAY);
-    expect(c.score).not.toBeNull();
-    const events = geo.log.filter((e) => e.type === 'campaign_victory');
-    expect(events).toHaveLength(1);
-    expect(events[0]).toMatchObject({ type: 'campaign_victory', day: VICTORY_DAY, score: c.score!.total });
+    expect(c.threat).toBe(8);
   });
 
-  it('після 30-ї доби перемога теж фіксується (запізнілий перший виклик)', () => {
+  it('загроза 100 — поразка: рахунок і доба фіксуються один раз, подія campaign_defeat, далі no-op', () => {
     const geo = createGeoGame({ seed: 3 });
-    geo.minute = minuteOfDay(35);
+    geo.minute = 60 * 1440;
     const c = createCampaign();
+    c.threat = 98;
+    geo.log.push(day(61), { type: 'mission_won', ufoId: 'u', minute: 1 }); // 98 + 2 = 100 — перемога після неї не рятує
     campaignTick(ctxOf(geo), c);
-    expect(c.status).toBe('перемога');
-    // перемога завжди «на 30-ту добу» (ADR-0033), пізніший виклик лише фіксує
-    expect(c.victoryDay).toBe(VICTORY_DAY);
+    expect(c.status).toBe('поразка');
+    expect(c.threat).toBe(THREAT_MAX);
+    expect(c.defeatDay).toBe(61);
+    expect(c.score).toEqual(campaignScore(geo, createRoster(), createEconomy()));
+    const ev = geo.log.filter((e) => e.type === 'campaign_defeat');
+    expect(ev).toEqual([{ type: 'campaign_defeat', day: 61, score: c.score!.total, minute: geo.minute }]);
+    expect(c.threatCursor).toBe(geo.log.length);
+    const frozen = { ...c, score: { ...c.score! } };
+    geo.log.push(day(62), { type: 'mission_won', ufoId: 'v', minute: 2 });
+    campaignTick(ctxOf(geo), c);
+    expect(c).toEqual(frozen);
+    expect(geo.log.filter((e) => e.type === 'campaign_defeat')).toHaveLength(1);
   });
 
-  it('повторні виклики на межі та після — no-op: рахунок і подія не дублюються', () => {
+  it('загроза не перевищує 100; кінець партії перемогою — no-op', () => {
     const geo = createGeoGame({ seed: 4 });
-    geo.minute = minuteOfDay(VICTORY_DAY);
     const c = createCampaign();
-    const ctx = ctxOf(geo);
-    campaignTick(ctx, c);
-    const frozen = c.score!.total;
-    // зміними метрики після фіксації — рахунок не перераховується (ADR-0033)
-    geo.log.push({ type: 'ufo_shot_down', ufoId: 'ufo1', pos: { x: 0, y: 0 }, minute: geo.minute });
-    campaignTick(ctx, c);
-    campaignTick(ctx, c);
-    expect(c.score!.total).toBe(frozen);
-    expect(geo.log.filter((e) => e.type === 'campaign_victory')).toHaveLength(1);
+    c.status = 'перемога';
+    geo.log.push(day(2));
+    campaignTick(ctxOf(geo), c);
+    expect(c).toMatchObject({ threat: 0, threatCursor: 0, status: 'перемога' });
+    const d = createCampaign();
+    d.threat = 99;
+    geo.log.push(
+      { type: 'ufo_spawned', ufoId: 'x', kind: 'збирач', pos: { x: 0, y: 0 }, minute: 0 },
+      { type: 'ufo_detected', ufoId: 'x', pos: { x: 0, y: 0 }, minute: 0 },
+      { type: 'ufo_left', ufoId: 'x', minute: 0 }
+    );
+    d.threatCursor = 1; // лише відліт: 99 + 6 → 100
+    campaignTick(ctxOf(geo), d);
+    expect(d.threat).toBe(THREAT_MAX);
+    expect(d.status).toBe('поразка');
   });
 
-  it('geo.rng не викликається — траєкторія геоцени з кампанією і без неї байт-у-байт', () => {
+  it('31 доба геоцени без місій: перемоги на межі 30-ї доби немає; загроза — сума threatDelta; geo.rng не викликається', () => {
     const geoA = createGeoGame({ seed: 7 });
     const geoB = createGeoGame({ seed: 7 });
     const c = createCampaign();
-    const ctx = ctxOf(geoA);
     for (let i = 0; i < 48 * 31; i++) {
       geoTickX(geoA);
       geoTickX(geoB);
-      campaignTick(ctx, c);
+      campaignTick(ctxOf(geoA), c);
     }
-    expect(geoA.log.filter((e) => e.type === 'campaign_victory')).toHaveLength(1);
-    // журнали відрізняються лише подією перемоги; усі події геоцени (спавн/рух/день) ідентичні
-    const stripVictory = (log: typeof geoA.log) => log.filter((e) => e.type !== 'campaign_victory');
-    expect(stripVictory(geoA.log)).toEqual(stripVictory(geoB.log));
+    expect(geoA.log.some((e) => e.type === 'campaign_victory')).toBe(false);
+    // без виграних місій загроза доходить до 100 (доба + відліт зондів) — поразка з подією в журналі
+    let t = 0;
+    let at = -1;
+    for (let i = 0; i < geoB.log.length && t < THREAT_MAX; i++) {
+      t = Math.max(0, Math.min(THREAT_MAX, t + threatDelta(geoB.log, i)));
+      at = i;
+    }
+    expect(c.threat).toBe(t);
+    expect(c.status).toBe(t >= THREAT_MAX ? 'поразка' : 'триває');
+    expect(geoA.log.findIndex((e) => e.type === 'campaign_defeat')).toBe(t >= THREAT_MAX ? at + 1 : -1);
+    const strip = (log: typeof geoA.log) => log.filter((e) => e.type !== 'campaign_defeat');
+    expect(strip(geoA.log)).toEqual(geoB.log);
     expect(geoA.ufos).toEqual(geoB.ufos);
   });
 });
@@ -153,21 +200,24 @@ describe('campaignScore — похідні метрики (ADR-0033)', () => {
 });
 
 describe('campaign — сумісність сейвів (ADR-0026/0033)', () => {
-  it('стан кампанії зберігається і відновлюється: save → load — байт-у-байт', () => {
+  it('п18.3: загроза, курсор і поразка зберігаються і відновлюються: save → load — байт-у-байт', () => {
     const party = createParty(11);
-    party.geo.minute = minuteOfDay(VICTORY_DAY);
-    party.geo.log.push({ type: 'ufo_shot_down', ufoId: 'ufo9', pos: { x: 3, y: 3 }, minute: 4000 });
+    party.campaign.threat = 98;
+    party.geo.minute = 40 * 1440;
+    party.geo.log.push({ type: 'day', day: 41, minute: party.geo.minute });
     campaignTick({ geo: party.geo, roster: party.roster, econ: party.econ }, party.campaign);
-    const restored = deserializeParty(serializeParty(party));
-    expect(restored.campaign.status).toBe('перемога');
-    expect(restored.campaign.preset).toBe(party.campaign.preset);
-    expect(restored.campaign.score).toEqual(party.campaign.score);
-    expect(restored.campaign.victoryDay).toBe(VICTORY_DAY);
+    const json = serializeParty(party);
+    const restored = deserializeParty(json);
+    expect(restored.campaign).toEqual(party.campaign);
+    expect(restored.campaign).toMatchObject({ status: 'поразка', threat: 100, defeatDay: 41 });
+    expect(serializeParty(restored)).toBe(json);
   });
 
-  it('старий сейв без поля campaign: «триває» і пресет «норма» (версія формату не зросла)', () => {
+  it('старий сейв (v2) без поля campaign: «триває», пресет «норма», загроза — з доби', () => {
     const party = createParty(12);
+    party.geo.minute = 4 * 1440; // доба 5
     const json = JSON.parse(serializeParty(party));
+    json.version = 2;
     delete json.state.campaign; // сейв до П8.2
     const restored = deserializeParty(JSON.stringify(json));
     expect(restored.campaign).toEqual({
@@ -175,13 +225,16 @@ describe('campaign — сумісність сейвів (ADR-0026/0033)', () =>
       preset: 'норма',
       score: null,
       victoryDay: null,
+      defeatDay: null,
+      threat: 8,
+      threatCursor: party.geo.log.length,
     });
   });
 
   it('пошкоджені дані кампанії в сейві — відмова без часткового стану', () => {
     const party = createParty(14);
     const json = JSON.parse(serializeParty(party));
-    json.state.campaign = { status: 'перемога', preset: '?', score: null, victoryDay: null };
+    json.state.campaign = { ...json.state.campaign, preset: '?' };
     expect(() => deserializeParty(JSON.stringify(json))).toThrow('Пошкоджені дані збереження: кампанія');
   });
 

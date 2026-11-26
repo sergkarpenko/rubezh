@@ -1,5 +1,8 @@
 // src/core/campaign.ts
 // Ітерація П8.2: мета кампанії (ADR-0033) — перемога на 30-ту добу з підсумковим рахунком.
+// п18.3 (ADR-0153 п. 13–15, ADR-0155): перемоги на межі 30-ї доби більше немає — шкала
+// загрози 0–100 рахується з подій журналу геоцени, 100 — поразка партії; перемога —
+// виграна фінальна місія (п18.4). Рахунок фіксується в мить кінця партії.
 // ADR-0002: чисте ядро без DOM; ADR-0003: campaign не має власного RNG — усі кидки
 // лишаються в наявних ін'єктованих RNG (геоцени, перехоплення), geo.rng не викликається.
 // Патерн ізоляції шарів (як economy.ts/squad.ts, ADR-0008/0021): geo.ts не знає про
@@ -14,7 +17,12 @@ import { geoDay, type GeoEvent, type GeoState } from './geo';
 import type { Roster } from './squad';
 import type { EconomyState } from './economy';
 
-export const VICTORY_DAY = 30; // перемога фіксується на межі 30-ї доби (ADR-0033)
+// п18.3 (ADR-0153 п. 13): числа шкали загрози — кандидати, перемір — probe п18.6.
+export const THREAT_MAX = 100; // загроза 100 — поразка партії
+export const THREAT_PER_DAY = 2; // за кожну завершену добу (подія 'day')
+export const THREAT_UFO_LEFT_DETECTED = 6; // виявлений зонд відлетів без бою
+export const THREAT_UFO_LEFT_UNDETECTED = 2; // невиявлений зонд відлетів (радар має ціну)
+export const THREAT_MISSION_WON = -1; // виграна місія стримує загрозу
 
 // Вагові коефіцієнти рахунку — константи (ADR-0033); зафіксовано П8.6 за симуляціями
 // (120 сідів × 2 пресети, docs/reports/p8.6-tuning.md): ветерани ×2 (ростер — головний
@@ -65,7 +73,7 @@ export function sciencePrice(base: number, preset: DifficultyPreset = DEFAULT_PR
   return Math.round(base * DIFFICULTY_MULTIPLIERS[preset].scienceMultiplier);
 }
 
-export type CampaignStatus = 'триває' | 'перемога';
+export type CampaignStatus = 'триває' | 'перемога' | 'поразка';
 
 export interface CampaignScore {
   ufosShotDown: number; // збиті в повітрі НЛО (intercept, ADR-0032)
@@ -78,12 +86,37 @@ export interface CampaignScore {
 export interface CampaignState {
   status: CampaignStatus;
   preset: DifficultyPreset;
-  score: CampaignScore | null; // фіксується один раз на межі 30-ї доби
+  score: CampaignScore | null; // фіксується один раз у мить кінця партії (перемога чи поразка)
   victoryDay: number | null;
+  defeatDay: number | null; // п18.3: доба поразки за загрозою
+  threat: number; // п18.3: шкала загрози 0–100
+  threatCursor: number; // п18.3: скільки подій geo.log уже враховано в загрозі
 }
 
 export function createCampaign(preset: DifficultyPreset = DEFAULT_PRESET): CampaignState {
-  return { status: 'триває', preset, score: null, victoryDay: null };
+  return { status: 'триває', preset, score: null, victoryDay: null, defeatDay: null, threat: 0, threatCursor: 0 };
+}
+
+// Зонд ufoId до індексу i: виявлений і без бою (місія не закінчилась поразкою чи евакуацією).
+function ufoLeftDelta(log: GeoEvent[], i: number, ufoId: string): number {
+  let detected = false;
+  for (let j = i - 1; j >= 0; j--) {
+    const e = log[j];
+    if (!('ufoId' in e) || e.ufoId !== ufoId) continue;
+    if (e.type === 'mission_lost' || e.type === 'mission_evacuated') return 0; // зонд відлетів після бою
+    if (e.type === 'ufo_detected') detected = true;
+    if (e.type === 'ufo_spawned') break;
+  }
+  return detected ? THREAT_UFO_LEFT_DETECTED : THREAT_UFO_LEFT_UNDETECTED;
+}
+
+// Зміна загрози від однієї події журналу геоцени (ADR-0153 п. 13); решта подій — 0.
+export function threatDelta(log: GeoEvent[], i: number): number {
+  const e = log[i];
+  if (e.type === 'day') return THREAT_PER_DAY;
+  if (e.type === 'mission_won') return THREAT_MISSION_WON;
+  if (e.type === 'ufo_left') return ufoLeftDelta(log, i, e.ufoId);
+  return 0;
 }
 
 function countEvents(log: GeoEvent[], type: GeoEvent['type']): number {
@@ -112,24 +145,27 @@ export interface CampaignContext {
   econ: EconomyState;
 }
 
-// Тік кампанії: на межі 30-ї завершеної доби реєструє в журналі геоцени подію перемоги
-// і один раз фіксує підсумковий рахунок (ADR-0033). Доби геоцени нумеруються з 1
-// (geoDay), тому 30 повних діб пройдено, коли настала доба 31 (minute >= 30 * 1440) —
-// та сама мить, коли geoTick записує подію 'day' 31. Повторні виклики на межі та після —
-// no-op, дублікати не нараховуються, зафіксований рахунок не перераховується.
+// Тік кампанії (п18.3, ADR-0153 п. 13, 15): нові події журналу геоцени від курсора
+// змінюють загрозу (межі 0 і THREAT_MAX після кожної події); щойно загроза досягла
+// THREAT_MAX — статус «поразка», рахунок фіксується один раз, подія 'campaign_defeat'.
+// Кінець партії (перемога чи поразка) — no-op, курсор далі не рухається.
 // geo.rng не викликається — траєкторія геоцени незмінна (ADR-0003). Викликається шаром
-// застосунку після geoTick (як economyTick).
+// застосунку після geoTick (як economyTick); події місій між тіками враховує наступний тік.
 export function campaignTick(ctx: CampaignContext, campaign: CampaignState): void {
-  if (campaign.status === 'перемога') return;
-  if (geoDay(ctx.geo) <= VICTORY_DAY) return;
-  const score = campaignScore(ctx.geo, ctx.roster, ctx.econ);
-  campaign.status = 'перемога';
-  campaign.score = score;
-  campaign.victoryDay = VICTORY_DAY;
-  ctx.geo.log.push({
-    type: 'campaign_victory',
-    day: VICTORY_DAY,
-    score: score.total,
-    minute: ctx.geo.minute,
-  });
+  if (campaign.status !== 'триває') return;
+  const log = ctx.geo.log;
+  while (campaign.threatCursor < log.length) {
+    const i = campaign.threatCursor;
+    campaign.threatCursor += 1;
+    campaign.threat = Math.max(0, Math.min(THREAT_MAX, campaign.threat + threatDelta(log, i)));
+    if (campaign.threat >= THREAT_MAX) {
+      const score = campaignScore(ctx.geo, ctx.roster, ctx.econ);
+      campaign.status = 'поразка';
+      campaign.score = score;
+      campaign.defeatDay = geoDay(ctx.geo);
+      log.push({ type: 'campaign_defeat', day: campaign.defeatDay, score: score.total, minute: ctx.geo.minute });
+      campaign.threatCursor = log.length;
+      return;
+    }
+  }
 }

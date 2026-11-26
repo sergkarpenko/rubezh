@@ -787,6 +787,7 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
         squad,
         items: deployConsumables(party.workshop, squad),
         ...(roles !== null ? { roles } : {}),
+        threat: party.campaign.threat, // п18.3: склад ворогів за загрозою
       });
     } catch (e) {
       deps.journal('✗ ' + (e as Error).message, 'lose');
