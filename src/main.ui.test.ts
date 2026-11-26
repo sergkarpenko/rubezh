@@ -681,11 +681,14 @@ describeScenario('критичний флоу економіки: найм → �
     expect($('clock').textContent).toBe('Д1 16:00'); // 18 + 14 тіків по 30 хв
   });
 
-  step('дотація: завершення доби 1 — +75 у журналі і балансі', () => {
+  // п19.2 (ADR-0159 п. 11–12): невиявлений зонд відлетів у добу 1 — довіра регіону −15, дотація 75 × 385 / 400 ≈ 72
+  step('дотація: завершення доби 1 — +72 у журналі і балансі (довіра 385 з 400)', () => {
     for (let i = 0; i < 16; i++) btn('btn-tick').click(); // 48 тіків усього
     expect($('clock').textContent).toBe('Д2 00:00');
-    expect($('money').textContent).toBe('385');
-    expect($('log').textContent).toContain('Дотація за добу 1: +75');
+    expect($('money').textContent).toBe('382');
+    expect($('log').textContent).toContain('Дотація за добу 1: +72');
+    expect($('log').textContent).toContain(': зонд відлетів без бою');
+    expect($('econ-rates').textContent).toContain('· дотація 72/добу'); // рядок ставок — з поточної Σ довір (аудит PR #521)
   });
 });
 
@@ -726,8 +729,8 @@ describePage('журнал з фільтрами-вкладками (П6.2, ADR-
 
   it('новий запис під активним фільтром видимий, під іншим — приховується', () => {
     btn('log-tab-econ').click();
-    expect($('money').textContent).toBe('375'); // 300 + дотація 75
-    btn('btn-hire').click(); // 375 → 275 (два записи: «Найм» + «Витрати»)
+    expect($('money').textContent).toBe('367'); // 300 + дотація 67 (п19.2: довіра 355 з 400)
+    btn('btn-hire').click(); // 367 → 267 (два записи: «Найм» + «Витрати»)
     const hireLi = Array.from(document.querySelectorAll('#log li[data-cat="econ"]')).find((li) =>
       li.textContent!.includes('Вербування')
     ) as HTMLElement;
@@ -736,7 +739,7 @@ describePage('журнал з фільтрами-вкладками (П6.2, ADR-
     expect(hireLi.style.display).toBe('none');
     btn('log-tab-all').click();
     expect(hireLi.style.display).toBe('');
-    expect($('money').textContent).toBe('275');
+    expect($('money').textContent).toBe('267');
   });
 });
 
@@ -789,9 +792,9 @@ describePage('панель збереження: 3 слоти, лише на г�
 
   it('розбіжність і відкат: тики після сейву → завантаження повертає стан точки збереження', () => {
     btn('btn-save-1').click(); // сейв слота 1 у Д1 09:00 — до passDay (issue #378)
-    passDay(); // доба вперед: дотація +75 (П8.6)
+    passDay(); // доба вперед: дотація +67 (П8.6; п19.2 — довіра 355 з 400)
     expect($('clock').textContent).toBe('Д2 09:00');
-    expect($('money').textContent).toBe('375');
+    expect($('money').textContent).toBe('367');
     btn('btn-load-1').click();
     expect($('clock').textContent).toBe('Д1 09:00');
     expect($('money').textContent).toBe('300');

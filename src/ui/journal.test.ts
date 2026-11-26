@@ -81,6 +81,36 @@ describe('п18.4: geoEventText — штурм бази і «Брама Розр�
   });
 });
 
+// п19.2 (ADR-0159 п. 11; рішення власника «А. Обидва напрями, і невиявлені», «А. …вийшов…»)
+describe('п19.2: geoEventText — довіра і вихід регіону', () => {
+  const none = new Set<string>();
+  it.each([
+    [
+      { type: 'region_trust', region: 'north', delta: -30, trust: 70, reason: 'ufo_left', minute: 0 },
+      '▼ Довіра «Північ» −30 → 70: зонд відлетів без бою',
+      'lose',
+    ],
+    [
+      { type: 'region_trust', region: 'south', delta: -15, trust: 0, reason: 'ufo_left', minute: 0 },
+      '▼ Довіра «Південь» −15 → 0: зонд відлетів без бою',
+      'lose',
+    ],
+    [
+      { type: 'region_trust', region: 'east', delta: 10, trust: 80, reason: 'mission_won', minute: 0 },
+      '▲ Довіра «Схід» +10 → 80: місію зачищено',
+      'win',
+    ],
+    [
+      { type: 'region_trust', region: 'west', delta: 5, trust: 100, reason: 'mission_won', minute: 0 },
+      '▲ Довіра «Захід» +5 → 100: місію зачищено',
+      'win',
+    ],
+    [{ type: 'region_out', region: 'north', minute: 0 }, '✗ Регіон «Північ» вийшов — його частки дотації більше немає', 'lose'],
+  ] as const)('%o', (e, text, cls) => {
+    expect(geoEventText(evGeo(e), none)).toEqual({ text, cls });
+  });
+});
+
 describe('geoEventText: фільтр туману стратегічного журналу (4.2)', () => {
   const known = new Set(['u1']);
 

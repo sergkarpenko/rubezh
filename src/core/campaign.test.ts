@@ -1,6 +1,7 @@
 // src/core/campaign.test.ts
 // Ітерація П8.2: тести ядра кампанії (ADR-0033) — стан, підсумковий рахунок, geo.rng не викликається.
 // п18.3 (ADR-0153 п. 13, 15; ADR-0155): перемоги на межі 30-ї доби немає — шкала загрози, поразка на 100.
+import { createRegions } from './regions';
 import { describe, expect, it } from 'vitest';
 import {
   campaignScore,
@@ -163,10 +164,12 @@ describe('п18.3: campaignTick — шкала загрози (ADR-0153 п. 13)',
     expect(c.threat).toBe(t);
     expect(c.status).toBe(t >= THREAT_MAX ? 'поразка' : 'триває');
     // п18.4: поріг 60 дає подію штурму (бою тут ніхто не грає — штурм лишається в очікуванні)
-    const noAssault = geoA.log.filter((e) => e.type !== 'base_assault');
+    const noAssault = geoA.log.filter((e) => e.type !== 'base_assault' && e.type !== 'region_trust' && e.type !== 'region_out');
     expect(geoA.log.filter((e) => e.type === 'base_assault').length).toBe(t >= 60 ? 1 : 0);
     expect(noAssault.findIndex((e) => e.type === 'campaign_defeat')).toBe(t >= THREAT_MAX ? at + 1 : -1);
-    const strip = (log: typeof geoA.log) => log.filter((e) => e.type !== 'campaign_defeat' && e.type !== 'base_assault');
+    // п19.2: події довіри регіонів (region_trust / region_out) теж пише кампанія, а не геоцена
+    const strip = (log: typeof geoA.log) =>
+      log.filter((e) => e.type !== 'campaign_defeat' && e.type !== 'base_assault' && e.type !== 'region_trust' && e.type !== 'region_out');
     expect(strip(geoA.log)).toEqual(geoB.log);
     expect(geoA.ufos).toEqual(geoB.ufos);
   });
@@ -231,6 +234,8 @@ describe('campaign — сумісність сейвів (ADR-0026/0033)', () =>
       defeatDay: null,
       threat: 8,
       threatCursor: party.geo.log.length,
+      regions: createRegions(), // п19.2: довіра 100 скрізь, курсор — кінець журналу
+      trustCursor: party.geo.log.length,
     });
   });
 
@@ -256,7 +261,7 @@ describe('campaign — сумісність сейвів (ADR-0026/0033)', () =>
       geoTickX(b);
       campaignTick({ geo: a, roster: createRoster(), econ: createEconomy() }, createCampaign());
     }
-    expect(a.log).toEqual(b.log);
+    expect(a.log.filter((e) => e.type !== 'region_trust' && e.type !== 'region_out')).toEqual(b.log); // п19.2
   });
 });
 

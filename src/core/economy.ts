@@ -16,6 +16,7 @@
 
 import { geoDay, type GeoState, type UfoKind } from './geo';
 import { type DifficultyPreset, DEFAULT_PRESET, DIFFICULTY_MULTIPLIERS } from './campaign';
+import { TRUST_TOTAL_MAX } from './regions';
 
 export const START_MONEY = 300; // стартовий баланс партії (ADR-0021)
 export const DAILY_ALLOWANCE = 75; // дотація за завершену добу геосцени (П8.6: 100 → 75)
@@ -51,8 +52,12 @@ export const SHOT_DOWN_BONUS: Record<UfoKind, number> = {
 // Т.7: фактичні суми за пресетом (множник економіки, ADR-0033/0058) — єдине
 // джерело і для нарахувань нижче, і для текстів шару відображення (урок П9.1:
 // числа в розмітці дрейфують; патерн hirePrice). Математика без змін.
-export function dailyAllowance(preset: DifficultyPreset = DEFAULT_PRESET): number {
-  return Math.round(DAILY_ALLOWANCE * DIFFICULTY_MULTIPLIERS[preset].economyMultiplier);
+// п19.2 (ADR-0159 п. 12): дотація — сума часток регіонів за довірою: округлення
+// (75 × множник × Σ довір / 400); за повної довіри (400) — та сама формула, що й до фази 19.
+export function dailyAllowance(preset: DifficultyPreset = DEFAULT_PRESET, trust: number = TRUST_TOTAL_MAX): number {
+  const base = DAILY_ALLOWANCE * DIFFICULTY_MULTIPLIERS[preset].economyMultiplier;
+  if (trust >= TRUST_TOTAL_MAX) return Math.round(base);
+  return Math.round((base * Math.max(0, trust)) / TRUST_TOTAL_MAX);
 }
 
 export function missionBonus(kind: UfoKind, preset: DifficultyPreset = DEFAULT_PRESET): number {
@@ -84,9 +89,15 @@ export function createEconomy(preset: DifficultyPreset = DEFAULT_PRESET): Econom
 // що завершилась з моменту останнього нарахування. День N завершено,
 // коли geoDay(geo) > N (доба = 48 тіків). Повторний виклик без нових
 // завершених діб — no-op (захист від подвійного нарахування).
-export function economyTick(state: EconomyState, geo: GeoState, preset: DifficultyPreset = DEFAULT_PRESET): void {
+// п19.2: trust — Σ довір регіонів (totalTrust); без нього — повна довіра.
+export function economyTick(
+  state: EconomyState,
+  geo: GeoState,
+  preset: DifficultyPreset = DEFAULT_PRESET,
+  trust: number = TRUST_TOTAL_MAX
+): void {
   const completedDays = geoDay(geo) - 1;
-  const effectiveAllowance = dailyAllowance(preset);
+  const effectiveAllowance = dailyAllowance(preset, trust);
   while (state.lastAllowanceDay < completedDays) {
     state.lastAllowanceDay += 1;
     state.money += effectiveAllowance;

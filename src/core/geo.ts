@@ -20,6 +20,7 @@
 
 import { mulberry32, type RNG, type Vec2 } from './combat';
 import { type DifficultyPreset, DEFAULT_PRESET, DIFFICULTY_MULTIPLIERS } from './campaign';
+import type { RegionId } from './regions';
 
 export const TICK_MINUTES = 30; // 1 тік = 30 хвилин; доба = 48 тіків
 export const WORLD_W = 16;
@@ -101,7 +102,24 @@ export type GeoEvent =
   | { type: 'base_assault'; threshold: number; minute: number }
   | { type: 'assault_won'; minute: number }
   | { type: 'assault_lost'; money: number; minute: number }
-  | { type: 'gate_lost'; minute: number };
+  | { type: 'gate_lost'; minute: number }
+  // п19.2 (ADR-0159 п. 11): зміна довіри регіону і вихід регіону (записує regions.ts з campaignTick).
+  | { type: 'region_trust'; region: RegionId; delta: number; trust: number; reason: 'ufo_left' | 'mission_won'; minute: number }
+  | { type: 'region_out'; region: RegionId; minute: number };
+
+// п19.2: як відлетів зонд ufoId (подія з індексом i): виявлений чи ні без бою, або після бою
+// (програна місія чи евакуація) — спільне правило загрози (ADR-0155) і довіри (ADR-0159 п. 11).
+export function ufoLeftKind(log: GeoEvent[], i: number, ufoId: string): 'detected' | 'undetected' | 'fought' {
+  let detected = false;
+  for (let j = i - 1; j >= 0; j--) {
+    const e = log[j];
+    if (!('ufoId' in e) || e.ufoId !== ufoId) continue;
+    if (e.type === 'mission_lost' || e.type === 'mission_evacuated') return 'fought'; // зонд відлетів після бою
+    if (e.type === 'ufo_detected') detected = true;
+    if (e.type === 'ufo_spawned') break;
+  }
+  return detected ? 'detected' : 'undetected';
+}
 
 export interface GeoState {
   minute: number; // хвилини від старту; 0 = 00:00 дня 1

@@ -4,6 +4,7 @@
 // перехоплення, місії авто-боєм, сейв і лоад посеред партії — і після кожної
 // команди перевіряються твердження про стан партії. Сід фіксований (ADR-0003).
 
+import { REGION_IDS, TRUST_MAX } from './core/regions';
 import { describe, expect, it } from 'vitest';
 import fc from 'fast-check';
 import type { Vec2 } from './core/combat';
@@ -460,6 +461,25 @@ function broken(p: Party): string[] {
       (campaign.defeatDay === null || campaign.defeatDay <= day),
     'кампанія на добу ' + day + ': загроза ' + campaign.threat + ' (повтор ' + replay + '), ' + campaign.status
   );
+
+  // п19.2 (ADR-0159 п. 11): довіра регіону — ціле 0–100, дорівнює 100 + Σ змін 'region_trust' у журналі;
+  // «вийшов» ⇔ довіра 0 ⇔ рівно одна подія 'region_out'; курсор довіри — у межах журналу.
+  for (const id of REGION_IDS) {
+    const r = campaign.regions[id];
+    let t = TRUST_MAX;
+    for (const e of geo.log) if (e.type === 'region_trust' && e.region === id) t += e.delta;
+    const outs = geo.log.filter((e) => e.type === 'region_out' && e.region === id).length;
+    must(
+      Number.isInteger(r.trust) &&
+        r.trust >= 0 &&
+        r.trust <= TRUST_MAX &&
+        r.trust === t &&
+        r.out === (r.trust === 0) &&
+        outs === (r.out ? 1 : 0),
+      'регіон ' + id + ': довіра ' + r.trust + ' (повтор ' + t + '), вийшов ' + r.out + ', подій виходу ' + outs
+    );
+  }
+  must(campaign.trustCursor <= geo.log.length, 'курсор довіри поза журналом');
   return bad;
 }
 

@@ -148,8 +148,8 @@ describe('save: зіпсовані дані (критерій П5.2)', () => {
   it('невідома/майбутня версія — throw українською', () => {
     const p = createParty(42);
     const json = serializeParty(p, 'T');
-    const v4 = JSON.stringify({ ...JSON.parse(json), version: 4 });
-    expect(() => deserializeParty(v4)).toThrow('Невідома версія збереження: 4');
+    const v5 = JSON.stringify({ ...JSON.parse(json), version: 5 });
+    expect(() => deserializeParty(v5)).toThrow('Невідома версія збереження: 5');
     const vStr = JSON.stringify({ ...JSON.parse(json), version: '1' });
     expect(() => deserializeParty(vStr)).toThrow('Невідома версія збереження');
   });
@@ -538,7 +538,7 @@ describe('save: П15.2 — «евакуйовано» (EARS 7)', () => {
     }
     completeMission(p.geo, 'uV1', 'евакуйовано');
     const json = serializeParty(p, 'T');
-    expect(SAVE_VERSION).toBe(3); // п16.2: v2 — кар'єри; п18.3: v3 — загроза; П15.2 формат не міняв
+    expect(SAVE_VERSION).toBe(4); // п16.2: v2 — кар'єри; п18.3: v3 — загроза; п19.2: v4 — довіра; П15.2 формат не міняв
     expect(json.includes('mission_evacuated')).toBe(true);
     expect(json.includes('evacuated') === json.includes('mission_evacuated')).toBe(true); // стан бою поза сейвом
     const restored = deserializeParty(json);
@@ -665,7 +665,7 @@ describe('save: Т.12 — кожне поле сейву перевіряєть�
 
   it('тексти відмов називають причину: некоректний JSON, очікувана версія', () => {
     expect(() => deserializeParty('{не json')).toThrow('Пошкоджені дані збереження: некоректний JSON');
-    expect(() => deserializeParty(corrupt('version', 4))).toThrow(`Невідома версія збереження: 4 (очікується ${SAVE_VERSION})`);
+    expect(() => deserializeParty(corrupt('version', 5))).toThrow(`Невідома версія збереження: 5 (очікується ${SAVE_VERSION})`);
   });
 
   it('round-trip стану не за замовчуванням: лікарня, погоня винищувача, НЛО в бою, рахунок кампанії', () => {

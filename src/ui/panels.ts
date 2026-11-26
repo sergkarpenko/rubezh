@@ -18,6 +18,7 @@ import {
   startRepair,
   type InterceptChoice,
 } from '../core/intercept';
+import { totalTrust } from '../core/regions';
 import { dailyAllowance, hirePrice, missionBonus } from '../core/economy';
 import { radarRange } from '../core/research';
 import type { Vec2 } from '../core/combat';
@@ -341,7 +342,7 @@ export function createPanels(deps: PanelsDeps): Panels {
     // Т.7: ставки і ціна — з ядра за пресетом (урок П9.1: числа в розмітці дрейфують)
     el('econ-rates').textContent =
       '· дотація ' +
-      dailyAllowance(preset) +
+      dailyAllowance(preset, totalTrust(party.campaign.regions)) + // п19.2: поточна дотація з довір
       '/добу · премії за місію ' +
       missionBonus('розвідник', preset) +
       '/' +

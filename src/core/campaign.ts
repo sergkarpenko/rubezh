@@ -13,7 +13,8 @@
 // масовими симуляціями Фази 8 (П8.5/П8.6). Пресети складності ('легкий'/'норма' —
 // П8.4, 'складний' — П10.3); тут лише ім'я пресета в стані (дефолт «норма», ADR-0033).
 
-import { geoDay, type GeoEvent, type GeoState } from './geo';
+import { geoDay, ufoLeftKind, type GeoEvent, type GeoState } from './geo';
+import { createRegions, regionsTick, type Regions } from './regions';
 import type { Roster } from './squad';
 import type { EconomyState } from './economy';
 
@@ -94,6 +95,9 @@ export interface CampaignState {
   defeatDay: number | null; // п18.3: доба поразки за загрозою
   threat: number; // п18.3: шкала загрози 0–100
   threatCursor: number; // п18.3: скільки подій geo.log уже враховано в загрозі
+  // п19.2 (ADR-0159 п. 11, 14): довіра регіонів і окремий курсор журналу геоцени (сейв v4).
+  regions: Regions;
+  trustCursor: number;
   // п18.4 (ADR-0155 п. 9, ADR-0156): необов'язкові поля сейва v3 — без поля 0 / false.
   assaults?: number; // скільки порогів штурму вже спрацювало (0..3)
   assaultPending?: boolean; // штурм почався і чекає бою (застосунок — бій одразу, бот — авто-бій)
@@ -101,20 +105,23 @@ export interface CampaignState {
 }
 
 export function createCampaign(preset: DifficultyPreset = DEFAULT_PRESET): CampaignState {
-  return { status: 'триває', preset, score: null, victoryDay: null, defeatDay: null, threat: 0, threatCursor: 0 };
+  return {
+    status: 'триває',
+    preset,
+    score: null,
+    victoryDay: null,
+    defeatDay: null,
+    threat: 0,
+    threatCursor: 0,
+    regions: createRegions(),
+    trustCursor: 0,
+  };
 }
 
-// Зонд ufoId до індексу i: виявлений і без бою (місія не закінчилась поразкою чи евакуацією).
+// Зонд відлетів: виявлений і без бою — +6, невиявлений — +2, після бою — 0 (ufoLeftKind, geo.ts).
 function ufoLeftDelta(log: GeoEvent[], i: number, ufoId: string): number {
-  let detected = false;
-  for (let j = i - 1; j >= 0; j--) {
-    const e = log[j];
-    if (!('ufoId' in e) || e.ufoId !== ufoId) continue;
-    if (e.type === 'mission_lost' || e.type === 'mission_evacuated') return 0; // зонд відлетів після бою
-    if (e.type === 'ufo_detected') detected = true;
-    if (e.type === 'ufo_spawned') break;
-  }
-  return detected ? THREAT_UFO_LEFT_DETECTED : THREAT_UFO_LEFT_UNDETECTED;
+  const kind = ufoLeftKind(log, i, ufoId);
+  return kind === 'fought' ? 0 : kind === 'detected' ? THREAT_UFO_LEFT_DETECTED : THREAT_UFO_LEFT_UNDETECTED;
 }
 
 // Зміна загрози від однієї події журналу геоцени (ADR-0153 п. 13); решта подій — 0.
@@ -162,6 +169,8 @@ export interface CampaignContext {
 export function campaignTick(ctx: CampaignContext, campaign: CampaignState): void {
   if (campaign.status !== 'триває') return;
   const log = ctx.geo.log;
+  // п19.2 (ADR-0159 п. 11): довіра — до загрози; її події ('region_trust', 'region_out') загрози не змінюють.
+  campaign.trustCursor = regionsTick(campaign.regions, log, campaign.trustCursor, ctx.geo.minute);
   while (campaign.threatCursor < log.length) {
     const i = campaign.threatCursor;
     campaign.threatCursor += 1;
