@@ -94,7 +94,7 @@ describe('П9.1: екран «Як грати» — контент з конст
     expect(text).toContain('«Кузня»');
     expect(text).toContain('Видача');
     expect(text).toContain('на вкладці «Загін»');
-    expect(text).toContain('Гель і граната витрачаються в бою, броня й око — ні');
+    expect(text).toContain('Гель, граната й заряд витрачаються в бою, броня й око — ні');
   });
   it('П10.2: показує версію гри зі зборки (vite define ← package.json)', () => {
     freshHelp();
