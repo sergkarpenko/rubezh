@@ -6,7 +6,7 @@
 // Чисті функції: стан бою → дані картки → HTML і місце; DOM чіпає src/ui/battle.ts.
 // п17.2 (ADR-0149 п. 15; рішення власника «А. Окремий рядок»): ближній бій — «впритул»
 // замість дальності; зброя з одним режимом — рядок «Лише …»; броня — рядок «Броня N: −N
-// від влучання». Назва типу — в імені («Гончак 1»).
+// від влучання». Назва типу — в імені; п21.5 (ADR-0179): «Гончак Скрегіт» і бюст у шапці.
 import {
   GRENADE_AP_COST,
   GRENADE_RANGE,
@@ -21,10 +21,11 @@ import {
   type ShotMode,
   type Unit,
 } from '../core/combat';
-import { enemyKind, type EnemyKind } from '../core/enemies';
+import { ENEMY_NAMES, ENEMY_ORDER, enemyKind, type EnemyKind } from '../core/enemies';
 import { ATLAS_ROW } from '../render';
 import { coverMenuLine } from './cover-ui';
 import unitAtlasUrl from '../../assets/units-atlas.png';
+import enemyPortraitsUrl from '../../assets/enemy-portraits.png';
 
 // Чому дія недоступна — ті самі перевірки, що й assertCanFire / throwGrenade ядра
 // п20.4 (ADR-0168): 'mode' — режиму немає у зброї стрільця (перша перевірка assertCanFire після цілі)
@@ -147,11 +148,43 @@ function button(action: string, label: string, ap: number, chance: string, block
 
 // п17.5 (ADR-0152; рішення власника «А. Мініатюра типу»): кадр «стій» свого ряду атласа бійців —
 // фігура (x 8–88, y 33–93 кадру 96) у 2/3 масштабу: 53 × 40 px; атлас 480 × 480 → 320 × 320.
+// п21.5 (ADR-0179): це запасний шар під бюстом — видно, якщо атлас бюстів не завантажився;
+// у колі 40 px фігуру зсунуто на FACE_SHIFT, щоб тулуб був по центру.
 export const FACE_SCALE = 2 / 3;
-export function enemyFaceStyle(kind: EnemyKind): string {
-  const x = -Math.round(8 * FACE_SCALE);
+export const FACE_SHIFT = -6;
+// п21.5 (ADR-0179; рішення власника «А. 4 на тип»): мальований бюст ворога з атласа
+// assets/enemy-portraits.png (384 × 384, клітинки 96 × 96): ряд — тип (ENEMY_ORDER), стовпець —
+// обличчя 0–3 за місцем імені в пулі типу (ENEMY_NAMES) по колу; ім'я поза пулом — обличчя 0.
+export const ENEMY_PORTRAIT_SIZE = 40;
+export const ENEMY_FACES = 4;
+export function enemyPortraitCell(kind: EnemyKind, name: string): { col: number; row: number } {
+  const i = ENEMY_NAMES[kind].indexOf(name.split(' ')[1] ?? '');
+  return { col: Math.max(i, 0) % ENEMY_FACES, row: ENEMY_ORDER.indexOf(kind) };
+}
+export function enemyFaceStyle(kind: EnemyKind, name: string): string {
+  const c = enemyPortraitCell(kind, name);
+  const atlas = ENEMY_PORTRAIT_SIZE * ENEMY_FACES;
+  const x = -Math.round(8 * FACE_SCALE) + FACE_SHIFT;
   const y = -Math.round((ATLAS_ROW[kind] * 96 + 33) * FACE_SCALE);
-  return 'background-image:url(' + unitAtlasUrl + ');background-position:' + x + 'px ' + y + 'px';
+  return (
+    'background-image:url(' +
+    enemyPortraitsUrl +
+    '),url(' +
+    unitAtlasUrl +
+    ');background-size:' +
+    atlas +
+    'px ' +
+    atlas +
+    'px,320px 320px;background-position:' +
+    -c.col * ENEMY_PORTRAIT_SIZE +
+    'px ' +
+    -c.row * ENEMY_PORTRAIT_SIZE +
+    'px,' +
+    x +
+    'px ' +
+    y +
+    'px'
+  );
 }
 
 export function enemyMenuHtml(v: EnemyMenuView): string {
@@ -159,8 +192,10 @@ export function enemyMenuHtml(v: EnemyMenuView): string {
   let html =
     '<div class="em-head"><span class="em-face" data-kind="' +
     v.kind +
+    '" data-face="' +
+    enemyPortraitCell(v.kind, v.name).col +
     '" style="' +
-    enemyFaceStyle(v.kind) +
+    enemyFaceStyle(v.kind, v.name) +
     '"></span><span class="em-name">' +
     esc(v.name) +
     '</span><span class="em-hpn">HP ' +

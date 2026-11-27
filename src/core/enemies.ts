@@ -51,7 +51,7 @@ export const EYE_BEAM: Weapon = {
 };
 
 export interface EnemyKindDef {
-  name: string; // назва типу — на полі «<назва> <N>»
+  name: string; // назва типу — перше слово імені «<назва> <ім'я>» (ENEMY_NAMES)
   hp: number;
   ap: number;
   accuracy: readonly number[]; // за порядком серед свого типу, циклічно
@@ -105,14 +105,42 @@ export function enemyMix(avail: readonly EnemyKind[], n: number, seed: number): 
   return kinds;
 }
 
-// Ворог типу kind: index — порядок серед свого типу від 0 (ім'я «<назва> <index+1>»,
+// п21.5 (ADR-0179, рішення власника «А. Як запропоновано»): пул імен на тип — коротко,
+// вигадані, без реальних культурних імен (`docs/design/setting.md`); по 8 — більше, ніж ворогів
+// одного типу в бою (≤ 6), тож у бою без повторів. Ім'я не закінчується на «-а»/«-я»:
+// рід у текстах — за першим словом, назвою типу (`isFeminineName`, src/ui/text.ts).
+export const ENEMY_NAMES: Readonly<Record<EnemyKind, readonly string[]>> = {
+  demon: ['Вирг', 'Хрозз', 'Карх', 'Грумх', 'Тракз', 'Мохр', 'Згарр', 'Кхаш'],
+  hound: ['Скрегіт', 'Рик', 'Хрип', 'Шкряб', 'Гарк', 'Клац', 'Вереск', 'Хрусь'],
+  golem: ['Клепач', 'Поршень', 'Болт', 'Шатун', 'Клапан', 'Котел', 'Гвинт', 'Брязк'],
+  eye: ['Зір', 'Відблиск', 'Спалах', 'Мерех', 'Блиск', 'Жар', 'Сяйв', 'Полиск'],
+};
+
+// Зсув пулу за сідом місії і типом — ціла арифметика без RNG (ADR-0179 п. 2): бойовий RNG
+// і генератор складу не зсуваються; той самий сід — ті самі імена.
+export function enemyNameStart(kind: EnemyKind, seed: number): number {
+  const h = Math.imul((seed ^ ENEMY_NAME_SALT) >>> 0, 0x85ebca6b) + Math.imul(ENEMY_ORDER.indexOf(kind) + 1, 0x27d4eb2f);
+  return ((h ^ (h >>> 15)) >>> 0) % ENEMY_NAMES[kind].length;
+}
+export const ENEMY_NAME_SALT = 0x5bd1e995;
+
+// «<Тип> <ім'я>»: index — порядок серед свого типу від 0; пул вичерпано — ім'я + номер кола
+// («Демон Вирг 2», як `scientistName`, src/core/research.ts).
+export function enemyName(kind: EnemyKind, index: number, seed: number): string {
+  const pool = ENEMY_NAMES[kind];
+  const base = pool[(enemyNameStart(kind, seed) + index) % pool.length];
+  const round = Math.floor(index / pool.length);
+  return ENEMY_KINDS[kind].name + ' ' + base + (round > 0 ? ' ' + (round + 1) : '');
+}
+
+// Ворог типу kind: index — порядок серед свого типу від 0 (ім'я — `enemyName` за сідом місії,
 // точність — за цим порядком). Демон — без полів kind і armor (байт-у-байт як до фази 17).
-export function makeEnemy(kind: EnemyKind, id: string, index: number, pos: Vec2): Unit {
+export function makeEnemy(kind: EnemyKind, id: string, index: number, pos: Vec2, seed = 0): Unit {
   const d = ENEMY_KINDS[kind];
   const u = makeUnit({
     id,
     side: 'alien',
-    name: d.name + ' ' + (index + 1),
+    name: enemyName(kind, index, seed),
     pos: { ...pos },
     firingAccuracy: d.accuracy[index % d.accuracy.length],
     weapon: d.weapon,
@@ -127,8 +155,8 @@ export function makeEnemy(kind: EnemyKind, id: string, index: number, pos: Vec2)
   return u;
 }
 
-// Вороги місії за складом: id 'a1'.., імена — за порядком серед свого типу.
-export function makeEnemies(kinds: readonly EnemyKind[], spawn: readonly Vec2[]): Unit[] {
+// Вороги місії за складом: id 'a1'.., імена — з пулу типу за порядком серед свого типу і сідом місії.
+export function makeEnemies(kinds: readonly EnemyKind[], spawn: readonly Vec2[], seed = 0): Unit[] {
   const seen: Record<EnemyKind, number> = { demon: 0, hound: 0, golem: 0, eye: 0 };
-  return kinds.map((k, i) => makeEnemy(k, 'a' + (i + 1), seen[k]++, spawn[i]));
+  return kinds.map((k, i) => makeEnemy(k, 'a' + (i + 1), seen[k]++, spawn[i], seed));
 }

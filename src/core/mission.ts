@@ -228,7 +228,7 @@ export function createMission(geo: GeoState, probeId: string, opts: CreateMissio
   // не зсувається; п18.3 (ADR-0153 п. 14): доступні типи — за загрозою, а не за добою.
   // П12.6 (ADR-0064): «демон Розриву», не «прибулець».
   const n = ALIENS_PER_KIND[probe.kind];
-  const aliens: Unit[] = makeEnemies(enemyMix(kindsForThreat(opts.threat ?? 0), n, seed), ALIEN_SPAWN);
+  const aliens: Unit[] = makeEnemies(enemyMix(kindsForThreat(opts.threat ?? 0), n, seed), ALIEN_SPAWN, seed);
 
   const state = createGame({
     map,
