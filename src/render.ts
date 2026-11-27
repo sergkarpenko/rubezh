@@ -797,7 +797,8 @@ export const PROBE_LANDED_ALPHA = 0.8;
 
 // п21.7 (кандидат 210 а, рішення власника «Світіння дрона-розвідника»): темний дрон-розвідник (34 px)
 // губився на темних дахах картини міста — під значком м'яке пурпурове світіння Розриву (радіус
-// PROBE_SCOUT_GLOW_R, від PROBE_SCOUT_GLOW до прозорого). Мок-контекст без градієнтів — без світіння.
+// PROBE_SCOUT_GLOW_R, від PROBE_SCOUT_GLOW до прозорого) — лише в польоті: у приземленого того самого
+// кольору кільце посадки, світіння його замивало (аудит PR #544). Мок-контекст без градієнтів — без світіння.
 export const PROBE_SCOUT_GLOW = 'rgba(255,46,136,0.55)';
 export const PROBE_SCOUT_GLOW_R = 24;
 
@@ -823,7 +824,7 @@ export function drawProbeSprite(ctx: CanvasRenderingContext2D, u: ProbeSprite): 
       ctx.lineWidth = 1;
       ctx.globalAlpha = PROBE_LANDED_ALPHA;
     }
-    if (u.kind === 'розвідник') drawScoutGlow(ctx, u.cx, u.cy);
+    if (u.kind === 'розвідник' && !u.landed) drawScoutGlow(ctx, u.cx, u.cy); // приземлений — кільце посадки, без світіння
     drawGeoIcon(ctx, u.kind === 'розвідник' ? 'scout' : 'harvester', u.cx, u.cy);
     ctx.globalAlpha = 1;
     return;

@@ -137,7 +137,7 @@ describe('п19.5 (ADR-0163): значки геосцени з аркуша Gemin
     }
   });
 
-  it('п21.7: під розвідником — пурпурове світіння радіуса PROBE_SCOUT_GLOW_R до значка; збирач — без світіння', () => {
+  it('п21.7: під розвідником — пурпурове світіння радіуса PROBE_SCOUT_GLOW_R до значка; збирач і приземлений — без світіння', () => {
     ready();
     const stops: unknown[][] = [];
     const glow = (): { ctx: CanvasRenderingContext2D; calls: Call[]; sets: { p: string; v: unknown }[] } => {
@@ -168,6 +168,11 @@ describe('п19.5 (ADR-0163): значки геосцени з аркуша Gemin
     const harv = glow();
     drawProbeSprite(harv.ctx, { cx: 504, cy: 24, landed: false, kind: 'збирач' });
     expect(harv.calls.some((c) => c.m === 'createRadialGradient')).toBe(false);
+    // аудит PR #544: приземлений розвідник — кільце посадки без світіння (той самий колір замивав кільце)
+    const landed = glow();
+    drawProbeSprite(landed.ctx, { cx: 504, cy: 24, landed: true, kind: 'розвідник' });
+    expect(landed.calls.some((c) => c.m === 'createRadialGradient')).toBe(false);
+    expect(landed.calls.some((c) => c.m === 'ellipse')).toBe(true);
   });
 
   it('приземлений зонд: кільце посадки під значком, значок приглушений, альфа повертається до 1', () => {
