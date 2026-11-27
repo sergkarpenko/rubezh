@@ -8,7 +8,8 @@
 // (typeof document): node-середовище (vitest) імпортує модуль без побічних ефектів.
 
 import { tabStop } from './ui/tab-stop';
-import { advanceTime } from './core/geo';
+import { advanceTime, geoDay } from './core/geo';
+import { SCENARIOS, scenarioParty, type ScenarioId } from './core/scenarios';
 import { chooseRole, hireSoldier, hospitalTick, isBankrupt, readySoldiers } from './core/squad';
 import { completeAssault } from './core/assault';
 import { awaitingRole, type SoldierRole } from './core/career';
@@ -250,6 +251,7 @@ const OVERLAY_IDS = [
   'settings-dialog',
   'save-dialog',
   'new-game-dialog',
+  'scenario-dialog', // Т.218: «Сценарії для перевірки»
   'exit-confirm',
   'campaign-victory',
   'campaign-defeat', // п18.5 (ADR-0157): екран поразки
@@ -272,6 +274,7 @@ const OVERLAY_ESC_CLOSE: Record<string, string> = {
   'help-screen': 'btn-help-close',
   'game-menu': 'btn-menu-close',
   'new-game-dialog': 'btn-new-game-cancel',
+  'scenario-dialog': 'btn-scenario-cancel', // Т.218
 };
 // Т.75: елементи, на які Tab ставить фокус (пастка фокусу у вікні)
 // Т.218: і `summary` («Додатково» в «Новій партії»)
@@ -728,6 +731,27 @@ function startNewParty(seed: number, preset: DifficultyPreset = 'норма'): v
   journal('Нова партія (сід ' + seed + ', складність «' + party.campaign.preset + '»). Рухайте час — сенсорна сітка шукає зонди Розриву.');
 }
 
+// Т.218 (рішення власника «7 віх, кнопка на старті»): сценарій для перевірки — партію з фіксованого
+// сіду до віхи доводить бот кампанії (src/core/scenarios.ts); збереження не змінюються, контрольна точка —
+// стан сценарію (виходу без змін «Незбережені зміни» не питає). Віхи немає — false, лишаємось на старті.
+function startScenario(id: ScenarioId): boolean {
+  let p: Party;
+  try {
+    p = scenarioParty(id);
+  } catch {
+    return false;
+  }
+  battle.close();
+  geoAnim.cancel();
+  party = adoptParty(p);
+  renderAll();
+  const sc = SCENARIOS.find((s) => s.id === id);
+  journal(
+    `Сценарій «${sc?.title ?? id}» (сід ${sc?.seed ?? '?'}, складність «${p.campaign.preset}», доба ${geoDay(p.geo)}): партію до віхи довів бот.`
+  );
+  return true;
+}
+
 // П12.2 (ADR-0065): «Продовжити» — останній активний слот через API панелі
 // збереження (ADR-0026); завантаження приймає партію (adoptLoaded →
 // adoptParty) і повертає успіх для переходу на ігровий екран.
@@ -1054,6 +1078,7 @@ if (typeof document !== 'undefined') {
     },
     onNewGame: startNewParty,
     onContinue: continueGame,
+    onScenario: startScenario,
     onHelp: help.open,
     onSettings: settings.open, // П12.3: зі стартового екрана і з меню гри
     // Т.128 (ADR-0117): вікно «Збереження» з меню — слоти на момент відкриття, фокус на «Закрити» (правила Т.73)
