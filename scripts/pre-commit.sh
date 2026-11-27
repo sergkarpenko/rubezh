@@ -64,6 +64,20 @@ if git diff --cached --name-only | grep -qE '^\.github/workflows/'; then
     fi
 fi
 
+# 1d. Типи скриптів (ADR-0174, кандидат 206): коміт зі scripts/*.ts, кореневим playwright*.config.ts
+# чи e2e/smoke.e2e.ts — `tsc -p tsconfig.scripts.json` тут, а не лише в CI після пушу
+# (Т.217: помилку типів скрипта знайшов CI). Без таких файлів — пропуск (≈ 5 с економії).
+if git diff --cached --name-only --diff-filter=ACMR | grep -qE '^(scripts/[^/]+\.ts|playwright[^/]*\.config\.ts|e2e/smoke\.e2e\.ts)$'; then
+    echo ""
+    echo "--- Типи скриптів (tsc -p tsconfig.scripts.json) ---"
+    if npx tsc --noEmit -p tsconfig.scripts.json; then
+        echo "[OK] Типи скриптів"
+    else
+        echo "[FAIL] Помилки типів у скриптах (ADR-0174)"
+        exit 1
+    fi
+fi
+
 # 2. Запуск тестів — лише коли коміт чіпає більше, ніж документи і допоміжні скрипти
 # (ADR-0146: рівень full за scripts/ci-scope.sh; помилка скрипта чи порожній вивід — тести)
 echo ""
