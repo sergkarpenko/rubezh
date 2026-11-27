@@ -18,7 +18,7 @@ import { MACHINE_GUN, SHOTGUN } from '../core/weapons';
 function game(shooterAt: { x: number; y: number }, alienAt: { x: number; y: number }, blocked: string[] = []): GameState {
   const map = { width: 20, height: 20, blocked: new Set(blocked) };
   const s = makeUnit({ id: 's1', name: 'Олена', side: 'player', pos: shooterAt, firingAccuracy: 0.65 });
-  const a = makeUnit({ id: 'a1', name: 'Демон 1', side: 'alien', pos: alienAt, hp: 4 });
+  const a = makeUnit({ id: 'a1', name: 'Демон Карх', side: 'alien', pos: alienAt, hp: 4 });
   return createGame({ map, units: [s, a], items: { s1: { medkit: false, grenade: true } } });
 }
 const unit = (st: GameState, id: string): Unit => st.units.find((u) => u.id === id)!;
@@ -98,7 +98,7 @@ describe('enemyMenuView', () => {
     const st = game({ x: 2, y: 2 }, { x: 5, y: 2 });
     const a = unit(st, 'a1');
     const v = enemyMenuView(st, a, undefined);
-    expect(v).toMatchObject({ id: 'a1', name: 'Демон 1', hp: 4, maxHp: 10, weapon: a.weapon.name, weaponRange: a.weapon.range });
+    expect(v).toMatchObject({ id: 'a1', name: 'Демон Карх', hp: 4, maxHp: 10, weapon: a.weapon.name, weaponRange: a.weapon.range });
     expect(v.shooter).toBeNull();
     expect(enemyMenuHtml(v)).toContain('Виберіть бійця');
     expect(enemyMenuHtml(v)).not.toContain('<button');

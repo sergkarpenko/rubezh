@@ -4,7 +4,7 @@
 // генератор від сіду місії (`ENEMY_MIX_SALT`), бойовий RNG не зсувається.
 //
 // Відсутній `Unit.kind` ≡ демон (ADR-0149 п. 9): демона ядро будує без поля,
-// тож бій лише з демонами — байт-у-байт як до фази 17.
+// тож бій лише з демонами — байт-у-байт як до фази 17, крім імені (п21.5: з пулу, ADR-0179).
 
 import { ALIEN_CUTTER, makeUnit, mulberry32, type ShotProfile, type Unit, type Vec2, type Weapon } from './combat';
 
@@ -107,7 +107,7 @@ export function enemyMix(avail: readonly EnemyKind[], n: number, seed: number): 
 
 // п21.5 (ADR-0179, рішення власника «А. Як запропоновано»): пул імен на тип — коротко,
 // вигадані, без реальних культурних імен (`docs/design/setting.md`); по 8 — більше, ніж ворогів
-// одного типу в бою (≤ 6), тож у бою без повторів. Ім'я не закінчується на «-а»/«-я»:
+// одного типу в бою (≤ 3: місія ≤ 3 ворогів, штурм — 4, Брама — 4 типи + 2), тож у бою без повторів. Ім'я не закінчується на «-а»/«-я»:
 // рід у текстах — за першим словом, назвою типу (`isFeminineName`, src/ui/text.ts).
 export const ENEMY_NAMES: Readonly<Record<EnemyKind, readonly string[]>> = {
   demon: ['Вирг', 'Хрозз', 'Карх', 'Грумх', 'Тракз', 'Мохр', 'Згарр', 'Кхаш'],
@@ -134,7 +134,7 @@ export function enemyName(kind: EnemyKind, index: number, seed: number): string 
 }
 
 // Ворог типу kind: index — порядок серед свого типу від 0 (ім'я — `enemyName` за сідом місії,
-// точність — за цим порядком). Демон — без полів kind і armor (байт-у-байт як до фази 17).
+// точність — за цим порядком). Демон — без полів kind і armor (як до фази 17; ім'я — з пулу, п21.5).
 export function makeEnemy(kind: EnemyKind, id: string, index: number, pos: Vec2, seed = 0): Unit {
   const d = ENEMY_KINDS[kind];
   const u = makeUnit({

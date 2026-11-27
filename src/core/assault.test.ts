@@ -23,8 +23,8 @@ import {
   gateOpen,
   makeTurret,
 } from './assault';
-import { ENEMY_ORDER, kindsForThreat, enemyKind } from './enemies';
-import { SQUAD_SPAWN, connectedMap, missionOutcome } from './mission';
+import { ENEMY_ORDER, kindsForThreat, enemyKind, enemyName } from './enemies';
+import { SQUAD_SPAWN, connectedMap, missionOutcome, textSeed } from './mission';
 import { DEFAULT_PARTY_POLICY, partyBotAssaultStep, partyBotGateStep } from './party-bot';
 import { applyMissionResult, readySoldiers } from './squad';
 import { createParty, deserializeParty, serializeParty, type Party } from './save';
@@ -101,6 +101,19 @@ describe('п18.4: пороги штурму в campaignTick (ADR-0153 п. 16)', 
   });
 });
 
+// п21.5 (ADR-0179, аудит PR #542): імена — «<Тип> <ім'я>» з пулу за сідом бою, порядок — серед свого типу
+function expectNamesBySeed(aliens: readonly Unit[], seed: number): void {
+  const seen = new Map<string, number>();
+  const want = aliens.map((u) => {
+    const k = enemyKind(u);
+    const i = seen.get(k) ?? 0;
+    seen.set(k, i + 1);
+    return enemyName(k, i, seed);
+  });
+  expect(aliens.map((u) => u.name)).toEqual(want);
+  expect(new Set(want).size).toBe(want.length);
+}
+
 describe('п18.4: бій штурму (createAssault)', () => {
   it('без штурму — відмова; 4 вороги за загрозою на ASSAULT_SPAWN, без евакуації, без турелей до «Ключа брами»', () => {
     const p = createParty(42);
@@ -120,6 +133,7 @@ describe('п18.4: бій штурму (createAssault)', () => {
     for (const a of aliens) expect(kindsForThreat(60)).toContain(enemyKind(a));
     expect(m.state.evacZone).toBeUndefined(); // рішення власника «А»: евакуації немає
     expect(m.state.units.some((u) => u.turret)).toBe(false);
+    expectNamesBySeed(aliens, textSeed('штурм:' + (p.campaign.assaults ?? 0) + ':' + p.geo.minute));
     // детермінізм: той самий стан — той самий бій
     const again = createAssault(p, { squad: squadOf(p) });
     expect([...again.state.map.blocked].sort()).toEqual([...m.state.map.blocked].sort());
@@ -296,6 +310,7 @@ describe('п18.4: фінал «Брама Розриву» (ADR-0153 п. 17)', (
     expect(m.state.evacZone).toEqual(SQUAD_SPAWN);
     expect(m.state.enemyZone).toEqual(GATE_SPAWN);
     expect(m.state.units.filter((u) => u.side === 'player').map((u) => u.pos)).toEqual(SQUAD_SPAWN);
+    expectNamesBySeed(aliens, textSeed('брама:' + p.geo.minute));
   });
 
   it('перемога — «перемога» партії з рахунком і подією campaign_victory; далі загроза не росте', () => {

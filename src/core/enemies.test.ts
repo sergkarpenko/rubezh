@@ -259,7 +259,7 @@ describe('п21.5: імена ворогів з пулу (ADR-0179)', () => {
     expect(new Set(ENEMY_ORDER.map((k) => enemyNameStart(k, 3))).size).toBeGreaterThan(1);
   });
 
-  it('у бою без повторів: місія, штурм (4) і Брама (6) — імена різні; бойовий RNG не зсунуто', () => {
+  it('у бою без повторів: місії на різних загрозах і шість демонів поспіль — імена різні; бойовий RNG місії не зсунуто (штурм і Брама — assault.test.ts)', () => {
     for (let d = 1; d <= 30; d++) {
       for (const threat of [0, 30, 90]) {
         const g = geoOnDay(d);

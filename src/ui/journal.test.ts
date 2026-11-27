@@ -457,11 +457,11 @@ describe('Journal: drain* — seen-трекінг подій', () => {
       evBattle({ type: 'shot', shooterId: 's1', targetId: 'a1', mode: 'snap', hit: false, damage: 0 }),
     ];
     const j = createJournal(
-      makeDeps({ battleLog: () => battleLog, unitName: (id) => (id === 's1' ? 'Гарт' : 'Гончак 1'), isMelee: (id) => id === 'a1' })
+      makeDeps({ battleLog: () => battleLog, unitName: (id) => (id === 's1' ? 'Гарт' : 'Гончак Скрегіт'), isMelee: (id) => id === 'a1' })
     );
     j.drainBattle();
     const texts = [...document.querySelectorAll<HTMLLIElement>('#log li')].map((li) => li.textContent);
-    expect(texts).toEqual(['Гарт → Гончак 1 (швидкий): промах', 'Гончак 1 → Гарт (кігті): −5']);
+    expect(texts).toEqual(['Гарт → Гончак Скрегіт (швидкий): промах', 'Гончак Скрегіт → Гарт (кігті): −5']);
   });
 
   it('П11.7 (ADR-0059): drain викликає хуки звуку для кожної події один раз (seen-трекінг)', () => {
