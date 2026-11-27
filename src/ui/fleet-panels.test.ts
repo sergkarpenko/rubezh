@@ -6,12 +6,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { advanceTime, detectedProbes, type Probe } from '../core/geo';
 import { FIGHTER_MAX_HP, addFighter, fighterInBattle, startIntercept } from '../core/intercept';
-import { REGION_IDS, REGION_OF, type RegionId } from '../core/regions';
+import { REGION_IDS, REGION_NAMES, REGION_OF, type RegionId } from '../core/regions';
 import { createParty, type Party } from '../core/save';
 import { INTERCEPTOR_COST } from '../core/workshop';
 import { initPixelSprites } from '../render';
 import { activeFighter, createPanels, fighterBtnId, gunModuleReady, nearestReady, type PanelsDeps } from './panels';
-import { drawRegionsLayer, fightersIn, regionRect, regionShare, renderRegions, trustColor } from './regions-panel';
+import { drawRegionsLayer, fightersIn, OUT_WORD, regionRect, regionShare, renderRegions, trustColor } from './regions-panel';
 import { createWorkshopPanel } from './workshop-panel';
 import { NEXT_STEP, nextStep } from './next-step';
 
@@ -345,9 +345,18 @@ describe('п19.4: «Регіони» і шар мапи', () => {
     expect(fightersIn(party, 'east')).toBe(2);
     expect(document.getElementById('region-south')!.classList.contains('out')).toBe(true);
     expect(document.querySelector('#region-south .rg-trust')!.textContent).toBe('✗');
-    expect(document.querySelector('#region-south .rg-share')!.textContent).toBe('вийшов');
+    expect(document.querySelector('#region-south .rg-share')!.textContent).toBe('вийшли'); // «Нетрі» — множина (п21.7)
     expect(regionShare(party, 'south')).toBe(0);
     expect(document.getElementById('regions-total')!.textContent).toBe('Дотація разом: 48/добу'); // 75 × 255 / 400 = 47,8
+  });
+
+  it('п21.7: статус району, що вийшов, — у роді й числі назви', () => {
+    expect(REGION_IDS.map((id) => REGION_NAMES[id] + ' ' + OUT_WORD[id])).toEqual([
+      'Порт вийшов',
+      'Шпилі вийшли',
+      'Промзона вийшла',
+      'Нетрі вийшли',
+    ]);
   });
 
   it('колір довіри — межі 70 і 40', () => {

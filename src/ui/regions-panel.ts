@@ -10,6 +10,10 @@ import type { Party } from '../core/save';
 import { el } from './dom';
 
 // Колір довіри: висока — ціан «Рубіжу», середня — бурштин, низька — червоний (межі — третини шкали).
+// п21.7 (кандидат 210 б, рішення власника «вийшов» за родом району): статус району, що вийшов, —
+// у роді й числі назви поряд («Порт вийшов», «Промзона вийшла», «Шпилі вийшли», «Нетрі вийшли»).
+export const OUT_WORD: Record<RegionId, string> = { west: 'вийшов', north: 'вийшли', east: 'вийшла', south: 'вийшли' };
+
 export function trustColor(trust: number): string {
   return trust >= 70 ? '#00e5ff' : trust >= 40 ? '#ffb454' : '#ff6b6b';
 }
@@ -50,7 +54,7 @@ export function renderRegions(party: Party): void {
       '"></i></span><span class="rg-trust">' +
       (r.out ? '✗' : trust) +
       '</span><span class="meta rg-share">' +
-      (r.out ? 'вийшов' : regionShare(party, id) + '/добу') +
+      (r.out ? OUT_WORD[id] : regionShare(party, id) + '/добу') +
       '</span>';
     row.title = r.out
       ? REGION_NAMES[id] + ': район вийшов — дотації немає'

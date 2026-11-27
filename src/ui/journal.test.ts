@@ -318,6 +318,8 @@ describe('battleEventText: події бою → журнал', () => {
     });
     // Т.7: рід дієслова — за іменем («Олена загинула», не «загинув»)
     expect(battleEventText(evBattle({ type: 'death', unitId: 's2', killerId: 'a1' }), () => 'Олена')?.text).toBe('✝ Олена загинула');
+    // п21.7 (кандидат 213 а): «Око» — середній рід
+    expect(battleEventText(evBattle({ type: 'death', unitId: 'a3', killerId: 's1' }), () => 'Око Зір')?.text).toBe('✝ Око Зір загинуло');
     expect(battleEventText(evBattle({ type: 'move', unitId: 's1', from: { x: 0, y: 0 }, to: { x: 1, y: 0 } }), name)).toBe(null);
     expect(battleEventText(evBattle({ type: 'turn', turn: 2, side: 'alien' }), name)).toBe(null);
     expect(battleEventText(evBattle({ type: 'overwatch', unitId: 's1', armed: true }), name)).toBe(null);

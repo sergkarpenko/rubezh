@@ -89,7 +89,8 @@ describe('П12.2: екрани — стартовий і ігровий (ADR-006
     const deps = makeDeps();
     createScreens(deps).showStart();
     expect($('start-logo').textContent).toBe('РУБІЖ');
-    expect(document.querySelector('.start-tagline')!.textContent).toContain('Розрив'); // ADR-0064: термінологія одразу
+    // ADR-0064: термінологія одразу; п21.7 — підпис за словником сетингу (рішення власника)
+    expect(document.querySelector('.start-tagline')!.textContent).toBe('Остання лінія оборони міста проти Розриву');
     expect(btn('btn-start-new').textContent).toBe('Нова партія');
     expect(btn('btn-start-continue').textContent).toBe('Продовжити');
     expect(btn('btn-start-help').textContent).toBe('Як грати');

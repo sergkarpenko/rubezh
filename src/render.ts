@@ -795,6 +795,23 @@ export function drawFighterSprite(ctx: CanvasRenderingContext2D, f: FighterSprit
 export const PROBE_LANDED_RING = 'rgba(255,46,136,0.75)';
 export const PROBE_LANDED_ALPHA = 0.8;
 
+// п21.7 (кандидат 210 а, рішення власника «Світіння дрона-розвідника»): темний дрон-розвідник (34 px)
+// губився на темних дахах картини міста — під значком м'яке пурпурове світіння Розриву (радіус
+// PROBE_SCOUT_GLOW_R, від PROBE_SCOUT_GLOW до прозорого). Мок-контекст без градієнтів — без світіння.
+export const PROBE_SCOUT_GLOW = 'rgba(255,46,136,0.55)';
+export const PROBE_SCOUT_GLOW_R = 24;
+
+function drawScoutGlow(ctx: CanvasRenderingContext2D, cx: number, cy: number): void {
+  const g = typeof ctx.createRadialGradient === 'function' ? ctx.createRadialGradient(cx, cy, 0, cx, cy, PROBE_SCOUT_GLOW_R) : undefined;
+  if (!g) return;
+  g.addColorStop(0, PROBE_SCOUT_GLOW);
+  g.addColorStop(1, 'rgba(255,46,136,0)');
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.arc(cx, cy, PROBE_SCOUT_GLOW_R, 0, Math.PI * 2);
+  ctx.fill();
+}
+
 export function drawProbeSprite(ctx: CanvasRenderingContext2D, u: ProbeSprite): void {
   if (geoIconsImg !== null) {
     if (u.landed) {
@@ -806,6 +823,7 @@ export function drawProbeSprite(ctx: CanvasRenderingContext2D, u: ProbeSprite): 
       ctx.lineWidth = 1;
       ctx.globalAlpha = PROBE_LANDED_ALPHA;
     }
+    if (u.kind === 'розвідник') drawScoutGlow(ctx, u.cx, u.cy);
     drawGeoIcon(ctx, u.kind === 'розвідник' ? 'scout' : 'harvester', u.cx, u.cy);
     ctx.globalAlpha = 1;
     return;

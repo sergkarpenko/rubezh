@@ -3,7 +3,7 @@
 // і змушує звірити правило «-а/-я — жіночий рід»).
 import { describe, expect, it } from 'vitest';
 import { SOLDIER_NAMES } from '../core/squad';
-import { byGender, daysText, isFeminineName, plural, probeNo, ticksText } from './text';
+import { byGender, daysText, isFeminineName, isNeuterName, plural, probeNo, ticksText } from './text';
 
 describe('ticksText: узгодження числівника з «тік»', () => {
   it('1 → тік; 2–4 → тіки; 0 і 5–20 → тіків', () => {
@@ -45,6 +45,12 @@ describe('рід за іменем: пул імен ядра (SOLDIER_NAMES)', (
   it('byGender обирає форму слова', () => {
     expect(byGender('Олена', 'загинув', 'загинула')).toBe('загинула');
     expect(byGender('Іван', 'загинув', 'загинула')).toBe('загинув');
+    // п21.7: «Око <ім'я>» — середній рід, якщо форму передано; без неї — чоловічий, як до п21.7
+    expect(byGender('Око Зір', 'загинув', 'загинула', 'загинуло')).toBe('загинуло');
+    expect(byGender('Око Зір', 'загинув', 'загинула')).toBe('загинув');
+    expect(byGender('Демон Карх', 'загинув', 'загинула', 'загинуло')).toBe('загинув');
+    expect(isNeuterName('Око Зір')).toBe(true);
+    expect(isNeuterName('Оксана')).toBe(false);
   });
 });
 

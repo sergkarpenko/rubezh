@@ -13,6 +13,8 @@ import {
   drawGeoBaseSprite,
   drawHangarSprite,
   drawProbeSprite,
+  PROBE_SCOUT_GLOW,
+  PROBE_SCOUT_GLOW_R,
   initGeoIcons,
   initGeoTower,
   initPixelSprites,
@@ -133,6 +135,39 @@ describe('п19.5 (ADR-0163): значки геосцени з аркуша Gemin
       expect(r.calls.some((c) => c.m === 'ellipse')).toBe(false);
       expect(r.sets.filter((x) => x.p === 'globalAlpha').map((x) => x.v)).toEqual([1]);
     }
+  });
+
+  it('п21.7: під розвідником — пурпурове світіння радіуса PROBE_SCOUT_GLOW_R до значка; збирач — без світіння', () => {
+    ready();
+    const stops: unknown[][] = [];
+    const glow = (): { ctx: CanvasRenderingContext2D; calls: Call[]; sets: { p: string; v: unknown }[] } => {
+      const r = rec();
+      const grad = { addColorStop: (...a: unknown[]): void => void stops.push(a) };
+      const ctx = new Proxy(r.ctx as unknown as object, {
+        get: (t, p) =>
+          p === 'createRadialGradient'
+            ? (...a: unknown[]): unknown => {
+                r.calls.push({ m: p, args: a });
+                return grad;
+              }
+            : Reflect.get(t, p),
+      });
+      return { ...r, ctx: ctx as unknown as CanvasRenderingContext2D };
+    };
+    const scout = glow();
+    drawProbeSprite(scout.ctx, { cx: 504, cy: 24, landed: false, kind: 'розвідник' });
+    expect(scout.calls.find((c) => c.m === 'createRadialGradient')!.args).toEqual([504, 24, 0, 504, 24, PROBE_SCOUT_GLOW_R]);
+    expect(stops).toEqual([
+      [0, PROBE_SCOUT_GLOW],
+      [1, 'rgba(255,46,136,0)'],
+    ]);
+    expect(scout.calls.find((c) => c.m === 'arc')!.args).toEqual([504, 24, PROBE_SCOUT_GLOW_R, 0, Math.PI * 2]);
+    // світіння — під значком
+    expect(scout.calls.findIndex((c) => c.m === 'fill')).toBeLessThan(scout.calls.findIndex((c) => c.m === 'drawImage'));
+    expect(images(scout.calls)).toEqual([iconArgs('scout', 504, 24)]);
+    const harv = glow();
+    drawProbeSprite(harv.ctx, { cx: 504, cy: 24, landed: false, kind: 'збирач' });
+    expect(harv.calls.some((c) => c.m === 'createRadialGradient')).toBe(false);
   });
 
   it('приземлений зонд: кільце посадки під значком, значок приглушений, альфа повертається до 1', () => {
