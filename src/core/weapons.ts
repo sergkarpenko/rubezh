@@ -35,7 +35,8 @@ export const MACHINE_GUN: Weapon = {
   name: 'Кулемет «Град»',
   damage: [3, 5],
   range: 12,
-  modes: sameModes({ apCost: 5, accuracyMod: 0.45, shots: 4 }),
+  // п20.6 (ADR-0170): ×0,45 → ×0,6 — рішення власника «В. Град ×0,6» після probe бота кампанії
+  modes: sameModes({ apCost: 5, accuracyMod: 0.6, shots: 4 }),
   only: ['auto'],
 };
 

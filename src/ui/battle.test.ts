@@ -551,7 +551,7 @@ describe('battle: флоу місії (запуск/закриття/завер�
     expect([ap('btn-aimed'), tile('btn-aimed').title]).toEqual(['6 AP', '6 AP · ×1,3 · 1 куля · клавіша 2']);
     sel.weapon = MACHINE_GUN;
     f.battle.renderBattle();
-    expect([ap('btn-auto'), tile('btn-auto').title]).toEqual(['5 AP', '5 AP · ×0,45 · 4 кулі · клавіша 3']);
+    expect([ap('btn-auto'), tile('btn-auto').title]).toEqual(['5 AP', '5 AP · ×0,6 · 4 кулі · клавіша 3']);
     f.ui.selectedId = null; // без вибору — числа «Гарта»
     f.battle.renderBattle();
     expect([ap('btn-aimed'), ap('btn-auto'), tile('btn-auto').title]).toEqual(['5 AP', '4 AP', '4 AP · ×0,5 · 3 кулі · клавіша 3']);

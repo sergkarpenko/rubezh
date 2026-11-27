@@ -18,6 +18,7 @@ import { advanceTime, missionTargets } from './geo';
 import { BALANCED_POLICY, PASSIVE_POLICY } from './intercept-bot';
 import {
   CAMPAIGN_POLICY,
+  CAMPAIGN_SCIENTISTS,
   DEFAULT_PARTY_POLICY,
   SCIENCE_POLICY,
   TICKS_PER_DAY,
@@ -519,11 +520,15 @@ describe('П11.8: partyBotScienceStep — детерміновані рішен�
 describe('п18.6: політика кампанії (CAMPAIGN_POLICY)', () => {
   const BASE = { ...CAMPAIGN_POLICY, scientistsUpTo: 0, projects: [] as ProjectId[], equip: false };
 
-  it('склад політики: три техноманти, броня і три ключові протоколи за порядком, заряд, дозор у кожному бою, фінал зі званнями', () => {
+  // п20.6 (ADR-0170): п'ять техномантів, протоколи зброї після ключових, зброя за роллю, дозор з укриттям
+  it('склад політики: п’ять техномантів, броня, три ключові протоколи і зброя за порядком, заряд, дозор з укриттям у кожному бою, фінал зі званнями', () => {
+    expect(CAMPAIGN_SCIENTISTS).toBe(5);
     expect(CAMPAIGN_POLICY).toMatchObject({
       name: 'campaign',
-      scientistsUpTo: 3,
-      projects: ['armor', 'rift-anatomy', 'gate-bearing', 'gate-key'],
+      scientistsUpTo: 5,
+      projects: ['armor', 'rift-anatomy', 'gate-bearing', 'gate-key', 'shotgun', 'mg', 'optics', 'sniper'],
+      holdCover: true,
+      weapons: true,
       workshopOrders: ['armor', 'breach-charge'],
       equip: true,
       fireScientistsWhenDone: true,
@@ -539,7 +544,10 @@ describe('п18.6: політика кампанії (CAMPAIGN_POLICY)', () => {
   // сід 7 — на 37-й; поразка — сід 5 (скан 1–30: поразок 5 — сіди 3, 4, 5, 18, 19).
   // п20.3 (ШІ ворогів з укриттям, ADR-0167; бот кампанії в дозорі, з місця не йде): сід 6 виграє на 38-й у другому фіналі, сід 5 — на 42-й; п'ятий фінал —
   // сід 7 (перемога на 42-й), поразка — сід 17 (скан 1–30: поразок 3 — сіди 1, 17, 18).
-  it('повна партія, сід 7 «норма»: ланцюжок 13 / 23 / 36-та доба, перемога на 42-й у п’ятому фіналі; байт-у-байт', () => {
+  // п20.6 (бот зі зброєю за роллю, п'ять техномантів, дозор з укриттям, «Град» ×0,6; ADR-0170): сід 7 виграє на 42-й
+  // у другому фіналі, ланцюжок 19 / 33 / 41-ша, зброю досліджено у вільному слоті до «Пеленгу брами»; поразка —
+  // сід 17 на 44-й (скан 1–30: поразок 6 — сіди 2, 17, 18, 19, 22, 25).
+  it('повна партія, сід 7 «норма»: ланцюжок 19 / 33 / 41-ша доба, зброя до «Пеленгу», перемога на 42-й у другому фіналі; байт-у-байт', () => {
     const days: Record<string, number> = {};
     const r = simulateParty(7, 'норма', {
       policy: CAMPAIGN_POLICY,
@@ -547,15 +555,15 @@ describe('п18.6: політика кампанії (CAMPAIGN_POLICY)', () => {
         for (const id of p.research.completed) days[id] ??= Math.floor(p.geo.minute / 1440) + 1;
       },
     });
-    expect([r.outcome, r.endDay, r.gateAttempts, r.assaults, r.soldiersLost]).toEqual(['перемога', 42, 5, 3, 27]);
-    expect(r.completedProjects).toEqual(['armor', 'rift-anatomy', 'gate-bearing', 'gate-key']);
-    expect([days['rift-anatomy'], days['gate-bearing'], days['gate-key']]).toEqual([13, 23, 36]);
+    expect([r.outcome, r.endDay, r.gateAttempts, r.assaults, r.soldiersLost]).toEqual(['перемога', 42, 2, 0, 11]);
+    expect(r.completedProjects).toEqual(['optics', 'shotgun', 'armor', 'rift-anatomy', 'mg', 'sniper', 'gate-bearing', 'gate-key']);
+    expect([days['rift-anatomy'], days['gate-bearing'], days['gate-key']]).toEqual([19, 33, 41]);
     expect(simulateParty(7, 'норма', { policy: CAMPAIGN_POLICY })).toEqual(r);
   }, 30_000);
 
-  it('повна партія, сід 17 «норма»: фінали програно, поразка за загрозою на 43-й добі', () => {
+  it('повна партія, сід 17 «норма»: фінали програно, поразка за загрозою на 44-й добі', () => {
     const r = simulateParty(17, 'норма', { policy: CAMPAIGN_POLICY });
-    expect([r.outcome, r.endDay, r.gateAttempts, r.assaults]).toEqual(['поразка', 43, 3, 3]);
+    expect([r.outcome, r.endDay, r.gateAttempts, r.assaults]).toEqual(['поразка', 44, 2, 3]);
   }, 30_000);
 
   it('onTick: виклик на кожен тік, результат той самий, що без спостерігача', () => {
