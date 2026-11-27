@@ -365,8 +365,8 @@ describe('фідбек власника 2026-10-22: якір дула — тра
     expect(tracerStart('player', 5, 3, true)).toEqual([264 - 21, 264 - 15]); // 18 → +13
   });
 
-  it('п17.5: muzzlePoint за типом ворога — якір свого ряду атласа (голем (16,52) — п21.5, латунний, око (26,64))', () => {
-    expect(muzzlePoint('alien', false, 264, 264, 0, 'golem')).toEqual({ x: 230 + 11, y: 217 + 37 });
+  it('п17.5: muzzlePoint за типом ворога — якір свого ряду атласа (голем (10,52) — п21.5, латунний, око (26,64))', () => {
+    expect(muzzlePoint('alien', false, 264, 264, 0, 'golem')).toEqual({ x: 230 + 7, y: 217 + 37 });
     expect(muzzlePoint('alien', true, 264, 264, 0, 'eye')).toEqual({ x: 230 + 50, y: 217 + 45 }); // 96 − 26 = 70 → 50
     expect(muzzlePoint('alien', false, 264, 264, 0, 'demon')).toEqual(muzzlePoint('alien', false, 264, 264));
   });

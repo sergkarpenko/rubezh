@@ -17,5 +17,5 @@
  {"kind": "eye", "cell": [2, 3], "split": [655, 981], "headTop": 239, "bustH": 290, "centerX": 187, "side": 237, "lineRows": 0, "greenMax": 0},
  {"kind": "eye", "cell": [3, 3], "split": [981, 1376], "headTop": 242, "bustH": 287, "centerX": 186, "side": 235, "lineRows": 0, "greenMax": 0}
  ],
- "golem": {"scale": 0.1612, "deathScale": 0.1612, "anchorX": 48, "centred": false, "bbox": [[26, 34, 67, 93], [27, 34, 64, 93], [32, 34, 64, 93], [14, 34, 64, 93], [24, 69, 72, 93]], "muzzle": {"x": 16, "y": 52}, "walkIoU": [0.638, 0.687, 0.632]}
+ "golem": {"scale": 0.1838, "deathScale": 0.1838, "anchorX": 48, "centred": false, "bbox": [[23, 34, 71, 93], [22, 34, 68, 93], [27, 34, 69, 93], [8, 34, 66, 93], [21, 69, 75, 93]], "muzzle": {"x": 10, "y": 52}, "walkIoU": [0.787, 0.764, 0.743]}
 }
