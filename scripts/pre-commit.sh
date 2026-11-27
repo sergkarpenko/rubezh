@@ -64,10 +64,11 @@ if git diff --cached --name-only | grep -qE '^\.github/workflows/'; then
     fi
 fi
 
-# 1d. Типи скриптів (ADR-0174, кандидат 206): коміт зі scripts/*.ts, кореневим playwright*.config.ts
-# чи e2e/smoke.e2e.ts — `tsc -p tsconfig.scripts.json` тут, а не лише в CI після пушу
-# (Т.217: помилку типів скрипта знайшов CI). Без таких файлів — пропуск (≈ 5 с економії).
-if git diff --cached --name-only --diff-filter=ACMR | grep -qE '^(scripts/[^/]+\.ts|playwright[^/]*\.config\.ts|e2e/smoke\.e2e\.ts)$'; then
+# 1d. Типи скриптів (ADR-0174, кандидат 206): коміт, що додає, змінює чи видаляє `src/**/*.ts`, `scripts/*.ts`,
+# кореневий playwright*.config.ts чи e2e/smoke.e2e.ts, — `tsc -p tsconfig.scripts.json` тут, а не лише в CI після пушу:
+# скрипти імпортують ядро, тож їх ламає й коміт лише з `src/` (Т.215, c6ce773 → виправлення 9efedf3). Перевіряється
+# робоче дерево (як і тести), ≈ 13 с; коміт лише з документів — пропуск.
+if git diff --cached --name-only | grep -qE '^(src/.+\.ts|scripts/[^/]+\.ts|playwright[^/]*\.config\.ts|e2e/smoke\.e2e\.ts)$'; then
     echo ""
     echo "--- Типи скриптів (tsc -p tsconfig.scripts.json) ---"
     if npx tsc --noEmit -p tsconfig.scripts.json; then

@@ -44,7 +44,6 @@
 ## Команди
 
 - Скан сідів повної партії і віх сценаріїв (Т.218, ADR-0174): `node scripts/run-ts.mjs scripts/scan-seeds.ts -- --seeds 1-30 --policy campaign` (результат, доба, загиблі), `… -- --seeds 1-30 --until gate` (доба віхи) — для підбору фіксованих сідів тестів після зміни правил.
-
 - Симуляції `sim-p11.8.ts`: `cd <тека-1> && node <клон>/scripts/run-ts.mjs <клон>/scripts/sim-p11.8.ts -- --seeds 480 --policies default` (або `science`). Готовність — за файлом `dist/p11.8-parties.csv` у теці запуску. Розділ «Числа балансу» — з Т.21: доба «без повного загону» — наприкінці доби боєготових менше трьох; ростер = живі разом із лікарнею.
 - **Probe політик:** `node scripts/run-ts.mjs scripts/probe-t23.ts -- --variants <список через кому> --presets норма --seeds 480 --out /tmp/x.csv > /tmp/x.log`. Частини варіанта через «+»: `none`, `sciN`, `afterN`, `resN`, `rh`, `rh2`, `p:armor.optics`, `fire`, `nofire`, `done:armor`, `gift`, `g:armor`, `c:armor=30`, `pc:`, `pp:`, `keep`, `eqN`. `trace-party.ts` пресет — `--preset`, `probe-t23.ts` — `--presets`.
 - **Probe каталогу:** ціни предметів і очки протоколів — частинами варіанта (`c:armor=30`, `pc:armor=48`, `pp:armor=14`; значення «норми», пресет множить сам).
