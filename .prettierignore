@@ -3,3 +3,5 @@ docs/
 node_modules/
 .husky/
 package-lock.json
+# Звіти конвертерів ассетів (json.dump Python) — не під Prettier: `prettier --write scripts` їх переписував (кандидат 184, Т.210)
+scripts/assets/*.json

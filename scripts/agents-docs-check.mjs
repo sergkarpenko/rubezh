@@ -23,7 +23,20 @@ const files = args.length
 
 // Верхній рівень репозиторію, з якого починаються відносні шляхи в довідниках: робоча тека
 // разом із origin/main — інакше згадка файла чи теки, видалених у гілці, пройшла б мовчки (аудит Т.50).
+// Теки й файли, які ігнорує git (`dist/`, `coverage/` — їх лишають прогони в робочій теці), — не верхній
+// рівень: інакше `coverage/coverage-final.json` у довіднику червонів, коли тека є, а файлу немає
+// (кандидат 186, Т.210); у CI цих тек немає, тож перевірка і так їх не бачила.
 const TOP = new Set(readdirSync(root).filter((f) => f !== '.git' && f !== 'node_modules'));
+try {
+  const ignored = execFileSync('git', ['-C', root, 'check-ignore', '--stdin'], {
+    encoding: 'utf8',
+    input: [...TOP].join('\n'),
+    stdio: ['pipe', 'pipe', 'ignore'],
+  });
+  for (const name of ignored.split('\n')) TOP.delete(name);
+} catch {
+  // код 1 — нічого не ігнорується; без git — верхній рівень робочої теки як є
+}
 try {
   const out = execFileSync('git', ['-C', root, 'ls-tree', '--name-only', 'origin/main'], {
     encoding: 'utf8',

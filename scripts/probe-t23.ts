@@ -2,12 +2,15 @@
 // наука за розумнішої політики, ніж чинна SCIENCE_POLICY. Константи й правила
 // гри ті самі; ядро не змінюється. Повторює цикл simulateParty
 // (src/core/party-bot.ts) тими самими кроками бота, але політику на кожен тік
-// будує за станом партії. `--verify` звіряє варіанти `none` і `sci3` із
-// simulateParty (результат, тіки, місії, гроші за добами).
+// будує за станом партії. `--verify` звіряє варіанти `none`, `sci2` і `campaign` із
+// simulateParty (результат, тіки, місії, спроби фіналу, гроші за добами).
 // Поза CI, як sim-p11.8.ts і trace-party.ts:
 //   node scripts/run-ts.mjs scripts/probe-t23.ts -- --variants sci3,sci1,rh --presets норма --seeds 480 --out dist/t23.csv
+//   … --variants campaign --days 60 --verify — політика кампанії; горизонт — діб (типово 30; Брама — ≈ 38–39-та доба)
 // Варіант — частини через «+»:
 //   none    — без науки (DEFAULT_PARTY_POLICY);
+//   campaign — основа CAMPAIGN_POLICY (п18.6–п19.6: ключові протоколи, заряд, дозор, фінал, другий
+//             перехоплювач) замість SCIENCE_POLICY; решта частин міняє її так само (Т.210);
 //   sciN    — штат техномантів не більше N (чинна політика після Т.28 — sci2: лише протокол
 //             броні, потім звільнити; до Т.28 — sci3 з усіма протоколами без звільнення);
 //   afterN  — наука починається після N-ї завершеної доби, до того — політика без науки;
@@ -61,7 +64,9 @@ import {
   DEFAULT_PARTY_POLICY,
   MISSION_SQUAD_SIZE,
   SCIENCE_POLICY,
+  CAMPAIGN_POLICY,
   TICKS_PER_DAY,
+  partyBotGateStep,
   partyBotHireStep,
   partyBotAirBattle,
   partyBotInterceptStep,
@@ -71,12 +76,12 @@ import {
   type PartyBotPolicy,
   partyBotAssaultStep,
 } from '../src/core/party-bot';
-const HORIZON_DAYS = 30; // п18.3 (ADR-0155): VICTORY_DAY прибрано — горизонт виміру 30 діб, як у звітах фаз 8–17
-
 function arg(flag: string, def: string): string {
   const i = process.argv.indexOf(flag);
   return i !== -1 && process.argv[i + 1] ? process.argv[i + 1] : def;
 }
+// п18.3 (ADR-0155): VICTORY_DAY прибрано — горизонт виміру типово 30 діб, як у звітах фаз 8–17 (Т.210: `--days`).
+const HORIZON_DAYS = Math.max(1, Number(arg('--days', '30')) || 30);
 const variants = arg('--variants', 'none,sci3').split(',');
 const presets = arg('--presets', 'норма').split(',') as DifficultyPreset[];
 const seedCount = Math.max(1, Number(arg('--seeds', '120')) || 120);
@@ -85,6 +90,7 @@ const verify = process.argv.includes('--verify');
 
 interface Variant {
   science: boolean;
+  base: PartyBotPolicy; // Т.210: SCIENCE_POLICY або CAMPAIGN_POLICY (частина `campaign`)
   gift: ItemId[]; // предмети, які скрипт кладе на склад без витрат
   scientists: number;
   projects: ProjectId[] | null; // null — порядок SCIENCE_POLICY
@@ -100,13 +106,15 @@ interface Variant {
 }
 
 function parseVariant(name: string): Variant {
+  const base = name.split('+').includes('campaign') ? CAMPAIGN_POLICY : SCIENCE_POLICY;
   const v: Variant = {
     science: true,
+    base,
     gift: [],
     projects: null,
-    fire: SCIENCE_POLICY.fireScientistsWhenDone,
+    fire: base.fireScientistsWhenDone,
     done: [],
-    scientists: SCIENCE_POLICY.scientistsUpTo,
+    scientists: base.scientistsUpTo,
     afterDay: 0,
     reserve: () => null,
     costs: {},
@@ -118,6 +126,8 @@ function parseVariant(name: string): Variant {
   for (const part of name.split('+')) {
     const num = Number(part.replace(/^[a-z]+/, ''));
     if (part === 'none') v.science = false;
+    else if (part === 'campaign')
+      continue; // основа політики — вище
     else if (part === 'gift')
       v.gift = [...ITEM_IDS]; // п18.2: п'ять чинних предметів, як до кроку
     else if (part.startsWith('p:')) v.projects = part.slice(2).split('.') as ProjectId[];
@@ -158,6 +168,7 @@ interface Rec {
   scientistDays: number; // сума штату техномантів за добами
   spentScience: number; // найм техномантів + протоколи + цех
   spentSalary: number;
+  gateAttempts: number; // Т.210: спроби фіналу «Брама Розриву»
   blockedTicks: number; // Т.27: ціль і загін є, запобіжник останнього загону не пускає
   noSquadTicks: number; // Т.27: ціль є, боєготових менше загону
   missionsFirstHalf: number; // Т.27: місії за перші 15 діб
@@ -201,8 +212,8 @@ function scienceTail(party: ReturnType<typeof createParty>, policy: PartyBotPoli
 function run(name: string, v: Variant, preset: DifficultyPreset, seed: number): Rec {
   const party = createParty(seed, preset);
   const sci: PartyBotPolicy = v.gift.length
-    ? { ...SCIENCE_POLICY, scientistsUpTo: 0, projects: [], workshopOrders: [], fireScientistsWhenDone: false }
-    : { ...SCIENCE_POLICY, scientistsUpTo: v.scientists, fireScientistsWhenDone: false };
+    ? { ...v.base, scientistsUpTo: 0, projects: [], workshopOrders: [], fireScientistsWhenDone: false }
+    : { ...v.base, scientistsUpTo: v.scientists, fireScientistsWhenDone: false };
   if (v.done.length) {
     party.research.completed = [...v.done];
     sci.scientistsUpTo = 0;
@@ -234,6 +245,7 @@ function run(name: string, v: Variant, preset: DifficultyPreset, seed: number): 
     scientistDays: 0,
     spentScience: 0,
     spentSalary: 0,
+    gateAttempts: 0,
     blockedTicks: 0,
     noSquadTicks: 0,
     missionsFirstHalf: 0,
@@ -267,6 +279,7 @@ function run(name: string, v: Variant, preset: DifficultyPreset, seed: number): 
       scienceTail(party, step, v.equipFirst);
     } else partyBotScienceStep(party, step);
     rec.spentScience += m1 - party.econ.money;
+    if (partyBotGateStep(party, policy).fought) rec.gateAttempts += 1; // Т.210: фінал перед місією — як simulateParty
     const logFrom = party.workshop.log.length;
     if (missionTargets(party.geo).length > 0) {
       if (readySoldiers(party.roster).length < MISSION_SQUAD_SIZE) rec.noSquadTicks += 1;
@@ -307,14 +320,15 @@ function run(name: string, v: Variant, preset: DifficultyPreset, seed: number): 
   return rec;
 }
 
-const median = (a: number[]): number => {
+// Порожній набір (жодна партія не дожила до горизонту — так буває з політикою кампанії) — «—», а не NaN (Т.210).
+const median = (a: number[]): number | string => {
   const s = [...a].sort((x, y) => x - y);
   const mid = s.length >> 1;
-  return s.length ? (s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2) : NaN;
+  return s.length ? (s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2) : '—';
 };
-const quantile = (a: number[], p: number): number => {
+const quantile = (a: number[], p: number): number | string => {
   const s = [...a].sort((x, y) => x - y);
-  return s[Math.min(s.length - 1, Math.floor(p * s.length))];
+  return s.length ? s[Math.min(s.length - 1, Math.floor(p * s.length))] : '—';
 };
 const mean = (a: number[]): number => a.reduce((x, y) => x + y, 0) / a.length;
 const f1 = (x: number): string => x.toFixed(1);
@@ -328,9 +342,9 @@ const baseProjects = Object.fromEntries(
   PROJECT_IDS.map((id) => [id, { cost: PROJECT_CATALOG[id].cost, points: PROJECT_CATALOG[id].points }])
 );
 console.log(
-  '| Варіант / пресет | Перемог, % | Виграно місій на партію | Частка виграних місій, % | Місій на добу | Діб без повного загону, % | Завершили 30-ту добу | Гроші на 30-ту добу | Ростер на 30-ту добу | Загиблих на партію | Протоколів | Техномантів у середньому | Витрати: наука / зарплата | Рахунок, медіана |'
+  `| Варіант / пресет | Перемог, % | Виграно місій на партію | Частка виграних місій, % | Місій на добу | Діб без повного загону, % | Завершили ${HORIZON_DAYS}-ту добу | Гроші на ${HORIZON_DAYS}-ту добу | Ростер на ${HORIZON_DAYS}-ту добу | Загиблих на партію | Протоколів | Техномантів у середньому | Витрати: наука / зарплата | Рахунок, медіана | Спроб фіналу на партію |`
 );
-console.log('| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |');
+console.log('| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |');
 for (const name of variants) {
   const v = parseVariant(name);
   for (const id of ITEMS) WORKSHOP_CATALOG[id].cost = v.costs[id] ?? baseCosts[id];
@@ -345,13 +359,15 @@ for (const name of variants) {
       const r = run(name, v, preset, seed);
       rs.push(r);
       if (!verify) continue;
-      if (name !== 'none' && name !== 'sci2') throw new Error('--verify — лише для варіантів none і sci2');
-      const ref = simulateParty(seed, preset, { policy: name === 'none' ? DEFAULT_PARTY_POLICY : SCIENCE_POLICY, maxDays: HORIZON_DAYS });
+      const REF: Record<string, PartyBotPolicy> = { none: DEFAULT_PARTY_POLICY, sci2: SCIENCE_POLICY, campaign: CAMPAIGN_POLICY };
+      if (!(name in REF)) throw new Error('--verify — лише для варіантів none, sci2 і campaign');
+      const ref = simulateParty(seed, preset, { policy: REF[name], maxDays: HORIZON_DAYS });
       const same =
         (ref.outcome === 'перемога') === r.won &&
         ref.ticks === r.ticks &&
         ref.missionsLaunched === r.missions &&
         ref.missionsWon === r.missionsWon &&
+        ref.gateAttempts === r.gateAttempts &&
         ref.hiredTotal === r.hired &&
         ref.score.total === r.score &&
         ref.projectsCompleted === r.projects &&
@@ -371,15 +387,15 @@ for (const name of variants) {
     const wonM = rs.reduce((a, r) => a + r.missionsWon, 0);
     const money = at30.map((r) => r.moneyByDay[HORIZON_DAYS - 1]);
     console.log(
-      `| ${name} / ${preset} | ${f1((100 * rs.filter((r) => r.won).length) / rs.length)} | ${f1(wonM / rs.length)} | ${f1((100 * wonM) / missions)} | ${(missions / days).toFixed(2)} | ${f1((100 * noFull) / days)} | ${at30.length} | ${median(money)} (${quantile(money, 0.25)}–${quantile(money, 0.75)}) | ${median(at30.map((r) => r.roster))} | ${f1(mean(rs.map((r) => r.lost)))} | ${f1(mean(rs.map((r) => r.projects)))} | ${f1(rs.reduce((a, r) => a + r.scientistDays, 0) / days)} | ${Math.round(mean(rs.map((r) => r.spentScience)))} / ${Math.round(mean(rs.map((r) => r.spentSalary)))} | ${median(rs.map((r) => r.score))} |${verify ? ` звірка: розбіжностей ${mismatch}` : ''}`
+      `| ${name} / ${preset} | ${f1((100 * rs.filter((r) => r.won).length) / rs.length)} | ${f1(wonM / rs.length)} | ${f1((100 * wonM) / missions)} | ${(missions / days).toFixed(2)} | ${f1((100 * noFull) / days)} | ${at30.length} | ${median(money)} (${quantile(money, 0.25)}–${quantile(money, 0.75)}) | ${median(at30.map((r) => r.roster))} | ${f1(mean(rs.map((r) => r.lost)))} | ${f1(mean(rs.map((r) => r.projects)))} | ${f1(rs.reduce((a, r) => a + r.scientistDays, 0) / days)} | ${Math.round(mean(rs.map((r) => r.spentScience)))} / ${Math.round(mean(rs.map((r) => r.spentSalary)))} | ${median(rs.map((r) => r.score))} | ${f1(mean(rs.map((r) => r.gateAttempts)))} |${verify ? ` звірка: розбіжностей ${mismatch}` : ''}`
     );
   }
 }
 
 if (out) {
   mkdirSync(dirname(out), { recursive: true });
-  const header =
-    'variant,preset,seed,won,days,missions,missionsWon,lost,hired,daysNoFullSquad,money30,roster,score,projects,scientistDays,spentScience,spentSalary,blockedTicks,noSquadTicks,missionsFirstHalf';
+  // колонка грошей — на добу горизонту (`money30` за типового `--days 30`, як у CSV Т.23–Т.29; аудит Vibe PR #526)
+  const header = `variant,preset,seed,won,days,missions,missionsWon,lost,hired,daysNoFullSquad,money${HORIZON_DAYS},roster,score,projects,scientistDays,spentScience,spentSalary,blockedTicks,noSquadTicks,missionsFirstHalf,gateAttempts`;
   const lines = all.map((r) =>
     [
       r.variant,
@@ -402,6 +418,7 @@ if (out) {
       r.blockedTicks,
       r.noSquadTicks,
       r.missionsFirstHalf,
+      r.gateAttempts,
     ].join(',')
   );
   writeFileSync(out, [header, ...lines].join('\n'), 'utf8');
