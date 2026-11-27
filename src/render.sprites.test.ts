@@ -41,6 +41,7 @@ import {
   drawNightTerrain,
   LOW_CRATE_EDGE,
   LOW_CRATE_FILL,
+  LOW_CRATE_FOG_ALPHA,
   drawPathPreview,
   drawReachZone,
   drawSoldierSprite,
@@ -1643,6 +1644,25 @@ describe('п20.2: низька перешкода — тимчасовий ящ�
     drawNightTerrain(c.ctx, 96, 48, [{ ...cells(false)[0] }, { x: 1, y: 0, blocked: false, visible: true, low: false }], 48);
     expect(crate(b.ops)).toEqual([]);
     expect(c.ops).toEqual(b.ops);
+    // аудит PR #529: без низьких — жодних операцій ящика (save / lineWidth / restore), як до п20.2
+    expect(b.ops.filter((o) => 'set' in o && o.set === 'lineWidth')).toEqual([]);
+  });
+
+  it('фолбек: ящик у тумані — з прозорістю LOW_CRATE_FOG_ALPHA, видимий — повний (vibe-audit PR #529)', () => {
+    const alphaAtCrate = (visible: boolean): unknown => {
+      const s = seqCtx();
+      drawNightTerrain(s.ctx, 48, 48, [{ x: 0, y: 0, blocked: false, visible, low: true }], 48);
+      let alpha: unknown = 1;
+      let fill = '';
+      for (const o of s.ops) {
+        if ('set' in o && o.set === 'globalAlpha') alpha = o.v;
+        if ('set' in o && o.set === 'fillStyle') fill = o.v as string;
+        if ('m' in o && o.m === 'fillRect' && fill === LOW_CRATE_FILL) return alpha;
+      }
+      return null;
+    };
+    expect(alphaAtCrate(false)).toBe(LOW_CRATE_FOG_ALPHA);
+    expect(alphaAtCrate(true)).toBe(1);
   });
 
   it('з ассетами: ящик поверх підлоги, декору на клітинці ящика немає', () => {

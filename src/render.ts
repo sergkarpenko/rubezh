@@ -780,11 +780,15 @@ export function drawHangarSprite(ctx: CanvasRenderingContext2D, h: { cx: number;
 // кадр після clearRect (урок П6.6) — кадр еквівалентний малюванню з
 // нуля. w/h — розмір buffer'а канви в пікселях, cell — BCELL.
 // п20.2 (ADR-0166, рішення власника «А. Тимчасово кодом»): низька перешкода — темний ящик
-// з рамкою і двома планками; мальований тайл замінить його в п20.5. Малюється до туману —
-// у тумані ящик приглушено, як стіну (рельєф видно, ADR-0006).
+// з рамкою і двома планками; мальований тайл замінить його в п20.5. З ассетами малюється до
+// накладок туману — у тумані ящик приглушено, як стіну (рельєф видно, ADR-0006); у фолбеку туман
+// «запечено» в заливку клітинки (terrainShade), тож ящик у тумані — з прозорістю LOW_CRATE_FOG_ALPHA
+// (vibe-audit PR #529).
 export const LOW_CRATE_FILL = '#2b3036';
 export const LOW_CRATE_EDGE = '#8a96a3';
-function drawLowCrates(ctx: CanvasRenderingContext2D, cells: readonly TerrainCell[], cell: number): void {
+export const LOW_CRATE_FOG_ALPHA = 0.4;
+function drawLowCrates(ctx: CanvasRenderingContext2D, cells: readonly TerrainCell[], cell: number, dimFog = false): void {
+  if (!cells.some((c) => c.low === true)) return; // без низьких — потік операцій як до п20.2 (аудит PR #529)
   const inset = Math.round(cell * 0.18);
   const size = cell - 2 * inset;
   ctx.save();
@@ -793,6 +797,7 @@ function drawLowCrates(ctx: CanvasRenderingContext2D, cells: readonly TerrainCel
     if (c.low !== true) continue;
     const x0 = c.x * cell + inset;
     const y0 = c.y * cell + inset;
+    ctx.globalAlpha = dimFog && !c.visible ? LOW_CRATE_FOG_ALPHA : 1;
     ctx.fillStyle = LOW_CRATE_FILL;
     ctx.fillRect(x0, y0, size, size);
     ctx.strokeStyle = LOW_CRATE_EDGE;
@@ -894,7 +899,7 @@ export function drawNightTerrain(
       ctx.fillStyle = terrainShade(c.x, c.y, c.blocked, c.visible);
       ctx.fillRect(c.x * cell, c.y * cell, cell - 1, cell - 1);
     }
-    drawLowCrates(ctx, cells, cell);
+    drawLowCrates(ctx, cells, cell, true);
     // тонка сітка: 1px у проміжках між клітинками (стовпці і рядки)
     ctx.fillStyle = GRID_COLOR;
     const cols = Math.floor(w / cell);

@@ -1194,7 +1194,7 @@ describeScenario('П6.14: UX прицілювання — обведення ц�
     btn('btn-snap').click(); // зведено; Т.131: плитка закриває меню
     expect($('benemy').classList.contains('hidden')).toBe(true);
     tap(16, 2); // перший тап по цілі — прев'ю шансу
-    expect($('binfo').textContent).toContain('повторний тап у цю саму ціль');
+    expect($('binfo').textContent).toContain('~58% · повторний тап у цю саму ціль'); // п20.2: з укриттям цілі (фланг)
     expect($('binfo').textContent).toContain('~');
     expect(unitLabel()).toContain('AP 9/10'); // пострілу ще не було
     // фідбек не ламає тап-тап: тап в ІНШУ клітинку — прев'ю руху, режим знято
