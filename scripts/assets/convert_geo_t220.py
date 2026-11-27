@@ -31,8 +31,9 @@ from convert_units_t133 import matte, resize, split_figures
 ROOT = Path(__file__).resolve().parents[2]
 SRC = Path(sys.argv[1]) if len(sys.argv) > 1 else ROOT / 'assets-src'
 REPORT = Path(__file__).resolve().parent / 'geo-t220-report.json'
-# назви районів у повідомленнях перевірок (ADR-0175 п. 3); клітинки ангарів — HANGARS (src/core/intercept.ts)
-MUST_LAND = {'вузол': (8, 4), 'ангар «Порт»': (2, 4), 'ангар «Промзона»': (13, 4), 'ангар «Нетрі»': (8, 7)}
+# назви районів у повідомленнях перевірок (ADR-0175 п. 3); клітинки ангарів — HANGARS (src/core/intercept.ts);
+# Брама (9, 4) — як у тесті render-core.test.ts (аудит PR #539)
+MUST_LAND = {'вузол': (8, 4), 'Брама': (9, 4), 'ангар «Порт»': (2, 4), 'ангар «Промзона»': (13, 4), 'ангар «Нетрі»': (8, 7)}
 # аркуш Т.220: пара за кормою дирижабля і шлейф дрона — окремі дрібні плями; розширення маски 9
 # пришиває їх до свого значка (між значками — понад 60 px хромакею)
 GROW = 9

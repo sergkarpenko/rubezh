@@ -269,7 +269,7 @@ function num(e: { fighter?: number }): string {
   return e.fighter !== undefined ? ' ' + e.fighter : '';
 }
 
-// п19.3: назва ангара (регіону) події вильоту чи повернення; без поля — «Північ» (вузол).
+// п19.3: назва ангара (регіону) події вильоту чи повернення; без поля — north («Шпилі», вузол).
 function hangarName(e: { region?: RegionId }): string {
   return REGION_NAMES[e.region ?? 'north'];
 }

@@ -146,7 +146,7 @@ describe('geo: спавн, радар, журнал — точні значен�
       { x: WORLD_W, y: 4 },
       { x: 8, y: WORLD_H },
     ]) {
-      expect(() => createGeoGame({ base })).toThrow('за межами мапи світу');
+      expect(() => createGeoGame({ base })).toThrow('за межами мапи');
     }
   });
 

@@ -182,7 +182,7 @@ describe('п19.4: «Перехоплювачі» — картки', () => {
     f.panels.renderFighter();
     expect(btn('btn-assign-2').getAttribute('aria-expanded')).toBe('true');
     const opts = [...document.querySelectorAll('#fighter-card-2 .assign-row button')].map((b) => b.textContent);
-    expect(opts).toEqual(['→ Порт (вийшов)', '→ Шпилі', '→ Нетрі']);
+    expect(opts).toEqual(['→ Порт (район вийшов)', '→ Шпилі', '→ Нетрі']);
     btn('btn-assign-2-south').click();
     expect(party.intercept.fighters[1]!.region).toBe('south');
     f.panels.renderFighter();

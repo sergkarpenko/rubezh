@@ -530,7 +530,7 @@ export function partyBotScienceStep(party: Party, policy: PartyBotPolicy): void 
 }
 
 // п19.6 (ADR-0159 п. 17): регіон ангара нового перехоплювача — найнижча довіра серед регіонів,
-// що не вийшли; рівні — регіон без перехоплювача, далі порядок REGION_IDS. Усі вийшли — «Північ» (вузол).
+// що не вийшли; рівні — регіон без перехоплювача, далі порядок REGION_IDS. Усі вийшли — north («Шпилі», вузол).
 export function weakestRegion(party: Pick<Party, 'campaign' | 'intercept'>): RegionId {
   const regions = party.campaign.regions;
   const manned = new Set(party.intercept.fighters.map((f) => f.region));
