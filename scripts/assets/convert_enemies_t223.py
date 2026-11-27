@@ -85,7 +85,9 @@ def golem():
 
 def main():
     report = {'portraits': busts(), 'golem': golem()}
-    REPORT.write_text(json.dumps(report, ensure_ascii=False, indent=1) + '\n')
+    # запис — рядком (як units-t194-report.json: багаторядковий звіт роздував би диф)
+    lines = [' ' + json.dumps(p, ensure_ascii=False) for p in report['portraits']]
+    REPORT.write_text('{\n "portraits": [\n' + ',\n'.join(lines) + '\n ],\n "golem": ' + json.dumps(report['golem'], ensure_ascii=False) + '\n}\n')
     print(json.dumps({'golem': {k: report['golem'][k] for k in ('muzzle', 'walkIoU', 'scale')}}, ensure_ascii=False))
 
 
