@@ -178,7 +178,11 @@ describe('battle: флоу місії (запуск/закриття/завер�
     expect(f.ui.mission).not.toBeNull();
     expect(f.ui.selectedId).toBeNull();
     expect(f.deps.resetBattleLog).toHaveBeenCalled();
-    expect(f.deps.journal).toHaveBeenCalledWith('▶ Місія: загін висаджено біля зонду Розриву ' + probeId, '', 'battle');
+    expect(f.deps.journal).toHaveBeenCalledWith(
+      '▶ Місія: загін висаджено біля зонду Розриву №' + probeId.replace('probe', ''),
+      '',
+      'battle'
+    );
     expect(document.getElementById('binfo')!.textContent).toContain('Ваш хід');
     expect(f.deps.renderAll).toHaveBeenCalled();
     const first = f.ui.mission;

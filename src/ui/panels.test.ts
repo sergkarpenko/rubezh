@@ -395,7 +395,7 @@ describe('renderInterceptCtx: контекст-стрічка повітряно
     startIntercept(f.party.intercept, f.party.geo, probe.id);
     f.panels.renderInterceptCtx();
     expect(document.getElementById('ictx')!.classList.contains('hidden')).toBe(false);
-    expect(document.getElementById('ictx-target')!.textContent).toBe(probe.id);
+    expect(document.getElementById('ictx-target')!.textContent).toBe('№' + probe.id.replace('probe', ''));
     expect(document.getElementById('ictx-round')!.textContent).toBe('—');
     // штучний стан «бій» (гілка раунду і HP) — відображення, ядро не викликаємо
     f.party.intercept.fighters[0].status = 'бій';

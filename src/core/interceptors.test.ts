@@ -380,11 +380,11 @@ describe('п19.3: сейв v4 з переліком перехоплювачів
       [
         'двоє на один зонд',
         (s) =>
-          s.state.intercept.fighters.forEach((f: { status: string; targetId: string }) => ((f.status = 'погоня'), (f.targetId = 'probe1'))),
+          s.state.intercept.fighters.forEach((f: { status: string; targetId: string }) => ((f.status = 'погоня'), (f.targetId = 'ufo1'))),
         'перехоплення',
       ],
       ['бій без активного зонда', (s) => (s.state.intercept.fighters[1].status = 'бій'), 'перехоплення'],
-      ['активний зонд без бою', (s) => (s.state.intercept.activeProbeId = 'probe1'), 'перехоплення'],
+      ['активний зонд без бою', (s) => (s.state.intercept.activeUfoId = 'ufo1'), 'перехоплення'],
       ['клітинка поза світом', (s) => (s.state.intercept.fighters[1].pos = { x: 16, y: 0 }), 'перехоплення'],
       ['ремонт без лічильника', (s) => (s.state.intercept.fighters[1].status = 'ремонт'), 'перехоплення'],
       [
