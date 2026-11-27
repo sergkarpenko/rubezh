@@ -27,11 +27,13 @@ import {
   grenadeZone,
   hasLineOfSight,
   weaponHasMode,
+  RIFLE,
   type GameState,
   type ShotMode,
   type Unit,
   type Vec2,
 } from '../core/combat';
+import { TILE_KEY, fireModeHint } from './toolbar';
 import { reachableCells, sideVisibleCells } from '../core/map';
 import { geoClock } from '../core/geo';
 import type { Party } from '../core/save';
@@ -703,8 +705,10 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
       const noMode = sel !== undefined && !weaponHasMode(sel.weapon, m);
       const noAp = sel !== undefined && !noMode && sel.ap < cost;
       b.disabled = busy || noMode || noAp;
-      const hint = b.dataset.hint || b.title;
-      b.dataset.hint = hint;
+      // п20.4 (аудит PR #531): ціна в кутку і тултіп — за зброєю вибраного (без вибору — «Гарт»)
+      const hint = fireModeHint(m, TILE_KEY[m]!, sel?.weapon);
+      const apCorner = b.querySelector<HTMLElement>('.tb-ap');
+      if (apCorner !== null) apCorner.textContent = (sel ? cost : RIFLE.modes[m].apCost) + ' AP';
       b.title = noMode
         ? hint + ' — у зброї «' + sel?.weapon.name + '» цього режиму немає'
         : noAp

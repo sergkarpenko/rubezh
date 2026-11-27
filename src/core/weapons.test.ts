@@ -15,7 +15,7 @@ import {
   type Unit,
   type Weapon,
 } from './combat';
-import { FORGE_WEAPONS, MACHINE_GUN, SHOTGUN, SNIPER_RIFLE, WEAPONS, WEAPON_IDS, isForgeWeapon, weaponIdOf } from './weapons';
+import { FORGE_WEAPONS, MACHINE_GUN, SHOTGUN, SNIPER_RIFLE, WEAPONS, WEAPON_IDS, isForgeWeapon } from './weapons';
 import { PROJECTS, PROJECT_CATALOG, WEAPON_PROJECTS, startProject, type ResearchState } from './research';
 import {
   ITEM_IDS,
@@ -65,9 +65,7 @@ describe('каталог зброї (ADR-0165 п. 5; назви — рішенн
     }
   });
 
-  it('weaponIdOf — за назвою (і після JSON); ворожа зброя — undefined; isForgeWeapon', () => {
-    for (const id of WEAPON_IDS) expect(weaponIdOf(JSON.parse(JSON.stringify(WEAPONS[id])))).toBe(id);
-    expect(weaponIdOf({ name: 'Фазовий різак' })).toBeUndefined();
+  it('isForgeWeapon — лише зброя «Кузні»', () => {
     expect(FORGE_WEAPONS.every(isForgeWeapon)).toBe(true);
     expect(isForgeWeapon('rifle')).toBe(false);
     expect(isForgeWeapon('armor')).toBe(false);

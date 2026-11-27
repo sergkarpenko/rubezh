@@ -59,7 +59,6 @@ import {
   orderItem,
   workshopTick,
   type ItemId,
-  type SoldierItemId,
 } from '../src/core/workshop';
 import {
   DEFAULT_PARTY_POLICY,
@@ -74,6 +73,7 @@ import {
   partyBotMissionStep,
   partyBotScienceStep,
   simulateParty,
+  type BotItemId,
   type PartyBotPolicy,
   partyBotAssaultStep,
 } from '../src/core/party-bot';
@@ -190,8 +190,7 @@ function scienceTail(party: ReturnType<typeof createParty>, policy: PartyBotPoli
           ? party.intercept.fighters[0].gunModule
             ? 0
             : 1
-          : // п20.4: зброї в політиці probe немає (ADR-0168) — лише предмети-прапорці
-            squad.filter((s) => !w.equipped[s.id]?.[SoldierItemIdOf(id as SoldierItemId)]).length;
+          : squad.filter((s) => !w.equipped[s.id]?.[SoldierItemIdOf(id)]).length;
       if (lacking - w.store[id] - w.queue.filter((o) => o.id === id).length <= 0) continue;
       const price = sciencePrice(WORKSHOP_CATALOG[id].cost, preset);
       if (party.econ.money - price < policy.hireReserve) continue;
@@ -220,11 +219,11 @@ function run(name: string, v: Variant, preset: DifficultyPreset, seed: number): 
     party.research.completed = [...v.done];
     sci.scientistsUpTo = 0;
     sci.projects = [];
-    sci.workshopOrders = v.done.filter((id) => id in WORKSHOP_CATALOG) as ItemId[]; // п18.2: ключові протоколи предмета не мають
+    sci.workshopOrders = v.done.filter((id) => id in WORKSHOP_CATALOG) as BotItemId[]; // п18.2: ключові протоколи предмета не мають
   }
   if (v.projects) {
     sci.projects = v.projects;
-    sci.workshopOrders = v.projects.filter((id) => id in WORKSHOP_CATALOG) as ItemId[];
+    sci.workshopOrders = v.projects.filter((id) => id in WORKSHOP_CATALOG) as BotItemId[];
   }
   const reserve = v.reserve(preset);
   const sciStep: PartyBotPolicy = reserve === null ? sci : { ...sci, hireReserve: reserve };

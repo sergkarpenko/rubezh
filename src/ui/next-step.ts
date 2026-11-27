@@ -18,7 +18,6 @@ import { TICK_MINUTES, detectedUfos, missionTargets } from '../core/geo';
 import { FIGHTER_MAX_HP, FIGHTER_REPAIR_COST } from '../core/intercept';
 import type { Party } from '../core/save';
 import { isBankrupt, readySoldiers } from '../core/squad';
-import { isForgeWeapon } from '../core/weapons';
 import { ITEM_IDS, SoldierItemIdOf, WORKSHOP_CATALOG, itemUnlocked, type ItemId } from '../core/workshop';
 import { EQUIP_ITEMS, fighterBtnId, fighterReady, gunModuleFighter, inAirCombat, readyToIssue } from './panels';
 import type { StatusTabId } from './status-tabs';
@@ -59,15 +58,13 @@ function everProduced(party: Party, id: ItemId): boolean {
 
 // Предмет завершеного протоколу, якого зараз ніде немає (ні на складі, ні в черзі
 // «Кузні», ні в оперативників, ні на перехоплювачі), а кредитів на нього вистачає.
-function canOrderNew(party: Party, id: ItemId): boolean {
+function canOrderNew(party: Party, id: (typeof ITEM_IDS)[number]): boolean {
   const w = party.workshop;
   if (!itemUnlocked(party.research, id)) return false;
   if (w.store[id] > 0 || w.queue.some((o) => o.id === id)) return false;
   if (id === 'gun-module') {
     // п19.4: модуль «є», коли він уже на кожному перехоплювачі (новому перехоплювачу — новий модуль)
     if (party.intercept.fighters.every((f) => f.gunModule === true)) return false;
-  } else if (isForgeWeapon(id)) {
-    if (party.roster.soldiers.some((s) => w.equipped[s.id]?.weapon === id)) return false; // п20.4: зброя — свій слот
   } else if (party.roster.soldiers.some((s) => w.equipped[s.id]?.[SoldierItemIdOf(id)] === true)) return false;
   return party.econ.money >= sciencePrice(WORKSHOP_CATALOG[id].cost, party.campaign.preset);
 }

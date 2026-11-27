@@ -46,9 +46,3 @@ export const FORGE_WEAPONS: readonly ForgeWeaponId[] = ['shotgun', 'sniper', 'mg
 export function isForgeWeapon(id: string): id is ForgeWeaponId {
   return (FORGE_WEAPONS as readonly string[]).includes(id);
 }
-
-// Ключ зброї за об'єктом юніта (ростер зберігає зброю об'єктом, ADR-0165 п. 13): за назвою каталогу;
-// невідома назва (ворожа зброя) — undefined.
-export function weaponIdOf(w: Pick<Weapon, 'name'>): WeaponId | undefined {
-  return WEAPON_IDS.find((id) => WEAPONS[id].name === w.name);
-}

@@ -24,6 +24,7 @@
 // (критерій П11.8.2). Політика SCIENCE_POLICY — базова для probe-симуляцій
 // П11.8 (scripts/sim-p11.8.ts).
 
+import type { ForgeWeaponId } from './weapons';
 import { TICK_MINUTES, advanceTime, chebyshevWrap, geoDay, missionTargets, type GeoState, type Ufo } from './geo';
 import { creditMissionBonus, economyTick, hirePrice } from './economy';
 import { REGION_IDS, totalTrust, type RegionId } from './regions';
@@ -94,6 +95,9 @@ export const TICKS_PER_DAY = 1440 / TICK_MINUTES; // 48 тіків на добу
 export const MISSION_SQUAD_SIZE = 3; // повний загін (SQUAD_SPAWN.length, mission.ts)
 
 // Політика бот-гравця партії: детерміновані рішення лише за станом (ADR-0003).
+// п20.4 (ADR-0168): предмети, які бот замовляє й видає, — без зброї «Кузні» (зброя бота — п20.6)
+export type BotItemId = Exclude<ItemId, ForgeWeaponId>;
+
 export interface PartyBotPolicy {
   name: string;
   intercept: InterceptPolicy; // політика перехоплень (intercept-bot.ts)
@@ -105,7 +109,7 @@ export interface PartyBotPolicy {
   // без науки байт-у-байт незмінні (критерій П11.8.2, патерн ізоляції П11.2).
   scientistsUpTo: number; // тримати штат вчених не менше (0 = не наймати)
   projects: ProjectId[]; // порядок запуску проєктів (пріоритет; порожній = без проєктів)
-  workshopOrders: ItemId[]; // порядок замовлень цеху (виготовляти за дефіцитом складу)
+  workshopOrders: BotItemId[]; // порядок замовлень цеху (виготовляти за дефіцитом складу); п20.4 — без зброї
   equip: boolean; // екіпірувати готові предмети боєготових + гарматний модуль
   fireScientistsWhenDone: boolean; // Т.28: усі протоколи політики завершено — звільнити штат і більше не наймати
   // Т.76 (П15.5, ADR-0075): політика евакуації бота в бою (ai-bot.ts). Немає —
@@ -353,7 +357,7 @@ function presetPrice(base: number, preset: DifficultyPreset): number {
 // складі + замовлених бракує, щоб екіпірувати всіх, кому предмета не вистача
 // (для гарматного модуля — один на винищувач). Порядок — за ростером
 // (ветерани перші, прецедент missionSquad), жодного RNG.
-function workshopDeficit(party: Party, id: ItemId): number {
+function workshopDeficit(party: Party, id: BotItemId): number {
   if (id === 'gun-module') {
     // п19.6 (аудит PR #525): на кожен перехоплювач без модуля, мінус склад і черга — інакше, поки
     // перехоплювач у польоті (модуль ставиться лише на базі), бот замовляв модулі без кінця
@@ -371,7 +375,8 @@ function workshopDeficit(party: Party, id: ItemId): number {
 // workshop.ts; тут гарматний модуль — помилкою, а не мовчки).
 // Гарматний модуль на солдатові не носиться — недосяжно за конструкцією
 // (workshopDeficit відсікає його до виклику).
-function soldierEquipKey(id: ItemId): 'armor' | 'optics' | 'medkit' | 'grenade' | 'charge' {
+// п20.4 (ADR-0168): зброя — свій слот (equipWeapon); бот зброю до п20.6 не замовляє — тип її не пускає
+function soldierEquipKey(id: BotItemId): 'armor' | 'optics' | 'medkit' | 'grenade' | 'charge' {
   switch (id) {
     case 'armor':
       return 'armor';
@@ -385,9 +390,6 @@ function soldierEquipKey(id: ItemId): 'armor' | 'optics' | 'medkit' | 'grenade' 
       return 'charge'; // п18.2; замовляє політика кампанії (п18.6, CAMPAIGN_POLICY)
     case 'gun-module':
       throw new Error('Гарматний модуль перехоплювача — озброєння перехоплювача, ключ екіпірування оперативника недосяжний');
-    default:
-      // п20.4: зброя — свій слот (equipWeapon); бот зброю до п20.6 не замовляє (ADR-0168)
-      throw new Error('Зброя — не предмет екіпірування: ' + id);
   }
 }
 

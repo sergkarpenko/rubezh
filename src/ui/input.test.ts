@@ -9,6 +9,7 @@ import { EYE_BEAM, GOLEM_CANNON, HOUND_CLAWS } from '../core/enemies';
 import { advanceTime, missionTargets } from '../core/geo';
 import { distance, hasLineOfSight, hasTerrainLine, type Unit } from '../core/combat';
 import { findPath } from '../core/map';
+import { SHOTGUN } from '../core/weapons';
 import { makeMoveAnim, type Anim } from '../core/render-core';
 import { createParty, type Party } from '../core/save';
 import { initPixelSprites } from '../render';
@@ -317,6 +318,19 @@ describe('input: обробники вводу бою (тап-тап, зведе
     key('Escape');
     expect(f.ui.selectedId).toBeNull();
     expect(prevented).toEqual([' ', 'Escape']);
+  });
+
+  it('п20.4 (EARS 6, аудит PR #531): клавіша режиму, якого зброя не має, режим не зводить — причина в #binfo', () => {
+    const f = makeFixture();
+    launchMission(f);
+    const s = f.ui.mission!.state.units.find((u) => u.side === 'player')!;
+    f.ui.selectedId = s.id;
+    s.weapon = SHOTGUN;
+    f.input.onKeyDown(new KeyboardEvent('keydown', { key: '2', code: 'Digit2' }));
+    expect(f.ui.fireMode).toBeNull();
+    expect(document.getElementById('binfo')!.textContent).toBe('У зброї «Дробовик «Шквал»» немає режиму «прицільний».');
+    f.input.onKeyDown(new KeyboardEvent('keydown', { key: '1', code: 'Digit1' }));
+    expect(f.ui.fireMode).toBe('snap');
   });
 
   it('Т.117 (аудит): автоповтор пробілу після пропуску підсумок не прибирає; фокус з кнопки знято', () => {

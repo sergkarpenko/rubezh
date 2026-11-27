@@ -59,7 +59,8 @@ export const WORKSHOP_CATALOG: Record<ItemId, WorkshopItemDef> = {
 
 // Предмети, які показують панелі «Кузні» і порада «Наступний крок». п18.2: «Пробивний
 // заряд» — у каталозі, але в панелях до UI п18.5 не показується (рішення власника, ADR-0154).
-export const ITEM_IDS: ItemId[] = ['medkit', 'grenade', 'optics', 'armor', 'gun-module'];
+// п20.4: без зброї «Кузні» (тип — щоб бот, «Наступний крок» і скрипти не потребували гілок зброї)
+export const ITEM_IDS: Exclude<ItemId, ForgeWeaponId>[] = ['medkit', 'grenade', 'optics', 'armor', 'gun-module'];
 
 // п18.2: чи відкрито виробництво предмета (завершено протокол unlockedBy або протокол з тим самим id).
 export function itemUnlocked(research: Pick<ResearchState, 'completed'>, id: ItemId): boolean {

@@ -510,6 +510,11 @@ describeScenario('UI-флоу прев’ю: геосцена → місія →
     expect(document.activeElement?.id).toBe('loadout-title');
     expect($('battle-panel').classList.contains('hidden')).toBe(true);
     expect(btn('btn-event').disabled).toBe(false); // вікно — ще не бій
+    // аудит PR #531: вікно — у OVERLAY_IDS: пробіл час не рухає
+    const clockBefore = $('clock').textContent;
+    const ev = new KeyboardEvent('keydown', { key: ' ', code: 'Space', bubbles: true, cancelable: true });
+    document.dispatchEvent(ev);
+    expect([ev.defaultPrevented, $('clock').textContent]).toEqual([false, clockBefore]);
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     expect($('loadout-dialog').classList.contains('hidden')).toBe(true);
     expect($('battle-panel').classList.contains('hidden')).toBe(true);
@@ -1759,6 +1764,7 @@ describeScenario('п18.4: штурм бази і «Брама Розриву»',
       const gate = btn('btn-gate');
       expect(gate.textContent).toBe('▶ Атакувати Браму Розриву');
       gate.click();
+      expect($('loadout-dialog').classList.contains('hidden')).toBe(false); // аудит PR #531: фінал — через вікно спорядження
       deploy();
       expect($('battle-panel').classList.contains('hidden')).toBe(false);
       expect($('bctx-kind').textContent).toBe('Брама Розриву');

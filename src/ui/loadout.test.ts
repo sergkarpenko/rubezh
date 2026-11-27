@@ -65,8 +65,10 @@ describe('контролер вікна', () => {
     expect(deps.box.classList.contains('hidden')).toBe(false);
     expect(document.activeElement?.id).toBe('loadout-title');
     const s = missionSquad(party.roster)[0];
+    btn('btn-lo-w-' + s.id + '-shotgun').focus();
     btn('btn-lo-w-' + s.id + '-shotgun').click();
     expect(s.weapon).toBe(SHOTGUN);
+    expect(document.activeElement?.id).toBe('btn-lo-w-' + s.id + '-shotgun'); // фокус — на ту саму кнопку після перемальовки
     expect(party.workshop.store.shotgun).toBe(0);
     expect(btn('btn-lo-w-' + s.id + '-shotgun').getAttribute('aria-pressed')).toBe('true');
     expect(deps.renderAll).toHaveBeenCalled();

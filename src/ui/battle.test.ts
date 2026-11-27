@@ -14,7 +14,7 @@ import { initPixelSprites, initUnitAtlas } from '../render';
 import { ALIEN_RING, RING_DY, RING_RX, fighterLook, makeDeathAnim, makeMoveAnim, makeTracerAnim } from '../core/render-core';
 import { createBattleUI, validFireTargets, validHealTargets, type BattleDeps, type BattleUIState } from './battle';
 import { createToolbar } from './toolbar';
-import { SHOTGUN, SNIPER_RIFLE } from '../core/weapons';
+import { MACHINE_GUN, SHOTGUN, SNIPER_RIFLE } from '../core/weapons';
 
 // Піксельний рушій (ADR-0031): тестовий мок фабрики offscreen-канвасів —
 // той самий патерн, що й у main.ui.test.ts (jsdom без пакета canvas).
@@ -546,6 +546,15 @@ describe('battle: флоу місії (запуск/закриття/завер�
       'немає в зброї',
     ]);
     expect([cap('btn-role').textContent, tile('btn-role').disabled]).toEqual(['Точний', false]);
+    // аудит PR #531: ціна в кутку і тултіп — за зброєю вибраного
+    const ap = (id: string): string => document.querySelector('#' + id + ' .tb-ap')!.textContent!;
+    expect([ap('btn-aimed'), tile('btn-aimed').title]).toEqual(['6 AP', '6 AP · ×1.3 · 1 куля · клавіша 2']);
+    sel.weapon = MACHINE_GUN;
+    f.battle.renderBattle();
+    expect([ap('btn-auto'), tile('btn-auto').title]).toEqual(['5 AP', '5 AP · ×0.45 · 4 кулі · клавіша 3']);
+    f.ui.selectedId = null; // без вибору — числа «Гарта»
+    f.battle.renderBattle();
+    expect([ap('btn-aimed'), ap('btn-auto'), tile('btn-auto').title]).toEqual(['5 AP', '4 AP', '4 AP · ×0.5 · 3 кулі · клавіша 3']);
   });
 
   it('п16.4: плитка «Роль» — підпис, іконка й ціна за роллю вибраного, причина з ядра (EARS 6)', () => {
