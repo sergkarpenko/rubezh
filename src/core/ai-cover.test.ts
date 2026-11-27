@@ -1,7 +1,19 @@
 // п20.3 (ADR-0167; EARS 5 Фази 20): ШІ ворогів, авто-бій і бот загону з укриттям.
 // Гейти байт-у-байт: бій без опції `cover` — жадібний шлях як до п20.3 (coverStep повертає його ж).
 import { describe, expect, it } from 'vitest';
-import { RIFLE, createGame, endTurn, makeUnit, mulberry32, type GameMap, type GameState, type Unit, type Vec2 } from './combat';
+import {
+  OVERWATCH_AP_COST as OW,
+  RIFLE,
+  createGame,
+  endTurn,
+  makeUnit,
+  moveUnit,
+  mulberry32,
+  type GameMap,
+  type GameState,
+  type Unit,
+  type Vec2,
+} from './combat';
 import { EYE_BEAM, makeEnemy } from './enemies';
 import { COVER_SCORE, COVER_SLACK, cheapestShotAp, coverRank, coverStep, movedThisTurn, pathToward, reachable } from './ai-utils';
 import { aiStep } from './ai';
@@ -313,5 +325,62 @@ describe('авто-бій і бот загону (botTurn) з укриттям',
     expect(bestModeAp(RIFLE)).toBe(RIFLE.modes.auto.apCost);
     expect(bestModeAp(EYE_BEAM)).toBe(EYE_BEAM.modes.aimed.apCost);
     expect(bestModeAp({ ...RIFLE, only: ['snap'] })).toBe(RIFLE.modes.snap.apCost);
+  });
+});
+
+// п20.6 (ADR-0170; ADR-0165 EARS 10): бот партії в дозорі ховається в укриття — режим `hold` 'cover'.
+describe('п20.6: дозор з укриттям (hold «cover»)', () => {
+  // око (дальність 16) на сході бачить і дістає всю мапу 20 × 12, стін немає — «поза вогнем» не буває;
+  // низька перешкода (6, 5) дає клітинці (5, 5) пів-укриття від ока; у бійця дальність 3 — пострілу немає
+  const eye = (): Unit => makeEnemy('eye', 'a1', 0, { x: 12, y: 5 });
+  const setup = (cover: boolean, start: Vec2 = { x: 5, y: 7 }): GameState =>
+    game(mapOf([], [{ x: 6, y: 5 }]), [soldier('s1', start, 3), eye()], cover, 'player');
+  const s1 = (st: GameState): Unit => st.units.find((u) => u.id === 's1')!;
+  const rank = (st: GameState): number => coverRank(st, s1(st), s1(st).pos, [st.units[1]]);
+  const moves = (st: GameState): number => st.log.filter((e) => e.type === 'move' && e.unitId === 's1').length;
+
+  it('видимий ворог, пострілу немає: хід у досяжну клітинку з кращим укриттям, потім дозор із залишком AP', () => {
+    const st = setup(true);
+    expect(rank(st)).toBe(COVER_SCORE.none);
+    botTurn(st, undefined, 'cover');
+    expect(rank(st)).toBe(COVER_SCORE.half);
+    expect(moves(st)).toBeGreaterThan(0);
+    expect(s1(st).overwatch).toBe(true);
+    expect(s1(st).ap).toBe(s1(st).maxAp - moves(st) - OW); // хід — по 1 AP за клітинку, дозор — 3
+  });
+
+  it('true — дозор з місця, як до п20.6; бій без `cover` — режим «cover» теж з місця', () => {
+    for (const [st, hold] of [
+      [setup(true), true],
+      [setup(false), 'cover'],
+    ] as const) {
+      botTurn(st, undefined, hold);
+      expect(moves(st)).toBe(0);
+      expect(s1(st).pos).toEqual({ x: 5, y: 7 });
+      expect(s1(st).overwatch).toBe(true);
+    }
+  });
+
+  it('клітинка вже з найкращим досяжним укриттям — дозор з місця; AP лише на дозор — без ходу', () => {
+    const here = setup(true, { x: 5, y: 5 });
+    botTurn(here, undefined, 'cover');
+    expect([moves(here), s1(here).overwatch]).toEqual([0, true]);
+    const tight = setup(true);
+    s1(tight).ap = OW; // рівно на дозор: на хід AP не лишається
+    botTurn(tight, undefined, 'cover');
+    expect([moves(tight), s1(tight).overwatch]).toEqual([0, true]);
+  });
+
+  it('уже ходив цього півходу (аудит PR #533) — далі не йде, лише дозор', () => {
+    const st = setup(true);
+    moveUnit(st, 's1', [{ x: 4, y: 7 }]); // крок не в укриття
+    botTurn(st, undefined, 'cover');
+    expect([moves(st), s1(st).pos, s1(st).overwatch]).toEqual([1, { x: 4, y: 7 }, true]);
+  });
+
+  it('найближча клітинка з укриттям: з (4, 5) — один крок у (5, 5)', () => {
+    const st = setup(true, { x: 4, y: 5 });
+    botTurn(st, undefined, 'cover');
+    expect([endOf(st, 's1'), moves(st)]).toEqual([{ x: 5, y: 5 }, 1]);
   });
 });

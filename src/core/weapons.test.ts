@@ -52,7 +52,7 @@ describe('каталог зброї (ADR-0165 п. 5; назви — рішенн
     const row = (w: Weapon) => [w.name, w.damage, w.range, w.only, w.modes[w.only![0]]];
     expect(row(SHOTGUN)).toEqual(['Дробовик «Шквал»', [4, 8], 6, ['snap'], { apCost: 3, accuracyMod: 1, shots: 1 }]);
     expect(row(SNIPER_RIFLE)).toEqual(['Гвинтівка «Голка»', [4, 7], 18, ['aimed'], { apCost: 6, accuracyMod: 1.3, shots: 1 }]);
-    expect(row(MACHINE_GUN)).toEqual(['Кулемет «Град»', [3, 5], 12, ['auto'], { apCost: 5, accuracyMod: 0.45, shots: 4 }]);
+    expect(row(MACHINE_GUN)).toEqual(['Кулемет «Град»', [3, 5], 12, ['auto'], { apCost: 5, accuracyMod: 0.6, shots: 4 }]); // п20.6: ×0,45 → ×0,6 (ADR-0170)
   });
 
   it('профілі недоступних режимів дорівнюють дозволеному — дозор (`modes.snap`) бере профіль зброї', () => {
@@ -214,6 +214,21 @@ describe('сейв (ADR-0165 п. 13; EARS 8): v4 з необов’язкови�
     expect(serializeParty(q)).toBe(json);
   });
 
+  it('п20.6 (ADR-0170, аудит PR #533): видана зброя «Кузні» — профіль з каталогу, а не зі старого сейва («Град» ×0,45 → ×0,6)', () => {
+    const p = createParty(42);
+    const s = p.roster.soldiers[0];
+    done(p.research, 'mg');
+    stock(p.workshop, 'mg', 1);
+    equipWeapon(p.workshop, s, 'mg');
+    const data = JSON.parse(serializeParty(p));
+    data.state.roster.soldiers[0].weapon.modes.auto.accuracyMod = 0.45; // сейв між п20.4 і п20.6
+    data.state.roster.soldiers[1].weapon.name = 'стара назва «Гарта»'; // «Гарт» — як у сейві
+    const q = deserializeParty(JSON.stringify(data));
+    expect(q.roster.soldiers[0].weapon).toEqual(MACHINE_GUN);
+    expect(q.roster.soldiers[0].weapon.modes.auto.accuracyMod).toBe(0.6);
+    expect(q.roster.soldiers[1].weapon.name).toBe('стара назва «Гарта»');
+  });
+
   it('сейв v4 без полів зброї: у кожного «Гарт», склад зброї порожній, протоколи зброї не досліджено', () => {
     const p = createParty(42);
     const data = JSON.parse(serializeParty(p));
@@ -251,13 +266,13 @@ describe('зброя в бою (EARS 6; рішення власника п20.4 �
     expect(resolveAttack(duel(SNIPER_RIFLE, 12).s, 'p', 'a', 'aimed').shots).toHaveLength(1);
   });
 
-  it('шанс новобранця: «Шквал» 60 %, «Голка» 78 %, «Град» 27 % за кулю; дозор — ×0,7 профілю (34 / 42 / 55 / 19 %)', () => {
+  it('шанс новобранця: «Шквал» 60 %, «Голка» 78 %, «Град» 36 % за кулю (п20.6); дозор — ×0,7 профілю (34 / 42 / 55 / 25 %)', () => {
     const u = (w: Weapon): Unit => makeUnit({ id: 'p', side: 'player', pos: { x: 0, y: 0 }, weapon: w, firingAccuracy: 0.6 });
     expect(calculateHitChance(u(SHOTGUN), 'snap')).toBeCloseTo(0.6, 10);
     expect(calculateHitChance(u(SNIPER_RIFLE), 'aimed')).toBeCloseTo(0.78, 10);
-    expect(calculateHitChance(u(MACHINE_GUN), 'auto')).toBeCloseTo(0.27, 10);
+    expect(calculateHitChance(u(MACHINE_GUN), 'auto')).toBeCloseTo(0.36, 10);
     const ow = (w: Weapon): number => Math.round(0.6 * w.modes.snap.accuracyMod * 0.7 * 100);
-    expect([RIFLE, SHOTGUN, SNIPER_RIFLE, MACHINE_GUN].map(ow)).toEqual([34, 42, 55, 19]);
+    expect([RIFLE, SHOTGUN, SNIPER_RIFLE, MACHINE_GUN].map(ow)).toEqual([34, 42, 55, 25]);
     const { s } = duel(SNIPER_RIFLE);
     setOverwatch(s, 'p'); // дозор — 3 AP і для «Голки»
     expect(s.units[0].ap).toBe(s.units[0].maxAp - 3);

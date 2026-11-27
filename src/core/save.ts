@@ -15,6 +15,7 @@
 // новою версією + міграцією на вході.
 
 import { mulberry32, type StatefulRng, type Unit, type Vec2 } from './combat';
+import { WEAPONS, isForgeWeapon } from './weapons';
 import { WORLD_H, WORLD_W, createGeoGame, geoDay, type GeoEvent, type GeoState, type Ufo } from './geo';
 import { createRoster, type Roster } from './squad';
 import { applyRankBonus, newCareer, rankOf, type SoldierCareer, type SoldierRole } from './career';
@@ -707,6 +708,13 @@ export function deserializeParty(json: string): Party {
   const ccsv = data.state.campaign;
   const cc = ccsv ?? { status: 'триває' as const, preset: DEFAULT_PRESET, score: null, victoryDay: null };
   const soldiers = data.state.roster.soldiers.map((s) => ({ ...s, pos: { ...s.pos } }));
+  // п20.6 (ADR-0170, аудит PR #533): профіль зброї «Кузні» — з каталогу за видачею, а не з сейва: зміна чисел
+  // зброї (тут — «Град» ×0,6) діє і на вже видану в старих сейвах. «Гарт» — як у сейві (RIFLE не змінювався).
+  const weaponOfSv = data.state.workshop?.equipped ?? {};
+  for (const s of soldiers) {
+    const w = weaponOfSv[s.id]?.weapon;
+    if (w !== undefined && isForgeWeapon(w)) s.weapon = WEAPONS[w];
+  }
   // п16.2 (ADR-0147 п. 15): v1 — міграція кар'єр, v2 — копія (parseSave перевірив).
   const careersSv = data.version !== SAVE_VERSION_V1 ? data.state.roster.careers : undefined;
   return {

@@ -32,6 +32,7 @@ import {
   setOverwatch,
   useDash,
   OVERWATCH_AP_COST,
+  MOVE_AP_PER_CELL,
   EVAC_AP_COST,
   GRENADE_RANGE,
   HEAL_AP_COST,
@@ -46,7 +47,18 @@ import {
   type Weapon,
 } from './combat';
 import { findPath, visibleEnemies } from './map';
-import { MODE_PRIORITY, bestPathToNeighbors, bestShootMode, coverStep, movedThisTurn, nearestEnemy, pathToward } from './ai-utils';
+import {
+  MODE_PRIORITY,
+  better,
+  bestPathToNeighbors,
+  bestShootMode,
+  coverRank,
+  coverStep,
+  movedThisTurn,
+  nearestEnemy,
+  pathToward,
+  reachable,
+} from './ai-utils';
 import { aiStep } from './ai';
 import { ALIEN_SPAWN, SQUAD_SPAWN, missionOutcome } from './mission';
 
@@ -108,13 +120,46 @@ function holdStep(state: GameState, u: Unit): boolean {
   return true;
 }
 
+// п20.6 (ADR-0170; ADR-0165 EARS 10): дозор з укриттям — тримати позицію, але спершу перейти в досяжну
+// клітинку з кращим рангом укриття від видимих ворогів (coverRank), лишивши AP на дозор; рівний ранг —
+// коротший шлях, далі порядок обходу. Лише в бою з `state.cover`, лише раз за півхід (movedThisTurn) і
+// лише коли клітинка краща за поточну; інакше — звичайний дозор (holdStep).
+// Режим 'cover' — для бота партії; true — дозор з місця, як до п20.6.
+export type HoldMode = boolean | 'cover';
+
+function holdCoverStep(state: GameState, u: Unit, enemies: Unit[]): Vec2[] | null {
+  if (!state.cover || u.overwatch || movedThisTurn(state, u)) return null;
+  const budget = Math.floor((u.ap - OVERWATCH_AP_COST) / MOVE_AP_PER_CELL); // ≤ 0 — reachable порожній
+  let best: Vec2[] | null = null;
+  let bestKey = [coverRank(state, u, u.pos, enemies), 0];
+  for (const r of reachable(state, u.pos, budget)) {
+    const k = [coverRank(state, u, r.pos, enemies), -r.path.length];
+    if (better(k, bestKey)) {
+      best = r.path;
+      bestKey = k;
+    }
+  }
+  return best;
+}
+
+function holdWithCover(state: GameState, u: Unit, enemies: Unit[], hold: HoldMode): boolean {
+  if (hold === 'cover') {
+    const path = holdCoverStep(state, u, enemies);
+    if (path) {
+      moveUnit(state, u.id, path);
+      return true;
+    }
+  }
+  return holdStep(state, u);
+}
+
 // AP найкращого режиму зброї за MODE_PRIORITY серед її режимів (ADR-0165 п. 12).
 export function bestModeAp(w: Weapon): number {
   const mode = MODE_PRIORITY.find((m) => weaponHasMode(w, m)) ?? 'auto';
   return w.modes[mode].apCost;
 }
 
-function soldierStep(state: GameState, u: Unit, evac?: EvacPolicy, hold = false): boolean {
+function soldierStep(state: GameState, u: Unit, evac?: EvacPolicy, hold: HoldMode = false): boolean {
   if (!u.alive || u.ap <= 0) return false;
   const aid = aidTarget(state, u);
   if (aid) {
@@ -174,7 +219,7 @@ function soldierStep(state: GameState, u: Unit, evac?: EvacPolicy, hold = false)
     return true;
   }
   if (u.turret) return false; // п18.4: турель не підходить до цілі
-  if (hold) return holdStep(state, u);
+  if (hold) return holdWithCover(state, u, enemies, hold);
   // п20.3 (ADR-0167 п. 5): авто-бій і бот загону — хід з укриттям, як у ШІ ворогів.
   const step = coverStep(state, u, target, enemies, pathToward(state, u, target), u.ap);
   if (step) {
@@ -222,7 +267,7 @@ function grenadeTarget(state: GameState, u: Unit, enemies: Unit[]): Vec2 | null 
 // зникає з units, але лишається в знімку циклу, і AP у нього ще є (евакуація
 // знімає лише 2) — повторну дію зупиняє перевірка state.units.includes(u).
 // п18.6: hold — тримати позицію в дозорі (holdStep), для бота партії.
-export function botTurn(state: GameState, evac?: EvacPolicy, hold = false): number {
+export function botTurn(state: GameState, evac?: EvacPolicy, hold: HoldMode = false): number {
   if (state.activeSide !== 'player') throw new Error('botTurn: зараз не хід гравця');
   let actions = 0;
   for (const u of state.units.filter((x) => x.side === 'player' && x.alive)) {
@@ -249,7 +294,7 @@ export function autoBattle(
   state: GameState,
   maxHalfTurns = 240,
   evac?: EvacPolicy,
-  hold = false
+  hold: HoldMode = false
 ): { outcome: ReturnType<typeof missionOutcome>; halfTurns: number } {
   let halfTurns = 0;
   while (missionOutcome(state) === 'триває' && halfTurns < maxHalfTurns) {

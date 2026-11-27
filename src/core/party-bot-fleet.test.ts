@@ -299,14 +299,15 @@ describe('п19.6: повітряний бій бота — до кінця, по
 describe('п19.6: повні партії політики кампанії з купівлею', () => {
   // п20.2 (укриття і низькі перешкоди, ADR-0166): сід 6 — 24 погоні з 56, перемога на 43-й (було 22 з 53, 41-ша)
   // п20.3 (ШІ ворогів з укриттям, ADR-0167; бот кампанії в дозорі, з місця не йде): 21 погоня з 50, перемога на 38-й у другому фіналі
-  it('сід 6 «норма»: другий перехоплювач в ангарі «Захід», 21 погоня з 50; перемога на 38-й', () => {
+  // п20.6 (бот зі зброєю, ADR-0170): сід 6 купує в «Схід» — сід 10: «Захід», 13 погонь з 50, перемога на 42-й у першому фіналі
+  it('сід 10 «норма»: другий перехоплювач в ангарі «Захід», 13 погонь з 50; перемога на 42-й', () => {
     let last: Readonly<Party> | null = null;
-    const r = simulateParty(6, 'норма', { policy: CAMPAIGN_POLICY, onTick: (p) => (last = p) });
-    expect([r.outcome, r.endDay, r.gateAttempts, r.launches, r.shotDown]).toEqual(['перемога', 38, 2, 50, 41]);
+    const r = simulateParty(10, 'норма', { policy: CAMPAIGN_POLICY, onTick: (p) => (last = p) });
+    expect([r.outcome, r.endDay, r.gateAttempts, r.launches, r.shotDown]).toEqual(['перемога', 42, 1, 50, 36]);
     const fin = last as unknown as Party;
     expect(fin.intercept.fighters.map((f) => f.id + ':' + f.region)).toEqual(['1:north', '2:west']);
     const starts = fin.intercept.log.filter((e) => e.type === 'intercept_start').map((e) => e.fighter ?? 1);
-    expect([starts.length, starts.filter((id) => id === 2).length]).toEqual([50, 21]);
+    expect([starts.length, starts.filter((id) => id === 2).length]).toEqual([50, 13]);
     expect(fin.intercept.fighters.every((f) => f.status !== 'бій')).toBe(true); // бій не переживає тік
   }, 30_000);
 
@@ -314,7 +315,8 @@ describe('п19.6: повні партії політики кампанії з �
     const a = simulateParty(7, 'норма', { policy: { ...CAMPAIGN_POLICY, interceptorsUpTo: 1 } });
     const b = simulateParty(7, 'норма', { policy: { ...CAMPAIGN_POLICY, interceptorsUpTo: undefined } });
     expect(JSON.stringify(a)).toBe(JSON.stringify(b));
-    // до п19.6 — 3 і 1: перехоплювач застрягав у «бою»; п20.2 — 41 і 31 → 38 і 29; п20.3 (ШІ ворогів з укриттям) — 43 і 33
-    expect([a.launches, a.shotDown]).toEqual([43, 33]);
+    // до п19.6 — 3 і 1: перехоплювач застрягав у «бою»; п20.2 — 41 і 31 → 38 і 29; п20.3 (ШІ ворогів з укриттям) — 43 і 33;
+    // п20.6 (бот зі зброєю, ADR-0170) — 39 і 31
+    expect([a.launches, a.shotDown]).toEqual([39, 31]);
   }, 30_000);
 });
