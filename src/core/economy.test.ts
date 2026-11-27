@@ -22,8 +22,8 @@ import {
 } from './economy';
 
 // Геосцена без НЛО, щоб тести доти не залежали від спавну.
-function geoNoUfo(seed = 7): GeoState {
-  return createGeoGame({ seed, spawnChance: 0, maxUfos: 0 });
+function geoNoProbe(seed = 7): GeoState {
+  return createGeoGame({ seed, spawnChance: 0, maxProbes: 0 });
 }
 
 describe('createEconomy', () => {
@@ -38,7 +38,7 @@ describe('createEconomy', () => {
 describe('economyTick — добова дотація (ADR-0021)', () => {
   it('протягом доби 1 дотації немає: доба ще не завершена', () => {
     const econ = createEconomy();
-    const geo = geoNoUfo();
+    const geo = geoNoProbe();
     advanceTime(geo, 47); // 23:30 дня 1
     economyTick(econ, geo);
     expect(econ.money).toBe(START_MONEY);
@@ -47,7 +47,7 @@ describe('economyTick — добова дотація (ADR-0021)', () => {
 
   it('межа дня: 48-й тік завершує добу 1 → +75 з подією allowance', () => {
     const econ = createEconomy();
-    const geo = geoNoUfo();
+    const geo = geoNoProbe();
     advanceTime(geo, 48); // 00:00 дня 2
     economyTick(econ, geo);
     expect(econ.money).toBe(START_MONEY + DAILY_ALLOWANCE);
@@ -56,13 +56,13 @@ describe('economyTick — добова дотація (ADR-0021)', () => {
 
   it('тик-у-тик і одним викликом після 96 тіків дають однаковий результат', () => {
     const step = createEconomy();
-    const geoStep = geoNoUfo();
+    const geoStep = geoNoProbe();
     for (let i = 0; i < 96; i++) {
       geoTick(geoStep);
       economyTick(step, geoStep);
     }
     const batch = createEconomy();
-    const geoBatch = geoNoUfo();
+    const geoBatch = geoNoProbe();
     advanceTime(geoBatch, 96);
     economyTick(batch, geoBatch);
     expect(batch.money).toBe(step.money);
@@ -72,7 +72,7 @@ describe('economyTick — добова дотація (ADR-0021)', () => {
 
   it('декілька діб одним викликом: окрема подія на кожну добу', () => {
     const econ = createEconomy();
-    const geo = geoNoUfo();
+    const geo = geoNoProbe();
     advanceTime(geo, 48 * 5); // 00:00 дня 6 → завершено доби 1–5
     economyTick(econ, geo);
     expect(econ.lastAllowanceDay).toBe(5);
@@ -82,7 +82,7 @@ describe('economyTick — добова дотація (ADR-0021)', () => {
 
   it('повторний виклик без нової доби — no-op (подвійного нарахування немає)', () => {
     const econ = createEconomy();
-    const geo = geoNoUfo();
+    const geo = geoNoProbe();
     advanceTime(geo, 48);
     economyTick(econ, geo);
     const money = econ.money;
@@ -164,7 +164,7 @@ describe('інваріанти ізоляції (ADR-0002/0003)', () => {
   it('повний міні-цикл: дотації + премія − найм дають відтворюваний баланс', () => {
     const run = () => {
       const econ = createEconomy();
-      const geo = geoNoUfo();
+      const geo = geoNoProbe();
       advanceTime(geo, 48 * 2); // дві доби → +200
       economyTick(econ, geo);
       creditMissionBonus(econ, 'збирач'); // перемога над збирачем
@@ -187,7 +187,7 @@ describe('Т.7: фактичні суми за пресетом — одне д�
 
   it('нарахування збігаються з хелперами на кожному пресеті', () => {
     for (const preset of ['легкий', 'норма', 'складний'] as const) {
-      const geo = geoNoUfo();
+      const geo = geoNoProbe();
       const econ = createEconomy(preset);
       const start = econ.money;
       advanceTime(geo, 48);

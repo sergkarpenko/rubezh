@@ -14,7 +14,7 @@
 // до 940 px префікс «Наступний крок:» заміняє стрілка «→» (варіант В власника 21.11.2026).
 
 import { sciencePrice } from '../core/campaign';
-import { TICK_MINUTES, detectedUfos, missionTargets } from '../core/geo';
+import { TICK_MINUTES, detectedProbes, missionTargets } from '../core/geo';
 import { FIGHTER_MAX_HP, FIGHTER_REPAIR_COST } from '../core/intercept';
 import type { Party } from '../core/save';
 import { isBankrupt, readySoldiers } from '../core/squad';
@@ -83,8 +83,8 @@ export function nextStepText(party: Party, ctx: NextStepContext): string | null 
 }
 
 const order = (id: ItemId): StepTarget => ({ tab: 'base', id: 'btn-order-' + id });
-// Т.97: кнопка «Запустити місію» конкретного зонда (id ставить renderUfos у panels.ts)
-const mission = (ufoId: string): StepTarget => ({ tab: 'base', id: 'btn-mission-' + ufoId });
+// Т.97: кнопка «Запустити місію» конкретного зонда (id ставить renderProbes у panels.ts)
+const mission = (probeId: string): StepTarget => ({ tab: 'base', id: 'btn-mission-' + probeId });
 
 // Т.97 (варіант В власника 21.11.2026): префікс — окремим span, щоб CSS на вікнах
 // до 940 px ховав його і ставив стрілку «→» перед рештою; textContent рядка — повний
@@ -141,8 +141,9 @@ export function nextStep(party: Party, ctx: NextStepContext): NextStep | null {
   }
   // п19.4: зонд у повітрі, якого ще ніхто не переслідує, і хоч один боєготовий перехоплювач
   const chased = new Set(fighters.filter((f) => f.status === 'погоня' || f.status === 'бій').map((f) => f.targetId));
-  const flying = detectedUfos(party.geo).some((u) => u.status === 'летить' && !chased.has(u.id));
-  if (flying && fighters.some(fighterReady)) return { text: NEXT_STEP.inAir, target: { tab: 'base', selector: '#ufos button.intercept' } };
+  const flying = detectedProbes(party.geo).some((u) => u.status === 'летить' && !chased.has(u.id));
+  if (flying && fighters.some(fighterReady))
+    return { text: NEXT_STEP.inAir, target: { tab: 'base', selector: '#probes button.intercept' } };
   if (ready === 0) return { text: NEXT_STEP.noReady, target: { tab: 'squad', id: 'btn-hire' } };
   const toOrder = ITEM_IDS.filter((id) => canOrderNew(party, id));
   const fresh = toOrder.find((id) => !CONSUMABLES.includes(id) || !everProduced(party, id));

@@ -61,7 +61,7 @@ for (const [w, h] of sizes) {
   await p.locator('#new-game-seed').fill('42');
   await p.locator('#btn-new-game-start').click();
   await p.locator('#status-tab-base').click();
-  const m = p.locator('#ufos button.mission').first();
+  const m = p.locator('#probes button.mission').first();
   for (let i = 0; i < 200 && !(await m.isVisible()); i++) await p.locator('#btn-tick').click();
   if (!(await m.isVisible()))
     throw new Error(`${w}x${h}: за 200 тіків (сід 42) кнопки місії немає — стан геосцени інший, ніж чекає скрипт`);
@@ -69,7 +69,7 @@ for (const [w, h] of sizes) {
     topbar: await rects(p, '#topbar button'),
     tabs: await rects(p, '#status-tabs button'),
     panels: await rects(p, 'section.panel'),
-    mission: await rects(p, '#ufos button.mission'),
+    mission: await rects(p, '#probes button.mission'),
     page: await pageSize(p),
   };
   const ex = p.locator('#btn-log-expand');

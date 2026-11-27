@@ -107,7 +107,7 @@ describe('WorkshopPanel: замовлення, черга і склад', () => 
 describe('WorkshopPanel: критерій 1 — числові ефекти ДО замовлення (П12.5, ADR-0065)', () => {
   // Рядок картки предмета за назвою.
   const row = (name: string): HTMLElement =>
-    [...document.querySelectorAll<HTMLElement>('#workshop .ufo')].find((r) => r.textContent!.includes(name))!;
+    [...document.querySelectorAll<HTMLElement>('#workshop .probe')].find((r) => r.textContent!.includes(name))!;
 
   it('кожен предмет показує числовий ефект до замовлення — числа з констант каталогів', () => {
     const panel = createWorkshopPanel(makeDeps());
@@ -208,7 +208,7 @@ describe('Т.43: причина під «Замовити» в «Кузні»', 
   it('Т.80: кнопка і причина — разом у групі .order-line, остання в рядку каталогу', () => {
     party = createParty(42);
     createWorkshopPanel(makeDeps()).render();
-    const rows = document.querySelectorAll('#workshop .ufo:not(#interceptor-order)'); // п19.4: рядок перехоплювача — окремий тест
+    const rows = document.querySelectorAll('#workshop .probe:not(#interceptor-order)'); // п19.4: рядок перехоплювача — окремий тест
     expect(rows.length).toBeGreaterThan(0);
     for (const row of rows) {
       const line = row.lastElementChild!;

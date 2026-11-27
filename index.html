@@ -753,7 +753,7 @@
         font-size: 14px;
         font-weight: 600;
       }
-      .ufo {
+      .probe {
         margin: 6px 0;
         padding: 8px;
         border: 1px solid #232a36;
@@ -761,8 +761,8 @@
       }
       /* Т.126 (ідея власника в Т.125: «кнопка прилягає до тексту»): кнопки картки зонда
          («Запустити місію», «Перехопити») — окремим рядком під координатами, а не в рядку тексту;
-         «Замовити» в «Кузні» (теж .ufo) — flex-рядок, відступ знімає #workshop .order-line button */
-      .ufo button {
+         «Замовити» в «Кузні» (теж .probe) — flex-рядок, відступ знімає #workshop .order-line button */
+      .probe button {
         display: block;
         margin-top: 8px;
       }
@@ -2618,7 +2618,7 @@
             <span class="chip">Статус: <b id="ictx-status">—</b></span>
             <span class="chip">Раунд: <b id="ictx-round">—</b></span>
             <span class="chip">Перехоплювач: <b id="ictx-fighter">—</b></span>
-            <span class="chip">Зонд: <b id="ictx-ufo">—</b></span>
+            <span class="chip">Зонд: <b id="ictx-probe">—</b></span>
           </div>
         </section>
         <section class="panel hidden" id="battle-panel">
@@ -2685,7 +2685,7 @@
           <div id="status-tabs"></div>
           <section class="panel" data-tab="base">
             <h2 data-icon="probe">Сенсорна сітка</h2>
-            <div id="ufos"></div>
+            <div id="probes"></div>
           </section>
           <section class="panel" data-tab="squad">
             <h2 data-icon="finance">Фінанси</h2>

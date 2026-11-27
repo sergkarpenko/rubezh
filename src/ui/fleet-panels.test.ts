@@ -4,7 +4,7 @@
 // «Призначити»), «Перехопити» в «Сенсорній сітці» найближчим, контекст-стрічка, «Регіони»
 // і шар мапи, рядок купівлі в «Кузні», порада «Наступний крок». Один перехоплювач — як до п19.4.
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { advanceTime, detectedUfos, type Ufo } from '../core/geo';
+import { advanceTime, detectedProbes, type Probe } from '../core/geo';
 import { FIGHTER_MAX_HP, addFighter, fighterInBattle, startIntercept } from '../core/intercept';
 import { REGION_IDS, REGION_OF, type RegionId } from '../core/regions';
 import { createParty, type Party } from '../core/save';
@@ -40,8 +40,8 @@ function setupDom(): void {
     <button id="btn-tick"></button><button id="btn-day"></button><button id="btn-event"></button>
     <span id="econ-rates"></span><button id="btn-hire"></button>
     <section id="geo-panel"><canvas id="geo" width="768" height="432"></canvas></section>
-    <div id="ictx" class="hidden"><b id="ictx-target"></b><b id="ictx-status"></b><b id="ictx-round"></b><b id="ictx-fighter"></b><b id="ictx-ufo"></b></div>
-    <div id="ufos"></div><div id="fighter"></div><div id="regions"></div><div id="workshop"></div>
+    <div id="ictx" class="hidden"><b id="ictx-target"></b><b id="ictx-status"></b><b id="ictx-round"></b><b id="ictx-fighter"></b><b id="ictx-probe"></b></div>
+    <div id="probes"></div><div id="fighter"></div><div id="regions"></div><div id="workshop"></div>
     <span id="money-card">—</span><div id="roster"></div>
     <section id="campaign-victory" class="hidden"><p id="campaign-victory-text"></p><span id="campaign-score"></span><div id="campaign-score-lines"></div></section>
     <section id="campaign-defeat" class="hidden"><p id="campaign-defeat-text"></p><span id="campaign-defeat-score"></span><div id="campaign-defeat-lines"></div></section>`;
@@ -69,12 +69,12 @@ function makeFixture(party: Party, over: Partial<PanelsDeps> = {}) {
 }
 
 // сід 42: тіки до першого виявленого зонда в повітрі
-function flyingParty(): { party: Party; ufo: Ufo } {
+function flyingParty(): { party: Party; probe: Probe } {
   const party = createParty(42);
-  for (let i = 0; i < 3000 && !detectedUfos(party.geo).some((u) => u.status === 'летить'); i++) advanceTime(party.geo, 1);
-  const ufo = detectedUfos(party.geo).find((u) => u.status === 'летить')!;
-  expect(ufo).toBeDefined();
-  return { party, ufo };
+  for (let i = 0; i < 3000 && !detectedProbes(party.geo).some((u) => u.status === 'летить'); i++) advanceTime(party.geo, 1);
+  const probe = detectedProbes(party.geo).find((u) => u.status === 'летить')!;
+  expect(probe).toBeDefined();
+  return { party, probe };
 }
 
 const btn = (id: string): HTMLButtonElement => {
@@ -91,45 +91,45 @@ beforeEach(() => {
 
 describe('п19.4: «Перехоплювачі» — картки', () => {
   it('один перехоплювач: картка без номера, ангар «Північ», id кнопок без суфікса', () => {
-    const { party, ufo } = flyingParty();
+    const { party, probe } = flyingParty();
     const f = makeFixture(party);
     f.panels.renderFighter();
     const cards = document.querySelectorAll('#fighter .fighter-card');
     expect(cards).toHaveLength(1);
     expect(cards[0]!.querySelector('.fc-title')!.textContent).toBe('ангар «Північ»');
     expect($text()).toContain('Статус: боєготовий');
-    expect(btn('btn-chase-1-' + ufo.id).textContent).toBe('✦ Погоня: ' + ufo.kind + ' ' + ufo.id);
+    expect(btn('btn-chase-1-' + probe.id).textContent).toBe('✦ Погоня: ' + probe.kind + ' №' + probe.id.replace('probe', ''));
     expect(btn('btn-assign-1').getAttribute('aria-expanded')).toBe('false');
     expect(fighterBtnId('btn-repair', { id: 1 })).toBe('btn-repair');
     expect(fighterBtnId('btn-repair', { id: 3 })).toBe('btn-repair-3');
   });
 
   it('два: номер і ангар у заголовку; «Погоня» другим — startIntercept з його id, у першого кнопки на цей зонд більше нема', () => {
-    const { party, ufo } = flyingParty();
+    const { party, probe } = flyingParty();
     addFighter(party.intercept, party.geo, 'east');
     const f = makeFixture(party);
     f.panels.renderFighter();
     const titles = [...document.querySelectorAll('#fighter .fc-title')].map((e) => e.textContent);
     expect(titles).toEqual(['Перехоплювач 1 · ангар «Північ»', 'Перехоплювач 2 · ангар «Схід»']);
-    btn('btn-chase-2-' + ufo.id).click();
+    btn('btn-chase-2-' + probe.id).click();
     expect(party.intercept.fighters[1]!.status).toBe('погоня');
-    expect(party.intercept.fighters[1]!.targetId).toBe(ufo.id);
+    expect(party.intercept.fighters[1]!.targetId).toBe(probe.id);
     expect(party.intercept.fighters[0]!.status).toBe('на базі');
     expect(f.deps.renderAll).toHaveBeenCalled();
     f.panels.renderFighter();
-    expect(document.getElementById('btn-chase-1-' + ufo.id)).toBeNull(); // на зонд — один
-    expect($text()).toContain('погоня: ' + ufo.id);
+    expect(document.getElementById('btn-chase-1-' + probe.id)).toBeNull(); // на зонд — один
+    expect($text()).toContain('погоня: №' + probe.id.replace('probe', ''));
   });
 
   it('бій другого: дистанції — у його картці, контекст-стрічка показує його номер; раунд іде', () => {
-    const { party, ufo } = flyingParty();
+    const { party, probe } = flyingParty();
     addFighter(party.intercept, party.geo, 'east');
-    startIntercept(party.intercept, party.geo, ufo.id, 2);
+    startIntercept(party.intercept, party.geo, probe.id, 2);
     // зближення погонею залежить від траєкторії (сід 42: зонд сідає раніше) — стан бою ставимо так, як його ставить chaseTick
     const two = party.intercept.fighters[1]!;
     two.status = 'бій';
-    two.pos = { ...ufo.pos };
-    party.intercept.activeUfoId = ufo.id;
+    two.pos = { ...probe.pos };
+    party.intercept.activeProbeId = probe.id;
     party.intercept.round = 0;
     const fighter = fighterInBattle(party.intercept);
     expect(fighter?.id).toBe(2);
@@ -191,9 +191,9 @@ describe('п19.4: «Перехоплювачі» — картки', () => {
   });
 
   it('у погоні «Призначити» немає; у тактичному бою кнопки вимкнені', () => {
-    const { party, ufo } = flyingParty();
+    const { party, probe } = flyingParty();
     addFighter(party.intercept, party.geo, 'east');
-    startIntercept(party.intercept, party.geo, ufo.id, 1);
+    startIntercept(party.intercept, party.geo, probe.id, 1);
     makeFixture(party).panels.renderFighter();
     expect(document.getElementById('btn-assign-1')).toBeNull();
     expect(btn('btn-assign-2').disabled).toBe(false);
@@ -205,13 +205,13 @@ describe('п19.4: «Перехоплювачі» — картки', () => {
 
 describe('аудит PR #523: стан панелі і прокрутка до бою', () => {
   it('розгорнутий «Призначити» скидається з новою партією і після вильоту', () => {
-    const { party, ufo } = flyingParty();
+    const { party, probe } = flyingParty();
     const f = makeFixture(party);
     f.panels.renderFighter();
     btn('btn-assign-1').click();
     f.panels.renderFighter();
     expect(document.querySelector('#fighter-card-1 .assign-row')).not.toBeNull();
-    startIntercept(party.intercept, party.geo, ufo.id);
+    startIntercept(party.intercept, party.geo, probe.id);
     f.panels.renderFighter();
     party.intercept.fighters[0]!.status = 'на базі'; // повернувся — ряд не розгортається сам
     f.panels.renderFighter();
@@ -229,16 +229,16 @@ describe('аудит PR #523: стан панелі і прокрутка до �
   });
 
   it("початок повітряного бою — картка того, хто б'ється, прокручується у видиму частину (раз на бій)", () => {
-    const { party, ufo } = flyingParty();
+    const { party, probe } = flyingParty();
     addFighter(party.intercept, party.geo, 'east');
     const spy = vi.fn();
     (HTMLElement.prototype as unknown as { scrollIntoView: unknown }).scrollIntoView = spy;
     const f = makeFixture(party);
     f.panels.renderFighter();
     expect(spy).not.toHaveBeenCalled();
-    startIntercept(party.intercept, party.geo, ufo.id, 2);
+    startIntercept(party.intercept, party.geo, probe.id, 2);
     party.intercept.fighters[1]!.status = 'бій';
-    party.intercept.activeUfoId = ufo.id;
+    party.intercept.activeProbeId = probe.id;
     f.panels.renderFighter();
     expect(spy).toHaveBeenCalledTimes(1);
     expect(spy.mock.contexts[0]).toBe(document.getElementById('fighter-card-2'));
@@ -247,22 +247,24 @@ describe('аудит PR #523: стан панелі і прокрутка до �
   });
 
   it('аудит PR #524: зонд, що сів на клітинку ангара, малюється поверх ангара', () => {
-    const { party, ufo } = flyingParty();
+    const { party, probe } = flyingParty();
     addFighter(party.intercept, party.geo, 'south');
-    ufo.pos = { x: 8, y: 7 }; // клітинка ангара «Південь»
-    ufo.status = 'приземлився';
+    probe.pos = { x: 8, y: 7 }; // клітинка ангара «Південь»
+    probe.status = 'приземлився';
     const f = makeFixture(party);
     f.panels.renderGeo();
     ops.length = 0;
     f.panels.renderGeo();
     const hangar = ops.indexOf('arc(408,368,15,' + Math.PI + ',0)');
-    const probe = ops.findIndex((o) => o.startsWith('drawImage(') && o.includes(',' + (8 * 48 + 24 - 12) + ',' + (7 * 48 + 24 - 12) + ','));
+    const probeOp = ops.findIndex(
+      (o) => o.startsWith('drawImage(') && o.includes(',' + (8 * 48 + 24 - 12) + ',' + (7 * 48 + 24 - 12) + ',')
+    );
     expect(hangar).toBeGreaterThanOrEqual(0);
-    expect(probe).toBeGreaterThan(hangar);
+    expect(probeOp).toBeGreaterThan(hangar);
   });
 
   it('маркер мапи — і в погоні другого (крило в клітинці погоні; ангар «Південь» лишається)', () => {
-    const { party, ufo } = flyingParty();
+    const { party, probe } = flyingParty();
     const f = makeFixture(party);
     const wings = (): string[] => {
       f.panels.renderGeo();
@@ -275,7 +277,7 @@ describe('аудит PR #523: стан панелі і прокрутка до �
     addFighter(party.intercept, party.geo, 'south');
     expect(wings().length).toBe(base); // п19.5: на базі — «в ангарі», крила немає
     expect(hangars()).toEqual(['arc(408,368,15,' + Math.PI + ',0)']); // ангар «Південь» (8, 7)
-    startIntercept(party.intercept, party.geo, ufo.id, 2);
+    startIntercept(party.intercept, party.geo, probe.id, 2);
     party.intercept.fighters[1]!.pos = { x: 3, y: 3 };
     const chase = wings();
     expect(chase.length).toBe(base + 1);
@@ -287,17 +289,17 @@ describe('аудит PR #523: стан панелі і прокрутка до �
 describe('п19.4: «Перехопити» в «Сенсорній сітці» — найближчий боєготовий', () => {
   // аудит PR #523: зонд ставимо явно ближче до ангара «Захід» (2, 4), ніж до вузла (8, 4) — інакше нічия
   it('ангар, ближчий до зонда, піднімається; за рівної відстані — менший id', () => {
-    const { party, ufo } = flyingParty();
+    const { party, probe } = flyingParty();
     addFighter(party.intercept, party.geo, 'west');
-    ufo.pos = { x: 1, y: 4 };
-    const pick = nearestReady(party, ufo)!;
+    probe.pos = { x: 1, y: 4 };
+    const pick = nearestReady(party, probe)!;
     expect(pick.id).toBe(2);
-    ufo.pos = { x: 5, y: 4 }; // 3 від обох ангарів
-    expect(nearestReady(party, ufo)!.id).toBe(1);
-    ufo.pos = { x: 1, y: 4 };
+    probe.pos = { x: 5, y: 4 }; // 3 від обох ангарів
+    expect(nearestReady(party, probe)!.id).toBe(1);
+    probe.pos = { x: 1, y: 4 };
     const f = makeFixture(party);
-    f.panels.renderUfos();
-    const ib = document.querySelector<HTMLButtonElement>('#ufos button.intercept')!;
+    f.panels.renderProbes();
+    const ib = document.querySelector<HTMLButtonElement>('#probes button.intercept')!;
     expect(ib.disabled).toBe(false);
     expect(ib.title).toBe('Підняти перехоплювач ' + pick.id + ' з ангара «' + nameOf(pick.region) + '» на перехоплення');
     ib.click();
@@ -305,20 +307,20 @@ describe('п19.4: «Перехопити» в «Сенсорній сітці» 
   });
 
   it('усі пошкоджені — кнопка вимкнена з причиною; один у погоні на інший зонд — інший бере', () => {
-    const { party, ufo } = flyingParty();
+    const { party, probe } = flyingParty();
     addFighter(party.intercept, party.geo, 'east');
     for (const x of party.intercept.fighters) x.hp = 1;
-    expect(nearestReady(party, ufo)).toBeNull();
-    makeFixture(party).panels.renderUfos();
-    const ib = document.querySelector<HTMLButtonElement>('#ufos button.intercept')!;
+    expect(nearestReady(party, probe)).toBeNull();
+    makeFixture(party).panels.renderProbes();
+    const ib = document.querySelector<HTMLButtonElement>('#probes button.intercept')!;
     expect(ib.disabled).toBe(true);
     expect(ib.title).toBe('Перехоплювач пошкоджений — спочатку ремонт');
     party.intercept.fighters[1]!.hp = FIGHTER_MAX_HP;
     party.intercept.fighters[0]!.status = 'погоня';
     party.intercept.fighters[0]!.targetId = 'інший';
     setupDom();
-    makeFixture(party).panels.renderUfos();
-    expect(document.querySelector<HTMLButtonElement>('#ufos button.intercept')!.disabled).toBe(false); // аудит PR #522: не лише [0]
+    makeFixture(party).panels.renderProbes();
+    expect(document.querySelector<HTMLButtonElement>('#probes button.intercept')!.disabled).toBe(false); // аудит PR #522: не лише [0]
   });
 });
 
@@ -449,13 +451,13 @@ describe('п19.4: «Кузня» — купівля перехоплювача �
 describe('п19.4: «Наступний крок» з кількома перехоплювачами', () => {
   const GEO = { inBattle: false, gameOver: false };
   it('перший у погоні, другий боєготовий, інший зонд у повітрі — «перехопіть»', () => {
-    const { party, ufo } = flyingParty();
+    const { party, probe } = flyingParty();
     addFighter(party.intercept, party.geo, 'east');
     party.intercept.fighters[0]!.status = 'погоня';
     party.intercept.fighters[0]!.targetId = 'інший';
     expect(nextStep(party, GEO)?.text).toBe(NEXT_STEP.inAir);
     party.intercept.fighters[1]!.status = 'погоня';
-    party.intercept.fighters[1]!.targetId = ufo.id; // зонд уже переслідують
+    party.intercept.fighters[1]!.targetId = probe.id; // зонд уже переслідують
     expect(nextStep(party, GEO)?.text).not.toBe(NEXT_STEP.inAir);
   });
 

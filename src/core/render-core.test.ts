@@ -637,7 +637,7 @@ describe('П14.5: хвіст перехоплення — точки з поді
   });
 
   it('послідовні кроки → ламана [from, to…]; хвіст не-рухів після — пропускається', () => {
-    const log: GeoEvent[] = [mv(0, 0, 1, 0), mv(1, 0, 2, 0), { type: 'intercept_engage', ufoId: 'u1', pos: { x: 2, y: 0 }, minute: 30 }];
+    const log: GeoEvent[] = [mv(0, 0, 1, 0), mv(1, 0, 2, 0), { type: 'intercept_engage', probeId: 'u1', pos: { x: 2, y: 0 }, minute: 30 }];
     expect(geoTrailPoints(log)).toEqual([
       { x: 0, y: 0 },
       { x: 1, y: 0 },
@@ -648,7 +648,16 @@ describe('П14.5: хвіст перехоплення — точки з поді
   it('будь-яка інша подія обриває ланцюжок — лишається свіжий сегмент польоту', () => {
     const log: GeoEvent[] = [
       mv(0, 0, 1, 0),
-      { type: 'intercept_round', round: 1, choice: 'далека', fighterHit: true, fighterDamage: 1, ufoHit: false, ufoDamage: 0, minute: 30 },
+      {
+        type: 'intercept_round',
+        round: 1,
+        choice: 'далека',
+        fighterHit: true,
+        fighterDamage: 1,
+        probeHit: false,
+        probeDamage: 0,
+        minute: 30,
+      },
       mv(1, 0, 2, 0),
     ];
     expect(geoTrailPoints(log)).toEqual([
@@ -685,7 +694,7 @@ describe('П14.5: хвіст перехоплення — точки з поді
   it('без рухів — порожній хвіст; лог читається, не змінюється', () => {
     expect(geoTrailPoints([])).toEqual([]);
     const log: GeoEvent[] = [
-      { type: 'ufo_spawned', ufoId: 'u1', kind: 'розвідник', pos: { x: 3, y: 3 }, minute: 30 },
+      { type: 'probe_spawned', probeId: 'u1', kind: 'розвідник', pos: { x: 3, y: 3 }, minute: 30 },
       { type: 'day', day: 1, minute: 1440 },
     ];
     expect(geoTrailPoints(log)).toEqual([]);

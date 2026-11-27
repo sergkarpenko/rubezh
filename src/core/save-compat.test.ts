@@ -29,7 +29,7 @@ import { createParty, deserializeParty, migrateThreat, SAVE_VERSION, serializePa
 import { awaitingRole, BIOGRAPHIES, CALLSIGNS, rankOf } from './career';
 
 // Сейс-фікстура ≤0.3.0 (див. шапку; відображувані назви — ДО мапи ADR-0064).
-const FIXTURE = `{"version":1,"seed":42,"savedAt":"2026-10-18T12:00:00.000Z","state":{"geo":{"rngState":1177001285,"minute":5460,"base":{"x":8,"y":4},"ufos":[],"log":[{"type":"ufo_spawned","ufoId":"ufo1","kind":"розвідник","pos":{"x":13,"y":0},"minute":570},{"type":"ufo_move","ufoId":"ufo1","from":{"x":13,"y":0},"to":{"x":12,"y":0},"minute":570},{"type":"ufo_detected","ufoId":"ufo1","pos":{"x":12,"y":0},"minute":570},{"type":"ufo_move","ufoId":"ufo1","from":{"x":12,"y":0},"to":{"x":11,"y":0},"minute":600},{"type":"ufo_move","ufoId":"ufo1","from":{"x":11,"y":0},"to":{"x":10,"y":0},"minute":630},{"type":"ufo_move","ufoId":"ufo1","from":{"x":10,"y":0},"to":{"x":9,"y":0},"minute":660},{"type":"ufo_landed","ufoId":"ufo1","pos":{"x":9,"y":0},"minute":660},{"type":"ufo_spawned","ufoId":"ufo2","kind":"розвідник","pos":{"x":13,"y":3},"minute":750},{"type":"ufo_move","ufoId":"ufo2","from":{"x":13,"y":3},"to":{"x":12,"y":3},"minute":750},{"type":"ufo_detected","ufoId":"ufo2","pos":{"x":12,"y":3},"minute":750},{"type":"ufo_move","ufoId":"ufo2","from":{"x":12,"y":3},"to":{"x":12,"y":2},"minute":780},{"type":"ufo_landed","ufoId":"ufo2","pos":{"x":12,"y":2},"minute":780},{"type":"ufo_left","ufoId":"ufo1","minute":900},{"type":"ufo_left","ufoId":"ufo2","minute":1020},{"type":"day","day":2,"minute":1440},{"type":"ufo_spawned","ufoId":"ufo3","kind":"розвідник","pos":{"x":7,"y":4},"minute":1560},{"type":"ufo_move","ufoId":"ufo3","from":{"x":7,"y":4},"to":{"x":8,"y":4},"minute":1560},{"type":"ufo_detected","ufoId":"ufo3","pos":{"x":8,"y":4},"minute":1560},{"type":"ufo_move","ufoId":"ufo3","from":{"x":8,"y":4},"to":{"x":9,"y":4},"minute":1590},{"type":"ufo_move","ufoId":"ufo3","from":{"x":9,"y":4},"to":{"x":10,"y":4},"minute":1620},{"type":"ufo_move","ufoId":"ufo3","from":{"x":10,"y":4},"to":{"x":11,"y":4},"minute":1650},{"type":"ufo_move","ufoId":"ufo3","from":{"x":11,"y":4},"to":{"x":11,"y":3},"minute":1680},{"type":"ufo_move","ufoId":"ufo3","from":{"x":11,"y":3},"to":{"x":12,"y":3},"minute":1710},{"type":"ufo_move","ufoId":"ufo3","from":{"x":12,"y":3},"to":{"x":12,"y":2},"minute":1740},{"type":"ufo_move","ufoId":"ufo3","from":{"x":12,"y":2},"to":{"x":13,"y":2},"minute":1770},{"type":"ufo_move","ufoId":"ufo3","from":{"x":13,"y":2},"to":{"x":13,"y":1},"minute":1800},{"type":"ufo_move","ufoId":"ufo3","from":{"x":13,"y":1},"to":{"x":14,"y":1},"minute":1830},{"type":"ufo_move","ufoId":"ufo3","from":{"x":14,"y":1},"to":{"x":14,"y":0},"minute":1860},{"type":"ufo_landed","ufoId":"ufo3","pos":{"x":14,"y":0},"minute":1860},{"type":"ufo_left","ufoId":"ufo3","minute":2100},{"type":"day","day":3,"minute":2880},{"type":"ufo_spawned","ufoId":"ufo4","kind":"збирач","pos":{"x":10,"y":7},"minute":3180},{"type":"ufo_move","ufoId":"ufo4","from":{"x":10,"y":7},"to":{"x":10,"y":6},"minute":3180},{"type":"ufo_detected","ufoId":"ufo4","pos":{"x":10,"y":6},"minute":3180},{"type":"ufo_move","ufoId":"ufo4","from":{"x":10,"y":6},"to":{"x":10,"y":5},"minute":3240},{"type":"ufo_move","ufoId":"ufo4","from":{"x":10,"y":5},"to":{"x":11,"y":5},"minute":3300},{"type":"ufo_move","ufoId":"ufo4","from":{"x":11,"y":5},"to":{"x":11,"y":4},"minute":3360},{"type":"ufo_move","ufoId":"ufo4","from":{"x":11,"y":4},"to":{"x":12,"y":4},"minute":3420},{"type":"ufo_spawned","ufoId":"ufo5","kind":"розвідник","pos":{"x":15,"y":4},"minute":3480},{"type":"ufo_move","ufoId":"ufo4","from":{"x":12,"y":4},"to":{"x":12,"y":3},"minute":3480},{"type":"ufo_move","ufoId":"ufo5","from":{"x":15,"y":4},"to":{"x":15,"y":3},"minute":3480},{"type":"ufo_move","ufoId":"ufo5","from":{"x":15,"y":3},"to":{"x":15,"y":2},"minute":3510},{"type":"ufo_move","ufoId":"ufo4","from":{"x":12,"y":3},"to":{"x":13,"y":3},"minute":3540},{"type":"ufo_move","ufoId":"ufo5","from":{"x":15,"y":2},"to":{"x":15,"y":1},"minute":3540},{"type":"ufo_landed","ufoId":"ufo5","pos":{"x":15,"y":1},"minute":3540},{"type":"ufo_move","ufoId":"ufo4","from":{"x":13,"y":3},"to":{"x":13,"y":2},"minute":3600},{"type":"ufo_move","ufoId":"ufo4","from":{"x":13,"y":2},"to":{"x":14,"y":2},"minute":3660},{"type":"ufo_move","ufoId":"ufo4","from":{"x":14,"y":2},"to":{"x":14,"y":1},"minute":3720},{"type":"ufo_landed","ufoId":"ufo4","pos":{"x":14,"y":1},"minute":3720},{"type":"ufo_left","ufoId":"ufo5","minute":3780},{"type":"ufo_left","ufoId":"ufo4","minute":4200},{"type":"day","day":4,"minute":4320}],"spawnChance":0.03,"maxUfos":3,"nextId":6},"roster":{"soldiers":[{"name":"Іван","hp":10,"maxHp":10,"ap":10,"maxAp":10,"firingAccuracy":0.6,"weapon":{"name":"АР-14 «Гарт»","damage":[3,6],"range":12,"modes":{"auto":{"apCost":4,"accuracyMod":0.5,"shots":3},"snap":{"apCost":3,"accuracyMod":0.8,"shots":1},"aimed":{"apCost":5,"accuracyMod":1.15,"shots":1}}},"alive":true,"kills":0,"overwatch":false,"id":"s1","side":"player","pos":{"x":0,"y":0}},{"name":"Олена","hp":10,"maxHp":10,"ap":10,"maxAp":10,"firingAccuracy":0.6,"weapon":{"name":"АР-14 «Гарт»","damage":[3,6],"range":12,"modes":{"auto":{"apCost":4,"accuracyMod":0.5,"shots":3},"snap":{"apCost":3,"accuracyMod":0.8,"shots":1},"aimed":{"apCost":5,"accuracyMod":1.15,"shots":1}}},"alive":true,"kills":0,"overwatch":false,"id":"s2","side":"player","pos":{"x":0,"y":0}},{"name":"Тарас","hp":10,"maxHp":10,"ap":10,"maxAp":10,"firingAccuracy":0.6,"weapon":{"name":"АР-14 «Гарт»","damage":[3,6],"range":12,"modes":{"auto":{"apCost":4,"accuracyMod":0.5,"shots":3},"snap":{"apCost":3,"accuracyMod":0.8,"shots":1},"aimed":{"apCost":5,"accuracyMod":1.15,"shots":1}}},"alive":true,"kills":0,"overwatch":false,"id":"s3","side":"player","pos":{"x":0,"y":0}},{"name":"Марія","hp":10,"maxHp":10,"ap":10,"maxAp":10,"firingAccuracy":0.6,"weapon":{"name":"АР-14 «Гарт»","damage":[3,6],"range":12,"modes":{"auto":{"apCost":4,"accuracyMod":0.5,"shots":3},"snap":{"apCost":3,"accuracyMod":0.8,"shots":1},"aimed":{"apCost":5,"accuracyMod":1.15,"shots":1}}},"alive":true,"kills":0,"overwatch":false,"id":"s4","side":"player","pos":{"x":0,"y":0}},{"name":"Богдан","hp":10,"maxHp":10,"ap":10,"maxAp":10,"firingAccuracy":0.6,"weapon":{"name":"АР-14 «Гарт»","damage":[3,6],"range":12,"modes":{"auto":{"apCost":4,"accuracyMod":0.5,"shots":3},"snap":{"apCost":3,"accuracyMod":0.8,"shots":1},"aimed":{"apCost":5,"accuracyMod":1.15,"shots":1}}},"alive":true,"kills":0,"overwatch":false,"id":"s5","side":"player","pos":{"x":0,"y":0}},{"name":"Софія","hp":10,"maxHp":10,"ap":10,"maxAp":10,"firingAccuracy":0.6,"weapon":{"name":"АР-14 «Гарт»","damage":[3,6],"range":12,"modes":{"auto":{"apCost":4,"accuracyMod":0.5,"shots":3},"snap":{"apCost":3,"accuracyMod":0.8,"shots":1},"aimed":{"apCost":5,"accuracyMod":1.15,"shots":1}}},"alive":true,"kills":0,"overwatch":false,"id":"s6","side":"player","pos":{"x":0,"y":0}},{"name":"Дмитро","hp":10,"maxHp":10,"ap":10,"maxAp":10,"firingAccuracy":0.6,"weapon":{"name":"АР-14 «Гарт»","damage":[3,6],"range":12,"modes":{"auto":{"apCost":4,"accuracyMod":0.5,"shots":3},"snap":{"apCost":3,"accuracyMod":0.8,"shots":1},"aimed":{"apCost":5,"accuracyMod":1.15,"shots":1}}},"alive":true,"kills":0,"overwatch":false,"id":"s7","side":"player","pos":{"x":0,"y":0}}],"hired":7,"hospital":{}},"econ":{"money":3685,"lastAllowanceDay":3,"log":[{"type":"allowance","day":1,"amount":75},{"type":"spend","amount":100},{"type":"spend","amount":100},{"type":"spend","amount":100},{"type":"spend","amount":90},{"type":"allowance","day":2,"amount":75},{"type":"spend","amount":40},{"type":"allowance","day":3,"amount":75},{"type":"spend","amount":40},{"type":"spend","amount":40},{"type":"spend","amount":40},{"type":"spend","amount":140},{"type":"spend","amount":50},{"type":"spend","amount":100}]},"intercept":{"rngState":42,"fighter":{"hp":4,"pos":{"x":0,"y":0},"status":"на базі","targetId":null},"ufoHp":{},"activeUfoId":null,"round":0,"log":[]},"campaign":{"status":"триває","preset":"норма","score":null,"victoryDay":null},"hints":{"intercept":false,"mission":false,"repair":false},"research":{"scientists":[{"id":"в1","name":"Зінаїда"},{"id":"в2","name":"Ярослав"}],"hired":2,"slots":2,"active":[{"id":"осколкова граната","invested":4}],"completed":["оптичний приціл","аптечка"],"pool":0,"lastSalaryDay":3,"log":[{"type":"hire","name":"Зінаїда"},{"type":"hire","name":"Ярослав"},{"type":"project_started","id":"аптечка"},{"type":"project_started","id":"оптичний приціл"},{"type":"salary","day":2,"amount":40},{"type":"points","day":2,"amount":2},{"type":"project_completed","id":"оптичний приціл"},{"type":"project_completed","id":"аптечка"},{"type":"salary","day":3,"amount":40},{"type":"points","day":3,"amount":2},{"type":"project_started","id":"осколкова граната"}]},"workshop":{"queue":[{"id":"оптичний приціл","ticksLeft":7}],"store":{"аптечка":1,"осколкова граната":0,"оптичний приціл":0,"легка броня":0,"гарматний модуль":0},"equipped":{"s1":{"armor":false,"optics":false,"medkit":true,"grenade":false}},"log":[{"type":"order","id":"аптечка","ticks":12},{"type":"order","id":"аптечка","ticks":12},{"type":"produced","id":"аптечка"},{"type":"equip","soldierId":"s1","id":"аптечка"},{"type":"order","id":"оптичний приціл","ticks":20},{"type":"produced","id":"аптечка"}]}}}`;
+const FIXTURE = `{"version":1,"seed":42,"savedAt":"2026-10-18T12:00:00.000Z","state":{"geo":{"rngState":1177001285,"minute":5460,"base":{"x":8,"y":4},"probes":[],"log":[{"type":"probe_spawned","probeId":"probe1","kind":"розвідник","pos":{"x":13,"y":0},"minute":570},{"type":"probe_move","probeId":"probe1","from":{"x":13,"y":0},"to":{"x":12,"y":0},"minute":570},{"type":"probe_detected","probeId":"probe1","pos":{"x":12,"y":0},"minute":570},{"type":"probe_move","probeId":"probe1","from":{"x":12,"y":0},"to":{"x":11,"y":0},"minute":600},{"type":"probe_move","probeId":"probe1","from":{"x":11,"y":0},"to":{"x":10,"y":0},"minute":630},{"type":"probe_move","probeId":"probe1","from":{"x":10,"y":0},"to":{"x":9,"y":0},"minute":660},{"type":"probe_landed","probeId":"probe1","pos":{"x":9,"y":0},"minute":660},{"type":"probe_spawned","probeId":"probe2","kind":"розвідник","pos":{"x":13,"y":3},"minute":750},{"type":"probe_move","probeId":"probe2","from":{"x":13,"y":3},"to":{"x":12,"y":3},"minute":750},{"type":"probe_detected","probeId":"probe2","pos":{"x":12,"y":3},"minute":750},{"type":"probe_move","probeId":"probe2","from":{"x":12,"y":3},"to":{"x":12,"y":2},"minute":780},{"type":"probe_landed","probeId":"probe2","pos":{"x":12,"y":2},"minute":780},{"type":"probe_left","probeId":"probe1","minute":900},{"type":"probe_left","probeId":"probe2","minute":1020},{"type":"day","day":2,"minute":1440},{"type":"probe_spawned","probeId":"probe3","kind":"розвідник","pos":{"x":7,"y":4},"minute":1560},{"type":"probe_move","probeId":"probe3","from":{"x":7,"y":4},"to":{"x":8,"y":4},"minute":1560},{"type":"probe_detected","probeId":"probe3","pos":{"x":8,"y":4},"minute":1560},{"type":"probe_move","probeId":"probe3","from":{"x":8,"y":4},"to":{"x":9,"y":4},"minute":1590},{"type":"probe_move","probeId":"probe3","from":{"x":9,"y":4},"to":{"x":10,"y":4},"minute":1620},{"type":"probe_move","probeId":"probe3","from":{"x":10,"y":4},"to":{"x":11,"y":4},"minute":1650},{"type":"probe_move","probeId":"probe3","from":{"x":11,"y":4},"to":{"x":11,"y":3},"minute":1680},{"type":"probe_move","probeId":"probe3","from":{"x":11,"y":3},"to":{"x":12,"y":3},"minute":1710},{"type":"probe_move","probeId":"probe3","from":{"x":12,"y":3},"to":{"x":12,"y":2},"minute":1740},{"type":"probe_move","probeId":"probe3","from":{"x":12,"y":2},"to":{"x":13,"y":2},"minute":1770},{"type":"probe_move","probeId":"probe3","from":{"x":13,"y":2},"to":{"x":13,"y":1},"minute":1800},{"type":"probe_move","probeId":"probe3","from":{"x":13,"y":1},"to":{"x":14,"y":1},"minute":1830},{"type":"probe_move","probeId":"probe3","from":{"x":14,"y":1},"to":{"x":14,"y":0},"minute":1860},{"type":"probe_landed","probeId":"probe3","pos":{"x":14,"y":0},"minute":1860},{"type":"probe_left","probeId":"probe3","minute":2100},{"type":"day","day":3,"minute":2880},{"type":"probe_spawned","probeId":"probe4","kind":"збирач","pos":{"x":10,"y":7},"minute":3180},{"type":"probe_move","probeId":"probe4","from":{"x":10,"y":7},"to":{"x":10,"y":6},"minute":3180},{"type":"probe_detected","probeId":"probe4","pos":{"x":10,"y":6},"minute":3180},{"type":"probe_move","probeId":"probe4","from":{"x":10,"y":6},"to":{"x":10,"y":5},"minute":3240},{"type":"probe_move","probeId":"probe4","from":{"x":10,"y":5},"to":{"x":11,"y":5},"minute":3300},{"type":"probe_move","probeId":"probe4","from":{"x":11,"y":5},"to":{"x":11,"y":4},"minute":3360},{"type":"probe_move","probeId":"probe4","from":{"x":11,"y":4},"to":{"x":12,"y":4},"minute":3420},{"type":"probe_spawned","probeId":"probe5","kind":"розвідник","pos":{"x":15,"y":4},"minute":3480},{"type":"probe_move","probeId":"probe4","from":{"x":12,"y":4},"to":{"x":12,"y":3},"minute":3480},{"type":"probe_move","probeId":"probe5","from":{"x":15,"y":4},"to":{"x":15,"y":3},"minute":3480},{"type":"probe_move","probeId":"probe5","from":{"x":15,"y":3},"to":{"x":15,"y":2},"minute":3510},{"type":"probe_move","probeId":"probe4","from":{"x":12,"y":3},"to":{"x":13,"y":3},"minute":3540},{"type":"probe_move","probeId":"probe5","from":{"x":15,"y":2},"to":{"x":15,"y":1},"minute":3540},{"type":"probe_landed","probeId":"probe5","pos":{"x":15,"y":1},"minute":3540},{"type":"probe_move","probeId":"probe4","from":{"x":13,"y":3},"to":{"x":13,"y":2},"minute":3600},{"type":"probe_move","probeId":"probe4","from":{"x":13,"y":2},"to":{"x":14,"y":2},"minute":3660},{"type":"probe_move","probeId":"probe4","from":{"x":14,"y":2},"to":{"x":14,"y":1},"minute":3720},{"type":"probe_landed","probeId":"probe4","pos":{"x":14,"y":1},"minute":3720},{"type":"probe_left","probeId":"probe5","minute":3780},{"type":"probe_left","probeId":"probe4","minute":4200},{"type":"day","day":4,"minute":4320}],"spawnChance":0.03,"maxProbes":3,"nextId":6},"roster":{"soldiers":[{"name":"Іван","hp":10,"maxHp":10,"ap":10,"maxAp":10,"firingAccuracy":0.6,"weapon":{"name":"АР-14 «Гарт»","damage":[3,6],"range":12,"modes":{"auto":{"apCost":4,"accuracyMod":0.5,"shots":3},"snap":{"apCost":3,"accuracyMod":0.8,"shots":1},"aimed":{"apCost":5,"accuracyMod":1.15,"shots":1}}},"alive":true,"kills":0,"overwatch":false,"id":"s1","side":"player","pos":{"x":0,"y":0}},{"name":"Олена","hp":10,"maxHp":10,"ap":10,"maxAp":10,"firingAccuracy":0.6,"weapon":{"name":"АР-14 «Гарт»","damage":[3,6],"range":12,"modes":{"auto":{"apCost":4,"accuracyMod":0.5,"shots":3},"snap":{"apCost":3,"accuracyMod":0.8,"shots":1},"aimed":{"apCost":5,"accuracyMod":1.15,"shots":1}}},"alive":true,"kills":0,"overwatch":false,"id":"s2","side":"player","pos":{"x":0,"y":0}},{"name":"Тарас","hp":10,"maxHp":10,"ap":10,"maxAp":10,"firingAccuracy":0.6,"weapon":{"name":"АР-14 «Гарт»","damage":[3,6],"range":12,"modes":{"auto":{"apCost":4,"accuracyMod":0.5,"shots":3},"snap":{"apCost":3,"accuracyMod":0.8,"shots":1},"aimed":{"apCost":5,"accuracyMod":1.15,"shots":1}}},"alive":true,"kills":0,"overwatch":false,"id":"s3","side":"player","pos":{"x":0,"y":0}},{"name":"Марія","hp":10,"maxHp":10,"ap":10,"maxAp":10,"firingAccuracy":0.6,"weapon":{"name":"АР-14 «Гарт»","damage":[3,6],"range":12,"modes":{"auto":{"apCost":4,"accuracyMod":0.5,"shots":3},"snap":{"apCost":3,"accuracyMod":0.8,"shots":1},"aimed":{"apCost":5,"accuracyMod":1.15,"shots":1}}},"alive":true,"kills":0,"overwatch":false,"id":"s4","side":"player","pos":{"x":0,"y":0}},{"name":"Богдан","hp":10,"maxHp":10,"ap":10,"maxAp":10,"firingAccuracy":0.6,"weapon":{"name":"АР-14 «Гарт»","damage":[3,6],"range":12,"modes":{"auto":{"apCost":4,"accuracyMod":0.5,"shots":3},"snap":{"apCost":3,"accuracyMod":0.8,"shots":1},"aimed":{"apCost":5,"accuracyMod":1.15,"shots":1}}},"alive":true,"kills":0,"overwatch":false,"id":"s5","side":"player","pos":{"x":0,"y":0}},{"name":"Софія","hp":10,"maxHp":10,"ap":10,"maxAp":10,"firingAccuracy":0.6,"weapon":{"name":"АР-14 «Гарт»","damage":[3,6],"range":12,"modes":{"auto":{"apCost":4,"accuracyMod":0.5,"shots":3},"snap":{"apCost":3,"accuracyMod":0.8,"shots":1},"aimed":{"apCost":5,"accuracyMod":1.15,"shots":1}}},"alive":true,"kills":0,"overwatch":false,"id":"s6","side":"player","pos":{"x":0,"y":0}},{"name":"Дмитро","hp":10,"maxHp":10,"ap":10,"maxAp":10,"firingAccuracy":0.6,"weapon":{"name":"АР-14 «Гарт»","damage":[3,6],"range":12,"modes":{"auto":{"apCost":4,"accuracyMod":0.5,"shots":3},"snap":{"apCost":3,"accuracyMod":0.8,"shots":1},"aimed":{"apCost":5,"accuracyMod":1.15,"shots":1}}},"alive":true,"kills":0,"overwatch":false,"id":"s7","side":"player","pos":{"x":0,"y":0}}],"hired":7,"hospital":{}},"econ":{"money":3685,"lastAllowanceDay":3,"log":[{"type":"allowance","day":1,"amount":75},{"type":"spend","amount":100},{"type":"spend","amount":100},{"type":"spend","amount":100},{"type":"spend","amount":90},{"type":"allowance","day":2,"amount":75},{"type":"spend","amount":40},{"type":"allowance","day":3,"amount":75},{"type":"spend","amount":40},{"type":"spend","amount":40},{"type":"spend","amount":40},{"type":"spend","amount":140},{"type":"spend","amount":50},{"type":"spend","amount":100}]},"intercept":{"rngState":42,"fighter":{"hp":4,"pos":{"x":0,"y":0},"status":"на базі","targetId":null},"probeHp":{},"activeProbeId":null,"round":0,"log":[]},"campaign":{"status":"триває","preset":"норма","score":null,"victoryDay":null},"hints":{"intercept":false,"mission":false,"repair":false},"research":{"scientists":[{"id":"в1","name":"Зінаїда"},{"id":"в2","name":"Ярослав"}],"hired":2,"slots":2,"active":[{"id":"осколкова граната","invested":4}],"completed":["оптичний приціл","аптечка"],"pool":0,"lastSalaryDay":3,"log":[{"type":"hire","name":"Зінаїда"},{"type":"hire","name":"Ярослав"},{"type":"project_started","id":"аптечка"},{"type":"project_started","id":"оптичний приціл"},{"type":"salary","day":2,"amount":40},{"type":"points","day":2,"amount":2},{"type":"project_completed","id":"оптичний приціл"},{"type":"project_completed","id":"аптечка"},{"type":"salary","day":3,"amount":40},{"type":"points","day":3,"amount":2},{"type":"project_started","id":"осколкова граната"}]},"workshop":{"queue":[{"id":"оптичний приціл","ticksLeft":7}],"store":{"аптечка":1,"осколкова граната":0,"оптичний приціл":0,"легка броня":0,"гарматний модуль":0},"equipped":{"s1":{"armor":false,"optics":false,"medkit":true,"grenade":false}},"log":[{"type":"order","id":"аптечка","ticks":12},{"type":"order","id":"аптечка","ticks":12},{"type":"produced","id":"аптечка"},{"type":"equip","soldierId":"s1","id":"аптечка"},{"type":"order","id":"оптичний приціл","ticks":20},{"type":"produced","id":"аптечка"}]}}}`;
 
 // Контур тіка партії — дзеркало partyTick у main.ts (порядок викликів фіксований,
 // ADR-0003: жоден виклик не витягує geo.rng, траєкторія не залежить від перейменувань).
@@ -121,51 +121,51 @@ describe('П12.6: продовження сіда 42 — види подій і 
     for (let i = 0; i < 96; i++) tickAll(p);
     // послідовність видів подій геосцени — байт-у-байт golden (код до серії)
     // WORLD_H 9 (фідбек П14.8): траєкторії НЛО у вищому світі — на один
-    // ufo_move менше до приземлення в обох серіях; rng/гроші — ті самі.
+    // probe_move менше до приземлення в обох серіях; rng/гроші — ті самі.
     // п19.2: події довіри регіонів пише campaignTick поверх траєкторії — golden без них, окремо нижче
     const added = p.geo.log.slice(before.geo);
     expect(kinds(added.filter((e) => e.type !== 'region_trust' && e.type !== 'region_out'))).toEqual([
       'day',
-      'ufo_spawned',
-      'ufo_move',
-      'ufo_detected',
-      'ufo_move',
-      'ufo_move',
-      'ufo_move',
-      'ufo_move',
-      'ufo_move',
-      'ufo_landed',
-      'ufo_left',
-      'ufo_spawned',
-      'ufo_move',
-      'ufo_move',
-      'ufo_move',
-      'ufo_move',
-      'ufo_move',
-      'ufo_landed',
-      'ufo_left',
+      'probe_spawned',
+      'probe_move',
+      'probe_detected',
+      'probe_move',
+      'probe_move',
+      'probe_move',
+      'probe_move',
+      'probe_move',
+      'probe_landed',
+      'probe_left',
+      'probe_spawned',
+      'probe_move',
+      'probe_move',
+      'probe_move',
+      'probe_move',
+      'probe_move',
+      'probe_landed',
+      'probe_left',
       'day',
-      'ufo_spawned',
-      'ufo_move',
-      'ufo_detected',
-      'ufo_move',
-      'ufo_move',
-      'ufo_move',
-      'ufo_move',
-      'ufo_move',
-      'ufo_move',
-      'ufo_move',
-      'ufo_move',
-      'ufo_move',
-      'ufo_landed',
-      'ufo_left',
+      'probe_spawned',
+      'probe_move',
+      'probe_detected',
+      'probe_move',
+      'probe_move',
+      'probe_move',
+      'probe_move',
+      'probe_move',
+      'probe_move',
+      'probe_move',
+      'probe_move',
+      'probe_move',
+      'probe_landed',
+      'probe_left',
     ]);
     expect(added.filter((e) => e.type === 'region_trust' || e.type === 'region_out')).toMatchInlineSnapshot(`
       [
         {
           "delta": -30,
           "minute": 6150,
-          "reason": "ufo_left",
+          "reason": "probe_left",
           "region": "east",
           "trust": 70,
           "type": "region_trust",
@@ -173,7 +173,7 @@ describe('П12.6: продовження сіда 42 — види подій і 
         {
           "delta": -15,
           "minute": 7020,
-          "reason": "ufo_left",
+          "reason": "probe_left",
           "region": "east",
           "trust": 55,
           "type": "region_trust",
@@ -181,7 +181,7 @@ describe('П12.6: продовження сіда 42 — види подій і 
         {
           "delta": -30,
           "minute": 7950,
-          "reason": "ufo_left",
+          "reason": "probe_left",
           "region": "east",
           "trust": 25,
           "type": "region_trust",
@@ -315,7 +315,7 @@ describe('п18.3: сейв v2 мігрує у v3 (ADR-0153 п. 18, EARS 9)', () 
   it('v2: загроза = min(99, 2 × (доба − 1)) − виграні місії, не менше 0', () => {
     const p = createParty(42);
     p.geo.minute = 19 * 1440 + 30; // доба 20
-    for (let i = 0; i < 5; i++) p.geo.log.push({ type: 'mission_won', ufoId: 'w' + i, minute: i });
+    for (let i = 0; i < 5; i++) p.geo.log.push({ type: 'mission_won', probeId: 'w' + i, minute: i });
     expect(deserializeParty(v2Of(p)).campaign.threat).toBe(38 - 5);
     p.geo.minute = 2 * 1440; // доба 3: 4 − 5 → 0
     expect(deserializeParty(v2Of(p)).campaign.threat).toBe(0);
@@ -344,7 +344,7 @@ describe('п18.3: сейв v2 мігрує у v3 (ADR-0153 п. 18, EARS 9)', () 
       v2Of(p, (c) => {
         c.status = 'перемога';
         c.victoryDay = 30;
-        c.score = { ufosShotDown: 0, missionsWon: 0, veteransAlive: 6, moneyLeft: 300, total: 375 };
+        c.score = { probesShotDown: 0, missionsWon: 0, veteransAlive: 6, moneyLeft: 300, total: 375 };
       })
     );
     expect(won.campaign).toMatchObject({ status: 'перемога', victoryDay: 30, threat: 60 });

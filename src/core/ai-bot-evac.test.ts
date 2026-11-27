@@ -13,11 +13,11 @@ import { createRoster, fireSoldier, missionSquad, readySoldiers } from './squad'
 import { DEFAULT_PARTY_POLICY, TICKS_PER_DAY, partyBotMissionStep, simulateParty } from './party-bot';
 import { createParty } from './save';
 
-function mkGeo(ufoId: string): GeoState {
+function mkGeo(probeId: string): GeoState {
   const g = createGeoGame({ seed: 9, spawnChance: 0 });
   advanceTime(g, 0);
-  g.ufos.push({
-    id: ufoId,
+  g.probes.push({
+    id: probeId,
     kind: 'розвідник',
     pos: { ...g.base },
     target: { ...g.base },
@@ -221,13 +221,13 @@ describe('Т.76: бот партії з політикою евакуації', 
     const p = createParty(42, 'норма');
     for (let t = 0; t < 30 * TICKS_PER_DAY && missionTargets(p.geo).length === 0; t++) advanceTime(p.geo, 1);
     while (readySoldiers(p.roster).length > 3) fireSoldier(p.roster, p.roster.soldiers[0].id);
-    const ufoId = missionTargets(p.geo)[0].id;
+    const probeId = missionTargets(p.geo)[0].id;
     const money = p.econ.money;
     const info = partyBotMissionStep(p, { ...DEFAULT_PARTY_POLICY, evac: { lastStanding: 3 } });
     expect(info).toEqual({ launched: true, outcome: 'евакуйовано', lost: 0, wounded: 0, evacuated: 3 });
     expect(p.geo.log.filter((e) => e.type === 'mission_evacuated')).toHaveLength(1);
     expect(p.geo.log.some((e) => e.type === 'mission_lost')).toBe(false);
-    expect(missionTargets(p.geo).some((u) => u.id === ufoId)).toBe(true);
+    expect(missionTargets(p.geo).some((u) => u.id === probeId)).toBe(true);
     expect(p.econ.money).toBe(money);
   });
 

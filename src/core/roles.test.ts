@@ -337,7 +337,7 @@ describe('п16.3: дії ролей у бота бою (авто-бій і бо�
 
   it('місія з ролями: autoBattle і DemoSteps дають той самий лог; без ролей — бій без подій ролей', () => {
     const geo: GeoState = createGeoGame({ seed: 9, spawnChance: 0 });
-    geo.ufos.push({
+    geo.probes.push({
       id: 'u1',
       kind: 'збирач',
       pos: { ...geo.base },
@@ -346,12 +346,12 @@ describe('п16.3: дії ролей у бота бою (авто-бій і бо�
       status: 'приземлився',
       landedTicksLeft: 16,
     });
-    const ufo = geo.ufos[0];
+    const probe = geo.probes[0];
     const make = (withRoles: boolean) => {
       const r = veterans();
       if (withRoles) assignBotRoles(r);
       const squad = missionSquad(r);
-      return createMission(geo, ufo.id, { squad, roles: deployRoles(r, squad) ?? undefined }).state;
+      return createMission(geo, probe.id, { squad, roles: deployRoles(r, squad) ?? undefined }).state;
     };
     const a = make(true);
     autoBattle(a);

@@ -201,7 +201,7 @@ describe('Синтез: рецепти за моком SoundContext', () => {
     expect(m.rec.osc.map((o) => o.start)).toEqual([0, 0.12, 0.24]);
     const m2 = mockContext();
     const s2 = createSound({ makeContext: () => m2.ctx, store: memStore() });
-    s2.geoEvent({ type: 'ufo_detected' } as never);
+    s2.geoEvent({ type: 'probe_detected' } as never);
     expect(m2.rec.osc.map((o) => o.freq[0].v)).toEqual([440, 660]);
     // бій: постріл auto з влучанням — звук режиму + «удар» (2 ноти + шум)
     const m3 = mockContext();

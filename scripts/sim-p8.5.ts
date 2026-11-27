@@ -25,7 +25,7 @@ import {
 import type { DifficultyPreset } from '../src/core/campaign';
 import type { Party } from '../src/core/save';
 import { REGION_IDS, REGION_NAMES, trustDelta, type RegionId } from '../src/core/regions';
-import { ufoLeftKind } from '../src/core/geo';
+import { probeLeftKind } from '../src/core/geo';
 
 const ALL_PRESETS: DifficultyPreset[] = ['легкий', 'норма', 'складний'];
 
@@ -108,10 +108,10 @@ function geoStats(p: Readonly<Party>, firstBuyDay: number | null): GeoStats {
   st.allowanceMean = allow.length ? allow.reduce((a, b) => a + b, 0) / allow.length : 0;
   const log = p.geo.log;
   for (let i = 0; i < log.length; i++) {
-    const ch = log[i].type === 'ufo_left' ? trustDelta(log, i) : null;
+    const ch = log[i].type === 'probe_left' ? trustDelta(log, i) : null;
     if (!ch) continue;
-    // аудит PR #525: вид відльоту — з журналу (ufoLeftKind), а не з величини зміни довіри
-    if (ufoLeftKind(log, i, (log[i] as { ufoId: string }).ufoId) === 'detected') st.leftDetected[ch.region] += 1;
+    // аудит PR #525: вид відльоту — з журналу (probeLeftKind), а не з величини зміни довіри
+    if (probeLeftKind(log, i, (log[i] as { probeId: string }).probeId) === 'detected') st.leftDetected[ch.region] += 1;
     else st.leftUndetected[ch.region] += 1;
   }
   return st;

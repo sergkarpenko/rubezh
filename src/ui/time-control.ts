@@ -13,11 +13,11 @@ export const MAX_RUN_TICKS = 48;
 // «event» — кнопка «До події» (усі сім подій); «day» — «+1 доба» (зонди і штурм вузла, п18.5).
 export type RunMode = 'event' | 'day';
 
-export type StopEvent = 'ufo_detected' | 'ufo_landed' | 'project_completed' | 'produced' | 'recovered' | 'repair_done' | 'assault';
+export type StopEvent = 'probe_detected' | 'probe_landed' | 'project_completed' | 'produced' | 'recovered' | 'repair_done' | 'assault';
 
 // п18.5 (ADR-0157; рішення власника «А. Два вікна + зупинка»): штурм вузла і програний штурм
 // (без боєготових бою немає — лише рядок журналу) зупиняють обидві кнопки.
-const DAY_STOPS: ReadonlySet<StopEvent> = new Set<StopEvent>(['ufo_detected', 'ufo_landed', 'assault']);
+const DAY_STOPS: ReadonlySet<StopEvent> = new Set<StopEvent>(['probe_detected', 'probe_landed', 'assault']);
 
 // Відбиток стану перед тіком: довжини журналів і перелік поранених.
 export interface TickSnapshot {
@@ -43,9 +43,9 @@ export function takeSnapshot(party: Party): TickSnapshot {
 export function stopEvents(party: Party, before: TickSnapshot): StopEvent[] {
   const out: StopEvent[] = [];
   for (const e of party.geo.log.slice(before.geoLog)) {
-    if (e.type === 'ufo_detected') out.push('ufo_detected');
-    else if (e.type === 'ufo_landed') {
-      if (party.geo.ufos.some((u) => u.id === e.ufoId && u.detected)) out.push('ufo_landed');
+    if (e.type === 'probe_detected') out.push('probe_detected');
+    else if (e.type === 'probe_landed') {
+      if (party.geo.probes.some((u) => u.id === e.probeId && u.detected)) out.push('probe_landed');
     } else if (e.type === 'fighter_repair_done') out.push('repair_done');
     else if (e.type === 'base_assault' || e.type === 'assault_lost') out.push('assault');
   }

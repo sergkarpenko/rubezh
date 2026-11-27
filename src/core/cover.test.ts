@@ -274,7 +274,7 @@ describe('низькі перешкоди: не проходяться, огля
 
 function geoWith(): GeoState {
   const g = createGeoGame({ seed: 9, spawnChance: 0 });
-  g.ufos.push({
+  g.probes.push({
     id: 'u1',
     kind: 'розвідник',
     pos: { ...g.base },

@@ -40,17 +40,17 @@ export type InterceptRange = 'далека' | 'середня' | 'впритул
 export interface RangeProfile {
   fighterHitChance: number;
   fighterDamage: [number, number];
-  ufoHitChance: number;
-  ufoDamage: [number, number];
+  probeHitChance: number;
+  probeDamage: [number, number];
 }
 
 export const RANGE_PROFILES: Record<InterceptRange, RangeProfile> = {
-  далека: { fighterHitChance: 0.25, fighterDamage: [1, 1], ufoHitChance: 0.1, ufoDamage: [1, 1] },
-  середня: { fighterHitChance: 0.45, fighterDamage: [1, 2], ufoHitChance: 0.3, ufoDamage: [1, 2] },
-  впритул: { fighterHitChance: 0.7, fighterDamage: [2, 3], ufoHitChance: 0.55, ufoDamage: [1, 3] },
+  далека: { fighterHitChance: 0.25, fighterDamage: [1, 1], probeHitChance: 0.1, probeDamage: [1, 1] },
+  середня: { fighterHitChance: 0.45, fighterDamage: [1, 2], probeHitChance: 0.3, probeDamage: [1, 2] },
+  впритул: { fighterHitChance: 0.7, fighterDamage: [2, 3], probeHitChance: 0.55, probeDamage: [1, 3] },
 };
 
-export const UFO_INTERCEPT_HP = { розвідник: 3, збирач: 5 } as const; // HP НЛО у повітряному бою
+export const PROBE_INTERCEPT_HP = { розвідник: 3, збирач: 5 } as const; // HP НЛО у повітряному бою
 
 // п19.3 (ADR-0159 п. 4, 13; ADR-0161): до трьох перехоплювачів, кожен — в ангарі свого регіону.
 // Перший (id 1) — безкоштовний, регіон «Північ», ангар — вузол «Рубіж» (`geo.base`), тож без
@@ -98,22 +98,22 @@ export interface FighterTag {
 }
 
 export type InterceptEvent = (
-  | { type: 'intercept_start'; ufoId: string; pos: Vec2; minute: number }
+  | { type: 'intercept_start'; probeId: string; pos: Vec2; minute: number }
   | { type: 'intercept_move'; from: Vec2; to: Vec2; minute: number }
-  | { type: 'intercept_engage'; ufoId: string; pos: Vec2; minute: number }
+  | { type: 'intercept_engage'; probeId: string; pos: Vec2; minute: number }
   | {
       type: 'intercept_round';
       round: number;
       choice: InterceptChoice;
       fighterHit: boolean;
       fighterDamage: number;
-      ufoHit: boolean;
-      ufoDamage: number;
+      probeHit: boolean;
+      probeDamage: number;
       minute: number;
     }
-  | { type: 'intercept_break_off'; ufoId: string; minute: number } // винищувач відступив
-  | { type: 'intercept_aborted'; ufoId: string; reason: 'ufo_lost' | 'ufo_landed' | 'fighter_damaged'; pos: Vec2; minute: number }
-  | { type: 'ufo_shot_down'; ufoId: string; pos: Vec2; minute: number }
+  | { type: 'intercept_break_off'; probeId: string; minute: number } // винищувач відступив
+  | { type: 'intercept_aborted'; probeId: string; reason: 'probe_lost' | 'probe_landed' | 'fighter_damaged'; pos: Vec2; minute: number }
+  | { type: 'probe_shot_down'; probeId: string; pos: Vec2; minute: number }
   | { type: 'fighter_returned'; pos: Vec2; minute: number }
   | { type: 'fighter_repair_start'; minute: number }
   | { type: 'fighter_repair_done'; minute: number }
@@ -124,8 +124,8 @@ export type InterceptEvent = (
 export interface InterceptState {
   rng: RNG; // окремий від geo.rng (ADR-0003/0032); спільний для всіх перехоплювачів (п19.3)
   fighters: Fighter[]; // п19.3: 1..MAX_FIGHTERS за зростанням id; [0] — перший (id 1)
-  ufoHp: Record<string, number>; // HP НЛО у повітряному бою (погоня не змінює geo)
-  activeUfoId: string | null; // НЛО активного бою (стан «бій»; бій одночасно — один, п19.3)
+  probeHp: Record<string, number>; // HP НЛО у повітряному бою (погоня не змінює geo)
+  activeProbeId: string | null; // НЛО активного бою (стан «бій»; бій одночасно — один, п19.3)
   round: number; // номер раунду активного бою (1..)
   log: InterceptEvent[];
 }
@@ -140,8 +140,8 @@ export function createIntercept(seedOrOpts: number | { seed?: number; rng?: RNG 
   return {
     rng: opts.rng ?? mulberry32(opts.seed ?? 4242),
     fighters: [{ id: 1, region: 'north', hp: FIGHTER_MAX_HP, pos: { x: 0, y: 0 }, status: 'на базі', targetId: null }],
-    ufoHp: {},
-    activeUfoId: null,
+    probeHp: {},
+    activeProbeId: null,
     round: 0,
     log: [],
   };
@@ -174,8 +174,8 @@ export function fighterInBattle(state: InterceptState): Fighter | null {
 }
 
 // п19.3: перехоплювач, що вже веде погоню чи бій за цим зондом (двоє на один зонд — ні).
-function chaserOf(state: InterceptState, ufoId: string): Fighter | null {
-  return state.fighters.find((f) => (f.status === 'погоня' || f.status === 'бій') && f.targetId === ufoId) ?? null;
+function chaserOf(state: InterceptState, probeId: string): Fighter | null {
+  return state.fighters.find((f) => (f.status === 'погоня' || f.status === 'бій') && f.targetId === probeId) ?? null;
 }
 
 // п19.3 (ADR-0161): новий перехоплювач (після виготовлення в «Кузні») — у стані «на базі»
@@ -209,18 +209,18 @@ export function assignFighter(state: InterceptState, geo: GeoState, fighterId: n
 // Позначити збитий НЛО у геосцені (П7.3, ADR-0032): НЛО сідає на місці падіння
 // зі статусом «збитий» і стає місією через missionTargets (правила mission.ts
 // не змінюються — воно, як і раніше, шукає приземлених/збитих за статусом).
-function markShotDown(geo: GeoState, ufoId: string): void {
-  const ufo = geo.ufos.find((u) => u.id === ufoId);
-  if (ufo) {
-    ufo.status = 'збитий';
-    ufo.landedTicksLeft = 0; // не зникає сам — чекає тактичної місії
+function markShotDown(geo: GeoState, probeId: string): void {
+  const probe = geo.probes.find((u) => u.id === probeId);
+  if (probe) {
+    probe.status = 'збитий';
+    probe.landedTicksLeft = 0; // не зникає сам — чекає тактичної місії
   }
 }
 
 // Запуск перехоплення: лише виявлений НЛО у стані «летить» (ADR-0006); винищувач
 // боєготовий (на базі, повний HP — ремонт блокує запуск, П7.4).
 // п19.3: fighterId — обраний перехоплювач (без нього — перший); погоня стартує з його ангара.
-export function startIntercept(state: InterceptState, geo: GeoState, ufoId: string, fighterId?: number): void {
+export function startIntercept(state: InterceptState, geo: GeoState, probeId: string, fighterId?: number): void {
   const f = fighterById(state, fighterId);
   if (f.status !== 'на базі') {
     throw new Error('Перехоплювач не ' + baseWhere(f) + ': перехоплення неможливе');
@@ -228,18 +228,18 @@ export function startIntercept(state: InterceptState, geo: GeoState, ufoId: stri
   if (f.hp < FIGHTER_MAX_HP) {
     throw new Error('Перехоплювач пошкоджений: спочатку ремонт');
   }
-  const ufo = geo.ufos.find((u) => u.id === ufoId);
-  if (!ufo || !ufo.detected || ufo.status !== 'летить') {
+  const probe = geo.probes.find((u) => u.id === probeId);
+  if (!probe || !probe.detected || probe.status !== 'летить') {
     throw new Error('Перехоплення можливе лише на виявлений зонд Розриву у повітрі');
   }
-  if (chaserOf(state, ufoId)) {
+  if (chaserOf(state, probeId)) {
     throw new Error('Цей зонд уже переслідує інший перехоплювач');
   }
   f.status = 'погоня';
-  f.targetId = ufoId;
+  f.targetId = probeId;
   f.pos = hangarPos(f.region, geo);
-  state.ufoHp[ufoId] = state.ufoHp[ufoId] ?? UFO_INTERCEPT_HP[ufo.kind];
-  geoLog(state, geo, { type: 'intercept_start', ufoId, pos: { ...ufo.pos }, minute: geo.minute, ...tag(state, f, true) });
+  state.probeHp[probeId] = state.probeHp[probeId] ?? PROBE_INTERCEPT_HP[probe.kind];
+  geoLog(state, geo, { type: 'intercept_start', probeId, pos: { ...probe.pos }, minute: geo.minute, ...tag(state, f, true) });
 }
 
 // Крок погоні до НЛО за Чебишевим з замиканням по X (куля по горизонталі, як радар).
@@ -269,31 +269,38 @@ export function interceptTick(state: InterceptState, geo: GeoState): void {
 }
 
 function chaseTick(state: InterceptState, geo: GeoState, f: Fighter): void {
-  const ufo = geo.ufos.find((u) => u.id === f.targetId);
-  if (!ufo || !ufo.detected || ufo.status !== 'летить') {
-    const reason = !ufo || !ufo.detected ? 'ufo_lost' : 'ufo_landed';
-    geoLog(state, geo, { type: 'intercept_aborted', ufoId: f.targetId!, reason, pos: { ...f.pos }, minute: geo.minute, ...tag(state, f) });
+  const probe = geo.probes.find((u) => u.id === f.targetId);
+  if (!probe || !probe.detected || probe.status !== 'летить') {
+    const reason = !probe || !probe.detected ? 'probe_lost' : 'probe_landed';
+    geoLog(state, geo, {
+      type: 'intercept_aborted',
+      probeId: f.targetId!,
+      reason,
+      pos: { ...f.pos },
+      minute: geo.minute,
+      ...tag(state, f),
+    });
     returnToBase(state, geo, f);
     return;
   }
   for (let step = 0; step < FIGHTER_STEPS_PER_TICK; step++) {
-    if (chebyshevWrap(f.pos, ufo.pos) === 0) {
+    if (chebyshevWrap(f.pos, probe.pos) === 0) {
       f.status = 'бій';
-      state.activeUfoId = ufo.id;
+      state.activeProbeId = probe.id;
       state.round = 0;
-      geoLog(state, geo, { type: 'intercept_engage', ufoId: ufo.id, pos: { ...ufo.pos }, minute: geo.minute, ...tag(state, f) });
+      geoLog(state, geo, { type: 'intercept_engage', probeId: probe.id, pos: { ...probe.pos }, minute: geo.minute, ...tag(state, f) });
       return;
     }
     const from = { ...f.pos };
-    f.pos = stepTowardWrap(f.pos, ufo.pos);
+    f.pos = stepTowardWrap(f.pos, probe.pos);
     geoLog(state, geo, { type: 'intercept_move', from, to: { ...f.pos }, minute: geo.minute, ...tag(state, f) });
   }
   // фінальна перевірка: другим кроком досягли клітинки НЛО — бій з цього ж тіку
-  if (chebyshevWrap(f.pos, ufo.pos) === 0) {
+  if (chebyshevWrap(f.pos, probe.pos) === 0) {
     f.status = 'бій';
-    state.activeUfoId = ufo.id;
+    state.activeProbeId = probe.id;
     state.round = 0;
-    geoLog(state, geo, { type: 'intercept_engage', ufoId: ufo.id, pos: { ...ufo.pos }, minute: geo.minute, ...tag(state, f) });
+    geoLog(state, geo, { type: 'intercept_engage', probeId: probe.id, pos: { ...probe.pos }, minute: geo.minute, ...tag(state, f) });
   }
 }
 
@@ -315,12 +322,12 @@ export function interceptRound(
   if (!f) {
     throw new Error('Активний бій відсутній: раунд неможливий');
   }
-  const ufo = geo.ufos.find((u) => u.id === state.activeUfoId);
-  if (!ufo) {
+  const probe = geo.probes.find((u) => u.id === state.activeProbeId);
+  if (!probe) {
     geoLog(state, geo, {
       type: 'intercept_aborted',
-      ufoId: state.activeUfoId!,
-      reason: 'ufo_lost',
+      probeId: state.activeProbeId!,
+      reason: 'probe_lost',
       pos: { ...f.pos },
       minute: geo.minute,
       ...tag(state, f),
@@ -336,49 +343,49 @@ export function interceptRound(
       choice,
       fighterHit: false,
       fighterDamage: 0,
-      ufoHit: false,
-      ufoDamage: 0,
+      probeHit: false,
+      probeDamage: 0,
       minute: geo.minute,
       ...tag(state, f),
     });
-    geoLog(state, geo, { type: 'intercept_break_off', ufoId: ufo.id, minute: geo.minute, ...tag(state, f) });
+    geoLog(state, geo, { type: 'intercept_break_off', probeId: probe.id, minute: geo.minute, ...tag(state, f) });
     returnToBase(state, geo, f);
     return;
   }
   const p = RANGE_PROFILES[choice];
   const fighterHit = state.rng() < p.fighterHitChance;
-  const ufoHit = state.rng() < p.ufoHitChance;
+  const probeHit = state.rng() < p.probeHitChance;
   // П11.3 (ADR-0058): бонус модуля додається ПІСЛЯ кидка урону — споживання
   // rng те саме, що й без модуля (промах — 0, як і раніше).
   const fighterDamage = fighterHit
     ? p.fighterDamage[0] + Math.floor(state.rng() * (p.fighterDamage[1] - p.fighterDamage[0] + 1)) + (f.gunModule ? GUN_MODULE_DAMAGE : 0)
     : 0;
-  const ufoDamage = ufoHit ? p.ufoDamage[0] + Math.floor(state.rng() * (p.ufoDamage[1] - p.ufoDamage[0] + 1)) : 0;
-  state.ufoHp[ufo.id] = Math.max(0, (state.ufoHp[ufo.id] ?? 0) - fighterDamage);
-  f.hp = Math.max(0, f.hp - ufoDamage);
+  const probeDamage = probeHit ? p.probeDamage[0] + Math.floor(state.rng() * (p.probeDamage[1] - p.probeDamage[0] + 1)) : 0;
+  state.probeHp[probe.id] = Math.max(0, (state.probeHp[probe.id] ?? 0) - fighterDamage);
+  f.hp = Math.max(0, f.hp - probeDamage);
   geoLog(state, geo, {
     type: 'intercept_round',
     round: state.round,
     choice,
     fighterHit,
     fighterDamage,
-    ufoHit,
-    ufoDamage,
+    probeHit,
+    probeDamage,
     minute: geo.minute,
     ...tag(state, f),
   });
-  if (state.ufoHp[ufo.id] === 0) {
-    geoLog(state, geo, { type: 'ufo_shot_down', ufoId: ufo.id, pos: { ...ufo.pos }, minute: geo.minute, ...tag(state, f) });
-    markShotDown(geo, ufo.id);
+  if (state.probeHp[probe.id] === 0) {
+    geoLog(state, geo, { type: 'probe_shot_down', probeId: probe.id, pos: { ...probe.pos }, minute: geo.minute, ...tag(state, f) });
+    markShotDown(geo, probe.id);
     returnToBase(state, geo, f);
     // П7.6: премія за збиття у повітрі — одразу після бою (економічна крива П7.6, ADR-0021).
-    if (econ) creditShotDownBonus(econ, ufo.kind, preset);
+    if (econ) creditShotDownBonus(econ, probe.kind, preset);
     return;
   }
   if (f.hp === 0) {
     geoLog(state, geo, {
       type: 'intercept_aborted',
-      ufoId: ufo.id,
+      probeId: probe.id,
       reason: 'fighter_damaged',
       pos: { ...f.pos },
       minute: geo.minute,
@@ -413,7 +420,7 @@ function returnToBase(state: InterceptState, geo: GeoState, f: Fighter): void {
   f.pos = hangarPos(f.region, geo);
   f.targetId = null;
   if (wasInBattle) {
-    state.activeUfoId = null;
+    state.activeProbeId = null;
     state.round = 0;
   }
   geoLog(state, geo, { type: 'fighter_returned', pos: hangarPos(f.region, geo), minute: geo.minute, ...tag(state, f, true) });
@@ -451,9 +458,9 @@ export function repairTick(state: InterceptState, geo: GeoState): void {
   }
 }
 
-// Збите НЛО для шару geo/mission (П7.3): подія ufo_shot_down — джерело місії падіння.
-export function shotDownUfos(state: InterceptState): string[] {
-  return state.log.filter((e) => e.type === 'ufo_shot_down').map((e) => (e as { ufoId: string }).ufoId);
+// Збите НЛО для шару geo/mission (П7.3): подія probe_shot_down — джерело місії падіння.
+export function shotDownProbes(state: InterceptState): string[] {
+  return state.log.filter((e) => e.type === 'probe_shot_down').map((e) => (e as { probeId: string }).probeId);
 }
 
 // Стан rng перехоплення для збереження (ADR-0026: функції не серіалізуються —

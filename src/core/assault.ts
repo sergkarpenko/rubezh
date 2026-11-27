@@ -99,7 +99,7 @@ export function createAssault(party: Party, opts: CampaignBattleOptions): Missio
     roles: opts.roles,
     cover: true, // п20.2 (ADR-0165 п. 10)
   });
-  return { briefing: { ufoId: 'база', kind: 'збирач', aliens: aliens.length, minute: party.geo.minute, op: 'штурм' }, state };
+  return { briefing: { probeId: 'база', kind: 'збирач', aliens: aliens.length, minute: party.geo.minute, op: 'штурм' }, state };
 }
 
 // Наслідки штурму. Перемога — подія assault_won; поразка — assault_lost з утраченими
@@ -162,7 +162,7 @@ export function createGateMission(party: Party, opts: CampaignBattleOptions): Mi
     enemyZone: GATE_SPAWN,
     cover: true, // п20.2 (ADR-0165 п. 10)
   });
-  return { briefing: { ufoId: 'брама', kind: 'збирач', aliens: aliens.length, minute: party.geo.minute, op: 'брама' }, state };
+  return { briefing: { probeId: 'брама', kind: 'збирач', aliens: aliens.length, minute: party.geo.minute, op: 'брама' }, state };
 }
 
 // Наслідки фіналу: перемога — «перемога» партії (рахунок один раз, campaign_victory);

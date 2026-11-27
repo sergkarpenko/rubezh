@@ -6,13 +6,13 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   HANGAR_FILL,
-  UFO_LANDED_ALPHA,
-  UFO_LANDED_RING,
+  PROBE_LANDED_ALPHA,
+  PROBE_LANDED_RING,
   drawFighterSprite,
   drawGatePortal,
   drawGeoBaseSprite,
   drawHangarSprite,
-  drawUfoSprite,
+  drawProbeSprite,
   initGeoIcons,
   initGeoTower,
   initPixelSprites,
@@ -128,7 +128,7 @@ describe('п19.5 (ADR-0163): значки геосцени з аркуша Gemin
       ['збирач', 'harvester'],
     ] as const) {
       const r = rec();
-      drawUfoSprite(r.ctx, { cx: 504, cy: 24, landed: false, kind });
+      drawProbeSprite(r.ctx, { cx: 504, cy: 24, landed: false, kind });
       expect(images(r.calls)).toEqual([iconArgs(icon, 504, 24)]);
       expect(r.calls.some((c) => c.m === 'ellipse')).toBe(false);
       expect(r.sets.filter((x) => x.p === 'globalAlpha').map((x) => x.v)).toEqual([1]);
@@ -138,13 +138,13 @@ describe('п19.5 (ADR-0163): значки геосцени з аркуша Gemin
   it('приземлений зонд: кільце посадки під значком, значок приглушений, альфа повертається до 1', () => {
     ready();
     const r = rec();
-    drawUfoSprite(r.ctx, { cx: 120, cy: 72, landed: true, kind: 'збирач' });
+    drawProbeSprite(r.ctx, { cx: 120, cy: 72, landed: true, kind: 'збирач' });
     const ring = r.calls.find((c) => c.m === 'ellipse')!;
     expect(ring.args.slice(0, 4)).toEqual([120, 82, 16, 6]);
-    expect(r.sets).toContainEqual({ p: 'strokeStyle', v: UFO_LANDED_RING });
+    expect(r.sets).toContainEqual({ p: 'strokeStyle', v: PROBE_LANDED_RING });
     // кільце — до значка (під ним)
     expect(r.calls.findIndex((c) => c.m === 'stroke')).toBeLessThan(r.calls.findIndex((c) => c.m === 'drawImage'));
-    expect(r.sets.filter((x) => x.p === 'globalAlpha').map((x) => x.v)).toEqual([UFO_LANDED_ALPHA, 1]);
+    expect(r.sets.filter((x) => x.p === 'globalAlpha').map((x) => x.v)).toEqual([PROBE_LANDED_ALPHA, 1]);
     expect(images(r.calls)).toEqual([iconArgs('harvester', 120, 72)]);
   });
 

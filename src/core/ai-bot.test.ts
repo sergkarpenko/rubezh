@@ -24,11 +24,11 @@ import { createMission, missionOutcome, type Mission } from './mission';
 import { createRoster, missionSquad } from './squad';
 
 // Геопартія з вручну «посадженим» НЛО (спавн вимкнено) — для точкових сценаріїв.
-function mkGeo(ufoId: string, kind: 'розвідник' | 'збирач' = 'розвідник', ticks = 0): GeoState {
+function mkGeo(probeId: string, kind: 'розвідник' | 'збирач' = 'розвідник', ticks = 0): GeoState {
   const g = createGeoGame({ seed: 9, spawnChance: 0 });
   if (ticks > 0) advanceTime(g, ticks);
-  g.ufos.push({
-    id: ufoId,
+  g.probes.push({
+    id: probeId,
     kind,
     pos: { ...g.base },
     target: { ...g.base },
@@ -39,8 +39,8 @@ function mkGeo(ufoId: string, kind: 'розвідник' | 'збирач' = 'р�
   return g;
 }
 
-function mkMission(ufoId: string, kind?: 'розвідник' | 'збирач', ticks = 0): Mission {
-  return createMission(mkGeo(ufoId, kind, ticks), ufoId, { squad: missionSquad(createRoster()) });
+function mkMission(probeId: string, kind?: 'розвідник' | 'збирач', ticks = 0): Mission {
+  return createMission(mkGeo(probeId, kind, ticks), probeId, { squad: missionSquad(createRoster()) });
 }
 
 describe('bot: хід гравця', () => {

@@ -10,19 +10,19 @@
 import { DAILY_ALLOWANCE, HIRE_PRICE, MISSION_BONUS } from '../core/economy';
 import { COVER_MULT, EVAC_AP_COST } from '../core/combat';
 import { FIGHTER_REPAIR_COST, MAX_FIGHTERS } from '../core/intercept';
-import { TRUST_MISSION_WON, TRUST_UFO_LEFT_DETECTED, TRUST_UFO_LEFT_UNDETECTED } from '../core/regions';
+import { TRUST_MISSION_WON, TRUST_PROBE_LEFT_DETECTED, TRUST_PROBE_LEFT_UNDETECTED } from '../core/regions';
 import { INTERCEPTOR_COST } from '../core/workshop';
 import {
   ASSAULT_THRESHOLDS,
   SCORE_PER_MISSION_WON,
   SCORE_PER_MONEY,
-  SCORE_PER_UFO_SHOT_DOWN,
+  SCORE_PER_PROBE_SHOT_DOWN,
   SCORE_PER_VETERAN_ALIVE,
   THREAT_MAX,
   THREAT_MISSION_WON,
   THREAT_PER_DAY,
-  THREAT_UFO_LEFT_DETECTED,
-  THREAT_UFO_LEFT_UNDETECTED,
+  THREAT_PROBE_LEFT_DETECTED,
+  THREAT_PROBE_LEFT_UNDETECTED,
 } from '../core/campaign';
 import { BASE_LAB_SLOTS, KEY_PROJECTS, SCIENTIST_SALARY } from '../core/research';
 import { ENEMY_KINDS } from '../core/enemies';
@@ -83,9 +83,9 @@ function helpHtml(): string {
     ': +' +
     THREAT_PER_DAY +
     ' за добу, +' +
-    THREAT_UFO_LEFT_DETECTED +
+    THREAT_PROBE_LEFT_DETECTED +
     ' за виявлений зонд, що відлетів без бою (+' +
-    THREAT_UFO_LEFT_UNDETECTED +
+    THREAT_PROBE_LEFT_UNDETECTED +
     ' — невиявлений), −' +
     -THREAT_MISSION_WON +
     ' за виграну місію. На ' +
@@ -123,7 +123,7 @@ function helpHtml(): string {
     INTERCEPTOR_COST +
     '.</li>' +
     '<li>Рахунок: ' +
-    SCORE_PER_UFO_SHOT_DOWN +
+    SCORE_PER_PROBE_SHOT_DOWN +
     ' за зонд · ' +
     SCORE_PER_MISSION_WON +
     ' за місію · ' +
@@ -146,9 +146,9 @@ function helpHtml(): string {
     // п19.4 (ADR-0159 п. 1–5, 15): регіони й перехоплювачі — у четвертому блоці (перші два — на межі гейта
     // висоти 736 px); рядки «Техноманти», «Протокол», «Кузня» — коротші, той самий зміст (рішення власника Т.207)
     '<li><b>Регіони</b>: довіра −' +
-    -TRUST_UFO_LEFT_DETECTED +
+    -TRUST_PROBE_LEFT_DETECTED +
     ' / −' +
-    -TRUST_UFO_LEFT_UNDETECTED +
+    -TRUST_PROBE_LEFT_UNDETECTED +
     ' за зонд, що відлетів без бою (виявлений / ні), +' +
     TRUST_MISSION_WON +
     ' за виграну місію; дотація — за довірою, на 0 регіон виходить.</li>' +

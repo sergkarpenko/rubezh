@@ -6,7 +6,7 @@
 // логіка ядра — виклики src/core, DOM — через хелпер el (src/ui/dom.ts).
 
 import { gateKeyDone, gateOpen } from '../core/assault';
-import { TICK_MINUTES, WORLD_W, chebyshevWrap, detectedUfos, geoClock, geoDay, missionTargets, type Ufo } from '../core/geo';
+import { TICK_MINUTES, WORLD_W, chebyshevWrap, detectedProbes, geoClock, geoDay, missionTargets, type Probe } from '../core/geo';
 import {
   FIGHTER_MAX_HP,
   FIGHTER_REPAIR_COST,
@@ -50,7 +50,7 @@ import {
   drawGeoBaseSprite,
   drawGeoTerrain,
   drawHangarSprite,
-  drawUfoSprite,
+  drawProbeSprite,
 } from '../render';
 import type { Anim } from '../core/render-core';
 import { el, setWhy } from './dom';
@@ -62,7 +62,7 @@ import { chevronHtml, roleLabel, xpLine } from './roles';
 import { GCELL } from './grid';
 import { geoEventText, type LogCat } from './journal';
 import { renderEndScreens, renderGoalPanel, renderThreatChip } from './campaign-panel';
-import { ticksText } from './text';
+import { probeNo, ticksText } from './text';
 import type { AmbientGeoScene } from './ambient';
 
 // п20.5: ширина іконки зброї в ростері, CSS px (42 × 14)
@@ -134,7 +134,7 @@ export function fighterReady(f: Fighter): boolean {
 
 // п19.4 (кнопка «Перехопити» в «Сенсорній сітці»): найближчий до зонда боєготовий перехоплювач
 // (відстань від ангара за Чебишевим з замиканням по X; рівні — менший id); немає — null.
-export function nearestReady(party: Party, u: Ufo): Fighter | null {
+export function nearestReady(party: Party, u: Probe): Fighter | null {
   let best: Fighter | null = null;
   let bestD = Infinity;
   for (const f of party.intercept.fighters) {
@@ -149,8 +149,8 @@ export function nearestReady(party: Party, u: Ufo): Fighter | null {
 }
 
 // п19.4: перехоплювач, що веде погоню чи бій за зондом (на один зонд — один, ADR-0161).
-function chaserOf(party: Party, ufoId: string): Fighter | null {
-  return party.intercept.fighters.find((f) => (f.status === 'погоня' || f.status === 'бій') && f.targetId === ufoId) ?? null;
+function chaserOf(party: Party, probeId: string): Fighter | null {
+  return party.intercept.fighters.find((f) => (f.status === 'погоня' || f.status === 'бій') && f.targetId === probeId) ?? null;
 }
 
 // п19.4: перехоплювач для контекст-стрічки — той, що в бою, інакше перший у погоні.
@@ -168,7 +168,7 @@ export interface PanelsDeps {
   isGameOver(): boolean; // банкрутство (ADR-0021)
   journal(text: string, cls?: string, cat?: LogCat): void;
   renderAll(): void;
-  launchMission(ufoId: string): void;
+  launchMission(probeId: string): void;
   launchGate(): void; // п18.4 (ADR-0156): фінал «Брама Розриву»
   drainGeo(): void; // нові geo-події → журнал (seen-трекінг у src/ui/journal.ts)
   drainEcon(): void; // нові події економіки → журнал
@@ -188,7 +188,7 @@ export interface GeoAmbient {
 
 export interface Panels {
   renderGeo(): void;
-  renderUfos(): void;
+  renderProbes(): void;
   renderFighter(): void;
   renderFinances(): void;
   renderRoster(): void;
@@ -199,9 +199,9 @@ export interface Panels {
 }
 
 // П7.4 (ADR-0032): «Перехопити» — лише для зонда в повітрі, коли перехоплювач
-// на базі. Спільна умова кнопки (renderUfos) і сигналу вкладки (nodeActions, Т.7).
+// на базі. Спільна умова кнопки (renderProbes) і сигналу вкладки (nodeActions, Т.7).
 // п19.4: хоч один перехоплювач на базі, і зонд ще ніхто не переслідує.
-function canIntercept(party: Party, u: Ufo): boolean {
+function canIntercept(party: Party, u: Probe): boolean {
   return u.status === 'летить' && chaserOf(party, u.id) === null && party.intercept.fighters.some((f) => f.status === 'на базі');
 }
 
@@ -232,7 +232,7 @@ export function createPanels(deps: PanelsDeps): Panels {
     ctx.setLineDash([]);
 
     // П6.7 (ADR-0029): статичні спрайти геосцени — база і позначки НЛО (туман:
-    // detectedUfos повертає лише виявлені — невиявлені в малювання не потрапляють).
+    // detectedProbes повертає лише виявлені — невиявлені в малювання не потрапляють).
     // п19.5: значок вузла з аркуша (фолбек — вежа-радар, далі піксельний спрайт ВУЗОЛ)
     drawGeoBaseSprite(ctx, { cx: b.x * GCELL + GCELL / 2, cy: b.y * GCELL + GCELL / 2, size: GCELL });
     // п18.5 (ADR-0157; рішення власника «А. Кодом»): Брама Розриву — портал у клітинці праворуч від вузла
@@ -253,8 +253,8 @@ export function createPanels(deps: PanelsDeps): Panels {
       const h = hangarPos(r, party.geo);
       drawHangarSprite(ctx, { cx: h.x * GCELL + GCELL / 2, cy: h.y * GCELL + GCELL / 2 });
     }
-    for (const u of detectedUfos(party.geo)) {
-      drawUfoSprite(ctx, {
+    for (const u of detectedProbes(party.geo)) {
+      drawProbeSprite(ctx, {
         cx: u.pos.x * GCELL + GCELL / 2,
         cy: u.pos.y * GCELL + GCELL / 2,
         landed: u.status === 'приземлився',
@@ -293,7 +293,7 @@ export function createPanels(deps: PanelsDeps): Panels {
   }
 
   // Т.7: дії гравця на вкладці «Вузол» — ті самі умови, що показують кнопки
-  // «Перехопити» / «Запустити місію» (renderUfos) і дистанції повітряного бою
+  // «Перехопити» / «Запустити місію» (renderProbes) і дистанції повітряного бою
   // (renderFighter). У тактичному бою і після банкрутства дій нема.
   function nodeActions(): number {
     if (deps.inBattle() || deps.isGameOver()) return 0;
@@ -302,7 +302,7 @@ export function createPanels(deps: PanelsDeps): Panels {
     // п19.4: дистанції бою і модуль — у середній колонці «Перехоплювачі» (видна без вкладки) — не рахуються
     let n = 0;
     if (gateOpen(party) && readySoldiers(party.roster).length > 0) n++; // п18.4: брама чекає атаки
-    for (const u of detectedUfos(party.geo)) {
+    for (const u of detectedProbes(party.geo)) {
       if (canIntercept(party, u)) n++;
       if (targets.has(u.id)) n++;
     }
@@ -313,7 +313,7 @@ export function createPanels(deps: PanelsDeps): Panels {
   // «▶ Атакувати Браму Розриву» (боєготових немає — вимкнена з причиною, як «Запустити місію»).
   function gateRow(party: Party): HTMLElement {
     const div = document.createElement('div');
-    div.className = 'ufo';
+    div.className = 'probe';
     div.innerHTML = '<b>Брама Розриву</b> · відкрита<br><span class="meta">фінальна місія · 6 ворогів</span>';
     const btn = document.createElement('button');
     btn.className = 'mission';
@@ -328,11 +328,11 @@ export function createPanels(deps: PanelsDeps): Panels {
     return div;
   }
 
-  function renderUfos(): void {
+  function renderProbes(): void {
     const party = deps.getParty();
-    const box = el('ufos');
+    const box = el('probes');
     box.innerHTML = '';
-    const detected = detectedUfos(party.geo);
+    const detected = detectedProbes(party.geo);
     const targets = new Set(missionTargets(party.geo).map((u) => u.id));
     if (gateOpen(party)) box.appendChild(gateRow(party)); // п18.4: фінал — над зондами
     if (detected.length === 0) {
@@ -341,7 +341,7 @@ export function createPanels(deps: PanelsDeps): Panels {
     }
     for (const u of detected) {
       const div = document.createElement('div');
-      div.className = 'ufo';
+      div.className = 'probe';
       const info = u.status === 'приземлився' ? 'вікно ' + (u.landedTicksLeft * TICK_MINUTES) / 60 + ' год' : 'у повітрі';
       div.innerHTML =
         '<b>' + u.kind + '</b> · ' + u.status + '<br><span class="meta">(' + u.pos.x + ',' + u.pos.y + ') · ' + info + '</span>';
@@ -442,12 +442,12 @@ export function createPanels(deps: PanelsDeps): Panels {
     const f = activeFighter(party); // п19.4: той, хто в бою, інакше перший у погоні
     el('ictx').classList.toggle('hidden', f === null);
     if (f === null) return;
-    el('ictx-target').textContent = f.targetId ?? '—';
+    el('ictx-target').textContent = f.targetId === null || f.targetId === undefined ? '—' : probeNo(f.targetId); // Т.218: «№N»
     el('ictx-status').textContent = f.status;
     el('ictx-round').textContent = f.status === 'бій' ? String(party.intercept.round) : '—';
     el('ictx-fighter').textContent = (party.intercept.fighters.length > 1 ? f.id + ' · ' : '') + 'HP ' + f.hp + '/' + FIGHTER_MAX_HP;
-    const ufo = f.status === 'бій' ? party.geo.ufos.find((u) => u.id === party.intercept.activeUfoId) : undefined;
-    el('ictx-ufo').textContent = ufo ? 'HP ' + party.intercept.ufoHp[ufo.id] : '—';
+    const probe = f.status === 'бій' ? party.geo.probes.find((u) => u.id === party.intercept.activeProbeId) : undefined;
+    el('ictx-probe').textContent = probe ? 'HP ' + party.intercept.probeHp[probe.id] : '—';
   }
 
   // п19.4 (ADR-0159 п. 15): перехоплювачі, що показують кнопки регіонів «Призначити» (розгорнуто кліком).
@@ -477,8 +477,8 @@ export function createPanels(deps: PanelsDeps): Panels {
     let i = log.length - 1;
     while (i >= 0 && !['intercept_start', 'intercept_aborted', 'intercept_break_off'].includes(log[i].type)) i--;
     const last = log[i];
-    // Не показуємо пошкодження, яке вже відремонтовано (аудит PR #340). Т.51: для причин ufo_landed/ufo_lost
-    // рядок показуємо лише поки зонд із події ще в geo.ufos. п19.4: «відремонтовано» — у перехоплювача з події.
+    // Не показуємо пошкодження, яке вже відремонтовано (аудит PR #340). Т.51: для причин probe_landed/probe_lost
+    // рядок показуємо лише поки зонд із події ще в geo.probes. п19.4: «відремонтовано» — у перехоплювача з події.
     const owner =
       last !== undefined && 'fighter' in last && last.fighter !== undefined
         ? party.intercept.fighters.find((f) => f.id === last.fighter)
@@ -487,8 +487,8 @@ export function createPanels(deps: PanelsDeps): Panels {
       last?.type === 'intercept_aborted' && last.reason === 'fighter_damaged' && (owner?.hp ?? FIGHTER_MAX_HP) === FIGHTER_MAX_HP;
     const probeGone =
       last?.type === 'intercept_aborted' &&
-      (last.reason === 'ufo_landed' || last.reason === 'ufo_lost') &&
-      !party.geo.ufos.some((u) => u.id === last.ufoId);
+      (last.reason === 'probe_landed' || last.reason === 'probe_lost') &&
+      !party.geo.probes.some((u) => u.id === last.probeId);
     if (last?.type === 'intercept_aborted' && !stale && !probeGone) {
       const note = document.createElement('div');
       note.id = 'fighter-last';
@@ -500,7 +500,7 @@ export function createPanels(deps: PanelsDeps): Panels {
     // аудит PR #523: сигналу вкладки на повітряний бій немає (дистанції — у середній колонці) — на початку
     // бою картку того, хто б'ється, прокручено у видиму частину колонки (раз на бій)
     const fighting = fighterInBattle(party.intercept);
-    const key = fighting === null ? null : fighting.id + ':' + String(party.intercept.activeUfoId);
+    const key = fighting === null ? null : fighting.id + ':' + String(party.intercept.activeProbeId);
     if (key !== null && key !== shownBattle)
       document.getElementById('fighter-card-' + fighting!.id)?.scrollIntoView?.({ block: 'nearest' });
     shownBattle = key;
@@ -523,7 +523,7 @@ export function createPanels(deps: PanelsDeps): Panels {
             ? 'на базі · пошкоджений'
             : 'боєготовий'
           : f.status === 'погоня'
-            ? 'погоня: ' + (f.targetId ?? '?')
+            ? 'погоня: ' + (f.targetId ? probeNo(f.targetId) : '?')
             : f.status;
     const head = document.createElement('div');
     head.className = 'meta';
@@ -549,12 +549,17 @@ export function createPanels(deps: PanelsDeps): Panels {
 
   // П7.4: дистанції повітряного бою — у картці того, хто в бою (бій одночасно — один, ADR-0161).
   function renderRanges(party: Party, box: HTMLElement): void {
-    const ufo = party.geo.ufos.find((u) => u.id === party.intercept.activeUfoId);
+    const probe = party.geo.probes.find((u) => u.id === party.intercept.activeProbeId);
     const ctx = document.createElement('div');
     ctx.className = 'meta';
     ctx.style.marginBottom = '4px';
     ctx.textContent =
-      'Бій з ' + (ufo ? ufo.id : '?') + ' · раунд ' + party.intercept.round + ' · зонд HP ' + (ufo ? party.intercept.ufoHp[ufo.id] : '?');
+      'Бій із зондом ' +
+      (probe ? probeNo(probe.id) : '?') +
+      ' · раунд ' +
+      party.intercept.round +
+      ' · зонд HP ' +
+      (probe ? party.intercept.probeHp[probe.id] : '?');
     box.appendChild(ctx);
     const row = document.createElement('div');
     row.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:4px'; // п19.4: дві в ряд
@@ -580,12 +585,12 @@ export function createPanels(deps: PanelsDeps): Panels {
   // п19.4: «Погоня» — боєготовий перехоплювач на виявлений зонд у повітрі, який ще ніхто не переслідує.
   function renderChase(party: Party, f: Fighter, box: HTMLElement): void {
     const many = party.intercept.fighters.length > 1;
-    for (const u of detectedUfos(party.geo)) {
+    for (const u of detectedProbes(party.geo)) {
       if (u.status !== 'летить' || chaserOf(party, u.id) !== null) continue;
       const b = document.createElement('button');
       b.className = 'chase';
       b.id = 'btn-chase-' + f.id + '-' + u.id;
-      b.textContent = '✦ Погоня: ' + u.kind + ' ' + u.id;
+      b.textContent = '✦ Погоня: ' + u.kind + ' ' + probeNo(u.id);
       b.disabled = deps.inBattle() || deps.isGameOver();
       b.title =
         'Підняти перехоплювач' +
@@ -837,7 +842,7 @@ export function createPanels(deps: PanelsDeps): Panels {
 
   return {
     renderGeo,
-    renderUfos,
+    renderProbes,
     renderFighter,
     renderFinances,
     renderRoster,

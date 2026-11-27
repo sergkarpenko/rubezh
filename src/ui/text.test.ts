@@ -3,7 +3,7 @@
 // і змушує звірити правило «-а/-я — жіночий рід»).
 import { describe, expect, it } from 'vitest';
 import { SOLDIER_NAMES } from '../core/squad';
-import { byGender, daysText, isFeminineName, plural, ticksText } from './text';
+import { byGender, daysText, isFeminineName, plural, probeNo, ticksText } from './text';
 
 describe('ticksText: узгодження числівника з «тік»', () => {
   it('1 → тік; 2–4 → тіки; 0 і 5–20 → тіків', () => {
@@ -66,5 +66,13 @@ describe('T.39: plural — число + іменівник (техноманти
     expect(plural(2, ...w)).toBe('2 техноманти');
     expect(plural(5, ...w)).toBe('5 техномантів');
     expect(plural(21, ...w)).toBe('21 техномант');
+  });
+});
+
+describe('Т.218: probeNo — номер зонда для тексту', () => {
+  it('«№N» з id `probeN`; id без номера — як є', () => {
+    expect(probeNo('probe3')).toBe('№3');
+    expect(probeNo('probe12')).toBe('№12');
+    expect(probeNo('база')).toBe('база');
   });
 });

@@ -463,7 +463,7 @@ const panels = createPanels({
   isGameOver: () => gameOver,
   journal,
   renderAll,
-  launchMission: (ufoId) => openLoadout(() => battle.launch(ufoId)), // п20.4: спершу вікно спорядження
+  launchMission: (probeId) => openLoadout(() => battle.launch(probeId)), // п20.4: спершу вікно спорядження
   launchGate: () => openLoadout(battle.launchGate), // п18.4: фінал «Брама Розриву»; п20.4 — через вікно спорядження
   drainGeo: () => journalUI.drainGeo(),
   drainEcon: () => journalUI.drainEcon(),
@@ -578,12 +578,12 @@ function interceptAnims(e: InterceptEvent): Anim[] {
   }
   if (e.type !== 'intercept_round' || e.choice === 'відступ') return [];
   const p = party;
-  const ufo = p.geo.ufos.find((u) => u.id === p.intercept.activeUfoId);
-  if (!ufo) return [];
+  const probe = p.geo.probes.find((u) => u.id === p.intercept.activeProbeId);
+  if (!probe) return [];
   const fpos = (fighterInBattle(p.intercept) ?? p.intercept.fighters[0]).pos; // п19.3: той, хто в бою
   const anims: Anim[] = [];
-  if (e.fighterHit) anims.push(makeTracerAnim('player', { ...fpos }, { ...ufo.pos }, true));
-  if (e.ufoHit) anims.push(makeTracerAnim('alien', { ...ufo.pos }, { ...fpos }, true));
+  if (e.fighterHit) anims.push(makeTracerAnim('player', { ...fpos }, { ...probe.pos }, true));
+  if (e.probeHit) anims.push(makeTracerAnim('alien', { ...probe.pos }, { ...fpos }, true));
   return anims;
 }
 
@@ -674,7 +674,7 @@ function renderAll(): void {
   renderNextStep(el('next-step'), step?.text ?? null); // Т.97: префікс окремим span
   panels.renderCampaign();
   panels.renderGeo();
-  panels.renderUfos();
+  panels.renderProbes();
   panels.renderFighter();
   panels.renderRegions(); // п19.4: панель «Регіони» середньої колонки
   panels.renderFinances();

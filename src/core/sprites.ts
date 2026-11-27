@@ -10,7 +10,7 @@
 // анімаціях (ADR-0064): статичні матриці читабельні, без шуму.
 
 import type { Side } from './combat';
-import type { UfoKind } from './geo';
+import type { ProbeKind } from './geo';
 
 // Палітра (П12.7, ADR-0064): неонові акценти на синьо-чорній основі —
 // ціан «Рубіжу», пурпур Розриву, бурштин спалахів.
@@ -33,11 +33,11 @@ export const BASE_BEACON = '#00e5ff'; // неоновий маяк-вогонь 
 export const BASE_WALL = '#0a1a2e'; // темний осередок/брама вежі
 // П6.9 (ADR-0029): м'якші позначки зондів — приглушені кольори і прозорість
 // 0.85 з обов'язковим відновленням alpha.
-export const UFO_LANDED_FILL = '#7a1fd9'; // пурпурний осередок приземленого зонда
-export const UFO_LANDED_EDGE = '#e3b8ff'; // світлі «тріщини» глітч-осередку
-export const UFO_AIR = '#c45cff'; // контур зонда в повітрі
-export const UFO_CORE = '#ff2e88'; // ядро-пульс зонда-«збирача»
-export const UFO_LEG = '#4a1580'; // опори приземленого зонда
+export const PROBE_LANDED_FILL = '#7a1fd9'; // пурпурний осередок приземленого зонда
+export const PROBE_LANDED_EDGE = '#e3b8ff'; // світлі «тріщини» глітч-осередку
+export const PROBE_AIR = '#c45cff'; // контур зонда в повітрі
+export const PROBE_CORE = '#ff2e88'; // ядро-пульс зонда-«збирача»
+export const PROBE_LEG = '#4a1580'; // опори приземленого зонда
 
 // Дані для малювання юніта бойовища: cx/cy — центр клітинки в пікселях buffer'а,
 // r — радіус маркерів (рамка вибору, дозор; у прев'ю 8 при клітинці 36 — П13.5).
@@ -61,11 +61,11 @@ export interface BaseSprite {
   size: number; // сторона клітинки геосцени (GCELL)
 }
 
-export interface UfoSprite {
+export interface ProbeSprite {
   cx: number;
   cy: number;
   landed: boolean;
-  kind: UfoKind;
+  kind: ProbeKind;
 }
 
 export interface FighterSprite {
@@ -248,7 +248,7 @@ export const BASE_SPRITE: PixelSprite = {
 // (ромб з «тріщинами» світла й опорами), «розвідник» — порожній ромб,
 // «збирач» — суцільний ромб із ядром-пульсом (пульс — подієвий кадр,
 // у статичній матриці — лише ядро-мітка).
-export const UFO_LANDED_SPRITE: PixelSprite = {
+export const PROBE_LANDED_SPRITE: PixelSprite = {
   rows: [
     '.....HH.....',
     '....HKKH....',
@@ -263,10 +263,10 @@ export const UFO_LANDED_SPRITE: PixelSprite = {
     '..G......G..',
     '............',
   ],
-  palette: { H: UFO_LANDED_FILL, K: UFO_LANDED_EDGE, G: UFO_LEG },
+  palette: { H: PROBE_LANDED_FILL, K: PROBE_LANDED_EDGE, G: PROBE_LEG },
 };
 
-export const UFO_SCOUT_SPRITE: PixelSprite = {
+export const PROBE_SCOUT_SPRITE: PixelSprite = {
   rows: [
     '.....AA.....',
     '....A..A....',
@@ -281,10 +281,10 @@ export const UFO_SCOUT_SPRITE: PixelSprite = {
     '....A..A....',
     '.....AA.....',
   ],
-  palette: { A: UFO_AIR },
+  palette: { A: PROBE_AIR },
 };
 
-export const UFO_HARVESTER_SPRITE: PixelSprite = {
+export const PROBE_HARVESTER_SPRITE: PixelSprite = {
   rows: [
     '.....AA.....',
     '....AAAA....',
@@ -299,7 +299,7 @@ export const UFO_HARVESTER_SPRITE: PixelSprite = {
     '.....AA.....',
     '............',
   ],
-  palette: { A: UFO_AIR, K: UFO_CORE },
+  palette: { A: PROBE_AIR, K: PROBE_CORE },
 };
 
 // П7.5 (П12.7, ADR-0031/0032; П13.5 — 12×12): перехоплювач на геосцені —

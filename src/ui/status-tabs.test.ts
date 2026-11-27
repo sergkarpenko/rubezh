@@ -13,7 +13,7 @@ import { createStatusTabs, DEFAULT_STATUS_TAB, STATUS_TAB_KEY, STATUS_TABS, type
 const SKELETON = `
 <aside id="status">
   <div id="status-tabs"></div>
-  <section class="panel" data-tab="base"><h2>Сенсорна сітка</h2><div id="ufos"></div></section>
+  <section class="panel" data-tab="base"><h2>Сенсорна сітка</h2><div id="probes"></div></section>
   <section class="panel" data-tab="base"><h2>Перехоплювач</h2><div id="fighter"></div></section>
   <section class="panel" data-tab="squad"><h2>Фінанси</h2><b id="money-card">300</b><button id="btn-hire">Найм</button></section>
   <section class="panel" data-tab="base"><h2>Дослідження</h2><div id="research"></div></section>

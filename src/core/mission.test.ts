@@ -4,7 +4,7 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { RIFLE, isBlocked, evacuate, makeUnit, type GameMap } from './combat';
-import { advanceTime, createGeoGame, missionTargets, type GeoState, type Ufo } from './geo';
+import { advanceTime, createGeoGame, missionTargets, type GeoState, type Probe } from './geo';
 import {
   ALIEN_SPAWN,
   SQUAD_SPAWN,
@@ -26,10 +26,10 @@ vi.mock('./map', async (importOriginal) => {
 });
 
 // Геопартія з вручну «посадженим» НЛО (спавн вимкнено) — для точкових сценаріїв.
-function mkGeo(ufoId: string, detected = true, status: Ufo['status'] = 'приземлився'): GeoState {
+function mkGeo(probeId: string, detected = true, status: Probe['status'] = 'приземлився'): GeoState {
   const g = createGeoGame({ seed: 9, spawnChance: 0 });
-  g.ufos.push({
-    id: ufoId,
+  g.probes.push({
+    id: probeId,
     kind: 'розвідник',
     pos: { ...g.base },
     target: { ...g.base },
@@ -80,7 +80,7 @@ describe('mission: валідація запуску', () => {
 describe('mission: структура', () => {
   it('розвідник: брифінг і 2 прибульці; солдати у зоні висадки з повними AP', () => {
     const m = createMission(mkGeo('uA'), 'uA');
-    expect(m.briefing).toMatchObject({ ufoId: 'uA', kind: 'розвідник', aliens: 2 });
+    expect(m.briefing).toMatchObject({ probeId: 'uA', kind: 'розвідник', aliens: 2 });
     const squad = m.state.units.filter((u) => u.side === 'player');
     expect(squad.length).toBe(3);
     expect(squad.every((u) => u.ap === 10)).toBe(true);
@@ -89,8 +89,8 @@ describe('mission: структура', () => {
 
   it('збирач: 3 прибульці з «Імпульсним різаком», точність .50/.45/.40', () => {
     const g = mkGeo('uB');
-    g.ufos[0].kind = 'збирач';
-    g.ufos[0].landedTicksLeft = 16;
+    g.probes[0].kind = 'збирач';
+    g.probes[0].landedTicksLeft = 16;
     const m = createMission(g, 'uB');
     const aliens = m.state.units.filter((u) => u.side === 'alien');
     expect(aliens.length).toBe(3);
@@ -148,8 +148,8 @@ describe('mission: детермінізм', () => {
     const run = (launch: boolean): string => {
       const g = createGeoGame({ seed: 5, spawnChance: 0 });
       advanceTime(g, 10);
-      g.ufos.push({
-        id: 'ufoM',
+      g.probes.push({
+        id: 'probeM',
         kind: 'розвідник',
         pos: { ...g.base },
         target: { ...g.base },
@@ -157,7 +157,7 @@ describe('mission: детермінізм', () => {
         status: 'приземлився',
         landedTicksLeft: 8,
       });
-      if (launch) createMission(g, 'ufoM');
+      if (launch) createMission(g, 'probeM');
       advanceTime(g, 100);
       return JSON.stringify(g.log);
     };
@@ -175,9 +175,9 @@ describe('mission: результати', () => {
     }
     expect(missionOutcome(m.state)).toBe('перемога');
     completeMission(g, 'uW', 'перемога');
-    expect(g.ufos.some((u) => u.id === 'uW')).toBe(false);
+    expect(g.probes.some((u) => u.id === 'uW')).toBe(false);
     const won = g.log.find((e) => e.type === 'mission_won');
-    expect(won).toMatchObject({ ufoId: 'uW', minute: g.minute });
+    expect(won).toMatchObject({ probeId: 'uW', minute: g.minute });
     expect(() => completeMission(g, 'uW', 'перемога')).toThrow(); // НЛО вже нема
   });
 
@@ -190,11 +190,11 @@ describe('mission: результати', () => {
     }
     expect(missionOutcome(m.state)).toBe('поразка');
     completeMission(g, 'uL', 'поразка');
-    expect(g.ufos.some((u) => u.id === 'uL')).toBe(true);
-    expect(g.log.some((e) => e.type === 'mission_lost' && e.ufoId === 'uL')).toBe(true);
+    expect(g.probes.some((u) => u.id === 'uL')).toBe(true);
+    expect(g.log.some((e) => e.type === 'mission_lost' && e.probeId === 'uL')).toBe(true);
     advanceTime(g, 8); // вікно розвідника — 8 тіків
-    expect(g.ufos.some((u) => u.id === 'uL')).toBe(false);
-    expect(g.log.some((e) => e.type === 'ufo_left' && e.ufoId === 'uL')).toBe(true);
+    expect(g.probes.some((u) => u.id === 'uL')).toBe(false);
+    expect(g.log.some((e) => e.type === 'probe_left' && e.probeId === 'uL')).toBe(true);
   });
 
   it('бій не завершено → «триває»', () => {
@@ -230,8 +230,8 @@ describe('mission: власний загін', () => {
 describe('mission: наскрізний цикл', () => {
   it('НЛО летить до бази → виявлений → ціль місії; після перемоги НЛО нема на радарі', () => {
     const g = createGeoGame({ seed: 11, spawnChance: 0 });
-    g.ufos.push({
-      id: 'ufo8',
+    g.probes.push({
+      id: 'probe8',
       kind: 'збирач',
       pos: { x: 3, y: 3 },
       target: { ...g.base },
@@ -244,17 +244,17 @@ describe('mission: наскрізний цикл', () => {
       advanceTime(g, 1);
       ticks++;
     }
-    expect(missionTargets(g).map((u) => u.id)).toEqual(['ufo8']);
-    const m = createMission(g, 'ufo8');
+    expect(missionTargets(g).map((u) => u.id)).toEqual(['probe8']);
+    const m = createMission(g, 'probe8');
     // швидка перемога: прибульці «зачищені»
     for (const a of m.state.units.filter((u) => u.side === 'alien')) {
       a.alive = false;
       a.hp = 0;
     }
     expect(missionOutcome(m.state)).toBe('перемога');
-    completeMission(g, 'ufo8', 'перемога');
-    expect(g.ufos.length).toBe(0);
-    expect(g.log.some((e) => e.type === 'mission_won' && e.ufoId === 'ufo8')).toBe(true);
+    completeMission(g, 'probe8', 'перемога');
+    expect(g.probes.length).toBe(0);
+    expect(g.log.some((e) => e.type === 'mission_won' && e.probeId === 'probe8')).toBe(true);
   });
 });
 
@@ -288,9 +288,9 @@ describe('mission: П15.2 — третій результат (ADR-0075)', () =>
     killSide(m.state, 'player');
     expect(missionOutcome(m.state)).toBe('евакуйовано'); // не «поразка»: 1 евакуйований
     completeMission(g, 'uP1', 'евакуйовано');
-    expect(g.log.filter((e) => e.type === 'mission_evacuated')).toEqual([{ type: 'mission_evacuated', ufoId: 'uP1', minute: g.minute }]);
+    expect(g.log.filter((e) => e.type === 'mission_evacuated')).toEqual([{ type: 'mission_evacuated', probeId: 'uP1', minute: g.minute }]);
     expect(g.log.some((e) => e.type === 'mission_won' || e.type === 'mission_lost')).toBe(false); // без премій/поразки
-    expect(g.ufos.some((u) => u.id === 'uP1')).toBe(true); // НЛО лишається приземленим
+    expect(g.probes.some((u) => u.id === 'uP1')).toBe(true); // НЛО лишається приземленим
   });
 
   it('EARS 3: повна евакуація → «евакуйовано» (порожнє поле ≠ поразка)', () => {
@@ -315,8 +315,8 @@ describe('mission: П15.2 — третій результат (ADR-0075)', () =>
     expect(m2.state.units.filter((u) => u.side === 'player')).toHaveLength(3);
     expect(m2.state.evacuated).toEqual([]); // новий бій — без евакуйованих
     advanceTime(g, 8); // вікно розвідника — 8 тіків; після евакуації тікає далі
-    expect(g.ufos.some((u) => u.id === 'uP3')).toBe(false);
-    expect(g.log.some((e) => e.type === 'ufo_left' && e.ufoId === 'uP3')).toBe(true);
+    expect(g.probes.some((u) => u.id === 'uP3')).toBe(false);
+    expect(g.log.some((e) => e.type === 'probe_left' && e.probeId === 'uP3')).toBe(true);
   });
 
   it('кутовий випадок (рішення власника №5): часткова евакуація + зачистка прибульців → ПЕРЕМОГА з пріоритетом', () => {
@@ -326,8 +326,8 @@ describe('mission: П15.2 — третій результат (ADR-0075)', () =>
     killSide(m.state, 'alien'); // останній солдат на полі знищив усіх прибульців
     expect(missionOutcome(m.state)).toBe('перемога'); // перемога має пріоритет над «евакуйовано»
     completeMission(g, 'uP4', 'перемога');
-    expect(g.ufos.some((u) => u.id === 'uP4')).toBe(false); // зачищено
-    expect(g.log.some((e) => e.type === 'mission_won' && e.ufoId === 'uP4')).toBe(true);
+    expect(g.probes.some((u) => u.id === 'uP4')).toBe(false); // зачищено
+    expect(g.log.some((e) => e.type === 'mission_won' && e.probeId === 'uP4')).toBe(true);
     expect(g.log.some((e) => e.type === 'mission_evacuated')).toBe(false);
   });
 
@@ -409,11 +409,11 @@ describe('mission: Т.14 — сід, склад бою, причини відм�
 
   it('completeMission серед кількох зондів: невідомий → помилка без запису; перемога прибирає лише свій', () => {
     const g = mkGeo('uK');
-    g.ufos.push({ ...g.ufos[0], id: 'uZ' });
+    g.probes.push({ ...g.probes[0], id: 'uZ' });
     const logged = g.log.length;
     expect(() => completeMission(g, 'нема', 'поразка')).toThrow('Невідомий зонд Розриву: нема');
     expect(g.log).toHaveLength(logged);
     completeMission(g, 'uK', 'перемога');
-    expect(g.ufos.map((u) => u.id)).toEqual(['uZ']);
+    expect(g.probes.map((u) => u.id)).toEqual(['uZ']);
   });
 });

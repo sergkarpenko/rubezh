@@ -4,7 +4,7 @@
 // гілки рендерів (геосцена, сканери, винищувач, фінанси, ростер, кампанія).
 // DOM-флоу застосунку лишається у main.ui.test.ts.
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { advanceTime, detectedUfos, geoClock, missionTargets } from '../core/geo';
+import { advanceTime, detectedProbes, geoClock, missionTargets } from '../core/geo';
 import { FIGHTER_MAX_HP, startIntercept } from '../core/intercept';
 import type { DifficultyPreset } from '../core/campaign';
 import { createParty, type Party } from '../core/save';
@@ -48,9 +48,9 @@ function setupDom(): void {
       <span><b id="ictx-status">—</b></span>
       <span><b id="ictx-round">—</b></span>
       <span><b id="ictx-fighter">—</b></span>
-      <span><b id="ictx-ufo">—</b></span>
+      <span><b id="ictx-probe">—</b></span>
     </div>
-    <div id="ufos"></div>
+    <div id="probes"></div>
     <div id="fighter"></div>
     <span id="money-card">—</span>
     <div id="roster"></div>
@@ -152,17 +152,17 @@ describe('Т.16: повітряний бій заморожує час геос�
   });
 });
 
-describe('renderUfos: сканери НЛО', () => {
+describe('renderProbes: сканери НЛО', () => {
   it('нічого не виявлено — підказка рухати час', () => {
     const f = makeFixture();
-    f.panels.renderUfos();
-    expect(document.getElementById('ufos')!.textContent).toContain('Нічого не виявлено');
+    f.panels.renderProbes();
+    expect(document.getElementById('probes')!.textContent).toContain('Нічого не виявлено');
   });
 
   it('виявлений НЛО у повітрі — кнопка перехоплення; клік стартує погоню (ядро) і renderAll', () => {
     const f = makeFixture();
-    expect(tickUntil(f.party, () => detectedUfos(f.party.geo).some((u) => u.status === 'летить'))).toBe(true);
-    f.panels.renderUfos();
+    expect(tickUntil(f.party, () => detectedProbes(f.party.geo).some((u) => u.status === 'летить'))).toBe(true);
+    f.panels.renderProbes();
     const ib = document.querySelector('button.intercept') as HTMLButtonElement;
     expect(ib).not.toBeNull();
     ib.click();
@@ -172,9 +172,9 @@ describe('renderUfos: сканери НЛО', () => {
 
   it('пошкоджений винищувач — перехоплення недоступне (підказка про ремонт)', () => {
     const f = makeFixture();
-    expect(tickUntil(f.party, () => detectedUfos(f.party.geo).some((u) => u.status === 'летить'))).toBe(true);
+    expect(tickUntil(f.party, () => detectedProbes(f.party.geo).some((u) => u.status === 'летить'))).toBe(true);
     f.party.intercept.fighters[0].hp = 2;
-    f.panels.renderUfos();
+    f.panels.renderProbes();
     const ib = document.querySelector('button.intercept') as HTMLButtonElement;
     expect(ib.disabled).toBe(true);
     expect(ib.title).toContain('пошкоджений');
@@ -183,12 +183,12 @@ describe('renderUfos: сканери НЛО', () => {
   it('приземлений НЛО — кнопка місії; без боєготових — вимкнена з причиною', () => {
     const f = makeFixture();
     expect(tickUntil(f.party, () => missionTargets(f.party.geo).length > 0)).toBe(true);
-    f.panels.renderUfos();
+    f.panels.renderProbes();
     const btn = document.querySelector('button.mission') as HTMLButtonElement;
     expect(btn).not.toBeNull();
     expect(btn.disabled).toBe(false);
     for (const s of f.party.roster.soldiers) f.party.roster.hospital[s.id] = 3; // усі в лікарні — нікого в бій
-    f.panels.renderUfos();
+    f.panels.renderProbes();
     const btn2 = document.querySelector('button.mission') as HTMLButtonElement;
     expect(btn2.disabled).toBe(true);
     expect(btn2.title).toContain('Усі оперативники поранені');
@@ -198,48 +198,48 @@ describe('renderUfos: сканери НЛО', () => {
   it('Т.24: останній загін без грошей на вербування — рядок-попередження, кнопка активна', () => {
     const f = makeFixture();
     expect(tickUntil(f.party, () => missionTargets(f.party.geo).length > 0)).toBe(true);
-    f.panels.renderUfos();
+    f.panels.renderProbes();
     expect(document.querySelector('.mission-warn')).toBeNull(); // старт: 300 кредитів — запас є
     f.party.econ.money = 99; // «норма»: вербування 100
-    f.panels.renderUfos();
+    f.panels.renderProbes();
     expect(f.party.roster.soldiers.length).toBeGreaterThan(3);
     expect(document.querySelector('.mission-warn')).toBeNull(); // боєготових більше за загін (3) — резерв є
     for (const s of f.party.roster.soldiers.slice(3)) f.party.roster.hospital[s.id] = 3; // боєготових троє — увесь загін іде в бій
-    f.panels.renderUfos();
-    const warn = document.querySelector('.ufo .mission-warn');
+    f.panels.renderProbes();
+    const warn = document.querySelector('.probe .mission-warn');
     expect(warn!.textContent).toBe('⚠ Останній загін, а на вербування бракує (99 з 100): загине — банкрутство.');
     const btn = document.querySelector('button.mission') as HTMLButtonElement;
     expect(btn.disabled).toBe(false); // запуск лишається в один клік
     btn.click();
     expect(f.deps.launchMission).toHaveBeenCalledTimes(1);
     f.party.econ.money = 100; // на вербування вистачає — без попередження
-    f.panels.renderUfos();
+    f.panels.renderProbes();
     expect(document.querySelector('.mission-warn')).toBeNull();
     f.party.econ.money = 0;
     for (const s of f.party.roster.soldiers) f.party.roster.hospital[s.id] = 3; // кнопка вимкнена — рядка нема
-    f.panels.renderUfos();
+    f.panels.renderProbes();
     expect(document.querySelector('.mission-warn')).toBeNull();
   });
 
   it('кнопка місії веде до launchMission (застосунок)', () => {
     const f = makeFixture();
     expect(tickUntil(f.party, () => missionTargets(f.party.geo).length > 0)).toBe(true);
-    f.panels.renderUfos();
+    f.panels.renderProbes();
     (document.querySelector('button.mission') as HTMLButtonElement).click();
-    expect(f.deps.launchMission).toHaveBeenCalledWith(f.party.geo.ufos.find((u) => u.id !== undefined)!.id);
+    expect(f.deps.launchMission).toHaveBeenCalledWith(f.party.geo.probes.find((u) => u.id !== undefined)!.id);
   });
 });
 
 // п18.4 (ADR-0156; рішення власника «А. Мінімум»): рядок фіналу «Брама Розриву» в панелі зондів
-describe('п18.4: renderUfos — рядок «Брама Розриву»', () => {
+describe('п18.4: renderProbes — рядок «Брама Розриву»', () => {
   it('до «Ключа брами» рядка немає; після — кнопка над зондами, клік — launchGate; nodeActions +1', () => {
     const f = makeFixture();
-    f.panels.renderUfos();
+    f.panels.renderProbes();
     expect(document.getElementById('btn-gate')).toBeNull();
     const before = f.panels.nodeActions();
     f.party.research.completed.push('gate-key');
-    f.panels.renderUfos();
-    const box = document.getElementById('ufos')!;
+    f.panels.renderProbes();
+    const box = document.getElementById('probes')!;
     expect(box.textContent).not.toContain('Нічого не виявлено'); // рядок брами замість підказки
     expect(box.firstElementChild!.textContent).toContain('Брама Розриву');
     const b = document.getElementById('btn-gate') as HTMLButtonElement;
@@ -249,32 +249,32 @@ describe('п18.4: renderUfos — рядок «Брама Розриву»', () =
     expect(f.deps.launchGate).toHaveBeenCalledTimes(1);
     expect(f.panels.nodeActions()).toBe(before + 1);
     // і з виявленими зондами — брама першим рядком
-    expect(tickUntil(f.party, () => detectedUfos(f.party.geo).length > 0)).toBe(true);
-    f.panels.renderUfos();
+    expect(tickUntil(f.party, () => detectedProbes(f.party.geo).length > 0)).toBe(true);
+    f.panels.renderProbes();
     expect(box.firstElementChild!.querySelector('#btn-gate')).not.toBeNull();
-    expect(box.children.length).toBe(1 + detectedUfos(f.party.geo).length);
+    expect(box.children.length).toBe(1 + detectedProbes(f.party.geo).length);
   });
 
   it('без боєготових — вимкнена з причиною (і без дії на вкладці); пауза після поразки — рядка немає', () => {
     const f = makeFixture();
     f.party.research.completed.push('gate-key');
     for (const s of f.party.roster.soldiers) f.party.roster.hospital[s.id] = 3;
-    f.panels.renderUfos();
+    f.panels.renderProbes();
     const b = document.getElementById('btn-gate') as HTMLButtonElement;
     expect(b.disabled).toBe(true);
     expect(b.title).toContain('Немає боєготових');
     expect(f.panels.nodeActions()).toBe(0);
     f.party.campaign.gateReadyAt = f.party.geo.minute + 1440;
-    f.panels.renderUfos();
+    f.panels.renderProbes();
     expect(document.getElementById('btn-gate')).toBeNull();
-    expect(document.getElementById('ufos')!.textContent).toContain('Нічого не виявлено');
+    expect(document.getElementById('probes')!.textContent).toContain('Нічого не виявлено');
   });
 
   it('у бою і після кінця гри — вимкнена', () => {
     for (const over of [{ inBattle: () => true }, { isGameOver: () => true }]) {
       const f = makeFixture(over);
       f.party.research.completed.push('gate-key');
-      f.panels.renderUfos();
+      f.panels.renderProbes();
       expect((document.getElementById('btn-gate') as HTMLButtonElement).disabled).toBe(true);
     }
   });
@@ -284,8 +284,8 @@ describe('Т.7: nodeActions — дії, що чекають на вкладці 
   it('нічого не виявлено — 0; зонд у повітрі і перехоплювач на базі — 1; погоня — 0', () => {
     const f = makeFixture();
     expect(f.panels.nodeActions()).toBe(0);
-    expect(tickUntil(f.party, () => detectedUfos(f.party.geo).some((u) => u.status === 'летить'))).toBe(true);
-    const flying = detectedUfos(f.party.geo).filter((u) => u.status === 'летить');
+    expect(tickUntil(f.party, () => detectedProbes(f.party.geo).some((u) => u.status === 'летить'))).toBe(true);
+    const flying = detectedProbes(f.party.geo).filter((u) => u.status === 'летить');
     expect(f.panels.nodeActions()).toBe(flying.length + missionTargets(f.party.geo).length);
     expect(f.panels.nodeActions()).toBeGreaterThan(0);
     startIntercept(f.party.intercept, f.party.geo, flying[0]!.id);
@@ -299,7 +299,7 @@ describe('Т.7: nodeActions — дії, що чекають на вкладці 
     const base = f.panels.nodeActions();
     expect(base).toBeGreaterThanOrEqual(missionTargets(f.party.geo).length);
     f.party.intercept.fighters[0].status = 'бій';
-    const flying = detectedUfos(f.party.geo).filter((u) => u.status === 'летить').length;
+    const flying = detectedProbes(f.party.geo).filter((u) => u.status === 'летить').length;
     expect(f.panels.nodeActions()).toBe(base - flying);
   });
 
@@ -390,22 +390,22 @@ describe('renderInterceptCtx: контекст-стрічка повітряно
 
   it('погоня — ціль і статус, раунд «—»; бій — раунд і HP обох', () => {
     const f = makeFixture();
-    expect(tickUntil(f.party, () => detectedUfos(f.party.geo).some((u) => u.status === 'летить'))).toBe(true);
-    const ufo = detectedUfos(f.party.geo).find((u) => u.status === 'летить')!;
-    startIntercept(f.party.intercept, f.party.geo, ufo.id);
+    expect(tickUntil(f.party, () => detectedProbes(f.party.geo).some((u) => u.status === 'летить'))).toBe(true);
+    const probe = detectedProbes(f.party.geo).find((u) => u.status === 'летить')!;
+    startIntercept(f.party.intercept, f.party.geo, probe.id);
     f.panels.renderInterceptCtx();
     expect(document.getElementById('ictx')!.classList.contains('hidden')).toBe(false);
-    expect(document.getElementById('ictx-target')!.textContent).toBe(ufo.id);
+    expect(document.getElementById('ictx-target')!.textContent).toBe('№' + probe.id.replace('probe', ''));
     expect(document.getElementById('ictx-round')!.textContent).toBe('—');
     // штучний стан «бій» (гілка раунду і HP) — відображення, ядро не викликаємо
     f.party.intercept.fighters[0].status = 'бій';
-    f.party.intercept.activeUfoId = ufo.id;
+    f.party.intercept.activeProbeId = probe.id;
     f.party.intercept.round = 3;
-    f.party.intercept.ufoHp[ufo.id] = 5;
+    f.party.intercept.probeHp[probe.id] = 5;
     f.panels.renderInterceptCtx();
     expect(document.getElementById('ictx-round')!.textContent).toBe('3');
     expect(document.getElementById('ictx-fighter')!.textContent).toBe('HP ' + FIGHTER_MAX_HP + '/' + FIGHTER_MAX_HP);
-    expect(document.getElementById('ictx-ufo')!.textContent).toBe('HP 5');
+    expect(document.getElementById('ictx-probe')!.textContent).toBe('HP 5');
   });
 });
 
@@ -550,11 +550,11 @@ describe('renderFighter: панель винищувача (П7.4)', () => {
 
   it('стан «бій» — рядок дистанцій (вимкнений у тактичній місії), клік рішення — ядро', () => {
     const f = makeFixture({ inBattle: () => true });
-    expect(tickUntil(f.party, () => detectedUfos(f.party.geo).length > 0)).toBe(true);
-    const ufo = detectedUfos(f.party.geo)[0]!;
+    expect(tickUntil(f.party, () => detectedProbes(f.party.geo).length > 0)).toBe(true);
+    const probe = detectedProbes(f.party.geo)[0]!;
     f.party.intercept.fighters[0].status = 'бій';
-    f.party.intercept.activeUfoId = ufo.id;
-    f.party.intercept.ufoHp[ufo.id] = 7;
+    f.party.intercept.activeProbeId = probe.id;
+    f.party.intercept.probeHp[probe.id] = 7;
     f.party.intercept.round = 1;
     f.panels.renderFighter();
     const btns = [...document.querySelectorAll<HTMLButtonElement>('.intercept-range')];
@@ -627,7 +627,7 @@ describe('renderCampaign: чипи кампанії і екран перемог
   it('перемога — екран з підсумковим рахунком', () => {
     const f = makeFixture();
     f.party.campaign.status = 'перемога';
-    f.party.campaign.score = { ufosShotDown: 0, missionsWon: 0, veteransAlive: 0, moneyLeft: 0, total: 1234 };
+    f.party.campaign.score = { probesShotDown: 0, missionsWon: 0, veteransAlive: 0, moneyLeft: 0, total: 1234 };
     f.panels.renderCampaign();
     expect(document.getElementById('campaign-victory')!.classList.contains('hidden')).toBe(false);
     expect(document.getElementById('campaign-score')!.textContent).toBe('1\u00a0234'); // п18.5: пробіл розрядів
@@ -637,7 +637,7 @@ describe('renderCampaign: чипи кампанії і екран перемог
   it('перемога + «Грати далі» (endless) — екран приховано, рахунок лишився', () => {
     const f = makeFixture({ victoryDismissed: () => true });
     f.party.campaign.status = 'перемога';
-    f.party.campaign.score = { ufosShotDown: 0, missionsWon: 0, veteransAlive: 0, moneyLeft: 0, total: 1234 };
+    f.party.campaign.score = { probesShotDown: 0, missionsWon: 0, veteransAlive: 0, moneyLeft: 0, total: 1234 };
     f.panels.renderCampaign();
     expect(document.getElementById('campaign-goal')!.textContent).toContain('Браму Розриву зачинено'); // п18.5
     expect(document.getElementById('campaign-victory')!.classList.contains('hidden')).toBe(true);
@@ -807,31 +807,31 @@ describe('Т.43: причини під неактивними кнопками �
   it('«Запустити місію»: поранені — рядок = title; боєготові — рядка немає; у бою з боєготовими — неактивна без рядка', () => {
     const f = easy();
     expect(tickUntil(f.party, () => missionTargets(f.party.geo).length > 0)).toBe(true);
-    const mission = (): HTMLButtonElement => document.querySelector('#ufos button.mission') as HTMLButtonElement;
-    f.panels.renderUfos();
+    const mission = (): HTMLButtonElement => document.querySelector('#probes button.mission') as HTMLButtonElement;
+    f.panels.renderProbes();
     expect(mission().disabled).toBe(false);
     expect(why(mission())).toBeNull();
     woundAll(f.party);
-    f.panels.renderUfos();
+    f.panels.renderProbes();
     expect(mission().disabled).toBe(true);
     expect(why(mission())).toBe('Усі оперативники поранені — чекайте одужання або вербуйте');
     expect(why(mission())).toBe(mission().title);
     const battle = easy({ inBattle: () => true });
     tickUntil(battle.party, () => missionTargets(battle.party.geo).length > 0);
-    battle.panels.renderUfos();
+    battle.panels.renderProbes();
     expect(mission().disabled).toBe(true);
     expect(why(mission())).toBeNull();
   });
 
   it('«Перехопити»: пошкоджений перехоплювач — рядок = title; справний — рядка немає', () => {
     const f = easy();
-    expect(tickUntil(f.party, () => detectedUfos(f.party.geo).some((u) => u.status === 'летить'))).toBe(true);
-    const ib = (): HTMLButtonElement => document.querySelector('#ufos button.intercept') as HTMLButtonElement;
-    f.panels.renderUfos();
+    expect(tickUntil(f.party, () => detectedProbes(f.party.geo).some((u) => u.status === 'летить'))).toBe(true);
+    const ib = (): HTMLButtonElement => document.querySelector('#probes button.intercept') as HTMLButtonElement;
+    f.panels.renderProbes();
     expect(ib().title).toBe('Підняти перехоплювач на перехоплення');
     expect(why(ib())).toBeNull();
     f.party.intercept.fighters[0].hp = 1;
-    f.panels.renderUfos();
+    f.panels.renderProbes();
     expect(ib().disabled).toBe(true);
     expect(why(ib())).toBe('Перехоплювач пошкоджений — спочатку ремонт');
     expect(why(ib())).toBe(ib().title);
@@ -854,14 +854,14 @@ describe('Т.43: причини під неактивними кнопками �
   it('банкрутство: під «Запустити місію» — «Партію програно — банкрутство»; у бою під справною «Перехопити» рядка немає', () => {
     const over = easy({ isGameOver: () => true });
     expect(tickUntil(over.party, () => missionTargets(over.party.geo).length > 0)).toBe(true);
-    over.panels.renderUfos();
-    const mission = document.querySelector('#ufos button.mission') as HTMLButtonElement;
+    over.panels.renderProbes();
+    const mission = document.querySelector('#probes button.mission') as HTMLButtonElement;
     expect(mission.disabled).toBe(true);
     expect(why(mission)).toBe('Партію програно — банкрутство');
     const battle = easy({ inBattle: () => true });
-    expect(tickUntil(battle.party, () => detectedUfos(battle.party.geo).some((u) => u.status === 'летить'))).toBe(true);
-    battle.panels.renderUfos();
-    const ib = document.querySelector('#ufos button.intercept') as HTMLButtonElement;
+    expect(tickUntil(battle.party, () => detectedProbes(battle.party.geo).some((u) => u.status === 'летить'))).toBe(true);
+    battle.panels.renderProbes();
+    const ib = document.querySelector('#probes button.intercept') as HTMLButtonElement;
     expect(ib.disabled).toBe(true);
     expect(why(ib)).toBeNull();
   });
@@ -869,21 +869,21 @@ describe('Т.43: причини під неактивними кнопками �
   it('#fighter-last: текст журналу після перерваного перехоплення; зникає після нового старту і після розриву контакту', () => {
     const f = easy();
     const last = (): string | null => document.getElementById('fighter-last')?.textContent ?? null;
-    // Т.51: зонди подій мають бути в geo.ufos, інакше рядок не показується (перевірка за id зонда)
-    expect(tickUntil(f.party, () => f.party.geo.ufos.length > 0)).toBe(true);
-    f.party.geo.ufos.push({ ...f.party.geo.ufos[0], id: 'ufo2' }, { ...f.party.geo.ufos[0], id: 'ufo4' });
+    // Т.51: зонди подій мають бути в geo.probes, інакше рядок не показується (перевірка за id зонда)
+    expect(tickUntil(f.party, () => f.party.geo.probes.length > 0)).toBe(true);
+    f.party.geo.probes.push({ ...f.party.geo.probes[0], id: 'probe2' }, { ...f.party.geo.probes[0], id: 'probe4' });
     f.panels.renderFighter();
     expect(last()).toBeNull();
     const pos = { x: 1, y: 1 };
-    f.party.geo.log.push({ type: 'intercept_start', ufoId: 'ufo2', pos, minute: 0 });
-    f.party.geo.log.push({ type: 'intercept_aborted', ufoId: 'ufo2', reason: 'ufo_lost', pos, minute: 30 });
+    f.party.geo.log.push({ type: 'intercept_start', probeId: 'probe2', pos, minute: 0 });
+    f.party.geo.log.push({ type: 'intercept_aborted', probeId: 'probe2', reason: 'probe_lost', pos, minute: 30 });
     f.party.geo.log.push({ type: 'fighter_returned', pos, minute: 60 });
     f.panels.renderFighter();
-    expect(last()).toBe('✦ Зонд Розриву ufo2 зник з трекінгу — перехоплення перервано');
-    f.party.geo.log.push({ type: 'intercept_start', ufoId: 'ufo3', pos, minute: 90 });
+    expect(last()).toBe('✦ Зонд Розриву №2 зник з трекінгу — перехоплення перервано');
+    f.party.geo.log.push({ type: 'intercept_start', probeId: 'probe3', pos, minute: 90 });
     f.panels.renderFighter();
     expect(last()).toBeNull();
-    f.party.geo.log.push({ type: 'intercept_aborted', ufoId: 'ufo3', reason: 'fighter_damaged', pos, minute: 120 });
+    f.party.geo.log.push({ type: 'intercept_aborted', probeId: 'probe3', reason: 'fighter_damaged', pos, minute: 120 });
     f.party.intercept.fighters[0].hp = 1;
     f.panels.renderFighter();
     expect(last()).toBe('✦ Перехоплювач пошкоджений — вимушене переривання бою');
@@ -891,56 +891,56 @@ describe('Т.43: причини під неактивними кнопками �
     f.panels.renderFighter();
     expect(last()).toBeNull();
     f.party.intercept.fighters[0].hp = 1;
-    f.party.geo.log.push({ type: 'intercept_break_off', ufoId: 'ufo3', minute: 150 });
+    f.party.geo.log.push({ type: 'intercept_break_off', probeId: 'probe3', minute: 150 });
     f.panels.renderFighter();
     expect(last()).toBeNull();
     // Т.49: зонд приземлився під час погоні — власний текст журналу, без «зник з трекінгу»
-    f.party.geo.log.push({ type: 'intercept_start', ufoId: 'ufo4', pos, minute: 180 });
+    f.party.geo.log.push({ type: 'intercept_start', probeId: 'probe4', pos, minute: 180 });
     f.panels.renderFighter();
     expect(last()).toBeNull();
-    f.party.geo.log.push({ type: 'intercept_aborted', ufoId: 'ufo4', reason: 'ufo_landed', pos, minute: 210 });
+    f.party.geo.log.push({ type: 'intercept_aborted', probeId: 'probe4', reason: 'probe_landed', pos, minute: 210 });
     f.panels.renderFighter();
-    expect(last()).toBe('✦ Зонд Розриву ufo4 приземлився — перехоплення перервано');
+    expect(last()).toBe('✦ Зонд Розриву №4 приземлився — перехоплення перервано');
   });
 });
 
-// Т.51: рядок #fighter-last не показується, якщо зонд події вже не в geo.ufos (виліт ufo_left / місія).
-describe('Т.51: #fighter-last при відсутньому зонді події в geo.ufos', () => {
+// Т.51: рядок #fighter-last не показується, якщо зонд події вже не в geo.probes (виліт probe_left / місія).
+describe('Т.51: #fighter-last при відсутньому зонді події в geo.probes', () => {
   const pos = { x: 1, y: 1 };
   const last = (): string | null => document.getElementById('fighter-last')?.textContent ?? null;
   // об'єкт зонда — копія створеної ядром, зі зміненим id
   const addProbe = (f: Fixture, id: string): void => {
-    expect(tickUntil(f.party, () => f.party.geo.ufos.length > 0)).toBe(true);
-    f.party.geo.ufos = [{ ...f.party.geo.ufos[0], id }]; // копія створеного ядром зонда зі зміненим id
+    expect(tickUntil(f.party, () => f.party.geo.probes.length > 0)).toBe(true);
+    f.party.geo.probes = [{ ...f.party.geo.probes[0], id }]; // копія створеного ядром зонда зі зміненим id
   };
   const dropProbe = (f: Fixture, id: string): void => {
-    f.party.geo.ufos = f.party.geo.ufos.filter((u) => u.id !== id);
+    f.party.geo.probes = f.party.geo.probes.filter((u) => u.id !== id);
   };
 
-  it('Т.51.1: ufo_landed, зонд є в geo.ufos — рядок показується', () => {
+  it('Т.51.1: probe_landed, зонд є в geo.probes — рядок показується', () => {
     const f = makeFixture();
-    addProbe(f, 'ufo5');
-    f.party.geo.log.push({ type: 'intercept_aborted', ufoId: 'ufo5', reason: 'ufo_landed', pos, minute: 10 });
+    addProbe(f, 'probe5');
+    f.party.geo.log.push({ type: 'intercept_aborted', probeId: 'probe5', reason: 'probe_landed', pos, minute: 10 });
     f.panels.renderFighter();
-    expect(last()).toBe('✦ Зонд Розриву ufo5 приземлився — перехоплення перервано');
+    expect(last()).toBe('✦ Зонд Розриву №5 приземлився — перехоплення перервано');
   });
 
-  it('Т.51.2: ufo_landed, зонд прибрано з geo.ufos — після renderFighter рядка немає', () => {
+  it('Т.51.2: probe_landed, зонд прибрано з geo.probes — після renderFighter рядка немає', () => {
     const f = makeFixture();
-    addProbe(f, 'ufo5');
-    f.party.geo.log.push({ type: 'intercept_aborted', ufoId: 'ufo5', reason: 'ufo_landed', pos, minute: 10 });
-    dropProbe(f, 'ufo5');
+    addProbe(f, 'probe5');
+    f.party.geo.log.push({ type: 'intercept_aborted', probeId: 'probe5', reason: 'probe_landed', pos, minute: 10 });
+    dropProbe(f, 'probe5');
     f.panels.renderFighter();
     expect(last()).toBeNull();
   });
 
-  it('Т.51.3: ufo_lost — зонд є: рядок; зонда немає: рядка немає', () => {
+  it('Т.51.3: probe_lost — зонд є: рядок; зонда немає: рядка немає', () => {
     const f = makeFixture();
-    addProbe(f, 'ufo6');
-    f.party.geo.log.push({ type: 'intercept_aborted', ufoId: 'ufo6', reason: 'ufo_lost', pos, minute: 20 });
+    addProbe(f, 'probe6');
+    f.party.geo.log.push({ type: 'intercept_aborted', probeId: 'probe6', reason: 'probe_lost', pos, minute: 20 });
     f.panels.renderFighter();
-    expect(last()).toBe('✦ Зонд Розриву ufo6 зник з трекінгу — перехоплення перервано');
-    dropProbe(f, 'ufo6');
+    expect(last()).toBe('✦ Зонд Розриву №6 зник з трекінгу — перехоплення перервано');
+    dropProbe(f, 'probe6');
     f.panels.renderFighter();
     expect(last()).toBeNull();
   });
@@ -948,15 +948,15 @@ describe('Т.51: #fighter-last при відсутньому зонді поді
   it('Т.51.4: fighter_damaged при HP < FIGHTER_MAX_HP і відсутньому зонді — рядок є', () => {
     const f = makeFixture();
     f.party.intercept.fighters[0].hp = 1;
-    f.party.geo.log.push({ type: 'intercept_aborted', ufoId: 'ufo7', reason: 'fighter_damaged', pos, minute: 30 });
+    f.party.geo.log.push({ type: 'intercept_aborted', probeId: 'probe7', reason: 'fighter_damaged', pos, minute: 30 });
     f.panels.renderFighter();
     expect(last()).toBe('✦ Перехоплювач пошкоджений — вимушене переривання бою');
   });
 
-  it('Т.51.5: у geo.ufos є лише інший зонд (інший id) — рядка немає (перевірка за id, а не за наявністю будь-якого зонда)', () => {
+  it('Т.51.5: у geo.probes є лише інший зонд (інший id) — рядка немає (перевірка за id, а не за наявністю будь-якого зонда)', () => {
     const f = makeFixture();
-    addProbe(f, 'ufo9');
-    f.party.geo.log.push({ type: 'intercept_aborted', ufoId: 'ufo5', reason: 'ufo_landed', pos, minute: 40 });
+    addProbe(f, 'probe9');
+    f.party.geo.log.push({ type: 'intercept_aborted', probeId: 'probe5', reason: 'probe_landed', pos, minute: 40 });
     f.panels.renderFighter();
     expect(last()).toBeNull();
   });
@@ -989,8 +989,8 @@ describe('issue #385: hirePrice(preset) у попередженнях — пре
     expect(tickUntil(f.party, () => missionTargets(f.party.geo).length > 0)).toBe(true);
     for (const s of f.party.roster.soldiers.slice(3)) f.party.roster.hospital[s.id] = 3; // ready = 3 = SQUAD_SPAWN.length
     f.party.econ.money = money;
-    f.panels.renderUfos();
-    const warn = document.querySelector('.ufo .mission-warn');
+    f.panels.renderProbes();
+    const warn = document.querySelector('.probe .mission-warn');
     expect(warn?.textContent ?? null).toBe(expected);
   });
 

@@ -66,7 +66,7 @@ import { BCELL } from './grid';
 import { type LogCat } from './journal';
 import { ICONS } from './icons';
 import { ROLE_INFO, roleTileView } from './roles';
-import { byGender, ticksText } from './text';
+import { byGender, probeNo, ticksText } from './text';
 import { squadCards, squadOrder, squadStripHtml } from './squad-strip';
 import { enemyMenuHtml, enemyMenuPlace, enemyMenuView } from './enemy-menu';
 import { previewCover } from './cover-ui';
@@ -143,7 +143,7 @@ export interface BattleUI {
   displayedAlienAt(cell: Vec2): Unit | undefined; // П14.4: демон у клітинці за відображуваною позицією
   renderBattle(): void;
   binfo(text: string): void;
-  launch(ufoId: string): void;
+  launch(probeId: string): void;
   launchAssault(): void; // п18.4 (ADR-0156): штурм бази — бій одразу (рішення власника «А. Мінімум»)
   launchGate(): void; // п18.4: фінал «Брама Розриву» — кнопкою панелі зондів
   close(): void;
@@ -814,10 +814,10 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
     deps.renderAll();
   }
 
-  function launch(ufoId: string): void {
+  function launch(probeId: string): void {
     start(
-      (party, opts) => createMission(party.geo, ufoId, { ...opts, threat: party.campaign.threat }), // п18.3: склад за загрозою
-      '▶ Місія: загін висаджено біля зонду Розриву ' + ufoId
+      (party, opts) => createMission(party.geo, probeId, { ...opts, threat: party.campaign.threat }), // п18.3: склад за загрозою
+      '▶ Місія: загін висаджено біля зонду Розриву ' + probeNo(probeId) // Т.218: «№N» (аудит PR #536)
     );
   }
 
@@ -888,7 +888,7 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
     const op = mission.briefing.op;
     if (op === 'штурм') completeAssault(party, outcome === 'перемога' ? 'перемога' : 'поразка');
     else if (op === 'брама') completeGate(party, outcome);
-    else completeMission(party.geo, mission.briefing.ufoId, outcome);
+    else completeMission(party.geo, mission.briefing.probeId, outcome);
     awardTrophies(party.research, mission.state, outcome); // п18.2 (ADR-0153 п. 9): трофеї лише за перемогу; показ — п18.5
     // п16.4 (ADR-0147 п. 7, 14; EARS 7): рядок втрати зі статистикою — у журнал і в картку результату.
     // Журнал історії після завантаження не відтворює (adoptParty у main.ts) — подія ядра для нього не потрібна.

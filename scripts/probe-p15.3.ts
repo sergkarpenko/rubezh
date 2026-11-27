@@ -61,7 +61,7 @@ function missionStep(party: Party): { evacUnits: number } {
   });
   const battle = autoBattle(mission.state);
   const outcome: 'перемога' | 'поразка' = battle.outcome === 'перемога' ? 'перемога' : 'поразка';
-  completeMission(party.geo, mission.briefing.ufoId, outcome);
+  completeMission(party.geo, mission.briefing.probeId, outcome);
   awardTrophies(party.research, mission.state, outcome);
   const aftermath = applyMissionResult(party.roster, mission.state);
   removeLostEquipment(party.workshop, aftermath.lost);

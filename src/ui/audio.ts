@@ -117,9 +117,9 @@ export function battleSounds(e: GameEvent): SoundName[] {
 }
 
 // Геосцена: виявлення НЛО і результат місії (події читає журнал — ADR-0006 не
-// порушується: undetected-події (ufo_spawned/ufo_move) звуку не мають).
+// порушується: undetected-події (probe_spawned/probe_move) звуку не мають).
 export function geoSounds(e: GeoEvent): SoundName[] {
-  if (e.type === 'ufo_detected') return ['detect'];
+  if (e.type === 'probe_detected') return ['detect'];
   if (e.type === 'mission_won') return ['win'];
   if (e.type === 'mission_lost') return ['lose'];
   return [];

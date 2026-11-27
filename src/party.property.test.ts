@@ -8,7 +8,7 @@ import { REGION_IDS, TRUST_MAX } from './core/regions';
 import { describe, expect, it } from 'vitest';
 import fc from 'fast-check';
 import type { Vec2 } from './core/combat';
-import { WORLD_H, WORLD_W, advanceTime, geoDay, missionTargets, type Ufo } from './core/geo';
+import { WORLD_H, WORLD_W, advanceTime, geoDay, missionTargets, type Probe } from './core/geo';
 import { createEconomy, creditMissionBonus, economyTick } from './core/economy';
 import {
   applyMissionResult,
@@ -192,7 +192,7 @@ function mission(p: Party, i: number): void {
   assignBotRoles(p.roster);
   removeLostEquipment(p.workshop, aftermath.lost);
   settleConsumables(p.workshop, aftermath.survivors, m.state.items);
-  completeMission(p.geo, m.briefing.ufoId, outcome);
+  completeMission(p.geo, m.briefing.probeId, outcome);
   awardTrophies(p.research, m.state, outcome); // п18.2
   if (outcome === 'перемога') creditMissionBonus(p.econ, m.briefing.kind, p.campaign.preset);
 }
@@ -226,7 +226,7 @@ function apply(p: Party, c: Cmd): Party {
     const eq = workshop.equipped[equipped?.id ?? ''];
     return isForgeWeapon(id) ? eq?.weapon === id : eq?.[slotOf(id)] === true;
   };
-  const flying = (): Ufo[] => geo.ufos.filter((u) => u.detected && u.status === 'летить');
+  const flying = (): Probe[] => geo.probes.filter((u) => u.detected && u.status === 'летить');
   const open = ALL_PROJECTS.filter(
     (d) => !research.completed.includes(d.id) && (!d.prerequisite || research.completed.includes(d.prerequisite))
   );
@@ -267,7 +267,7 @@ function apply(p: Party, c: Cmd): Party {
     intercept: () => {
       // п19.3: перехоплювач — за номером команди; полюють на зонд, за яким ще ніхто не летить
       const f = pick(intercept.fighters, intercept.fighters, c.n)!;
-      const free = (): Ufo[] => flying().filter((u) => !intercept.fighters.some((x) => x.targetId === u.id));
+      const free = (): Probe[] => flying().filter((u) => !intercept.fighters.some((x) => x.targetId === u.id));
       const hunt = c.n % 4 !== 3 && f.status === 'на базі' && f.hp === FIGHTER_MAX_HP;
       // п19.3 (аудит PR #522): за c.i % 3 === 2 і вільного другого — чекати двох зондів і підняти обидва
       const g = intercept.fighters.find((x) => x !== f && x.status === 'на базі' && x.hp === FIGHTER_MAX_HP);
@@ -275,7 +275,7 @@ function apply(p: Party, c: Cmd): Party {
       if (hunt) ticks(96, () => free().length > (pair ? 1 : 0));
       if (hunt && free().length === 0) return;
       const second = pair ? free()[1] : undefined;
-      startIntercept(intercept, geo, (hunt ? free()[0] : pick(flying(), geo.ufos))?.id ?? '', f.id);
+      startIntercept(intercept, geo, (hunt ? free()[0] : pick(flying(), geo.probes))?.id ?? '', f.id);
       if (second && g) {
         startIntercept(intercept, geo, second.id, g.id);
         ticks(6); // обидва в повітрі: бій одного — погоня другого чекає
@@ -323,12 +323,13 @@ function broken(p: Party): string[] {
 
   // Геосцена: зонди в межах світу й ліміту, журнал іде за часом.
   must(
-    geo.ufos.filter((u) => u.status !== 'збитий').length <= geo.maxUfos && new Set(geo.ufos.map((u) => u.id)).size === geo.ufos.length,
+    geo.probes.filter((u) => u.status !== 'збитий').length <= geo.maxProbes &&
+      new Set(geo.probes.map((u) => u.id)).size === geo.probes.length,
     'зонди: ліміт або повтор id'
   );
-  for (const u of geo.ufos) must(inWorld(u.pos) && inWorld(u.target) && u.landedTicksLeft >= 0, 'зонд ' + u.id + ' поза світом');
-  const cleared = new Set(geo.log.map((e) => (e.type === 'mission_won' ? e.ufoId : '')));
-  must(!geo.ufos.some((u) => cleared.has(u.id)), 'зонд лишився після виграної місії');
+  for (const u of geo.probes) must(inWorld(u.pos) && inWorld(u.target) && u.landedTicksLeft >= 0, 'зонд ' + u.id + ' поза світом');
+  const cleared = new Set(geo.log.map((e) => (e.type === 'mission_won' ? e.probeId : '')));
+  must(!geo.probes.some((u) => cleared.has(u.id)), 'зонд лишився після виграної місії');
   must(
     geo.log.every((e, i) => i === 0 || geo.log[i - 1].minute <= e.minute),
     'журнал геосцени не за часом'
@@ -471,10 +472,11 @@ function broken(p: Party): string[] {
     const left = x.repairTicksLeft;
     must(x.status === 'ремонт' ? left !== undefined && left >= 1 && left <= FIGHTER_REPAIR_TICKS : left === undefined, 'ремонт: ' + left);
   }
-  must((battling.length === 1) === (p.intercept.activeUfoId !== null), 'перехоплювач у бою і активний зонд');
-  for (const u of geo.ufos) must((u.status === 'збитий') === (p.intercept.ufoHp[u.id] === 0), 'зонд ' + u.id + ': статус і HP у повітрі');
+  must((battling.length === 1) === (p.intercept.activeProbeId !== null), 'перехоплювач у бою і активний зонд');
+  for (const u of geo.probes)
+    must((u.status === 'збитий') === (p.intercept.probeHp[u.id] === 0), 'зонд ' + u.id + ': статус і HP у повітрі');
   // Т.16: бій іде там, де зустрілись, — перехоплювач у клітинці зонда, зонд у повітрі.
-  const target = geo.ufos.find((u) => u.id === p.intercept.activeUfoId);
+  const target = geo.probes.find((u) => u.id === p.intercept.activeProbeId);
   must(
     f.status !== 'бій' || (target !== undefined && target.status === 'летить' && target.pos.x === f.pos.x && target.pos.y === f.pos.y),
     'повітряний бій: зонд ' +

@@ -9,7 +9,8 @@ import { advanceTime } from './geo';
 import { economyTick } from './economy';
 import { hireSoldier, hospitalTick } from './squad';
 import { evacuate, mulberry32, type StatefulRng } from './combat';
-import { completeMission, createMission } from './mission';
+import { completeMission, createMission, textSeed } from './mission';
+import { CAMPAIGN_POLICY, simulateParty } from './party-bot';
 import { createResearch, hireScientist, researchTick, startProject } from './research';
 import { createWorkshop, equipItem, installGunModule, orderItem, removeGunModule, workshopTick, WORKSHOP_CATALOG } from './workshop';
 import {
@@ -25,6 +26,8 @@ import {
   serializeParty,
   slotIsEmpty,
   slotMeta,
+  toDisk,
+  fromDisk,
   type Party,
   type SlotStore,
 } from './save';
@@ -53,10 +56,10 @@ function snapshot(p: Party): string {
   return JSON.stringify({
     minute: p.geo.minute,
     base: p.geo.base,
-    ufos: p.geo.ufos,
+    probes: p.geo.probes,
     log: p.geo.log,
     spawnChance: p.geo.spawnChance,
-    maxUfos: p.geo.maxUfos,
+    maxProbes: p.geo.maxProbes,
     nextId: p.geo.nextId,
     soldiers: p.roster.soldiers,
     hired: p.roster.hired,
@@ -185,7 +188,7 @@ describe('save: зіпсовані дані (критерій П5.2)', () => {
     const restored = deserializeParty(JSON.stringify(legacy));
     expect(restored.intercept.fighters[0].status).toBe('на базі');
     expect(restored.intercept.fighters[0].hp).toBe(4);
-    expect(restored.intercept.activeUfoId).toBeNull();
+    expect(restored.intercept.activeProbeId).toBeNull();
   });
 });
 
@@ -253,9 +256,9 @@ describe('save: пресети партії (П8.4a)', () => {
   it('createParty(seed, "легкий") — множники у geo/roster/econ + пресет у campaign', () => {
     const p = createParty(42, 'легкий');
     expect(p.campaign.preset).toBe('легкий');
-    // частота НЛО 0.7: spawnChance 0.03×0.7, maxUfos Math.round(3×0.7)
+    // частота НЛО 0.7: spawnChance 0.03×0.7, maxProbes Math.round(3×0.7)
     expect(p.geo.spawnChance).toBeCloseTo(0.03 * 0.7, 12);
-    expect(p.geo.maxUfos).toBe(2);
+    expect(p.geo.maxProbes).toBe(2);
     // HP солдатів 1.2: стартовий ростер 10 → 12
     expect(p.roster.soldiers.length).toBe(6);
     expect(p.roster.soldiers.every((s) => s.maxHp === 12)).toBe(true);
@@ -267,7 +270,7 @@ describe('save: пресети партії (П8.4a)', () => {
     const p = createParty(42);
     expect(p.campaign.preset).toBe('норма');
     expect(p.geo.spawnChance).toBeCloseTo(0.03, 12);
-    expect(p.geo.maxUfos).toBe(3);
+    expect(p.geo.maxProbes).toBe(3);
     expect(p.roster.soldiers.every((s) => s.maxHp === 10)).toBe(true);
     expect(p.econ.money).toBe(300);
   });
@@ -299,7 +302,7 @@ describe('save: пресети партії (П8.4a)', () => {
     expect(p.campaign.preset).toBe('складний');
     // спавн — не ручка тиску (probe П8.6): частота НЛО як у «нормі»
     expect(p.geo.spawnChance).toBeCloseTo(0.03, 12);
-    expect(p.geo.maxUfos).toBe(3);
+    expect(p.geo.maxProbes).toBe(3);
     // HP солдатів 0.9: стартовий ростер 10 → 9 (Math.round, ручка дискретна)
     expect(p.roster.soldiers.every((s) => s.maxHp === 9)).toBe(true);
     // економіка 0.9: стартовий баланс 300 → 270
@@ -520,7 +523,7 @@ describe('save: цех (П11.3, ADR-0026)', () => {
 describe('save: П15.2 — «евакуйовано» (EARS 7)', () => {
   it('mission_evacuated у журналі партії переживає round-trip', () => {
     const p = createParty(42);
-    p.geo.ufos.push({
+    p.geo.probes.push({
       id: 'uV1',
       kind: 'розвідник',
       pos: { ...p.geo.base },
@@ -542,8 +545,8 @@ describe('save: П15.2 — «евакуйовано» (EARS 7)', () => {
     expect(json.includes('mission_evacuated')).toBe(true);
     expect(json.includes('evacuated') === json.includes('mission_evacuated')).toBe(true); // стан бою поза сейвом
     const restored = deserializeParty(json);
-    expect(restored.geo.log.some((e) => e.type === 'mission_evacuated' && e.ufoId === 'uV1')).toBe(true);
-    expect(restored.geo.ufos.some((u) => u.id === 'uV1')).toBe(true); // НЛО лишається після евакуації
+    expect(restored.geo.log.some((e) => e.type === 'mission_evacuated' && e.probeId === 'uV1')).toBe(true);
+    expect(restored.geo.probes.some((u) => u.id === 'uV1')).toBe(true); // НЛО лишається після евакуації
   });
 });
 
@@ -566,8 +569,8 @@ describe('save: Т.12 — кожне поле сейву перевіряєть�
       ['minute', 'x'],
       ['nextId', 2.5],
       ['spawnChance', '0.1'],
-      ['maxUfos', 1.5],
-      ['ufos', {}],
+      ['maxProbes', 1.5],
+      ['probes', {}],
       ['log', 'x'],
       ['base', null],
       ['base.x', '8'],
@@ -635,7 +638,7 @@ describe('save: Т.12 — кожне поле сейву перевіряєть�
       Object.assign(json.state.campaign, c);
       return JSON.stringify(json);
     };
-    const score = { ufosShotDown: 0, missionsWon: 0, veteransAlive: 6, moneyLeft: 300, total: 375 };
+    const score = { probesShotDown: 0, missionsWon: 0, veteransAlive: 6, moneyLeft: 300, total: 375 };
     expect(deserializeParty(withCampaign({ status: 'поразка', threat: 100, defeatDay: 61, score })).campaign.defeatDay).toBe(61);
     for (const bad of [
       { status: 'триває', threat: 100 },
@@ -671,18 +674,18 @@ describe('save: Т.12 — кожне поле сейву перевіряєть�
   it('round-trip стану не за замовчуванням: лікарня, погоня винищувача, НЛО в бою, рахунок кампанії', () => {
     const p = createParty(42);
     p.roster.hospital = { s2: 5 };
-    p.intercept.fighters[0] = { ...p.intercept.fighters[0], pos: { x: 3, y: 2 }, status: 'бій', targetId: 'ufo1' }; // аудит PR #522: «бій» ⇔ активний зонд
-    p.intercept.ufoHp = { ufo1: 2 };
-    p.intercept.activeUfoId = 'ufo1';
+    p.intercept.fighters[0] = { ...p.intercept.fighters[0], pos: { x: 3, y: 2 }, status: 'бій', targetId: 'probe1' }; // аудит PR #522: «бій» ⇔ активний зонд
+    p.intercept.probeHp = { probe1: 2 };
+    p.intercept.activeProbeId = 'probe1';
     p.intercept.round = 2;
-    p.campaign.score = { ufosShotDown: 1, missionsWon: 2, veteransAlive: 3, moneyLeft: 400, total: 77 };
+    p.campaign.score = { probesShotDown: 1, missionsWon: 2, veteransAlive: 3, moneyLeft: 400, total: 77 };
     p.intercept.rng(); // потік rng перехоплення зрушив від стартового сіда
     const r = deserializeParty(serializeParty(p, 'T'));
     expect(r.intercept.rng()).toBe(p.intercept.rng());
     expect(r.roster.hospital).toEqual({ s2: 5 });
     expect(r.intercept.fighters[0]).toEqual(p.intercept.fighters[0]);
-    expect(r.intercept.ufoHp).toEqual({ ufo1: 2 });
-    expect(r.intercept.activeUfoId).toBe('ufo1');
+    expect(r.intercept.probeHp).toEqual({ probe1: 2 });
+    expect(r.intercept.activeProbeId).toBe('probe1');
     expect(r.intercept.round).toBe(2);
     expect(r.campaign.score).toEqual(p.campaign.score);
     // рахунку ще немає — після завантаження теж null, а не порожній об'єкт
@@ -735,5 +738,50 @@ describe('Т.72: прапорець підказки «Можна евакуюв
     legacy.state.hints.mission = true;
     const restored = deserializeParty(JSON.stringify(legacy));
     expect(restored.hints).toEqual({ intercept: false, mission: true, repair: false, evac: false });
+  });
+});
+
+describe('Т.218: сутність у коді — `probe`, на диску — старі ключі `ufo` (сейв v4 байт у байт)', () => {
+  it('сейв після партії з зондами: на диску лише `ufo`, у пам’яті — `probe`; save → load → save — той самий рядок', () => {
+    const party = createParty(42);
+    for (let i = 0; i < 400 && party.geo.probes.length === 0; i++) advanceTime(party.geo, 1);
+    expect(party.geo.probes.length).toBeGreaterThan(0);
+    const s = serializeParty(party);
+    expect(s).not.toMatch(/probe/i);
+    expect(s).toContain('"ufos":[{"id":"ufo');
+    expect(s).toContain('"type":"ufo_spawned"');
+    const back = deserializeParty(s);
+    expect(back.geo.probes[0].id).toMatch(/^probe\d+$/);
+    expect(back.geo.log.some((e) => e.type === 'probe_spawned')).toBe(true);
+    expect(serializeParty(back)).toBe(s);
+  });
+
+  it('toDisk / fromDisk: ключі й значення-ідентифікатори в обидва боки, решта рядків — як є', () => {
+    const mem = {
+      probeHp: { probe3: 2 },
+      activeProbeId: 'probe3',
+      log: [{ type: 'probe_landed', probeId: 'probe3' }],
+      name: 'probe',
+      maxProbes: 4,
+    };
+    const disk = { ufoHp: { ufo3: 2 }, activeUfoId: 'ufo3', log: [{ type: 'ufo_landed', ufoId: 'ufo3' }], name: 'probe', maxUfos: 4 };
+    expect(toDisk(mem)).toEqual(disk);
+    expect(fromDisk(disk)).toEqual({ ...mem, name: 'probe' });
+    expect(fromDisk({ id: 'ufo', note: 'ufology' })).toEqual({ id: 'ufo', note: 'ufology' });
+  });
+});
+
+describe('Т.218 (аудит PR #536): золотий сейв — той самий рядок, що v0.12.0 до перейменування', () => {
+  it('сід 7, політика кампанії, 20 діб: FNV-1a і довжина сейва — як на `main` 0e812fd', () => {
+    let s = '';
+    simulateParty(7, 'норма', {
+      policy: CAMPAIGN_POLICY,
+      maxDays: 20,
+      onTick: (p) => {
+        s = serializeParty(p as Party);
+      },
+    });
+    expect(s.length).toBe(104761);
+    expect(textSeed(s)).toBe(4154294394);
   });
 });

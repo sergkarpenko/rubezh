@@ -5,7 +5,7 @@
 import { describe, expect, it } from 'vitest';
 import { createParty } from './save';
 import type { Party } from './save';
-import type { Ufo } from './geo';
+import type { Probe } from './geo';
 import { addFighter, FIGHTER_MAX_HP, hangarPos } from './intercept';
 import { BALANCED_POLICY, CAUTIOUS_POLICY } from './intercept-bot';
 import {
@@ -21,13 +21,13 @@ import {
   weakestRegion,
 } from './party-bot';
 
-function ufo(id: string, x: number, y: number, kind: Ufo['kind'] = 'розвідник'): Ufo {
+function probe(id: string, x: number, y: number, kind: Probe['kind'] = 'розвідник'): Probe {
   return { id, kind, pos: { x, y }, target: { x, y }, detected: true, status: 'летить', landedTicksLeft: 8 };
 }
 
 function twoFighters(): Party {
   const p = createParty(42, 'норма');
-  p.geo.ufos = [];
+  p.geo.probes = [];
   p.intercept.fighters[0].pos = hangarPos('north', p.geo);
   addFighter(p.intercept, p.geo, 'east');
   return p;
@@ -119,7 +119,7 @@ describe('п19.6: купівля перехоплювача політикою �
 describe('п19.6: перехоплення кількома перехоплювачами', () => {
   it('дві цілі — дві погоні: кожна найближчим вільним від ангара', () => {
     const p = twoFighters();
-    p.geo.ufos.push(ufo('a', 14, 4), ufo('b', 7, 4)); // «a» біля «Сходу», «b» біля вузла
+    p.geo.probes.push(probe('a', 14, 4), probe('b', 7, 4)); // «a» біля «Сходу», «b» біля вузла
     partyBotInterceptStep(p, BALANCED_POLICY);
     const [f1, f2] = p.intercept.fighters;
     expect([f1.status, f1.targetId, f2.status, f2.targetId]).toEqual(['погоня', 'b', 'погоня', 'a']);
@@ -127,35 +127,35 @@ describe('п19.6: перехоплення кількома перехоплюв
 
   it('одна ціль — найближчий; рівна відстань — менший id', () => {
     const p = twoFighters();
-    p.geo.ufos.push(ufo('a', 12, 4));
+    p.geo.probes.push(probe('a', 12, 4));
     partyBotInterceptStep(p, BALANCED_POLICY);
     expect(p.intercept.fighters.map((f) => f.status)).toEqual(['на базі', 'погоня']);
     const q = twoFighters();
     q.intercept.fighters[1].region = 'south'; // ангар (8, 7): до (8, 1) — 6, вузол (8, 4) — 3
-    q.geo.ufos.push(ufo('c', 11, 1)); // вузол — 3, «Південь» — 6
+    q.geo.probes.push(probe('c', 11, 1)); // вузол — 3, «Південь» — 6
     partyBotInterceptStep(q, BALANCED_POLICY);
     expect(q.intercept.fighters.map((f) => f.status)).toEqual(['погоня', 'на базі']);
     const r = twoFighters();
     r.intercept.fighters[1].region = 'north'; // обидва у вузлі — рівно
-    r.geo.ufos.push(ufo('d', 10, 4));
+    r.geo.probes.push(probe('d', 10, 4));
     partyBotInterceptStep(r, BALANCED_POLICY);
     expect(r.intercept.fighters.map((f) => f.status)).toEqual(['погоня', 'на базі']);
   });
 
   it('ціль уже переслідують — не друга погоня; вільна — найближчим із вільних', () => {
     const p = twoFighters();
-    p.geo.ufos.push(ufo('a', 14, 4));
+    p.geo.probes.push(probe('a', 14, 4));
     partyBotInterceptStep(p, BALANCED_POLICY);
     partyBotInterceptStep(p, BALANCED_POLICY);
     expect(p.intercept.fighters.map((f) => f.status)).toEqual(['на базі', 'погоня']);
-    p.geo.ufos.push(ufo('b', 15, 4)); // ближче до «Сходу», але той зайнятий
+    p.geo.probes.push(probe('b', 15, 4)); // ближче до «Сходу», але той зайнятий
     partyBotInterceptStep(p, BALANCED_POLICY);
     expect([p.intercept.fighters[0].status, p.intercept.fighters[0].targetId]).toEqual(['погоня', 'b']);
   });
 
   it('перша ціль, на яку політика не запускає, зупиняє запуски кроку (як з одним)', () => {
     const p = twoFighters();
-    p.geo.ufos.push(ufo('a', 9, 4, 'збирач'), ufo('b', 14, 4));
+    p.geo.probes.push(probe('a', 9, 4, 'збирач'), probe('b', 14, 4));
     partyBotInterceptStep(p, CAUTIOUS_POLICY);
     expect(p.intercept.fighters.map((f) => f.status)).toEqual(['на базі', 'на базі']);
   });
@@ -176,27 +176,27 @@ describe('п19.6: перехоплення кількома перехоплюв
 
   it('один у бою — раунд, другий боєготовий тим самим кроком іде на іншу ціль; той, що вийшов із бою, — ні', () => {
     const p = twoFighters();
-    p.geo.ufos.push(ufo('a', 8, 4));
+    p.geo.probes.push(probe('a', 8, 4));
     partyBotInterceptStep(p, BALANCED_POLICY); // перший — погоня; він уже на клітинці цілі
     const ic = p.intercept;
     ic.fighters[0].status = 'бій';
-    ic.activeUfoId = 'a';
+    ic.activeProbeId = 'a';
     ic.round = 0;
-    p.geo.ufos.push(ufo('b', 14, 4));
+    p.geo.probes.push(probe('b', 14, 4));
     const rounds = ic.log.filter((e) => e.type === 'intercept_round').length;
     partyBotInterceptStep(p, BALANCED_POLICY);
     expect(ic.log.filter((e) => e.type === 'intercept_round').length).toBe(rounds + 1);
     expect([ic.fighters[1].status, ic.fighters[1].targetId]).toEqual(['погоня', 'b']);
     // запуск — лише з тих, хто був боєготовим на початку кроку: у бою й у ремонті — ні
     const q = twoFighters();
-    q.geo.ufos.push(ufo('a', 8, 4));
+    q.geo.probes.push(probe('a', 8, 4));
     partyBotInterceptStep(q, BALANCED_POLICY);
     Object.assign(q.intercept.fighters[0], { status: 'бій', hp: FIGHTER_MAX_HP });
-    q.intercept.activeUfoId = 'a';
+    q.intercept.activeProbeId = 'a';
     q.intercept.fighters[1].hp = 1;
     q.intercept.fighters[1].repairTicksLeft = 5;
     q.intercept.fighters[1].status = 'ремонт';
-    q.geo.ufos.push(ufo('c', 9, 4));
+    q.geo.probes.push(probe('c', 9, 4));
     partyBotInterceptStep(q, { ...BALANCED_POLICY, chooseRange: () => 'далека' });
     expect(q.intercept.log.filter((e) => e.type === 'intercept_start').length).toBe(1);
   });
@@ -240,11 +240,11 @@ describe('п19.6: перехоплення кількома перехоплюв
 
   it('той, хто вийшов із бою цим кроком (відступ), не злітає тим самим кроком на вільну ціль', () => {
     const p = createParty(42, 'норма');
-    p.geo.ufos = [ufo('a', 8, 4), ufo('b', 10, 4)];
+    p.geo.probes = [probe('a', 8, 4), probe('b', 10, 4)];
     partyBotInterceptStep(p, BALANCED_POLICY); // погоня на «a»
     const ic = p.intercept;
     ic.fighters[0].status = 'бій';
-    ic.activeUfoId = 'a';
+    ic.activeProbeId = 'a';
     const retreat = { ...BALANCED_POLICY, chooseRange: () => 'відступ' as unknown as 'далека' };
     partyBotInterceptStep(p, retreat);
     expect([ic.fighters[0].status, ic.fighters[0].targetId]).toEqual(['на базі', null]);
@@ -257,11 +257,11 @@ describe('п19.6: перехоплення кількома перехоплюв
 describe('п19.6: повітряний бій бота — до кінця, поки час стоїть (рішення власника «А. Бій як у грі»)', () => {
   function engaged(): Party {
     const p = createParty(42, 'норма');
-    p.geo.ufos = [ufo('a', 8, 4)];
+    p.geo.probes = [probe('a', 8, 4)];
     partyBotInterceptStep(p, BALANCED_POLICY);
     const ic = p.intercept;
     Object.assign(ic.fighters[0], { status: 'бій', pos: { x: 8, y: 4 } });
-    ic.activeUfoId = 'a';
+    ic.activeProbeId = 'a';
     return p;
   }
 
@@ -271,19 +271,19 @@ describe('п19.6: повітряний бій бота — до кінця, по
     expect(rounds).toBeGreaterThan(0);
     expect(p.intercept.log.filter((e) => e.type === 'intercept_round')).toHaveLength(rounds);
     expect(p.intercept.fighters[0].status).not.toBe('бій');
-    expect(p.intercept.activeUfoId).toBeNull();
+    expect(p.intercept.activeProbeId).toBeNull();
     expect(partyBotAirBattle(p, BALANCED_POLICY)).toBe(0);
   });
 
-  it('зонд бою зник (бот виграв на ньому місію) — бій переривається «ufo_lost», а не застрягає', () => {
+  it('зонд бою зник (бот виграв на ньому місію) — бій переривається «probe_lost», а не застрягає', () => {
     const p = engaged();
-    p.geo.ufos = [];
+    p.geo.probes = [];
     partyBotInterceptStep(p, BALANCED_POLICY);
     const last = p.intercept.log[p.intercept.log.length - 2];
-    expect(last).toMatchObject({ type: 'intercept_aborted', ufoId: 'a', reason: 'ufo_lost' });
+    expect(last).toMatchObject({ type: 'intercept_aborted', probeId: 'a', reason: 'probe_lost' });
     expect(p.intercept.fighters[0].status).toBe('на базі');
     const q = engaged();
-    q.geo.ufos = [];
+    q.geo.probes = [];
     expect(partyBotAirBattle(q, BALANCED_POLICY)).toBe(1);
     expect(q.intercept.fighters[0].status).toBe('на базі');
   });

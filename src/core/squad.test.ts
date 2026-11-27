@@ -25,10 +25,10 @@ import { createWorkshop, deployConsumables, equipItem, settleConsumables } from 
 import { BIOGRAPHIES, CALLSIGNS } from './career';
 
 // Геопартія з вручну «посадженим» НЛО (спавн вимкнено) — для точкових сценаріїв.
-function mkGeo(ufoId: string): GeoState {
+function mkGeo(probeId: string): GeoState {
   const g = createGeoGame({ seed: 9, spawnChance: 0 });
-  g.ufos.push({
-    id: ufoId,
+  g.probes.push({
+    id: probeId,
     kind: 'розвідник',
     pos: { ...g.base },
     target: { ...g.base },
@@ -114,7 +114,7 @@ describe('squad: результат місії', () => {
     expect(r.hospital['s1']).toBe((10 - 4) * HEAL_TICKS_PER_HP);
     // geo-бік циклу: порядок з completeMission не важливий
     completeMission(g, 'uW', 'перемога');
-    expect(g.log.some((e) => e.type === 'mission_won' && e.ufoId === 'uW')).toBe(true);
+    expect(g.log.some((e) => e.type === 'mission_won' && e.probeId === 'uW')).toBe(true);
   });
 
   it('поразка: увесь загін вилучено; наступна місія бере наступних солдатів', () => {
@@ -181,8 +181,8 @@ describe('squad: наскрізний цикл', () => {
     const run = (useRoster: boolean): string => {
       const g = createGeoGame({ seed: 5, spawnChance: 0 });
       advanceTime(g, 10);
-      g.ufos.push({
-        id: 'ufoM',
+      g.probes.push({
+        id: 'probeM',
         kind: 'розвідник',
         pos: { ...g.base },
         target: { ...g.base },
@@ -192,9 +192,9 @@ describe('squad: наскрізний цикл', () => {
       });
       if (useRoster) {
         const r: Roster = createRoster();
-        createMission(g, 'ufoM', { squad: missionSquad(r) });
+        createMission(g, 'probeM', { squad: missionSquad(r) });
       } else {
-        createMission(g, 'ufoM');
+        createMission(g, 'probeM');
       }
       advanceTime(g, 100);
       return JSON.stringify(g.log);

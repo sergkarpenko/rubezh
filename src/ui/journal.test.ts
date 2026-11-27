@@ -87,12 +87,12 @@ describe('п19.2: geoEventText — довіра і вихід регіону', (
   const none = new Set<string>();
   it.each([
     [
-      { type: 'region_trust', region: 'north', delta: -30, trust: 70, reason: 'ufo_left', minute: 0 },
+      { type: 'region_trust', region: 'north', delta: -30, trust: 70, reason: 'probe_left', minute: 0 },
       '▼ Довіра «Північ» −30 → 70: зонд відлетів без бою',
       'lose',
     ],
     [
-      { type: 'region_trust', region: 'south', delta: -15, trust: 0, reason: 'ufo_left', minute: 0 },
+      { type: 'region_trust', region: 'south', delta: -15, trust: 0, reason: 'probe_left', minute: 0 },
       '▼ Довіра «Південь» −15 → 0: зонд відлетів без бою',
       'lose',
     ],
@@ -119,37 +119,41 @@ describe('п19.3: geoEventText і workshopEventText — кілька перех�
   const p = { pos: { x: 13, y: 4 }, minute: 0 };
   it.each([
     [
-      { type: 'intercept_start', ufoId: 'ufo7', ...p, fighter: 2, region: 'east' },
-      '✦ Перехоплювач 2 піднявся з ангара «Схід» на зонд Розриву ufo7',
+      { type: 'intercept_start', probeId: 'probe7', ...p, fighter: 2, region: 'east' },
+      '✦ Перехоплювач 2 піднявся з ангара «Схід» на зонд Розриву №7',
       '',
     ],
-    [{ type: 'intercept_start', ufoId: 'ufo7', ...p }, '✦ Перехоплення: перехоплювач піднявся на зонд Розриву ufo7', ''],
+    [{ type: 'intercept_start', probeId: 'probe7', ...p }, '✦ Перехоплення: перехоплювач піднявся на зонд Розриву №7', ''],
     [
-      { type: 'intercept_engage', ufoId: 'ufo7', ...p, fighter: 3 },
-      '✦ Перехоплювач 3 зблизився із зондом Розриву ufo7 — повітряний бій',
+      { type: 'intercept_engage', probeId: 'probe7', ...p, fighter: 3 },
+      '✦ Перехоплювач 3 зблизився із зондом Розриву №7 — повітряний бій',
       '',
     ],
-    [{ type: 'intercept_engage', ufoId: 'ufo7', ...p }, '✦ Перехоплювач зблизився із зондом Розриву ufo7 — повітряний бій', ''],
-    [{ type: 'intercept_break_off', ufoId: 'ufo7', minute: 0, fighter: 2 }, '✦ Розрив контакту — перехоплювач 2 повертається в ангар', ''],
-    [{ type: 'intercept_break_off', ufoId: 'ufo7', minute: 0 }, '✦ Розрив контакту — перехоплювач повернувся у вузол «Рубіж»', ''],
+    [{ type: 'intercept_engage', probeId: 'probe7', ...p }, '✦ Перехоплювач зблизився із зондом Розриву №7 — повітряний бій', ''],
     [
-      { type: 'intercept_aborted', ufoId: 'ufo7', reason: 'fighter_damaged', ...p, fighter: 2 },
+      { type: 'intercept_break_off', probeId: 'probe7', minute: 0, fighter: 2 },
+      '✦ Розрив контакту — перехоплювач 2 повертається в ангар',
+      '',
+    ],
+    [{ type: 'intercept_break_off', probeId: 'probe7', minute: 0 }, '✦ Розрив контакту — перехоплювач повернувся у вузол «Рубіж»', ''],
+    [
+      { type: 'intercept_aborted', probeId: 'probe7', reason: 'fighter_damaged', ...p, fighter: 2 },
       '✦ Перехоплювач 2 пошкоджений — вимушене переривання бою',
       'lose',
     ],
     [
-      { type: 'intercept_aborted', ufoId: 'ufo7', reason: 'ufo_landed', ...p, fighter: 1 },
-      '✦ Зонд Розриву ufo7 приземлився — перехоплення перервано (перехоплювач 1)',
+      { type: 'intercept_aborted', probeId: 'probe7', reason: 'probe_landed', ...p, fighter: 1 },
+      '✦ Зонд Розриву №7 приземлився — перехоплення перервано (перехоплювач 1)',
       '',
     ],
     [
-      { type: 'intercept_aborted', ufoId: 'ufo7', reason: 'ufo_lost', ...p, fighter: 3 },
-      '✦ Зонд Розриву ufo7 зник з трекінгу — перехоплення перервано (перехоплювач 3)',
+      { type: 'intercept_aborted', probeId: 'probe7', reason: 'probe_lost', ...p, fighter: 3 },
+      '✦ Зонд Розриву №7 зник з трекінгу — перехоплення перервано (перехоплювач 3)',
       '',
     ],
     [
-      { type: 'intercept_aborted', ufoId: 'ufo7', reason: 'ufo_lost', ...p },
-      '✦ Зонд Розриву ufo7 зник з трекінгу — перехоплення перервано',
+      { type: 'intercept_aborted', probeId: 'probe7', reason: 'probe_lost', ...p },
+      '✦ Зонд Розриву №7 зник з трекінгу — перехоплення перервано',
       '',
     ],
     [{ type: 'fighter_returned', ...p, fighter: 2, region: 'east' }, '✦ Перехоплювач 2 повернувся в ангар «Схід»', ''],
@@ -183,35 +187,44 @@ describe('geoEventText: фільтр туману стратегічного ж�
 
   it('доба і виявлення — видно завжди', () => {
     expect(geoEventText(evGeo({ type: 'day', day: 2, minute: 0 }), known)).toEqual({ text: '— Доба 2 —', cls: '' });
-    expect(geoEventText(evGeo({ type: 'ufo_detected', ufoId: 'u2', pos: { x: 1, y: 1 }, minute: 5 }), known)).toEqual({
-      text: 'Виявлено зонд Розриву: u2',
+    expect(geoEventText(evGeo({ type: 'probe_detected', probeId: 'u2', pos: { x: 1, y: 1 }, minute: 5 }), known)).toEqual({
+      text: 'Виявлено зонд Розриву №2',
       cls: '',
     });
   });
 
   it('приземлення/відліт видно лише для раніше виявлених НЛО', () => {
-    expect(geoEventText(evGeo({ type: 'ufo_landed', ufoId: 'u1', pos: { x: 2, y: 2 }, minute: 9 }), known)?.text).toContain('приземлився');
-    expect(geoEventText(evGeo({ type: 'ufo_landed', ufoId: 'uX', pos: { x: 2, y: 2 }, minute: 9 }), known)).toBe(null);
-    expect(geoEventText(evGeo({ type: 'ufo_left', ufoId: 'u1', minute: 30 }), known)?.text).toContain('відлетів');
-    expect(geoEventText(evGeo({ type: 'ufo_left', ufoId: 'uX', minute: 30 }), known)).toBe(null);
+    expect(geoEventText(evGeo({ type: 'probe_landed', probeId: 'u1', pos: { x: 2, y: 2 }, minute: 9 }), known)?.text).toContain(
+      'приземлився'
+    );
+    expect(geoEventText(evGeo({ type: 'probe_landed', probeId: 'uX', pos: { x: 2, y: 2 }, minute: 9 }), known)).toBe(null);
+    expect(geoEventText(evGeo({ type: 'probe_left', probeId: 'u1', minute: 30 }), known)?.text).toContain('відлетів');
+    expect(geoEventText(evGeo({ type: 'probe_left', probeId: 'uX', minute: 30 }), known)).toBe(null);
   });
 
   it('спавн і рух НЛО приховано туманом; результати місій з класами win/lose', () => {
-    expect(geoEventText(evGeo({ type: 'ufo_spawned', ufoId: 'u3', kind: 'розвідник', pos: { x: 0, y: 0 }, minute: 1 }), known)).toBe(null);
-    expect(geoEventText(evGeo({ type: 'ufo_move', ufoId: 'u1', from: { x: 0, y: 0 }, to: { x: 1, y: 0 }, minute: 2 }), known)).toBe(null);
-    expect(geoEventText(evGeo({ type: 'mission_won', ufoId: 'u1', minute: 60 }), known)).toEqual({ text: 'Місію зачищено ✓', cls: 'win' });
-    expect(geoEventText(evGeo({ type: 'mission_lost', ufoId: 'u1', minute: 60 }), known)).toEqual({
+    expect(geoEventText(evGeo({ type: 'probe_spawned', probeId: 'u3', kind: 'розвідник', pos: { x: 0, y: 0 }, minute: 1 }), known)).toBe(
+      null
+    );
+    expect(geoEventText(evGeo({ type: 'probe_move', probeId: 'u1', from: { x: 0, y: 0 }, to: { x: 1, y: 0 }, minute: 2 }), known)).toBe(
+      null
+    );
+    expect(geoEventText(evGeo({ type: 'mission_won', probeId: 'u1', minute: 60 }), known)).toEqual({
+      text: 'Місію зачищено ✓',
+      cls: 'win',
+    });
+    expect(geoEventText(evGeo({ type: 'mission_lost', probeId: 'u1', minute: 60 }), known)).toEqual({
       text: 'Загін втрачено ✗',
       cls: 'lose',
     });
   });
 
   it('події перехоплення: старт/зближення/розрив/збиття/ремонт/повернення', () => {
-    expect(geoEventText(evGeo({ type: 'intercept_start', ufoId: 'u1', minute: 1 }), known)?.text).toContain('Перехоплення');
-    expect(geoEventText(evGeo({ type: 'intercept_engage', ufoId: 'u1', minute: 2 }), known)?.text).toContain('повітряний бій');
+    expect(geoEventText(evGeo({ type: 'intercept_start', probeId: 'u1', minute: 1 }), known)?.text).toContain('Перехоплення');
+    expect(geoEventText(evGeo({ type: 'intercept_engage', probeId: 'u1', minute: 2 }), known)?.text).toContain('повітряний бій');
     expect(geoEventText(evGeo({ type: 'intercept_break_off', minute: 3 }), known)?.text).toContain('Розрив контакту');
-    expect(geoEventText(evGeo({ type: 'ufo_shot_down', ufoId: 'u1', minute: 4 }), known)).toEqual({
-      text: '✦ Зонд Розриву u1 збитий! На місці падіння — місія',
+    expect(geoEventText(evGeo({ type: 'probe_shot_down', probeId: 'u1', minute: 4 }), known)).toEqual({
+      text: '✦ Зонд Розриву №1 збитий! На місці падіння — місія',
       cls: 'win',
     });
     expect(geoEventText(evGeo({ type: 'fighter_returned', minute: 5 }), known)?.text).toContain('повернувся у вузол «Рубіж»');
@@ -230,22 +243,22 @@ describe('geoEventText: фільтр туману стратегічного ж�
       text: '✦ Перехоплювач пошкоджений — вимушене переривання бою',
       cls: 'lose',
     });
-    expect(geoEventText(evGeo({ type: 'intercept_aborted', reason: 'ufo_lost', ufoId: 'u1', minute: 2 }), known)).toEqual({
-      text: '✦ Зонд Розриву u1 зник з трекінгу — перехоплення перервано',
+    expect(geoEventText(evGeo({ type: 'intercept_aborted', reason: 'probe_lost', probeId: 'u1', minute: 2 }), known)).toEqual({
+      text: '✦ Зонд Розриву №1 зник з трекінгу — перехоплення перервано',
       cls: '',
     });
   });
 
   it('Т.75: місія з результатом «евакуйовано» — рядок «Загін евакуйовано ⇧» (рішення власника)', () => {
-    expect(geoEventText(evGeo({ type: 'mission_evacuated', ufoId: 'u3', minute: 9 }), known)).toEqual({
+    expect(geoEventText(evGeo({ type: 'mission_evacuated', probeId: 'u3', minute: 9 }), known)).toEqual({
       text: 'Загін евакуйовано ⇧',
       cls: '',
     });
   });
 
   it('Т.49: перехоплення перервало приземлення зонда — власний текст, без «зник з трекінгу»', () => {
-    expect(geoEventText(evGeo({ type: 'intercept_aborted', reason: 'ufo_landed', ufoId: 'u7', minute: 3 }), known)).toEqual({
-      text: '✦ Зонд Розриву u7 приземлився — перехоплення перервано',
+    expect(geoEventText(evGeo({ type: 'intercept_aborted', reason: 'probe_landed', probeId: 'u7', minute: 3 }), known)).toEqual({
+      text: '✦ Зонд Розриву №7 приземлився — перехоплення перервано',
       cls: '',
     });
   });
@@ -390,12 +403,12 @@ describe('Journal: фільтри-вкладки (ADR-0027)', () => {
 });
 
 describe('Journal: drain* — seen-трекінг подій', () => {
-  it('drainGeo: події → журнал; ufo_detected поповнює туман ДО перевірки landed того ж batch; onGeoEvent для кожної', () => {
+  it('drainGeo: події → журнал; probe_detected поповнює туман ДО перевірки landed того ж batch; onGeoEvent для кожної', () => {
     const onGeoEvent = vi.fn();
     const geoLog: GeoEvent[] = [
-      evGeo({ type: 'ufo_detected', ufoId: 'u1', pos: { x: 1, y: 1 }, minute: 5 }),
-      evGeo({ type: 'ufo_landed', ufoId: 'u1', pos: { x: 2, y: 2 }, minute: 9 }),
-      evGeo({ type: 'ufo_landed', ufoId: 'uX', pos: { x: 3, y: 3 }, minute: 10 }), // невиявлений — туман
+      evGeo({ type: 'probe_detected', probeId: 'u1', pos: { x: 1, y: 1 }, minute: 5 }),
+      evGeo({ type: 'probe_landed', probeId: 'u1', pos: { x: 2, y: 2 }, minute: 9 }),
+      evGeo({ type: 'probe_landed', probeId: 'uX', pos: { x: 3, y: 3 }, minute: 10 }), // невиявлений — туман
     ];
     const j = createJournal(makeDeps({ geoLog: () => geoLog, onGeoEvent }));
     j.drainGeo();
@@ -458,7 +471,7 @@ describe('Journal: drain* — seen-трекінг подій', () => {
       evBattle({ type: 'move', unitId: 's1', from: { x: 0, y: 0 }, to: { x: 1, y: 0 } }),
       evBattle({ type: 'shot', shooterId: 's1', targetId: 'a1', mode: 'snap', hit: true, damage: 3 }),
     ];
-    const geoLog: GeoEvent[] = [evGeo({ type: 'ufo_detected', ufoId: 'u1', pos: { x: 1, y: 1 }, minute: 5 })];
+    const geoLog: GeoEvent[] = [evGeo({ type: 'probe_detected', probeId: 'u1', pos: { x: 1, y: 1 }, minute: 5 })];
     const j = createJournal(makeDeps({ battleLog: () => battleLog, geoLog: () => geoLog, onBattleSound, onGeoSound }));
     j.drainBattle();
     j.drainGeo();
@@ -475,7 +488,7 @@ describe('Journal: drain* — seen-трекінг подій', () => {
 describe('Journal: adopt/resetBattle', () => {
   it('adopt: seen-трекінг до кінця логів (без відтворення історії), knownDetected перебудовується', () => {
     const party = createParty(42);
-    party.geo.log.push(evGeo({ type: 'ufo_detected', ufoId: 'uA', pos: { x: 1, y: 1 }, minute: 1 }));
+    party.geo.log.push(evGeo({ type: 'probe_detected', probeId: 'uA', pos: { x: 1, y: 1 }, minute: 1 }));
     party.econ.log.push({ type: 'spend', amount: 10 } as EconomyEvent);
     const j = createJournal(makeDeps({ geoLog: () => party.geo.log, econLog: () => party.econ.log }));
     j.adopt(party);
@@ -483,7 +496,7 @@ describe('Journal: adopt/resetBattle', () => {
     j.drainEcon();
     expect(document.querySelectorAll('#log li')).toHaveLength(0); // історію не відтворюємо
     // нові події після adopt — у журнал; knownDetected з логу: landed(uA) видно
-    party.geo.log.push(evGeo({ type: 'ufo_landed', ufoId: 'uA', pos: { x: 2, y: 2 }, minute: 2 }));
+    party.geo.log.push(evGeo({ type: 'probe_landed', probeId: 'uA', pos: { x: 2, y: 2 }, minute: 2 }));
     party.econ.log.push({ type: 'allowance', day: 1, amount: 100 } as EconomyEvent);
     j.drainGeo();
     j.drainEcon();
@@ -505,8 +518,8 @@ describe('Journal: adopt/resetBattle', () => {
 
 describe('Journal: підказки по ходу (П9.2, один раз за партію)', () => {
   // Виявлений НЛО у стані «летить» у geo-стані партії (туман: detected = true).
-  function flyingUfo(p: ReturnType<typeof createParty>, id: string): void {
-    p.geo.ufos.push({
+  function flyingProbe(p: ReturnType<typeof createParty>, id: string): void {
+    p.geo.probes.push({
       id,
       kind: 'розвідник',
       pos: { x: 1, y: 1 },
@@ -519,7 +532,7 @@ describe('Journal: підказки по ходу (П9.2, один раз за �
 
   it('«Можна перехопити»: виявлений НЛО у повітрі + боєготовий винищувач — підказка один раз', () => {
     const p = createParty(42);
-    flyingUfo(p, 'u1');
+    flyingProbe(p, 'u1');
     const j = createJournal(makeDeps({ party: () => p, geoLog: () => p.geo.log }));
     j.drainGeo();
     const hints = [...document.querySelectorAll('#log li')].filter((li) => li.textContent?.startsWith('Підказка'));
@@ -533,7 +546,7 @@ describe('Journal: підказки по ходу (П9.2, один раз за �
   it('«Можна перехопити» не показується, поки винищувач не боєготовий', () => {
     const p = createParty(42);
     p.intercept.fighters[0].hp = 2; // пошкоджений — перехоплення недоступне
-    flyingUfo(p, 'u1');
+    flyingProbe(p, 'u1');
     const j = createJournal(makeDeps({ party: () => p, geoLog: () => p.geo.log }));
     j.drainGeo();
     expect([...document.querySelectorAll('#log li')].filter((li) => li.textContent?.startsWith('Підказка'))).toHaveLength(0);
@@ -545,7 +558,7 @@ describe('Journal: підказки по ходу (П9.2, один раз за �
     const p = createParty(42);
     addFighter(p.intercept, p.geo, 'east');
     p.intercept.fighters[0].hp = 2;
-    flyingUfo(p, 'u1');
+    flyingProbe(p, 'u1');
     const j = createJournal(makeDeps({ party: () => p, geoLog: () => p.geo.log }));
     j.drainGeo();
     expect(p.hints.intercept).toBe(true);
@@ -553,7 +566,7 @@ describe('Journal: підказки по ходу (П9.2, один раз за �
 
   it('«Доступна місія»: приземлений виявлений НЛО — підказка один раз', () => {
     const p = createParty(42);
-    p.geo.ufos.push({
+    p.geo.probes.push({
       id: 'u2',
       kind: 'збирач',
       pos: { x: 3, y: 3 },
@@ -573,7 +586,7 @@ describe('Journal: підказки по ходу (П9.2, один раз за �
 
   it('невиявлений НЛО — підказок немає (туман стратегічного шару)', () => {
     const p = createParty(42);
-    p.geo.ufos.push({
+    p.geo.probes.push({
       id: 'u3',
       kind: 'розвідник',
       pos: { x: 1, y: 1 },
@@ -590,7 +603,7 @@ describe('Journal: підказки по ходу (П9.2, один раз за �
   it('«Ремонт завершено»: подія fighter_repair_done — підказка один раз за партію', () => {
     const p = createParty(42);
     const geoLog: GeoEvent[] = [
-      evGeo({ type: 'ufo_detected', ufoId: 'u1', pos: { x: 1, y: 1 }, minute: 5 }),
+      evGeo({ type: 'probe_detected', probeId: 'u1', pos: { x: 1, y: 1 }, minute: 5 }),
       evGeo({ type: 'fighter_repair_done', minute: 60 }),
     ];
     // виявленого НЛО немає — лише подія ремонту веде до підказки про ремонт
@@ -607,7 +620,7 @@ describe('Journal: підказки по ходу (П9.2, один раз за �
 
   it('adopt: прапорці підказок ідуть із партією — завантажена партія підказку не дублює', () => {
     const p = createParty(42);
-    flyingUfo(p, 'u1');
+    flyingProbe(p, 'u1');
     p.hints.intercept = true; // у сейві підказку вже показано
     const j = createJournal(makeDeps({ party: () => p, geoLog: () => p.geo.log }));
     j.adopt(p);
