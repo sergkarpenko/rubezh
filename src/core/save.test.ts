@@ -9,7 +9,8 @@ import { advanceTime } from './geo';
 import { economyTick } from './economy';
 import { hireSoldier, hospitalTick } from './squad';
 import { evacuate, mulberry32, type StatefulRng } from './combat';
-import { completeMission, createMission } from './mission';
+import { completeMission, createMission, textSeed } from './mission';
+import { CAMPAIGN_POLICY, simulateParty } from './party-bot';
 import { createResearch, hireScientist, researchTick, startProject } from './research';
 import { createWorkshop, equipItem, installGunModule, orderItem, removeGunModule, workshopTick, WORKSHOP_CATALOG } from './workshop';
 import {
@@ -767,5 +768,20 @@ describe('Т.218: сутність у коді — `probe`, на диску — 
     expect(toDisk(mem)).toEqual(disk);
     expect(fromDisk(disk)).toEqual({ ...mem, name: 'probe' });
     expect(fromDisk({ id: 'ufo', note: 'ufology' })).toEqual({ id: 'ufo', note: 'ufology' });
+  });
+});
+
+describe('Т.218 (аудит PR #536): золотий сейв — той самий рядок, що v0.12.0 до перейменування', () => {
+  it('сід 7, політика кампанії, 20 діб: FNV-1a і довжина сейва — як на `main` 0e812fd', () => {
+    let s = '';
+    simulateParty(7, 'норма', {
+      policy: CAMPAIGN_POLICY,
+      maxDays: 20,
+      onTick: (p) => {
+        s = serializeParty(p as Party);
+      },
+    });
+    expect(s.length).toBe(104761);
+    expect(textSeed(s)).toBe(4154294394);
   });
 });

@@ -1547,7 +1547,7 @@ test('сценарій приймання ADR-0030: партія → місія 
 // Т.61: екран перемоги і рядок-пояснення невдалого «Продовжити» — на сторінці, а не лише класом hidden.
 // Наскрізні тести на сторінці (jsdom) розкладки не мають: кнопка з display:none чи рядок без стилів їх проходять.
 // Екран перемоги — правкою сейву (campaign.status = 'перемога'), як у наскрізному тесті Т.58; невдале
-// «Продовжити» — зіпсованим списком зондів (probes = [null]).
+// «Продовжити» — зіпсованим списком зондів (ufos = [null] на диску).
 const T61_VIEWPORTS = [
   { width: 1366, height: 768 },
   { width: 1024, height: 768 },
@@ -1665,8 +1665,8 @@ test('Т.61: екран перемоги і рядок-пояснення ста
   const good = await page.evaluate(() => localStorage.getItem('rubezh.save.1')!);
   const won = JSON.parse(good) as { state: { campaign: { status: string } } };
   won.state.campaign.status = 'перемога';
-  const bad = JSON.parse(good) as { state: { geo: { probes: unknown } } };
-  bad.state.geo.probes = [null]; // метадані читаються, розбір партії падає
+  const bad = JSON.parse(good) as { state: { geo: { ufos: unknown } } };
+  bad.state.geo.ufos = [null]; // Т.218: сейв на диску — старі ключі `ufo` // метадані читаються, розбір партії падає
 
   await test.step('екран перемоги: три кнопки видно в межах вікна, одна під одною', async () => {
     await page.evaluate((s) => localStorage.setItem('rubezh.save.1', s), JSON.stringify(won));

@@ -118,7 +118,7 @@ describe('п19.4: «Перехоплювачі» — картки', () => {
     expect(f.deps.renderAll).toHaveBeenCalled();
     f.panels.renderFighter();
     expect(document.getElementById('btn-chase-1-' + probe.id)).toBeNull(); // на зонд — один
-    expect($text()).toContain('погоня: ' + probe.id);
+    expect($text()).toContain('погоня: №' + probe.id.replace('probe', ''));
   });
 
   it('бій другого: дистанції — у його картці, контекст-стрічка показує його номер; раунд іде', () => {

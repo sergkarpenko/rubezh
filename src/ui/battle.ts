@@ -66,7 +66,7 @@ import { BCELL } from './grid';
 import { type LogCat } from './journal';
 import { ICONS } from './icons';
 import { ROLE_INFO, roleTileView } from './roles';
-import { byGender, ticksText } from './text';
+import { byGender, probeNo, ticksText } from './text';
 import { squadCards, squadOrder, squadStripHtml } from './squad-strip';
 import { enemyMenuHtml, enemyMenuPlace, enemyMenuView } from './enemy-menu';
 import { previewCover } from './cover-ui';
@@ -817,7 +817,7 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
   function launch(probeId: string): void {
     start(
       (party, opts) => createMission(party.geo, probeId, { ...opts, threat: party.campaign.threat }), // п18.3: склад за загрозою
-      '▶ Місія: загін висаджено біля зонду Розриву ' + probeId
+      '▶ Місія: загін висаджено біля зонду Розриву ' + probeNo(probeId) // Т.218: «№N» (аудит PR #536)
     );
   }
 

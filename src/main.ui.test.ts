@@ -984,8 +984,8 @@ describePage('панель збереження: 3 слоти, лише на г�
     expect($('start-screen').classList.contains('hidden')).toBe(true);
     exitToStart(false);
     const good = localStorage.getItem('rubezh.save.1') as string;
-    const bad = JSON.parse(good) as { state: { geo: { probes: unknown } } };
-    bad.state.geo.probes = [null]; // метадані читаються (слот лишається останнім), розбір партії падає
+    const bad = JSON.parse(good) as { state: { geo: { ufos: unknown } } };
+    bad.state.geo.ufos = [null]; // Т.218: сейв на диску — старі ключі `ufo` // метадані читаються (слот лишається останнім), розбір партії падає
     const failures = (): number => ($('log').textContent ?? '').split('✗ Завантаження не вдалось').length - 1;
     const failuresBefore = failures();
     localStorage.setItem('rubezh.save.1', JSON.stringify(bad));
@@ -2606,8 +2606,8 @@ describePage('Т.58: стартовий екран після невдалого
     const good = freshSave();
     exitViaMenu();
     expect(hidden('start-note')).toBe(true);
-    const bad = JSON.parse(good) as { state: { geo: { probes: unknown } } };
-    bad.state.geo.probes = [null]; // метадані читаються (слот лишається останнім), розбір партії падає
+    const bad = JSON.parse(good) as { state: { geo: { ufos: unknown } } };
+    bad.state.geo.ufos = [null]; // Т.218: сейв на диску — старі ключі `ufo` // метадані читаються (слот лишається останнім), розбір партії падає
     localStorage.setItem('rubezh.save.1', JSON.stringify(bad));
     try {
       btn('btn-start-continue').click();
@@ -2635,8 +2635,8 @@ describePage('Т.58: стартовий екран після невдалого
       btn('btn-defeat-exit').click();
       expect(hidden('start-screen')).toBe(false);
       expect(hidden('campaign-defeat')).toBe(true);
-      const bad = JSON.parse(good) as { state: { geo: { probes: unknown } } };
-      bad.state.geo.probes = [null];
+      const bad = JSON.parse(good) as { state: { geo: { ufos: unknown } } };
+      bad.state.geo.ufos = [null]; // Т.218: сейв на диску — старі ключі `ufo`
       localStorage.setItem('rubezh.save.1', JSON.stringify(bad));
       btn('btn-start-continue').click();
       expect(hidden('start-note')).toBe(false);
@@ -2660,8 +2660,8 @@ describePage('Т.58: стартовий екран після невдалого
       expect(hidden('start-screen')).toBe(false);
       expect(hidden('campaign-victory')).toBe(true);
       // невдале «Продовжити» перемальовує панелі покинутої партії — екран перемоги не повертається
-      const bad = JSON.parse(good) as { state: { geo: { probes: unknown } } };
-      bad.state.geo.probes = [null];
+      const bad = JSON.parse(good) as { state: { geo: { ufos: unknown } } };
+      bad.state.geo.ufos = [null]; // Т.218: сейв на диску — старі ключі `ufo`
       localStorage.setItem('rubezh.save.1', JSON.stringify(bad));
       btn('btn-start-continue').click();
       expect(hidden('start-note')).toBe(false);

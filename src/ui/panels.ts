@@ -442,7 +442,7 @@ export function createPanels(deps: PanelsDeps): Panels {
     const f = activeFighter(party); // п19.4: той, хто в бою, інакше перший у погоні
     el('ictx').classList.toggle('hidden', f === null);
     if (f === null) return;
-    el('ictx-target').textContent = f.targetId ?? '—';
+    el('ictx-target').textContent = f.targetId === null || f.targetId === undefined ? '—' : probeNo(f.targetId); // Т.218: «№N»
     el('ictx-status').textContent = f.status;
     el('ictx-round').textContent = f.status === 'бій' ? String(party.intercept.round) : '—';
     el('ictx-fighter').textContent = (party.intercept.fighters.length > 1 ? f.id + ' · ' : '') + 'HP ' + f.hp + '/' + FIGHTER_MAX_HP;
@@ -523,7 +523,7 @@ export function createPanels(deps: PanelsDeps): Panels {
             ? 'на базі · пошкоджений'
             : 'боєготовий'
           : f.status === 'погоня'
-            ? 'погоня: ' + (f.targetId ?? '?')
+            ? 'погоня: ' + (f.targetId ? probeNo(f.targetId) : '?')
             : f.status;
     const head = document.createElement('div');
     head.className = 'meta';
