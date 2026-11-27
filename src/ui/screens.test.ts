@@ -5,7 +5,15 @@
 // rAF-анімацій (idle → 0 перерисовок, ADR-0029). Повний флоу із сейвами —
 // у src/main.ui.test.ts (там живе панель збереження).
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { CONTINUE_FAILED_TEXT, createScreens, type ScreensDeps } from './screens';
+import { CONTINUE_FAILED_TEXT, PRESET_TEXT, createScreens, type ScreensDeps } from './screens';
+
+// Т.218: складність у «Новій партії» — радіогрупа карток (обрана / вибрати)
+function presetOf(): string | undefined {
+  return document.querySelector<HTMLInputElement>('input[name="new-game-preset"]:checked')?.value;
+}
+function pickPreset(v: string): void {
+  for (const r of document.querySelectorAll<HTMLInputElement>('input[name="new-game-preset"]')) r.checked = r.value === v;
+}
 
 // Скелетні секції — ті самі id, що й в index.html (контент генерує модуль).
 const SKELETON =
@@ -109,7 +117,7 @@ describe('П12.2: діалог «Нова партія» — сід і скла�
     btn('btn-start-new').click();
     expect(visible('new-game-dialog')).toBe(true);
     expect(($('new-game-seed') as HTMLInputElement).value).toBe('42');
-    expect(($('new-game-preset') as HTMLSelectElement).value).toBe('норма');
+    expect(presetOf()).toBe('норма');
     btn('btn-new-game-cancel').click();
     expect(visible('new-game-dialog')).toBe(false);
     expect(deps.onNewGame).not.toHaveBeenCalled();
@@ -120,15 +128,31 @@ describe('П12.2: діалог «Нова партія» — сід і скла�
     createScreens(deps).showStart();
     btn('btn-start-new').click();
     ($('new-game-seed') as HTMLInputElement).value = '7';
-    ($('new-game-preset') as HTMLSelectElement).value = 'легкий';
+    pickPreset('легкий');
     btn('btn-new-game-start').click();
     expect(deps.onNewGame).toHaveBeenCalledWith(7, 'легкий');
     expect(visible('new-game-dialog')).toBe(false);
     btn('btn-start-new').click();
     ($('new-game-seed') as HTMLInputElement).value = 'не число';
-    ($('new-game-preset') as HTMLSelectElement).value = 'казус'; // невідомий — «норма»
+    pickPreset('казус'); // невідомий — «норма»
     btn('btn-new-game-start').click();
     expect(deps.onNewGame).toHaveBeenLastCalledWith(42, 'норма');
+  });
+
+  it('Т.218: картки складності з описом пресета, сід — у «Додатково», «Випадковий» дає число 1–999999', () => {
+    createScreens(makeDeps()).showStart();
+    btn('btn-start-new').click();
+    const cards = [...document.querySelectorAll<HTMLElement>('#new-game-preset .preset-card')];
+    expect(cards.map((c) => c.querySelector('.preset-name')?.textContent)).toEqual(['Легкий', 'Норма', 'Складний']);
+    expect(cards[0].querySelector('.preset-desc')?.textContent).toBe(PRESET_TEXT['легкий']);
+    expect($('new-game-seed').closest('details')?.querySelector('summary')?.textContent).toBe('Додатково');
+    const rnd = vi.spyOn(Math, 'random').mockReturnValue(0.5);
+    try {
+      btn('btn-new-game-random').click();
+    } finally {
+      rnd.mockRestore();
+    }
+    expect(($('new-game-seed') as HTMLInputElement).value).toBe('500000');
   });
 
   it('після старту партії діалоги приховані (глибина навігації — один діалог, ADR-0065)', () => {

@@ -784,6 +784,33 @@ describe('Фікс П14.8 (фідбек валідації): смерть у ч�
     expect(ops2.some((o) => o.startsWith('fillText(0,'))).toBe(false);
   });
 
+  it('Т.218: HP за чергою — влучання ще летить: живий демон з HP 4 і загиблий показують HP до свого кадру', () => {
+    const f = makeFixture();
+    f.battle.launch(firstTarget(f));
+    const g = createGame({
+      map: { width: 20, height: 20, blocked: new Set<string>() },
+      units: [
+        makeUnit({ id: 's1', side: 'player', name: 'Гарт', pos: { x: 2, y: 2 }, hp: 10, maxHp: 10 }),
+        makeUnit({ id: 'a1', side: 'alien', name: 'Морок', pos: { x: 6, y: 2 }, hp: 4, maxHp: 10 }),
+        makeUnit({ id: 'a2', side: 'alien', name: 'Мара', pos: { x: 3, y: 3 }, hp: 0, maxHp: 10 }),
+      ],
+    });
+    g.units[2]!.alive = false;
+    f.ui.mission!.state = g;
+    const hit = makeTracerAnim('player', { x: 2, y: 2 }, { x: 6, y: 2 }, true);
+    hit.hpFx = [{ unitId: 'a1', before: 7, after: 4 }];
+    const kill = makeTracerAnim('player', { x: 2, y: 2 }, { x: 3, y: 3 }, true);
+    kill.hpFx = [{ unitId: 'a2', before: 3, after: 0 }];
+    f.deps.anim.queued = () => [makeMoveAnim(g.units[0]!, [{ x: 2, y: 2 }], false), hit, kill, makeDeathAnim(g.units[2]!)];
+    const ops = withRecCtx(() => f.battle.renderBattle());
+    expect(ops.some((o) => o.startsWith('fillText(7,'))).toBe(true);
+    expect(ops.some((o) => o.startsWith('fillText(3,'))).toBe(true);
+    expect(ops.some((o) => o.startsWith('fillText(4,') || o.startsWith('fillText(0,'))).toBe(false);
+    f.deps.anim.queued = () => [];
+    const ops2 = withRecCtx(() => f.battle.renderBattle());
+    expect(ops2.some((o) => o.startsWith('fillText(4,'))).toBe(true); // черга відіграла — HP ядра
+  });
+
   // Фідбек власника 2026-10-22: трасер бою стартує з ДУЛА стрільця (якір
   // MUZZLE_ANCHOR у render.ts), фліп — фактичний facing кадру: демон у нативі
   // (вліво) — дуло лівого краю кадру (Т.132: якір у просторі 96); постріл по солдату праворуч від

@@ -7,7 +7,7 @@
 // Canvas-виклики. Тести піксель-спрайтів — у src/render.sprites.test.ts.
 
 import { beforeEach, describe, expect, it } from 'vitest';
-import { drawAnimFrame, initPixelSprites, muzzlePoint, type MakeOffscreen } from './render';
+import { drawAnimFrame, initPixelSprites, muzzlePoint, steepShot, type MakeOffscreen } from './render';
 import {
   DISSOLVE_STRIP,
   RECOIL_PX,
@@ -867,5 +867,29 @@ describe('спокійні кадри за «менше руху» (Т.144)', ()
     const f = animCtx();
     drawAnimFrame(f.ctx, p, p.dur * 0.2, 24, 0);
     expect(arcR(f.calls)).toEqual([60]);
+  });
+});
+
+describe('Т.218: промінь на крутих кутах — з центру бійця (рішення власника «Центр корпусу на крутих»)', () => {
+  it('steepShot: понад 60° від горизонталі (dy² > 3·dx²); горизонталь і діагональ — ні', () => {
+    expect(steepShot({ x: 2, y: 2 }, { x: 2, y: 7 })).toBe(true); // строго вниз
+    expect(steepShot({ x: 2, y: 7 }, { x: 3, y: 2 })).toBe(true); // 5 > √3 · 1
+    expect(steepShot({ x: 2, y: 2 }, { x: 5, y: 7 })).toBe(false); // 25 < 27 — ≈ 59°
+    expect(steepShot({ x: 2, y: 2 }, { x: 6, y: 2 })).toBe(false);
+    expect(steepShot({ x: 2, y: 2 }, { x: 2, y: 2 })).toBe(false);
+  });
+  it('ціль строго вгорі: лінія з центру клітинки стрільця, без спалаху дула; збоку — з дула, як раніше', () => {
+    const up = makeTracerAnim('player', { x: 2, y: 5 }, { x: 2, y: 1 }, false);
+    up.start = 0;
+    const f = animCtx();
+    drawAnimFrame(f.ctx, up, up.dur * 0.1, 48, 8, 480, 480, { side: 'player', flip: false });
+    expect(f.calls.find((c) => c.m === 'moveTo')?.args).toEqual([2 * 48 + 24, 5 * 48 + 24]);
+    expect(f.calls.filter((c) => c.m === 'arc')).toHaveLength(0); // спалаху дула немає
+    const side = makeTracerAnim('player', { x: 2, y: 5 }, { x: 6, y: 4 }, false);
+    side.start = 0;
+    const g = animCtx();
+    drawAnimFrame(g.ctx, side, side.dur * 0.1, 48, 8, 480, 480, { side: 'player', flip: false });
+    expect(g.calls.find((c) => c.m === 'moveTo')?.args).not.toEqual([2 * 48 + 24, 5 * 48 + 24]);
+    expect(g.calls.filter((c) => c.m === 'arc').length).toBeGreaterThan(0);
   });
 });

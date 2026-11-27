@@ -14,6 +14,7 @@
 
 import { DemoSteps } from '../core/ai-bot';
 import { type Anim, animsFromEvents } from '../core/render-core';
+import { takeHpBefore } from './hp-track';
 import { missionOutcome, type Mission } from '../core/mission';
 
 // Залежності драйвера від шару застосунку (main.ts): читання стану і зворотні
@@ -125,8 +126,9 @@ export class AutoBattleDriver {
     const mid = missionOutcome(mission.state);
     if (mid === 'перемога' || mid === 'поразка') {
       this.stop();
+      const hpBefore = takeHpBefore(mission.state); // Т.218: HP до пачки
       if (this.deps.hasRaf)
-        this.deps.pushAnims(animsFromEvents(mission.state.log.slice(prevLen), mission.state.units, this.deps.visibleCells?.()));
+        this.deps.pushAnims(animsFromEvents(mission.state.log.slice(prevLen), mission.state.units, this.deps.visibleCells?.(), hpBefore));
       this.deps.finishBattle(mid);
       return;
     }
@@ -144,8 +146,9 @@ export class AutoBattleDriver {
     }
     // Патерн enqueueBattleAnims, але тут власний гейт hasRaf: без rAF (тести)
     // анімації не ставляться — авто-бій крокує лише паузами таймера.
+    const hpBefore = takeHpBefore(mission.state); // Т.218: HP до пачки (і без rAF — знімок не застаріває)
     const anims = this.deps.hasRaf
-      ? animsFromEvents(mission.state.log.slice(prevLen), mission.state.units, this.deps.visibleCells?.())
+      ? animsFromEvents(mission.state.log.slice(prevLen), mission.state.units, this.deps.visibleCells?.(), hpBefore)
       : [];
     if (anims.length > 0) {
       this.waitIdle = true; // пауза — після відтворення черги (onIdle)

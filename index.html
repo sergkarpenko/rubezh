@@ -1952,6 +1952,61 @@
         padding: 6px 8px;
         font: inherit;
       }
+      /* Т.218 (рішення власника «Картки складності»): радіогрупа карток у «Новій партії»,
+         сід — у «Додатково» */
+      .preset-cards {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        margin: 10px 0;
+      }
+      .preset-card {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        column-gap: 8px;
+        align-items: baseline;
+        padding: 8px 10px;
+        border: 1px solid #31435f;
+        border-radius: 6px;
+        background: #0d1017;
+        cursor: pointer;
+      }
+      .preset-card:has(input:checked) {
+        border-color: #00e5ff;
+        box-shadow: 0 0 10px rgba(0, 229, 255, 0.25);
+      }
+      .preset-card input {
+        grid-row: 1 / span 2;
+        width: auto;
+        margin: 0;
+        accent-color: #00e5ff;
+      }
+      .preset-name {
+        color: #e6edf6;
+        font-size: 14px;
+      }
+      .preset-desc {
+        grid-column: 2;
+        color: #9fb0c3;
+        font-size: 12px;
+        line-height: 1.35;
+      }
+      .dialog-more {
+        margin: 6px 0 0;
+        color: #9fb0c3;
+        font-size: 13px;
+      }
+      .dialog-more summary {
+        cursor: pointer;
+      }
+      .dialog-more .dialog-field {
+        margin: 8px 0 6px;
+      }
+      #btn-new-game-random {
+        border-radius: 6px;
+        padding: 4px 8px;
+        font: inherit;
+      }
       .dialog-actions {
         display: flex;
         gap: 8px;

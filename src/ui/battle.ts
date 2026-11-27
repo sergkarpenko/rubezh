@@ -53,12 +53,14 @@ import {
   moveAnimPos,
   pendingAlienMoveStarts,
   pendingDeathStarts,
+  pendingHp,
   recoilPx,
   shakeOffset,
   tracerShare,
   type Anim,
   type TerrainCell,
 } from '../core/render-core';
+import { takeHpBefore } from './hp-track';
 import { el } from './dom';
 import { BCELL } from './grid';
 import { type LogCat } from './journal';
@@ -356,8 +358,10 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
   // пошкоджень породжуються лише для видимих цілей.
   function enqueueBattleAnims(prevLen: number): void {
     const mission = ui.mission;
-    if (!mission || !deps.hasRaf()) return;
-    deps.anim.push(animsFromEvents(mission.state.log.slice(prevLen), mission.state.units, visibleCells()));
+    if (!mission) return;
+    const hpBefore = takeHpBefore(mission.state); // Т.218: і без rAF — знімок не застаріває
+    if (!deps.hasRaf()) return;
+    deps.anim.push(animsFromEvents(mission.state.log.slice(prevLen), mission.state.units, visibleCells(), hpBefore));
   }
 
   // Т.130 (кандидат 127): смуга загону — картки замість плашки «Юніт». Порядок — висадки
@@ -494,6 +498,8 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
     // миттєво, кадр згасання ще в черзі — загиблий лишається на полі до свого
     // кадру (поза «зник → з'явився → зник»); туман — як для живих (ADR-0006).
     const pendingDeath = pendingDeathStarts(deps.anim.queued());
+    // Т.218: HP, яке черга ще не відіграла (влучання летить) — смуга й число до свого кадру
+    const shownHp = pendingHp(deps.anim.queued());
 
     // П6.13: нічна палітра. Легка тряска канвасу при влучанні — зсув усього кадру
     // на фазі спалаху трасера (через AnimEngine — лише в кадрах анімації); фон
@@ -586,7 +592,7 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
           cx: at.x * BCELL + BCELL / 2,
           cy: at.y * BCELL + BCELL / 2,
           r: 8,
-          hp: 0,
+          hp: shownHp.get(u.id) ?? 0, // Т.218: до кадру влучання — HP до нього
           maxHp: u.maxHp, // смерть уже застосована — порожня смуга (П14.4)
           selected: false,
           overwatch: false,
@@ -619,13 +625,14 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
       const visible = vis.has(at.x + ',' + at.y);
       if (u.side === 'alien' && !visible) continue;
       const native: 1 | -1 = u.side === 'player' ? 1 : -1;
-      ambUnits.push({ at: { x: at.x, y: at.y }, hp: u.hp, maxHp: u.maxHp }); // П14.8: сцена ambient
+      const hp = shownHp.get(u.id) ?? u.hp; // Т.218: HP за чергою анімацій
+      ambUnits.push({ at: { x: at.x, y: at.y }, hp, maxHp: u.maxHp }); // П14.8: сцена ambient
       drawUnitSprite(ctx, {
         side: u.side,
         cx: at.x * BCELL + BCELL / 2,
         cy: at.y * BCELL + BCELL / 2,
         r: 8,
-        hp: u.hp,
+        hp,
         maxHp: u.maxHp, // П14.4: смуга HP + число
         selected: u.id === ui.selectedId,
         overwatch: u.overwatch,

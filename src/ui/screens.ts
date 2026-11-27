@@ -81,15 +81,25 @@ function startScreenHtml(version: string): string {
 // Діалог нової партії (ADR-0033): сід + пресет складності — інпути
 // мігрували з топбара (ADR-0065); дефолти ті самі, що були в топбарі.
 function newGameDialogHtml(): string {
+  // Т.218 (відгук власника 27.11.2026: «сід та дропдаун, не зручно, не зрозуміло»; рішення —
+  // картки складності): радіогрупа карток з описом, що змінює пресет (числа — DIFFICULTY_MULTIPLIERS);
+  // сід — у «Додатково» з кнопкою «Випадковий». Перемальовування екрана — Фаза 21.
+  const card = (value: DifficultyPreset, name: string, desc: string): string =>
+    '<label class="preset-card">' +
+    `<input type="radio" name="new-game-preset" value="${value}"${value === 'норма' ? ' checked' : ''} />` +
+    `<span class="preset-name">${name}</span><span class="preset-desc">${desc}</span></label>`;
   return (
     '<div class="panel screen-dialog">' +
     '<h2>Нова партія</h2>' +
+    '<div class="preset-cards" id="new-game-preset" role="radiogroup" aria-label="Складність">' +
+    card('легкий', 'Легкий', PRESET_TEXT['легкий']) +
+    card('норма', 'Норма', PRESET_TEXT['норма']) +
+    card('складний', 'Складний', PRESET_TEXT['складний']) +
+    '</div>' +
+    '<details class="dialog-more" id="new-game-more"><summary>Додатково</summary>' +
     '<label class="dialog-field">Сід <input id="new-game-seed" type="number" value="42" /></label>' +
-    '<label class="dialog-field">Складність <select id="new-game-preset">' +
-    '<option value="норма" selected>норма</option>' +
-    '<option value="легкий">легкий</option>' +
-    '<option value="складний">складний</option>' +
-    '</select></label>' +
+    '<button id="btn-new-game-random" type="button" title="Випадковий сід партії">Випадковий</button>' +
+    '</details>' +
     '<div class="dialog-actions">' +
     '<button id="btn-new-game-start">Стартувати</button>' +
     '<button id="btn-new-game-cancel">Скасувати</button>' +
@@ -97,6 +107,13 @@ function newGameDialogHtml(): string {
     '</div>'
   );
 }
+
+// Т.218: описи карток складності (тексти власника дослівно).
+export const PRESET_TEXT: Readonly<Record<DifficultyPreset, string>> = {
+  легкий: 'Зондів менше (×0,7), бійці міцніші (HP ×1,2), наука вдвічі дешевша, дотація, премії й найм ×1,2',
+  норма: 'Базові числа гри',
+  складний: 'Бійці слабші (HP ×0,9), дотація, премії й найм ×0,9',
+};
 
 // Вікно «Меню» у грі (ADR-0065): Т.128 — «Збереження» (ADR-0117), налаштування (п12.3), «Як грати», вихід.
 function gameMenuHtml(): string {
@@ -248,6 +265,10 @@ export function createScreens(deps: ScreensDeps): Screens {
   el('btn-start-new').onclick = () => {
     newGameDialog.classList.remove('hidden');
   };
+  // Т.218: випадковий сід — у шарі UI (ядро детерміноване, ADR-0003: сід лише вхід партії)
+  el('btn-new-game-random').onclick = () => {
+    el<HTMLInputElement>('new-game-seed').value = String(1 + Math.floor(Math.random() * 999999));
+  };
   el('btn-new-game-cancel').onclick = () => {
     newGameDialog.classList.add('hidden');
   };
@@ -255,7 +276,7 @@ export function createScreens(deps: ScreensDeps): Screens {
     // Ті самі правила, що були в топбарі: порожній/нечисловий сід — 42;
     // невідомий пресет — «норма» (детермінізм валідації не міняється).
     const seed = Number(el<HTMLInputElement>('new-game-seed').value) || 42;
-    const raw = el<HTMLSelectElement>('new-game-preset').value;
+    const raw = newGameDialog.querySelector<HTMLInputElement>('input[name="new-game-preset"]:checked')?.value;
     const preset: DifficultyPreset = raw === 'легкий' || raw === 'складний' ? raw : 'норма';
     hideDialogs();
     deps.onNewGame(seed, preset);

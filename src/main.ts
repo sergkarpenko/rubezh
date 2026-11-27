@@ -273,7 +273,15 @@ const OVERLAY_ESC_CLOSE: Record<string, string> = {
   'new-game-dialog': 'btn-new-game-cancel',
 };
 // Т.75: елементи, на які Tab ставить фокус (пастка фокусу у вікні)
-const FOCUSABLE = 'button, input, select, textarea, a[href], [tabindex]:not([tabindex="-1"])';
+// Т.218: і `summary` («Додатково» в «Новій партії»)
+const FOCUSABLE = 'button, input, select, textarea, a[href], summary, [tabindex]:not([tabindex="-1"])';
+// Т.218: Tab-зупинка, як у браузері: поле в закритому `details` — ні (його `summary` — так);
+// з радіогрупи — лише обрана кнопка (Tab бере групу однією зупинкою, стрілки — всередині).
+function tabStop(e: HTMLElement): boolean {
+  if (e.tagName !== 'SUMMARY' && e.closest('details:not([open])') !== null) return false;
+  if (e instanceof HTMLInputElement && e.type === 'radio') return e.checked;
+  return true;
+}
 let gameOver = false; // банкрутство (ADR-0021): боєготових немає і грошей на найм немає; п18.3 — і поразка за загрозою
 let partyOnScreen = false; // Т.58: партію показано (не стартовий екран) — лише тоді ambient-цикл стартує
 let victoryDismissed = false; // П8.3a: endless — гравець закрив екран перемоги і продовжує гру
@@ -969,7 +977,7 @@ if (typeof document !== 'undefined') {
       .find((o) => !o.classList.contains('hidden'));
     if (box === undefined) return;
     const items = [...box.querySelectorAll<HTMLElement>(FOCUSABLE)].filter(
-      (e) => !(e as HTMLButtonElement).disabled && !e.hidden && e.closest('.hidden') === null
+      (e) => !(e as HTMLButtonElement).disabled && !e.hidden && e.closest('.hidden') === null && tabStop(e)
     );
     const i = items.indexOf(document.activeElement as HTMLElement);
     const edge = ev.shiftKey ? i <= 0 : i === -1 || i === items.length - 1;
