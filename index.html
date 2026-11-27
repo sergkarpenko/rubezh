@@ -1884,6 +1884,7 @@
          меню гри, підтвердження виходу (без анімацій — перемикання класів);
          П12.3: вікно «Налаштування» — той самий патерн */
       #new-game-dialog,
+      #scenario-dialog,
       #game-menu,
       #exit-confirm,
       #evac-confirm,
@@ -2007,6 +2008,48 @@
         border-radius: 6px;
         padding: 4px 8px;
         font: inherit;
+      }
+      /* Т.218: «Сценарії для перевірки» — посилання в рядку версії і список віх */
+      .start-link {
+        background: none;
+        border: none;
+        padding: 0;
+        font: inherit;
+        color: #7fdcff;
+        text-decoration: underline;
+        cursor: pointer;
+        box-shadow: none;
+      }
+      #scenario-dialog .screen-dialog {
+        max-width: 460px;
+      }
+      .dialog-hint {
+        margin: 6px 0 10px;
+        color: #9fb0c3;
+        font-size: 12px;
+      }
+      .scenario-list {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      .scenario-item {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 2px;
+        text-align: left;
+        padding: 7px 10px;
+        border-radius: 6px;
+        font: inherit;
+      }
+      .scenario-title {
+        font-size: 14px;
+      }
+      .scenario-desc {
+        font-size: 12px;
+        color: #9fb0c3;
+        line-height: 1.3;
       }
       .dialog-actions {
         display: flex;
@@ -2694,6 +2737,7 @@
          партії), діалог нової партії, меню гри, підтвердження виходу -->
     <section class="hidden" id="start-screen"></section>
     <section class="hidden" id="new-game-dialog"></section>
+    <section class="hidden" id="scenario-dialog"></section>
     <section class="hidden" id="game-menu"></section>
     <section class="hidden" id="exit-confirm"></section>
     <!-- Т.71 (ADR-0075): підтвердження евакуації останнього оперативника — контент генерує src/main.ts -->

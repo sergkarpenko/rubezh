@@ -3805,3 +3805,20 @@ describePage('п18.2 (ADR-0153 п. 12): радар 6 після «Пеленгу
     expect(detectedAfterTick(['rift-anatomy', 'gate-bearing'])).toBe(true);
   });
 });
+
+describePage('Т.218: сценарій для перевірки зі стартового екрана — партія з віхи, рядок журналу, вихід без підтвердження', () => {
+  it('«Сценарії» → «Перед Брамою»: гра на 41-й добі, Брама доступна, журнал пояснює; вихід — одразу на старт', () => {
+    if (!$('help-screen').classList.contains('hidden')) btn('btn-help-close').click();
+    btn('btn-start-scenarios').click();
+    expect($('scenario-dialog').classList.contains('hidden')).toBe(false);
+    (document.querySelector('[data-scenario="gate"]') as HTMLButtonElement).click();
+    expect($('scenario-dialog').classList.contains('hidden')).toBe(true);
+    expect($('start-screen').classList.contains('hidden')).toBe(true);
+    expect($('journal').textContent).toContain('Сценарій «Перед Брамою» (сід 5, складність «норма», доба 41)');
+    expect(document.body.textContent).toContain('Атакувати Браму Розриву');
+    btn('btn-menu').click();
+    btn('btn-menu-exit').click();
+    expect($('exit-confirm').classList.contains('hidden')).toBe(true); // контрольна точка — стан сценарію
+    expect($('start-screen').classList.contains('hidden')).toBe(false);
+  });
+});

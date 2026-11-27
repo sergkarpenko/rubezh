@@ -5,7 +5,7 @@
 // rAF-анімацій (idle → 0 перерисовок, ADR-0029). Повний флоу із сейвами —
 // у src/main.ui.test.ts (там живе панель збереження).
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { CONTINUE_FAILED_TEXT, PRESET_TEXT, createScreens, type ScreensDeps } from './screens';
+import { CONTINUE_FAILED_TEXT, PRESET_TEXT, SCENARIO_FAILED_TEXT, createScreens, type ScreensDeps } from './screens';
 
 // Т.218: складність у «Новій партії» — радіогрупа карток (обрана / вибрати)
 function presetOf(): string | undefined {
@@ -21,6 +21,7 @@ const SKELETON =
   '<main id="layout" class="hidden"></main>' +
   '<section id="start-screen" class="hidden"></section>' +
   '<section id="new-game-dialog" class="hidden"></section>' +
+  '<section id="scenario-dialog" class="hidden"></section>' +
   '<section id="game-menu" class="hidden"></section>' +
   '<section id="exit-confirm" class="hidden"></section>';
 
@@ -38,6 +39,7 @@ function makeDeps(overrides: Partial<ScreensDeps> = {}): ScreensDeps {
     continueDisabledReason: () => 'Немає збережених партій',
     onNewGame: vi.fn(),
     onContinue: vi.fn(() => true),
+    onScenario: vi.fn(() => true),
     onHelp: vi.fn(),
     onSettings: vi.fn(),
     onSave: vi.fn(),
@@ -386,5 +388,39 @@ describe('Т.58: пояснення невдалого «Продовжити»,
     screens.requestExit();
     expect(visible('exit-confirm')).toBe(false);
     expect(deps.onExitToStart).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('Т.218: «Сценарії для перевірки» — посилання в рядку версії і вікно віх', () => {
+  it('посилання відкриває вікно з сімома віхами, фокус — на першій; «Скасувати» закриває без дії', () => {
+    const deps = makeDeps();
+    createScreens(deps).showStart();
+    expect(document.querySelector('.start-version #btn-start-scenarios')?.textContent).toBe('Сценарії');
+    btn('btn-start-scenarios').click();
+    expect(visible('scenario-dialog')).toBe(true);
+    const items = [...document.querySelectorAll<HTMLButtonElement>('#scenario-dialog .scenario-item')];
+    expect(items.map((b) => b.dataset.scenario)).toEqual(['kinds', 'arsenal', 'assault', 'gate', 'gate-retry', 'edge', 'fleet']);
+    expect(items[3].querySelector('.scenario-title')?.textContent).toBe('Перед Брамою');
+    expect(document.activeElement).toBe(items[0]);
+    btn('btn-scenario-cancel').click();
+    expect(visible('scenario-dialog')).toBe(false);
+    expect(deps.onScenario).not.toHaveBeenCalled();
+  });
+
+  it('вибір віхи — onScenario з id і перехід у гру; невдача — банер на стартовому екрані', () => {
+    const deps = makeDeps();
+    createScreens(deps).showStart();
+    btn('btn-start-scenarios').click();
+    document.querySelector<HTMLButtonElement>('[data-scenario="gate"]')!.click();
+    expect(deps.onScenario).toHaveBeenCalledWith('gate');
+    expect(visible('scenario-dialog')).toBe(false);
+    expect(visible('layout')).toBe(true);
+    const bad = makeDeps({ onScenario: vi.fn(() => false) });
+    document.body.innerHTML = SKELETON;
+    createScreens(bad).showStart();
+    btn('btn-start-scenarios').click();
+    document.querySelector<HTMLButtonElement>('[data-scenario="edge"]')!.click();
+    expect(visible('start-screen')).toBe(true);
+    expect($('start-note').textContent).toBe(SCENARIO_FAILED_TEXT);
   });
 });

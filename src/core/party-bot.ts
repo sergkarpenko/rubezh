@@ -258,6 +258,10 @@ export interface SimulatePartyOptions {
   // п18.6 (кандидат 180): спостерігач стану партії наприкінці кожного тіку — для вимірів скриптів;
   // лише читає (зміна стану — порушення контракту), на результат і лог не впливає.
   onTick?: (party: Readonly<Party>, tick: number) => void;
+  // Т.218 (сценарії для перевірки): зупинка партії, коли умова справдилась, — після тіку часу й загрози,
+  // до рішень бота (штурм, найм, наука, Брама, місія), тобто в стані, який гравець бачить перед своїм
+  // ходом. Лише читає; результат — «триває», endDay — завершені доби.
+  until?: (party: Readonly<Party>) => boolean;
 }
 
 // Виявлені НЛО у повітрі, яких ще не переслідує жоден перехоплювач, — цілі запуску в порядку
@@ -775,6 +779,10 @@ export function simulateParty(seed: number, preset: DifficultyPreset = DEFAULT_P
     // п18.3 (аудит PR #514): загроза — наприкінці тіку, до рішень гравця, як partyTick у main.ts:
     // склад місії цього тіку бачить події доби й відльотів цього тіку; поразка — місій немає.
     campaignTick({ geo: party.geo, roster: party.roster, econ: party.econ }, party.campaign);
+    if (opts.until?.(party) === true) {
+      res.ticks = t + 1;
+      break;
+    }
 
     // Фаза 2.5 (п18.4): штурм бази — до рішень гравця, як startPendingAssault у partyTick.
     const a = partyBotAssaultStep(party, policy);

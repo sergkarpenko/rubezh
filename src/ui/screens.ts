@@ -9,6 +9,7 @@
 // контрактами DOM-тестів (урок П11.6). Ядро src/core не змінюється (ADR-0002).
 
 import type { DifficultyPreset } from '../core/campaign';
+import { SCENARIOS, type ScenarioId } from '../core/scenarios';
 import { el } from './dom';
 import logoUrl from '../../assets/logo.webp';
 import startBgUrl from '../../assets/start-bg.webp';
@@ -26,6 +27,7 @@ export interface ScreensDeps {
   continueDisabledReason(): string; // '' — доступно; інакше причина для тултіпа
   onNewGame(seed: number, preset: DifficultyPreset): void; // старт нової партії (ADR-0033)
   onContinue(): boolean; // завантажити останній активний слот; true — перехід у гру
+  onScenario(id: ScenarioId): boolean; // Т.218: партія сценарію для перевірки; true — перехід у гру
   onHelp(): void; // «Як грати» — help.ts без змін (П9.1)
   onSettings(): void; // «Налаштування» — вікно settings.ts (П12.3, ADR-0065)
   onSave(): void; // Т.128 (ADR-0117): «Збереження» — вікно зі слотами (було вкладкою «Система»)
@@ -73,6 +75,9 @@ function startScreenHtml(version: string): string {
     '</div>' +
     '<p class="start-version">Версія ' +
     version +
+    // Т.218 (рішення власника «7 віх, кнопка на старті»): сценарії для перевірки — посилання в рядку
+    // версії, щоб не міняти висоту меню стартового екрана (гейти низьких вікон Т.94, Т.96)
+    ' · <button id="btn-start-scenarios" class="start-link" title="Готові стани партії для перевірки: бот доводить партію до віхи">Сценарії</button>' +
     '</p>' +
     '</div>'
   );
@@ -115,6 +120,24 @@ export const PRESET_TEXT: Readonly<Record<DifficultyPreset, string>> = {
   складний: 'Бійці слабші (HP ×0,9), дотація, премії й найм ×0,9',
 };
 
+// Т.218: вікно «Сценарії для перевірки» — сім віх (`SCENARIOS`, src/core/scenarios.ts).
+function scenarioDialogHtml(): string {
+  return (
+    '<div class="panel screen-dialog">' +
+    '<h2>Сценарії для перевірки</h2>' +
+    '<p class="dialog-hint">Партію з фіксованого сіду до віхи доводить бот; ваші збереження не змінюються.</p>' +
+    '<div class="scenario-list">' +
+    SCENARIOS.map(
+      (s) =>
+        `<button class="scenario-item" data-scenario="${s.id}"><span class="scenario-title">${s.title}</span>` +
+        `<span class="scenario-desc">${s.desc}</span></button>`
+    ).join('') +
+    '</div>' +
+    '<div class="dialog-actions"><button id="btn-scenario-cancel">Скасувати</button></div>' +
+    '</div>'
+  );
+}
+
 // Вікно «Меню» у грі (ADR-0065): Т.128 — «Збереження» (ADR-0117), налаштування (п12.3), «Як грати», вихід.
 function gameMenuHtml(): string {
   return (
@@ -148,12 +171,14 @@ function exitConfirmHtml(): string {
 
 // Т.58 (рішення власника 17.11.2026): текст на стартовому екрані після невдалого «Продовжити»
 export const CONTINUE_FAILED_TEXT = 'Не вдалося завантажити збереження. Почніть нову гру.';
+export const SCENARIO_FAILED_TEXT = 'Сценарій не зібрано — віхи не досягнуто. Повідомте про це в репозиторії.';
 
 export function createScreens(deps: ScreensDeps): Screens {
   // Скелетні секції — у index.html (мінімальні зміни розмітки, патерн
   // #help-screen); контент генерується тут.
   const startScreen = el('start-screen');
   const newGameDialog = el('new-game-dialog');
+  const scenarioDialog = el('scenario-dialog');
   const gameMenu = el('game-menu');
   const exitConfirm = el('exit-confirm');
   const topbar = el('topbar');
@@ -168,6 +193,7 @@ export function createScreens(deps: ScreensDeps): Screens {
   // без зображення, тести від ассета не залежать).
   startScreen.style.backgroundImage = `url("${startBgUrl}")`;
   newGameDialog.innerHTML = newGameDialogHtml();
+  scenarioDialog.innerHTML = scenarioDialogHtml();
   gameMenu.innerHTML = gameMenuHtml();
   exitConfirm.innerHTML = exitConfirmHtml();
 
@@ -236,6 +262,7 @@ export function createScreens(deps: ScreensDeps): Screens {
 
   function hideDialogs(): void {
     newGameDialog.classList.add('hidden');
+    scenarioDialog.classList.add('hidden');
     exitConfirm.classList.add('hidden');
   }
 
@@ -286,6 +313,19 @@ export function createScreens(deps: ScreensDeps): Screens {
     if (deps.onContinue()) showGame();
     else showNote(CONTINUE_FAILED_TEXT); // Т.58: слот не розібрано — пояснити, а не мовчати
   };
+  // Т.218: сценарії для перевірки — вікно зі списком віх; вибір збирає партію і відкриває гру
+  el('btn-start-scenarios').onclick = () => {
+    scenarioDialog.classList.remove('hidden');
+    scenarioDialog.querySelector<HTMLButtonElement>('.scenario-item')?.focus();
+  };
+  el('btn-scenario-cancel').onclick = () => scenarioDialog.classList.add('hidden');
+  for (const b of scenarioDialog.querySelectorAll<HTMLButtonElement>('.scenario-item')) {
+    b.onclick = () => {
+      hideDialogs();
+      if (deps.onScenario(b.dataset.scenario as ScenarioId)) showGame();
+      else showNote(SCENARIO_FAILED_TEXT);
+    };
+  }
   el('btn-start-settings').onclick = () => deps.onSettings(); // п12.3: вікно налаштувань
   el('btn-start-help').onclick = () => deps.onHelp();
 
