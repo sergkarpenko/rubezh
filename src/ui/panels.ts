@@ -55,7 +55,7 @@ import {
 import type { Anim } from '../core/render-core';
 import { el, setWhy } from './dom';
 import { setIconText } from './icons';
-import { helmetSvg } from './avatar';
+import { portraitHtml } from './portrait';
 import { weaponIconHtml, weaponIdOf } from './weapon-icon';
 import { RANK_NAMES, rankOf } from '../core/career';
 import { chevronHtml, roleLabel, xpLine } from './roles';
@@ -67,6 +67,8 @@ import type { AmbientGeoScene } from './ambient';
 
 // п20.5: ширина іконки зброї в ростері, CSS px (42 × 14)
 export const ROSTER_WEAPON_W = 42;
+// п21.4 (ADR-0178): сторона аватара (бюст у кільці) в рядку ростера, CSS px — рішення власника «Б. Більші» (40 / 32 / 32)
+export const ROSTER_AVATAR = 40;
 
 // П7: колір HP (чиста функція): повне — зелений, понад половину — жовтий, інакше — червоний.
 export function hpColor(hp: number, maxHp: number): string {
@@ -762,7 +764,7 @@ export function createPanels(deps: PanelsDeps): Panels {
       const rank = career ? rankOf(career.xp) : 0;
       const role = career ? roleLabel(career) : '';
       row.innerHTML =
-        helmetSvg(s.id) + // Т.129 (ADR-0118): аватар «шолом» кольору бійця
+        portraitHtml(s.id, ROSTER_AVATAR) + // п21.4 (ADR-0178): мальований бюст у кільці кольору бійця; шолом — запасний
         '<span class="s-name">' +
         s.name +
         (career ? ' <span class="s-call">«' + career.callsign + '»</span>' : '') +

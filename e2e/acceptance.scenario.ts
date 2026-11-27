@@ -489,6 +489,23 @@ test('сценарій приймання ADR-0030: партія → місія 
     const avatars = page.locator('#roster .soldier svg.avatar');
     await expect(avatars).toHaveCount(FIGHTER_COLORS.length);
     expect(await avatars.evaluateAll((a) => a.map((s) => s.getAttribute('data-color')))).toEqual([...FIGHTER_COLORS]);
+    // п21.4 (ADR-0178; рішення власника «Б. Більші»): мальований бюст 40 px поверх шолома — атлас завантажено,
+    // бюст ліворуч від трьох рядків (рядок не вищий за 102 px, як на main 9c5fa10), кільце шолома видно довкола
+    const pts = page.locator('#roster .soldier > .pt');
+    await expect(pts).toHaveCount(FIGHTER_COLORS.length);
+    const look = await pts.first().evaluate(async (pt) => {
+      const i = pt.querySelector('i')!;
+      const url = /url\("?([^")]+)"?\)/.exec(getComputedStyle(i).backgroundImage)![1]!;
+      const img = new Image();
+      img.src = url;
+      await img.decode();
+      const row = pt.parentElement!.getBoundingClientRect();
+      const b = pt.getBoundingClientRect();
+      const ib = i.getBoundingClientRect();
+      return { w: img.naturalWidth, h: img.naturalHeight, size: b.width, inner: ib.width, left: b.left - row.left, rowH: row.height };
+    });
+    expect(look).toMatchObject({ w: 768, h: 192, size: 40, inner: 36, left: 0 });
+    expect(look.rowH).toBeLessThanOrEqual(102);
   });
 
   // п19.4 (ADR-0159 п. 5, 15; EARS 8): на 1366 × 768 мапа — ≈ половина ширини ліворуч, журнал під нею,

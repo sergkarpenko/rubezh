@@ -13,7 +13,7 @@ import { GRENADE_DAMAGE, GRENADE_RANGE, HEAL_AMOUNT, HEAL_AP_COST, HIT_CHANCE_CA
 import { GUN_MODULE_DAMAGE } from '../core/intercept';
 import { ARMOR_MAX_HP_BONUS, OPTICS_ACCURACY_BONUS, WORKSHOP_CATALOG } from '../core/workshop';
 import { sciencePrice } from '../core/campaign';
-import { createResearchPanel, type ResearchPanelDeps } from './research-panel';
+import { STAFF_AVATAR, createResearchPanel, type ResearchPanelDeps } from './research-panel';
 import { el } from './dom';
 import { ticksText } from './text';
 
@@ -57,6 +57,10 @@ describe('ResearchPanel: штат вчених', () => {
     panel.render();
     expect(el('research').textContent).toContain('Зінаїда');
     expect((el('btn-fire-в1') as HTMLButtonElement).textContent).toBe('Звільнити');
+    // п21.4 (ADR-0178): бюст техноманта перед іменем — ряд 1 атласа, Зінаїда — жіночий пул
+    const pt = el('research').querySelector<HTMLElement>('.staff .soldier > .pt')!;
+    expect(pt.dataset.portrait).toBe('4,1');
+    expect(pt.style.width).toBe(STAFF_AVATAR + 'px');
   });
 
   it('найм без грошей — кнопка вимкнена, штат не змінюється', () => {
