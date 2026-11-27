@@ -102,15 +102,15 @@ describe('п19.6: купівля перехоплювача політикою �
 
   it('регіон ангара — найнижча довіра серед тих, що не вийшли; рівні — без перехоплювача, далі порядок', () => {
     const p = createParty(42, 'норма');
-    expect(weakestRegion(p)).toBe('west'); // усі 100, «Північ» з перехоплювачем
+    expect(weakestRegion(p)).toBe('west'); // усі 100, «Шпилі» з перехоплювачем
     p.campaign.regions.east.trust = 70;
     expect(weakestRegion(p)).toBe('east');
     p.campaign.regions.north.trust = 70;
-    expect(weakestRegion(p)).toBe('east'); // рівні 70 — «Північ» з перехоплювачем далі
+    expect(weakestRegion(p)).toBe('east'); // рівні 70 — «Шпилі» з перехоплювачем далі
     p.campaign.regions.west.trust = 0;
     p.campaign.regions.west.out = true;
     p.campaign.regions.south.trust = 40;
-    expect(weakestRegion(p)).toBe('south'); // «Захід» вийшов — не рахується
+    expect(weakestRegion(p)).toBe('south'); // «Порт» вийшов — не рахується
     for (const id of ['north', 'east', 'south'] as const) p.campaign.regions[id] = { trust: 0, out: true };
     expect(weakestRegion(p)).toBe('north');
   });
@@ -132,7 +132,7 @@ describe('п19.6: перехоплення кількома перехоплюв
     expect(p.intercept.fighters.map((f) => f.status)).toEqual(['на базі', 'погоня']);
     const q = twoFighters();
     q.intercept.fighters[1].region = 'south'; // ангар (8, 7): до (8, 1) — 6, вузол (8, 4) — 3
-    q.geo.probes.push(probe('c', 11, 1)); // вузол — 3, «Південь» — 6
+    q.geo.probes.push(probe('c', 11, 1)); // вузол — 3, «Нетрі» — 6
     partyBotInterceptStep(q, BALANCED_POLICY);
     expect(q.intercept.fighters.map((f) => f.status)).toEqual(['погоня', 'на базі']);
     const r = twoFighters();
@@ -299,8 +299,8 @@ describe('п19.6: повітряний бій бота — до кінця, по
 describe('п19.6: повні партії політики кампанії з купівлею', () => {
   // п20.2 (укриття і низькі перешкоди, ADR-0166): сід 6 — 24 погоні з 56, перемога на 43-й (було 22 з 53, 41-ша)
   // п20.3 (ШІ ворогів з укриттям, ADR-0167; бот кампанії в дозорі, з місця не йде): 21 погоня з 50, перемога на 38-й у другому фіналі
-  // п20.6 (бот зі зброєю, ADR-0170): сід 6 купує в «Схід» — сід 10: «Захід», 13 погонь з 50, перемога на 42-й у першому фіналі
-  it('сід 10 «норма»: другий перехоплювач в ангарі «Захід», 13 погонь з 50; перемога на 42-й', () => {
+  // п20.6 (бот зі зброєю, ADR-0170): сід 6 купує в «Промзона» — сід 10: «Порт», 13 погонь з 50, перемога на 42-й у першому фіналі
+  it('сід 10 «норма»: другий перехоплювач в ангарі «Порт», 13 погонь з 50; перемога на 42-й', () => {
     let last: Readonly<Party> | null = null;
     const r = simulateParty(10, 'норма', { policy: CAMPAIGN_POLICY, onTick: (p) => (last = p) });
     expect([r.outcome, r.endDay, r.gateAttempts, r.launches, r.shotDown]).toEqual(['перемога', 42, 1, 50, 36]);

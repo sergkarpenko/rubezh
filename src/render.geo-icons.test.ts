@@ -20,7 +20,7 @@ import {
   type MakeOffscreen,
 } from './render';
 import { GEO_ICON_CELL, GEO_ICON_ORDER, GEO_ICON_PX, GEO_LAYOUT, type GeoIcon } from './core/render-core';
-import reportRaw from '../scripts/assets/geo-t208-report.json?raw';
+import reportRaw from '../scripts/assets/geo-t220-report.json?raw';
 
 type Call = { m: string; args: unknown[] };
 const iconsImg = { width: 576, height: 96 } as unknown as CanvasImageSource;
@@ -80,7 +80,7 @@ describe('п19.5 (ADR-0163): значки геосцени з аркуша Gemin
     expect(GEO_ICON_PX).toEqual({ scout: 34, harvester: 40, interceptor: 34, node: 48, hangar: 36, gate: 46 });
   });
 
-  it('константи — як у звіті конвертера (розклад і порядок значків перенесено вручну — аудит PR #524)', () => {
+  it('константи — як у звіті конвертера (розклад і порядок значків перенесено вручну — аудит PR #524; п21.2 — звіт geo-t220-report.json)', () => {
     const report = JSON.parse(reportRaw) as {
       map: { layout: string[]; size: number[] };
       icons: { order: string[]; cell: number; size: number[] };

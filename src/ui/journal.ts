@@ -360,7 +360,7 @@ export function geoEventText(e: GeoEvent, knownDetected: ReadonlySet<string>): {
         ? { text: '▼ Довіра «' + REGION_NAMES[e.region] + '» −' + -e.delta + ' → ' + e.trust + ': зонд відлетів без бою', cls: 'lose' }
         : { text: '▲ Довіра «' + REGION_NAMES[e.region] + '» +' + e.delta + ' → ' + e.trust + ': місію зачищено', cls: 'win' };
     case 'region_out':
-      return { text: '✗ Регіон «' + REGION_NAMES[e.region] + '» вийшов — його частки дотації більше немає', cls: 'lose' };
+      return { text: '✗ Район «' + REGION_NAMES[e.region] + '» вийшов — його частки дотації більше немає', cls: 'lose' };
     default:
       return null; // probe_spawned / probe_move — приховано туманом
   }

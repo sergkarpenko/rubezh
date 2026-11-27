@@ -616,7 +616,7 @@ function parseSave(json: string): SaveData {
       (ccsv.trustCursor as number) < 0 ||
       (ccsv.trustCursor as number) > st.geo.log.length)
   ) {
-    fail('Пошкоджені дані збереження: регіони');
+    fail('Пошкоджені дані збереження: райони');
   }
   // П9.2: поле hints опційне (старі сейви) — але якщо є, має бути об'єктом.
   if (data.state.hints !== undefined && (typeof data.state.hints !== 'object' || data.state.hints === null)) {

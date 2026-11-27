@@ -14,8 +14,9 @@ import { probeLeftKind, type GeoEvent } from './geo';
 
 export type RegionId = 'west' | 'north' | 'east' | 'south';
 export const REGION_IDS: readonly RegionId[] = ['west', 'north', 'east', 'south'];
-// Рішення власника п19.2 «А. Захід · Північ · Схід · Південь».
-export const REGION_NAMES: Record<RegionId, string> = { west: 'Захід', north: 'Північ', east: 'Схід', south: 'Південь' };
+// Рішення власника п21.1 (ADR-0175 п. 3) «А. Порт · Шпилі · Промзона · Нетрі» — райони мегаполіса;
+// ідентифікатори й розклад — з п19.2 («А. Захід · Північ · Схід · Південь», ADR-0160).
+export const REGION_NAMES: Record<RegionId, string> = { west: 'Порт', north: 'Шпилі', east: 'Промзона', south: 'Нетрі' };
 
 export const TRUST_MAX = 100; // старт і стеля довіри регіону
 export const TRUST_TOTAL_MAX = TRUST_MAX * REGION_IDS.length; // Σ довір за повної довіри — дотація як у v0.10.0

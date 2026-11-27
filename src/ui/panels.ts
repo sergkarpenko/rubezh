@@ -700,7 +700,7 @@ export function createPanels(deps: PanelsDeps): Panels {
     b.textContent = '⇄ Призначити';
     b.setAttribute('aria-expanded', String(open));
     b.disabled = deps.inBattle() || deps.isGameOver();
-    b.title = 'Перебазувати перехоплювач' + (many ? ' ' + f.id : '') + ' в ангар іншого регіону — одразу і безкоштовно';
+    b.title = 'Перебазувати перехоплювач' + (many ? ' ' + f.id : '') + ' в ангар іншого району — одразу і безкоштовно';
     b.onclick = () => {
       if (open) assignOpen.delete(f.id);
       else assignOpen.add(f.id);

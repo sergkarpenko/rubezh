@@ -56,7 +56,7 @@ describe('п19.2: розклад регіонів (ADR-0159 п. 9, EARS 1)', () 
     expect(regionOf({ x: 12, y: 0 })).toBe('east');
     expect(regionOf({ x: 15, y: 8 })).toBe('east');
     expect(regionOf(createGeoGame({ seed: 1 }).base)).toBe('north'); // вузол «Рубіж» (8, 4)
-    expect(REGION_NAMES).toEqual({ west: 'Захід', north: 'Північ', east: 'Схід', south: 'Південь' });
+    expect(REGION_NAMES).toEqual({ west: 'Порт', north: 'Шпилі', east: 'Промзона', south: 'Нетрі' });
   });
 
   it('клітинка поза мапою — помилка українською', () => {
@@ -274,9 +274,9 @@ describe('п19.2: сейв v4 (ADR-0159 п. 14, EARS 7)', () => {
     ['курсор поза журналом', (c: C) => (c.trustCursor = 1e9)],
     ['курсор −1', (c: C) => (c.trustCursor = -1)],
     ['курсор рядком', (c: C) => (c.trustCursor = '0')],
-  ])('v4: %s — відмова «регіони»', (_name, edit) => {
+  ])('v4: %s — відмова «райони»', (_name, edit) => {
     const data = JSON.parse(serializeParty(played(), 'T'));
     edit(data.state.campaign);
-    expect(() => deserializeParty(JSON.stringify(data))).toThrow('Пошкоджені дані збереження: регіони');
+    expect(() => deserializeParty(JSON.stringify(data))).toThrow('Пошкоджені дані збереження: райони');
   });
 });
