@@ -20,7 +20,7 @@ import {
 } from './combat';
 import { makeEnemy } from './enemies';
 import { createEconomy, type EconomyState } from './economy';
-import { advanceTime, createGeoGame, type Ufo } from './geo';
+import { advanceTime, createGeoGame, type Probe } from './geo';
 import {
   KEY_PROJECTS,
   PROJECTS,
@@ -327,7 +327,7 @@ describe('п18.2: заряд у бою — «А. Сам на броні» (ADR-0
 });
 
 describe('п18.2: ширший радар (ADR-0153 п. 12; EARS 3)', () => {
-  const mk = (id: string, pos: { x: number; y: number }): Ufo => ({
+  const mk = (id: string, pos: { x: number; y: number }): Probe => ({
     id,
     kind: 'розвідник',
     detected: false,
@@ -350,9 +350,9 @@ describe('п18.2: ширший радар (ADR-0153 п. 12; EARS 3)', () => {
       [6, true],
     ] as const) {
       const s = createGeoGame({ seed: 1, spawnChance: 0 });
-      s.ufos.push(mk('b', { x: s.base.x - 6, y: 0 }));
+      s.probes.push(mk('b', { x: s.base.x - 6, y: 0 }));
       advanceTime(s, 1, radar);
-      expect(s.ufos[0].detected).toBe(seen);
+      expect(s.probes[0].detected).toBe(seen);
     }
   });
 
@@ -365,7 +365,7 @@ describe('п18.2: ширший радар (ADR-0153 п. 12; EARS 3)', () => {
     advanceTime(c, 48 * 12, 6);
     expect(JSON.stringify(b.log)).toBe(JSON.stringify(a.log));
     expect((a.rng as StatefulRng).state).toBe((c.rng as StatefulRng).state);
-    const strip = (log: typeof a.log) => log.filter((e) => e.type !== 'ufo_detected');
+    const strip = (log: typeof a.log) => log.filter((e) => e.type !== 'probe_detected');
     expect(JSON.stringify(strip(c.log))).toBe(JSON.stringify(strip(a.log)));
   });
 });

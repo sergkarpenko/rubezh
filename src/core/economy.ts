@@ -14,7 +14,7 @@
 // Дотація нараховується за кожну ЗАВЕРШЕНУ добу (межа дня: geoDay зріс);
 // премія — за тип НЛО лише за перемогу; списання — лише при достатку.
 
-import { geoDay, type GeoState, type UfoKind } from './geo';
+import { geoDay, type GeoState, type ProbeKind } from './geo';
 import { type DifficultyPreset, DEFAULT_PRESET, DIFFICULTY_MULTIPLIERS } from './campaign';
 import { TRUST_TOTAL_MAX } from './regions';
 
@@ -36,7 +36,7 @@ export function hirePrice(preset: DifficultyPreset = DEFAULT_PRESET): number {
 // лінії П8.5 дохід стабільно перевищував витрати (крива грошей монотонно зростала,
 // «норма» 4649 на Д30). Нижчі премії роблять поразки відчутними (нуль премії при
 // живих витратах на найм) — банкрутство настає при серії невдач, а не лише на старті.
-export const MISSION_BONUS: Record<UfoKind, number> = {
+export const MISSION_BONUS: Record<ProbeKind, number> = {
   розвідник: 110,
   збирач: 170,
 };
@@ -44,7 +44,7 @@ export const MISSION_BONUS: Record<UfoKind, number> = {
 // поверх премії за тактичну місію на місці падіння. П8.6: піднято (75/150 → 125/210) —
 // кожне збиття відчутніше винагороджується; перехоплення лишається мінорною, але
 // прибутковою статтєю (запусків ~2.8 за 30 діб — геометрія радара, geo.ts).
-export const SHOT_DOWN_BONUS: Record<UfoKind, number> = {
+export const SHOT_DOWN_BONUS: Record<ProbeKind, number> = {
   розвідник: 125,
   збирач: 210,
 };
@@ -60,14 +60,14 @@ export function dailyAllowance(preset: DifficultyPreset = DEFAULT_PRESET, trust:
   return Math.round((base * Math.max(0, trust)) / TRUST_TOTAL_MAX);
 }
 
-export function missionBonus(kind: UfoKind, preset: DifficultyPreset = DEFAULT_PRESET): number {
+export function missionBonus(kind: ProbeKind, preset: DifficultyPreset = DEFAULT_PRESET): number {
   return Math.round(MISSION_BONUS[kind] * DIFFICULTY_MULTIPLIERS[preset].economyMultiplier);
 }
 
 export type EconomyEvent =
   | { type: 'allowance'; day: number; amount: number }
-  | { type: 'mission_bonus'; kind: UfoKind; amount: number }
-  | { type: 'shot_down_bonus'; kind: UfoKind; amount: number }
+  | { type: 'mission_bonus'; kind: ProbeKind; amount: number }
+  | { type: 'shot_down_bonus'; kind: ProbeKind; amount: number }
   | { type: 'spend'; amount: number };
 
 export interface EconomyState {
@@ -107,7 +107,7 @@ export function economyTick(
 
 // Премія за перемогу в місії за тип НЛО (поразка премії не дає — ADR-0021).
 // Викликає шар застосунку один раз після mission_won; тип — із briefing.kind.
-export function creditMissionBonus(state: EconomyState, kind: UfoKind, preset: DifficultyPreset = DEFAULT_PRESET): void {
+export function creditMissionBonus(state: EconomyState, kind: ProbeKind, preset: DifficultyPreset = DEFAULT_PRESET): void {
   const amount = missionBonus(kind, preset);
   state.money += amount;
   state.log.push({ type: 'mission_bonus', kind, amount });
@@ -115,7 +115,7 @@ export function creditMissionBonus(state: EconomyState, kind: UfoKind, preset: D
 
 // П7.6 (ADR-0032): премія за збиття НЛО у повітрі перехопленням — відрізняється від премії
 // за тактичну місію (окрема стаття доходу, константи SHOT_DOWN_BONUS вище).
-export function creditShotDownBonus(state: EconomyState, kind: UfoKind, preset: DifficultyPreset = DEFAULT_PRESET): void {
+export function creditShotDownBonus(state: EconomyState, kind: ProbeKind, preset: DifficultyPreset = DEFAULT_PRESET): void {
   const baseAmount = SHOT_DOWN_BONUS[kind];
   const multipliers = DIFFICULTY_MULTIPLIERS[preset];
   const amount = Math.round(baseAmount * multipliers.economyMultiplier);

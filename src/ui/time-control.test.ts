@@ -5,27 +5,35 @@
 // до і після тіку, тож тік тут — функція, що дописує потрібну подію.
 
 import { describe, expect, it } from 'vitest';
-import type { Ufo } from '../core/geo';
+import type { Probe } from '../core/geo';
 import { createParty, type Party } from '../core/save';
 import { geoHotkey, isSpaceForEvent, runTime, shouldStop, stopEvents, takeSnapshot, type RunMode, type StopEvent } from './time-control';
 
-function ufo(id: string, detected: boolean): Ufo {
-  return { id, kind: 'розвідник', pos: { x: 1, y: 1 }, target: { x: 1, y: 1 }, status: 'приземлився', detected, landedTicksLeft: 8 } as Ufo;
+function probe(id: string, detected: boolean): Probe {
+  return {
+    id,
+    kind: 'розвідник',
+    pos: { x: 1, y: 1 },
+    target: { x: 1, y: 1 },
+    status: 'приземлився',
+    detected,
+    landedTicksLeft: 8,
+  } as Probe;
 }
 
 // Дії «одного тіку», кожна дає рівно одну подію зупинки (або жодної).
 const TICKS: Record<StopEvent | 'landed_hidden' | 'nothing' | 'died_in_hospital', (p: Party) => void> = {
-  ufo_detected: (p) => {
-    p.geo.ufos.push(ufo('u1', true));
-    p.geo.log.push({ type: 'ufo_detected', ufoId: 'u1', pos: { x: 1, y: 1 }, minute: 0 });
+  probe_detected: (p) => {
+    p.geo.probes.push(probe('u1', true));
+    p.geo.log.push({ type: 'probe_detected', probeId: 'u1', pos: { x: 1, y: 1 }, minute: 0 });
   },
-  ufo_landed: (p) => {
-    p.geo.ufos.push(ufo('u2', true));
-    p.geo.log.push({ type: 'ufo_landed', ufoId: 'u2', pos: { x: 1, y: 1 }, minute: 0 });
+  probe_landed: (p) => {
+    p.geo.probes.push(probe('u2', true));
+    p.geo.log.push({ type: 'probe_landed', probeId: 'u2', pos: { x: 1, y: 1 }, minute: 0 });
   },
   landed_hidden: (p) => {
-    p.geo.ufos.push(ufo('u3', false));
-    p.geo.log.push({ type: 'ufo_landed', ufoId: 'u3', pos: { x: 1, y: 1 }, minute: 0 });
+    p.geo.probes.push(probe('u3', false));
+    p.geo.log.push({ type: 'probe_landed', probeId: 'u3', pos: { x: 1, y: 1 }, minute: 0 });
   },
   project_completed: (p) => void p.research.log.push({ type: 'project_completed', id: 'armor' }),
   produced: (p) => void p.workshop.log.push({ type: 'produced', id: 'armor' }),
@@ -68,7 +76,7 @@ function run(mode: RunMode, kind: keyof typeof TICKS, at: number, halted: () => 
   );
 }
 
-const SIX: StopEvent[] = ['ufo_detected', 'ufo_landed', 'project_completed', 'produced', 'recovered', 'repair_done'];
+const SIX: StopEvent[] = ['probe_detected', 'probe_landed', 'project_completed', 'produced', 'recovered', 'repair_done'];
 
 describe('Т.43: події зупинки (stopEvents)', () => {
   it.each(SIX)('подія %s розпізнається після тіку', (kind) => {
@@ -104,7 +112,7 @@ describe('Т.43: події зупинки (stopEvents)', () => {
 
   it('події до відбитка не рахуються', () => {
     const p = createParty(42);
-    TICKS.ufo_detected(p);
+    TICKS.probe_detected(p);
     TICKS.produced(p);
     expect(stopEvents(p, takeSnapshot(p))).toEqual([]);
   });
@@ -114,7 +122,7 @@ describe('Т.43: правило режиму (shouldStop)', () => {
   it('«До події» зупиняється на кожній із шести подій Т.43 і на штурмі, «+1 доба» — на двох подіях зондів і штурмі (п18.5)', () => {
     for (const kind of SIX) {
       expect(shouldStop('event', [kind])).toBe(true);
-      expect(shouldStop('day', [kind])).toBe(kind === 'ufo_detected' || kind === 'ufo_landed');
+      expect(shouldStop('day', [kind])).toBe(kind === 'probe_detected' || kind === 'probe_landed');
     }
     // п18.5 (рішення власника «А. Два вікна + зупинка»): штурм вузла зупиняє обидві кнопки
     expect(shouldStop('event', ['assault'])).toBe(true);
@@ -130,8 +138,8 @@ describe('Т.43: прогін часу (runTime)', () => {
   });
 
   it('«+1 доба» зупиняється на виявленні й приземленні, решту подій проходить', () => {
-    expect(run('day', 'ufo_detected', 7)).toBe(7);
-    expect(run('day', 'ufo_landed', 7)).toBe(7);
+    expect(run('day', 'probe_detected', 7)).toBe(7);
+    expect(run('day', 'probe_landed', 7)).toBe(7);
     for (const kind of ['project_completed', 'produced', 'recovered', 'repair_done'] as const) {
       expect(run('day', kind, 7)).toBe(48);
     }

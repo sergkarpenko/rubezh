@@ -141,7 +141,7 @@ async function expectLook(page: Page): Promise<void> {
     const panel = [...document.querySelectorAll<HTMLElement>('section.panel')].find((e) => e.offsetParent !== null)!;
     return {
       event: [cs('#btn-event').backgroundImage.includes('linear-gradient'), cs('#btn-event').color],
-      mission: [cs('#ufos button.mission').backgroundImage.includes('linear-gradient'), cs('#ufos button.mission').color],
+      mission: [cs('#probes button.mission').backgroundImage.includes('linear-gradient'), cs('#probes button.mission').color],
       plain: [cs('#btn-menu').backgroundImage.includes('linear-gradient'), cs('#btn-menu').boxShadow],
       glass: getComputedStyle(panel).backdropFilter,
       tab: cs('#status-tabs button.active').boxShadow.includes('inset'),
@@ -150,7 +150,7 @@ async function expectLook(page: Page): Promise<void> {
       next: [cs('#next-step').boxShadow, cs('#next-step').backgroundImage],
       // Т.126: кнопка картки зонда — окремим рядком з відступом від тексту (ідея власника в Т.125);
       // панель на вкладці «Вузол» тут прихована (активна «Загін») — обчислений стиль, не рамки
-      ufoGap: [cs('#ufos button.mission').display, parseFloat(cs('#ufos button.mission').marginTop) >= 6],
+      probeGap: [cs('#probes button.mission').display, parseFloat(cs('#probes button.mission').marginTop) >= 6],
     };
   });
   expect(look).toEqual({
@@ -162,7 +162,7 @@ async function expectLook(page: Page): Promise<void> {
     chip: true,
     off: 'none',
     next: ['none', 'none'],
-    ufoGap: ['block', true],
+    probeGap: ['block', true],
   });
 }
 
@@ -464,8 +464,8 @@ test('сценарій приймання ADR-0030: партія → місія 
     }
     expect(mirror.targets().length, 'на сіді ' + SEED + ' зонд не приземлився за дві доби').toBeGreaterThan(0);
     await expect(clock).toHaveText(mirror.clock());
-    await expect(page.locator('#ufos .ufo')).toHaveCount(mirror.detected().length);
-    await expect(page.locator('#ufos button.mission')).toHaveCount(mirror.targets().length);
+    await expect(page.locator('#probes .probe')).toHaveCount(mirror.detected().length);
+    await expect(page.locator('#probes button.mission')).toHaveCount(mirror.targets().length);
     // Т.7: дія чекає на вкладці «Вузол» — лічильник видно з вкладки «Загін»
     await expect(page.locator('#status-tab-base .tab-badge')).toBeVisible();
     await expectIcons(page, '#status-tabs button svg.tab-icon', 16, 2); // Т.123: іконки вкладок колонки стану (Т.128: без «Системи»)
@@ -633,7 +633,7 @@ test('сценарій приймання ADR-0030: партія → місія 
       const w = document.querySelector<HTMLElement>('#workshop')!.getBoundingClientRect();
       // п19.4: з рядком купівлі перехоплювача «Кузня» (≈ 950 px) вища за колонку (≈ 825 px на 1440 × 900) —
       // у видимій частині мають бути верх панелі і перший рядок каталогу, а не вся панель
-      const first = document.querySelector<HTMLElement>('#workshop .ufo')!.getBoundingClientRect();
+      const first = document.querySelector<HTMLElement>('#workshop .probe')!.getBoundingClientRect();
       return w.height > col.height
         ? w.top >= col.top - 1 && first.bottom <= col.bottom + 1
         : w.top >= col.top - 1 && w.bottom <= col.bottom + 1;
@@ -670,7 +670,7 @@ test('сценарій приймання ADR-0030: партія → місія 
       w.textContent = 'Недостатньо кредитів (ціна 128)';
       const b = document.getElementById('btn-order-armor')!.getBoundingClientRect();
       const r = w.getBoundingClientRect();
-      const row = w.closest('.ufo')!.getBoundingClientRect();
+      const row = w.closest('.probe')!.getBoundingClientRect();
       w.textContent = keep;
       return { dy: Math.abs((r.top + r.bottom) / 2 - (b.top + b.bottom) / 2), right: r.left >= b.right, inRow: r.right <= row.right };
     });
@@ -793,7 +793,7 @@ test('сценарій приймання ADR-0030: партія → місія 
     await page.locator('#btn-tick').click();
     await expect(clock).not.toHaveText(saved);
     await page.locator('#status-tab-base').click();
-    await page.locator('#ufos button.mission').first().click();
+    await page.locator('#probes button.mission').first().click();
     await page.locator('#btn-deploy').click(); // п20.4 (ADR-0168): вікно спорядження — «Висадити загін»
     await expect(page.locator('#battle-panel')).toBeVisible();
     // Т.48: авто-бій запущено до виходу і справді йде — у журналі з'явились його рядки
@@ -882,7 +882,7 @@ test('сценарій приймання ADR-0030: партія → місія 
   await test.step('запуск місії', async () => {
     const mission = mirror.launch(mirror.targets()[0].id);
     await page.locator('#status-tab-base').click();
-    await page.locator('#ufos button.mission').first().click();
+    await page.locator('#probes button.mission').first().click();
     // п20.4 (ADR-0165 п. 7, EARS 7; ADR-0168): спершу вікно спорядження — картка на бійця загону, «Гарт» у кожного;
     // Esc закриває вікно без бою, «Висадити загін» починає бій
     const box = page.locator('#loadout-dialog');
@@ -892,7 +892,7 @@ test('сценарій приймання ADR-0030: партія → місія 
     await page.keyboard.press('Escape');
     await expect(box).toBeHidden();
     await expect(page.locator('#battle-panel')).toBeHidden();
-    await page.locator('#ufos button.mission').first().click();
+    await page.locator('#probes button.mission').first().click();
     await page.locator('#btn-deploy').click();
     await expect(box).toBeHidden();
     await expect(page.locator('#battle-panel')).toBeVisible();
@@ -1516,7 +1516,7 @@ test('сценарій приймання ADR-0030: партія → місія 
     await expect(page.locator(':focus'), 'N не дав фокус кнопці дії').toHaveClass(/step-target/);
     // на сіді сценарію хоч одна з двох кнопок стає раніше за добу — інакше крок нічого не перевіряє
     expect(Math.min(dayTicks, eventTicks), 'зупинка на події раніше за 48 тіків').toBeLessThan(TICKS_PER_DAY);
-    await expect(page.locator('#ufos .ufo')).toHaveCount(mirror.detected().length);
+    await expect(page.locator('#probes .probe')).toHaveCount(mirror.detected().length);
     await expect(page.locator('#ready')).toHaveText(mirror.readyChip()); // лікарня тікає разом з геосценою
   });
 
@@ -1547,7 +1547,7 @@ test('сценарій приймання ADR-0030: партія → місія 
 // Т.61: екран перемоги і рядок-пояснення невдалого «Продовжити» — на сторінці, а не лише класом hidden.
 // Наскрізні тести на сторінці (jsdom) розкладки не мають: кнопка з display:none чи рядок без стилів їх проходять.
 // Екран перемоги — правкою сейву (campaign.status = 'перемога'), як у наскрізному тесті Т.58; невдале
-// «Продовжити» — зіпсованим списком зондів (ufos = [null]).
+// «Продовжити» — зіпсованим списком зондів (probes = [null]).
 const T61_VIEWPORTS = [
   { width: 1366, height: 768 },
   { width: 1024, height: 768 },
@@ -1665,8 +1665,8 @@ test('Т.61: екран перемоги і рядок-пояснення ста
   const good = await page.evaluate(() => localStorage.getItem('rubezh.save.1')!);
   const won = JSON.parse(good) as { state: { campaign: { status: string } } };
   won.state.campaign.status = 'перемога';
-  const bad = JSON.parse(good) as { state: { geo: { ufos: unknown } } };
-  bad.state.geo.ufos = [null]; // метадані читаються, розбір партії падає
+  const bad = JSON.parse(good) as { state: { geo: { probes: unknown } } };
+  bad.state.geo.probes = [null]; // метадані читаються, розбір партії падає
 
   await test.step('екран перемоги: три кнопки видно в межах вікна, одна під одною', async () => {
     await page.evaluate((s) => localStorage.setItem('rubezh.save.1', s), JSON.stringify(won));
@@ -1861,7 +1861,7 @@ test('Т.71: евакуація — плитка, клавіша V і вікно
   await page.locator(`input[name="new-game-preset"][value="${PRESET}"]`).check(); // Т.218: картки складності
   await page.locator('#btn-new-game-start').click();
   await page.locator('#status-tab-base').click();
-  const mission = page.locator('#ufos button.mission').first();
+  const mission = page.locator('#probes button.mission').first();
   for (let i = 0; i < MAX_TICKS_TO_MISSION && !(await mission.isVisible()); i++) await page.locator('#btn-tick').click();
   await mission.click();
   await page.locator('#btn-deploy').click(); // п20.4 (ADR-0168): вікно спорядження — «Висадити загін»
@@ -1935,7 +1935,7 @@ test('п16.4: вікно ролі після сейву v1, ростер, кар
   await expect(first.locator('.chev i')).toHaveCount(2);
 
   await page.locator('#status-tab-base').click();
-  const mission = page.locator('#ufos button.mission').first();
+  const mission = page.locator('#probes button.mission').first();
   for (let i = 0; i < MAX_TICKS_TO_MISSION && !(await mission.isVisible()); i++) await page.locator('#btn-tick').click();
   await mission.click();
   await page.locator('#btn-deploy').click(); // п20.4 (ADR-0168): вікно спорядження — «Висадити загін»
@@ -1974,7 +1974,7 @@ test('Т.121: тап по порожній клітинці під час ані
   await page.locator(`input[name="new-game-preset"][value="${PRESET}"]`).check(); // Т.218: картки складності
   await page.locator('#btn-new-game-start').click();
   await page.locator('#status-tab-base').click();
-  const mission = page.locator('#ufos button.mission').first();
+  const mission = page.locator('#probes button.mission').first();
   for (let i = 0; i < MAX_TICKS_TO_MISSION && !(await mission.isVisible()); i++) await page.locator('#btn-tick').click();
   await mission.click();
   await page.locator('#btn-deploy').click(); // п20.4 (ADR-0168): вікно спорядження — «Висадити загін»
@@ -2054,7 +2054,7 @@ test.describe('Т.179: телефон пальцем (hasTouch, isMobile)', () =
     expect(mirror.targets().length, 'на сіді ' + SEED + ' зонд не приземлився за дві доби').toBeGreaterThan(0);
     mirror.launch(mirror.targets()[0]!.id);
     await page.locator('#status-tab-base').tap();
-    await page.locator('#ufos button.mission').first().tap();
+    await page.locator('#probes button.mission').first().tap();
     // п20.4 (ADR-0168): вікно спорядження на телефоні — «Висадити загін» пальцем
     await expect(page.locator('#loadout-title')).toHaveText('Спорядження перед вильотом');
     await page.locator('#btn-deploy').tap();

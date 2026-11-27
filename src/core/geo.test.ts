@@ -4,10 +4,10 @@
 
 import { describe, expect, it } from 'vitest';
 import type { RNG } from './combat';
-import { advanceTime, chebyshevWrap, createGeoGame, detectedUfos, geoClock, missionTargets, WORLD_H, WORLD_W, type Ufo } from './geo';
+import { advanceTime, chebyshevWrap, createGeoGame, detectedProbes, geoClock, missionTargets, WORLD_H, WORLD_W, type Probe } from './geo';
 
 // НЛО вручну для точкових сценаріїв (спавн вимкнено).
-function mkUfo(init: Partial<Ufo> & { id: string; pos: { x: number; y: number }; target: { x: number; y: number } }): Ufo {
+function mkProbe(init: Partial<Probe> & { id: string; pos: { x: number; y: number }; target: { x: number; y: number } }): Probe {
   return {
     kind: 'розвідник',
     detected: false,
@@ -39,7 +39,7 @@ describe('geo: детермінізм', () => {
     const run = () => {
       const s = createGeoGame({ seed: 42 });
       advanceTime(s, 480);
-      return JSON.stringify({ log: s.log, ufos: s.ufos, minute: s.minute });
+      return JSON.stringify({ log: s.log, probes: s.probes, minute: s.minute });
     };
     expect(run()).toBe(run());
   });
@@ -54,49 +54,49 @@ describe('geo: детермінізм', () => {
 });
 
 describe('geo: спавн НЛО', () => {
-  it('spawnChance=1: щотік новий НЛО, але не більше maxUfos', () => {
-    const s = createGeoGame({ seed: 1, spawnChance: 1, maxUfos: 3 });
+  it('spawnChance=1: щотік новий НЛО, але не більше maxProbes', () => {
+    const s = createGeoGame({ seed: 1, spawnChance: 1, maxProbes: 3 });
     advanceTime(s, 5);
-    expect(s.ufos.length).toBe(3);
-    expect(s.log.filter((e) => e.type === 'ufo_spawned').length).toBe(3);
+    expect(s.probes.length).toBe(3);
+    expect(s.log.filter((e) => e.type === 'probe_spawned').length).toBe(3);
   });
 
-  it("збиті НЛО ліміт не займають: при maxUfos збитих нові з'являються (Т.17)", () => {
-    const s = createGeoGame({ seed: 1, spawnChance: 1, maxUfos: 2 });
-    s.ufos.push(mkUfo({ id: 'd1', pos: { x: 1, y: 1 }, target: { x: 1, y: 1 }, status: 'збитий' }));
-    s.ufos.push(mkUfo({ id: 'd2', pos: { x: 2, y: 2 }, target: { x: 2, y: 2 }, status: 'збитий' }));
+  it("збиті НЛО ліміт не займають: при maxProbes збитих нові з'являються (Т.17)", () => {
+    const s = createGeoGame({ seed: 1, spawnChance: 1, maxProbes: 2 });
+    s.probes.push(mkProbe({ id: 'd1', pos: { x: 1, y: 1 }, target: { x: 1, y: 1 }, status: 'збитий' }));
+    s.probes.push(mkProbe({ id: 'd2', pos: { x: 2, y: 2 }, target: { x: 2, y: 2 }, status: 'збитий' }));
     advanceTime(s, 3);
-    expect(s.log.filter((e) => e.type === 'ufo_spawned').length).toBe(2);
-    expect(s.ufos.filter((u) => u.status !== 'збитий').length).toBe(2);
-    expect(s.ufos.filter((u) => u.status === 'збитий').map((u) => u.id)).toEqual(['d1', 'd2']);
+    expect(s.log.filter((e) => e.type === 'probe_spawned').length).toBe(2);
+    expect(s.probes.filter((u) => u.status !== 'збитий').length).toBe(2);
+    expect(s.probes.filter((u) => u.status === 'збитий').map((u) => u.id)).toEqual(['d1', 'd2']);
   });
 
   it('збитий НЛО лишається на місці без строку (Т.17)', () => {
     const s = createGeoGame({ seed: 1, spawnChance: 0 });
-    s.ufos.push(mkUfo({ id: 'd', pos: { x: 3, y: 3 }, target: { x: 5, y: 5 }, status: 'збитий' }));
+    s.probes.push(mkProbe({ id: 'd', pos: { x: 3, y: 3 }, target: { x: 5, y: 5 }, status: 'збитий' }));
     advanceTime(s, 48 * 10);
-    expect(s.ufos.map((u) => ({ id: u.id, pos: u.pos, status: u.status }))).toEqual([{ id: 'd', pos: { x: 3, y: 3 }, status: 'збитий' }]);
+    expect(s.probes.map((u) => ({ id: u.id, pos: u.pos, status: u.status }))).toEqual([{ id: 'd', pos: { x: 3, y: 3 }, status: 'збитий' }]);
   });
 });
 
 describe('geo: радар і туман', () => {
   it('НЛО в межах радара виявляється за тік, поза межами — ні', () => {
     const s = createGeoGame({ seed: 1, spawnChance: 0 });
-    s.ufos.push(mkUfo({ id: 'a', pos: { x: 8, y: 5 }, target: { x: 14, y: 7 } }));
-    s.ufos.push(mkUfo({ id: 'b', pos: { x: 2, y: 0 }, target: { x: 2, y: 7 } }));
+    s.probes.push(mkProbe({ id: 'a', pos: { x: 8, y: 5 }, target: { x: 14, y: 7 } }));
+    s.probes.push(mkProbe({ id: 'b', pos: { x: 2, y: 0 }, target: { x: 2, y: 7 } }));
     advanceTime(s, 1);
-    expect(s.ufos[0].detected).toBe(true);
-    expect(s.ufos[1].detected).toBe(false);
-    expect(detectedUfos(s).map((u) => u.id)).toEqual(['a']);
+    expect(s.probes[0].detected).toBe(true);
+    expect(s.probes[1].detected).toBe(false);
+    expect(detectedProbes(s).map((u) => u.id)).toEqual(['a']);
   });
 
   it('замикання по X: відстань через край, рух і виявлення через край', () => {
     expect(chebyshevWrap({ x: 0, y: 4 }, { x: 15, y: 4 })).toBe(1);
     const s = createGeoGame({ seed: 1, spawnChance: 0, base: { x: 0, y: 4 } });
-    s.ufos.push(mkUfo({ id: 'w', pos: { x: 15, y: 4 }, target: { x: 1, y: 4 } }));
+    s.probes.push(mkProbe({ id: 'w', pos: { x: 15, y: 4 }, target: { x: 1, y: 4 } }));
     advanceTime(s, 1);
-    expect(s.ufos[0].detected).toBe(true); // радар «бачить» через край світу
-    expect(s.ufos[0].pos).toEqual({ x: 0, y: 4 }); // рух НЛО через край світу
+    expect(s.probes[0].detected).toBe(true); // радар «бачить» через край світу
+    expect(s.probes[0].pos).toEqual({ x: 0, y: 4 }); // рух НЛО через край світу
   });
 });
 
@@ -106,11 +106,11 @@ describe('geo: крок НЛО до цілі (Т.11)', () => {
   // Клітинки НЛО після кожного з ticks тіків, записом 'x,y'.
   function fly(from: [number, number], to: [number, number], ticks: number): string[] {
     const s = createGeoGame({ seed: 1, spawnChance: 0 });
-    s.ufos.push(mkUfo({ id: 'u', pos: { x: from[0], y: from[1] }, target: { x: to[0], y: to[1] } }));
+    s.probes.push(mkProbe({ id: 'u', pos: { x: from[0], y: from[1] }, target: { x: to[0], y: to[1] } }));
     const track: string[] = [];
     for (let i = 0; i < ticks; i++) {
       advanceTime(s, 1);
-      track.push(s.ufos[0].pos.x + ',' + s.ufos[0].pos.y);
+      track.push(s.probes[0].pos.x + ',' + s.probes[0].pos.y);
     }
     return track;
   }
@@ -159,52 +159,52 @@ describe('geo: спавн, радар, журнал — точні значен�
   it('спавн: кидок, що дорівнює шансу, — НЛО немає', () => {
     const s = createGeoGame({ rng: seqRng([0.5]), spawnChance: 0.5 });
     advanceTime(s, 1);
-    expect(s.ufos).toHaveLength(0);
+    expect(s.probes).toHaveLength(0);
   });
 
   it('спавн: кидок типу 0.7 — уже збирач; клітинка і ціль — з наступних кидків; подія в журналі', () => {
     // кидки: спавн, тип, клітинка (x, y), ціль (x, y)
     const s = createGeoGame({ rng: seqRng([0, 0.7, 0.5, 0.5, 0.25, 0.25]), spawnChance: 0.5 });
     advanceTime(s, 1);
-    expect(s.ufos).toHaveLength(1);
-    expect(s.ufos[0]).toMatchObject({ id: 'ufo1', kind: 'збирач', pos: { x: 8, y: 4 }, target: { x: 4, y: 2 } });
+    expect(s.probes).toHaveLength(1);
+    expect(s.probes[0]).toMatchObject({ id: 'probe1', kind: 'збирач', pos: { x: 8, y: 4 }, target: { x: 4, y: 2 } });
     // збирач на непарному тіку стоїть; з'явився над вузлом — радар бачить одразу
     expect(s.log).toEqual([
-      { type: 'ufo_spawned', ufoId: 'ufo1', kind: 'збирач', pos: { x: 8, y: 4 }, minute: 30 },
-      { type: 'ufo_detected', ufoId: 'ufo1', pos: { x: 8, y: 4 }, minute: 30 },
+      { type: 'probe_spawned', probeId: 'probe1', kind: 'збирач', pos: { x: 8, y: 4 }, minute: 30 },
+      { type: 'probe_detected', probeId: 'probe1', pos: { x: 8, y: 4 }, minute: 30 },
     ]);
   });
 
-  it('id НЛО — ufo1, ufo2, ufo3 у порядку появи', () => {
-    const s = createGeoGame({ seed: 1, spawnChance: 1, maxUfos: 3 });
+  it('id НЛО — probe1, probe2, probe3 у порядку появи', () => {
+    const s = createGeoGame({ seed: 1, spawnChance: 1, maxProbes: 3 });
     advanceTime(s, 3);
-    expect(s.log.filter((e) => e.type === 'ufo_spawned').map((e) => e.ufoId)).toEqual(['ufo1', 'ufo2', 'ufo3']);
+    expect(s.log.filter((e) => e.type === 'probe_spawned').map((e) => e.probeId)).toEqual(['probe1', 'probe2', 'probe3']);
   });
 
   it('радар: рівно 4 клітинки від вузла — виявлено, 5 — ні', () => {
     const s = createGeoGame({ seed: 1, spawnChance: 0 }); // вузол (8,4)
-    s.ufos.push(mkUfo({ id: 'near', pos: { x: 12, y: 4 }, target: { x: 12, y: 4 }, status: 'приземлився' }));
-    s.ufos.push(mkUfo({ id: 'far', pos: { x: 13, y: 4 }, target: { x: 13, y: 4 }, status: 'приземлився' }));
+    s.probes.push(mkProbe({ id: 'near', pos: { x: 12, y: 4 }, target: { x: 12, y: 4 }, status: 'приземлився' }));
+    s.probes.push(mkProbe({ id: 'far', pos: { x: 13, y: 4 }, target: { x: 13, y: 4 }, status: 'приземлився' }));
     advanceTime(s, 1);
-    expect(detectedUfos(s).map((u) => u.id)).toEqual(['near']);
-    expect(s.log).toEqual([{ type: 'ufo_detected', ufoId: 'near', pos: { x: 12, y: 4 }, minute: 30 }]);
+    expect(detectedProbes(s).map((u) => u.id)).toEqual(['near']);
+    expect(s.log).toEqual([{ type: 'probe_detected', probeId: 'near', pos: { x: 12, y: 4 }, minute: 30 }]);
   });
 
   it('НЛО вже у клітинці цілі: посадка без руху', () => {
     const s = createGeoGame({ seed: 1, spawnChance: 0 });
-    s.ufos.push(mkUfo({ id: 'u', pos: { x: 1, y: 1 }, target: { x: 1, y: 1 } }));
+    s.probes.push(mkProbe({ id: 'u', pos: { x: 1, y: 1 }, target: { x: 1, y: 1 } }));
     advanceTime(s, 1);
-    expect(s.ufos[0].status).toBe('приземлився');
-    expect(s.log).toEqual([{ type: 'ufo_landed', ufoId: 'u', pos: { x: 1, y: 1 }, minute: 30 }]);
+    expect(s.probes[0].status).toBe('приземлився');
+    expect(s.log).toEqual([{ type: 'probe_landed', probeId: 'u', pos: { x: 1, y: 1 }, minute: 30 }]);
   });
 
   it('журнал перельоту: крок — «звідки» і «куди», посадка — клітинка цілі', () => {
     const s = createGeoGame({ seed: 1, spawnChance: 0 });
-    s.ufos.push(mkUfo({ id: 'u', pos: { x: 0, y: 0 }, target: { x: 1, y: 0 } }));
+    s.probes.push(mkProbe({ id: 'u', pos: { x: 0, y: 0 }, target: { x: 1, y: 0 } }));
     advanceTime(s, 1);
     expect(s.log).toEqual([
-      { type: 'ufo_move', ufoId: 'u', from: { x: 0, y: 0 }, to: { x: 1, y: 0 }, minute: 30 },
-      { type: 'ufo_landed', ufoId: 'u', pos: { x: 1, y: 0 }, minute: 30 },
+      { type: 'probe_move', probeId: 'u', from: { x: 0, y: 0 }, to: { x: 1, y: 0 }, minute: 30 },
+      { type: 'probe_landed', probeId: 'u', pos: { x: 1, y: 0 }, minute: 30 },
     ]);
   });
 });
@@ -212,32 +212,32 @@ describe('geo: спавн, радар, журнал — точні значен�
 describe('geo: життєвий цикл НЛО', () => {
   it('летить → приземлився у цілі → вікно 8 тіків → відлітає', () => {
     const s = createGeoGame({ seed: 1, spawnChance: 0 });
-    s.ufos.push(mkUfo({ id: 'l', pos: { x: 8, y: 4 }, target: { x: 10, y: 4 } }));
+    s.probes.push(mkProbe({ id: 'l', pos: { x: 8, y: 4 }, target: { x: 10, y: 4 } }));
     advanceTime(s, 2);
-    const u = s.ufos.find((x) => x.id === 'l')!;
+    const u = s.probes.find((x) => x.id === 'l')!;
     expect(u.status).toBe('приземлився');
     expect(u.landedTicksLeft).toBe(8); // вікно не витікає в тік посадки
     advanceTime(s, 8);
-    expect(s.ufos.some((x) => x.id === 'l')).toBe(false);
-    expect(s.log.some((e) => e.type === 'ufo_left' && e.ufoId === 'l')).toBe(true);
+    expect(s.probes.some((x) => x.id === 'l')).toBe(false);
+    expect(s.log.some((e) => e.type === 'probe_left' && e.probeId === 'l')).toBe(true);
   });
 
   it('збирач рухається раз на два тіки', () => {
     const s = createGeoGame({ seed: 1, spawnChance: 0 });
-    s.ufos.push(mkUfo({ id: 'h', kind: 'збирач', pos: { x: 0, y: 0 }, target: { x: 5, y: 0 }, landedTicksLeft: 16 }));
+    s.probes.push(mkProbe({ id: 'h', kind: 'збирач', pos: { x: 0, y: 0 }, target: { x: 5, y: 0 }, landedTicksLeft: 16 }));
     advanceTime(s, 1);
-    expect(s.ufos[0].pos).toEqual({ x: 0, y: 0 }); // непарний тік — стоїть
+    expect(s.probes[0].pos).toEqual({ x: 0, y: 0 }); // непарний тік — стоїть
     advanceTime(s, 1);
-    expect(s.ufos[0].pos).toEqual({ x: 1, y: 0 }); // парний тік — крок
+    expect(s.probes[0].pos).toEqual({ x: 1, y: 0 }); // парний тік — крок
   });
 });
 
 describe('geo: місії', () => {
   it('missionTargets: лише виявлені приземлені НЛО', () => {
     const s = createGeoGame({ seed: 1, spawnChance: 0 });
-    s.ufos.push(mkUfo({ id: 'm1', pos: { x: 8, y: 4 }, target: { x: 8, y: 4 }, detected: true, status: 'приземлився' }));
-    s.ufos.push(mkUfo({ id: 'm2', pos: { x: 3, y: 3 }, target: { x: 3, y: 3 }, status: 'приземлився' })); // невиявлений
-    s.ufos.push(mkUfo({ id: 'm3', pos: { x: 4, y: 4 }, target: { x: 9, y: 7 }, detected: true })); // ще в повітрі
+    s.probes.push(mkProbe({ id: 'm1', pos: { x: 8, y: 4 }, target: { x: 8, y: 4 }, detected: true, status: 'приземлився' }));
+    s.probes.push(mkProbe({ id: 'm2', pos: { x: 3, y: 3 }, target: { x: 3, y: 3 }, status: 'приземлився' })); // невиявлений
+    s.probes.push(mkProbe({ id: 'm3', pos: { x: 4, y: 4 }, target: { x: 9, y: 7 }, detected: true })); // ще в повітрі
     expect(missionTargets(s).map((u) => u.id)).toEqual(['m1']);
   });
 });

@@ -28,8 +28,8 @@ import {
 } from './research';
 
 // Геосцена без НЛО, щоб тести не залежали від спавну (прецедент economy.test.ts).
-function geoNoUfo(seed = 7): GeoState {
-  return createGeoGame({ seed, spawnChance: 0, maxUfos: 0 });
+function geoNoProbe(seed = 7): GeoState {
+  return createGeoGame({ seed, spawnChance: 0, maxProbes: 0 });
 }
 
 // Економіка з великим балансом — тести стартів проєктів не про банкрутство.
@@ -149,7 +149,7 @@ describe('researchTick — зарплата і наукові точки на м
   it('упродовж доби 1 і повторний виклик без нової доби — no-op', () => {
     const econ = richEcon();
     const research = createResearch();
-    const geo = geoNoUfo();
+    const geo = geoNoProbe();
     hireScientist(econ, research);
     advanceTime(geo, 47);
     researchTick(research, econ, geo);
@@ -166,7 +166,7 @@ describe('researchTick — зарплата і наукові точки на м
   it('межа доби: зарплата списана, точки нараховані в пул, обидві події в журналі', () => {
     const econ = richEcon();
     const research = createResearch();
-    const geo = geoNoUfo();
+    const geo = geoNoProbe();
     hireScientist(econ, research);
     hireScientist(econ, research);
     const money = econ.money;
@@ -182,7 +182,7 @@ describe('researchTick — зарплата і наукові точки на м
   it('тик-у-тик і одним викликом після 96 тіків — однаковий стан (детермінізм)', () => {
     const step = createResearch();
     const econStep = richEcon();
-    const geoStep = geoNoUfo();
+    const geoStep = geoNoProbe();
     hireScientist(econStep, step);
     hireScientist(econStep, step);
     for (let i = 0; i < 96; i++) {
@@ -191,7 +191,7 @@ describe('researchTick — зарплата і наукові точки на м
     }
     const bulk = createResearch();
     const econBulk = richEcon();
-    const geoBulk = geoNoUfo();
+    const geoBulk = geoNoProbe();
     hireScientist(econBulk, bulk);
     hireScientist(econBulk, bulk);
     advanceTime(geoBulk, 96);
@@ -203,7 +203,7 @@ describe('researchTick — зарплата і наукові точки на м
   it('бракує на зарплату всім → штат звільнено повністю, у мінус не йдемо', () => {
     const econ = richEcon(HIRE_SCIENTIST_PRICE); // на найм хватило, на зарплату — ні
     const research = createResearch();
-    const geo = geoNoUfo();
+    const geo = geoNoProbe();
     hireScientist(econ, research);
     advanceTime(geo, 48);
     researchTick(research, econ, geo);
@@ -219,7 +219,7 @@ describe('researchTick — зарплата і наукові точки на м
   it('бракує на частину штату → звільняє з кінця: лишається найдавніший', () => {
     const econ = richEcon(2 * HIRE_SCIENTIST_PRICE + SCIENTIST_SALARY); // після найму — рівно на одного
     const research = createResearch();
-    const geo = geoNoUfo();
+    const geo = geoNoProbe();
     hireScientist(econ, research); // Зінаїда
     hireScientist(econ, research); // Ярослав — на двох грошей немає
     advanceTime(geo, 48);
@@ -234,7 +234,7 @@ describe('researchTick — зарплата і наукові точки на м
   it('порожній штат — тік no-op: без зарплати, без точок, без подій', () => {
     const econ = richEcon();
     const research = createResearch();
-    const geo = geoNoUfo();
+    const geo = geoNoProbe();
     advanceTime(geo, 48);
     researchTick(research, econ, geo);
     expect(research.lastSalaryDay).toBe(1);
@@ -245,7 +245,7 @@ describe('researchTick — зарплата і наукові точки на м
   it('пресет множить лише кошти (Т.29: scienceMultiplier): «легкий» — найм 50, зарплата 5; точки — без множника', () => {
     const econ = richEcon();
     const research = createResearch();
-    const geo = geoNoUfo();
+    const geo = geoNoProbe();
     hireScientist(econ, research, 'легкий');
     expect(econ.money).toBe(5000 - 50);
     advanceTime(geo, 48);
@@ -277,7 +277,7 @@ describe('розподіл точок і завершення проєктів (
       { id: 'medkit', invested: 0 },
     ]);
     research.pool = 3;
-    const geo = geoNoUfo();
+    const geo = geoNoProbe();
     advanceTime(geo, 48);
     researchTick(research, econ, geo);
     expect(research.active.map((p) => p.invested)).toEqual([2, 1]);
@@ -287,7 +287,7 @@ describe('розподіл точок і завершення проєктів (
   it('пул спільний: без проєктів накопичується, при старті одразу лягає в проєкт', () => {
     const econ = richEcon();
     const research = createResearch();
-    const geo = geoNoUfo();
+    const geo = geoNoProbe();
     hireScientist(econ, research);
     advanceTime(geo, 48);
     researchTick(research, econ, geo);
@@ -301,7 +301,7 @@ describe('розподіл точок і завершення проєктів (
     // П11.8: «Кібернетичне око» — 23 точки (тунінг ×0.75), бракує однієї
     const research = withActive(createResearch(), [{ id: 'optics', invested: 22 }]);
     research.pool = 2;
-    const geo = geoNoUfo();
+    const geo = geoNoProbe();
     advanceTime(geo, 48);
     researchTick(research, econ, geo);
     expect(research.active).toEqual([]);
@@ -317,7 +317,7 @@ describe('розподіл точок і завершення проєктів (
       { id: 'armor', invested: 13 },
     ]);
     research.pool = 3;
-    const geo = geoNoUfo();
+    const geo = geoNoProbe();
     advanceTime(geo, 48);
     researchTick(research, econ, geo);
     expect(research.completed).toEqual(['optics', 'armor']);
@@ -331,7 +331,7 @@ describe('розподіл точок і завершення проєктів (
       { id: 'armor', invested: 20 }, // за старих 27 очок ще тривав; тепер потреба 14
       { id: 'optics', invested: 0 },
     ]);
-    const geo = geoNoUfo();
+    const geo = geoNoProbe();
     advanceTime(geo, 48);
     researchTick(research, econ, geo); // техномантів немає — нових очок немає
     expect(research.completed).toEqual(['armor']);
@@ -343,7 +343,7 @@ describe('розподіл точок і завершення проєктів (
   it('Т.28: прогрес рівно на потребу завершує протокол без надлишку; розширення лабораторії відкриває слот', () => {
     const econ = richEcon();
     const research = withActive(createResearch(), [{ id: 'lab-extension', invested: 33 }]);
-    const geo = geoNoUfo();
+    const geo = geoNoProbe();
     advanceTime(geo, 48);
     researchTick(research, econ, geo);
     expect(research.completed).toEqual(['lab-extension']);
@@ -358,7 +358,7 @@ describe('розподіл точок і завершення проєктів (
       { id: 'armor', invested: 0 },
     ]);
     research.pool = 1;
-    const geo = geoNoUfo();
+    const geo = geoNoProbe();
     advanceTime(geo, 48);
     researchTick(research, econ, geo);
     expect(research.slots).toBe(MAX_LAB_SLOTS);
@@ -369,8 +369,8 @@ describe('розподіл точок і завершення проєктів (
 
 describe('ізоляція від геосцени (критерій П11.2: geo.rng не витягується)', () => {
   it('траєкторія геосцени з наукою і без неї — байт-у-байт однакова', () => {
-    const withScience = geoNoUfo(42);
-    const withoutScience = geoNoUfo(42);
+    const withScience = geoNoProbe(42);
+    const withoutScience = geoNoProbe(42);
     const econ = richEcon();
     const research = createResearch();
     hireScientist(econ, research);

@@ -54,7 +54,7 @@ import {
   drawSoldierSprite,
   unitRing,
   drawTargetFrame,
-  drawUfoSprite,
+  drawProbeSprite,
   drawUnitSprite,
   initGeoMap,
   initGeoTower,
@@ -92,8 +92,8 @@ import {
   OW_BOLT,
   SOLDIER_STAND,
   SPRITE_SCALE,
-  UFO_LANDED_SPRITE,
-  UFO_SCOUT_SPRITE,
+  PROBE_LANDED_SPRITE,
+  PROBE_SCOUT_SPRITE,
 } from './core/sprites';
 import { BCELL, GCELL } from './ui/grid';
 import {
@@ -258,8 +258,8 @@ describe('П13.5 (ADR-0068): масштаб піксель-арту — матр
       [SOLDIER_STAND, 16],
       [ALIEN_STAND, 16],
       [BASE_SPRITE, 16],
-      [UFO_LANDED_SPRITE, 12],
-      [UFO_SCOUT_SPRITE, 12],
+      [PROBE_LANDED_SPRITE, 12],
+      [PROBE_SCOUT_SPRITE, 12],
       [FIGHTER_SPRITE, 12],
       [OW_BOLT, 5],
     ] as const) {
@@ -273,7 +273,7 @@ describe('П13.5 (ADR-0068): масштаб піксель-арту — матр
     expect(SPRITE_SCALE).toBe(2); // ціле кратне (ADR-0031)
     expect(SOLDIER_STAND.rows.length * SPRITE_SCALE).toBeLessThanOrEqual(BCELL);
     expect(BASE_SPRITE.rows.length * SPRITE_SCALE).toBeLessThanOrEqual(GCELL);
-    expect(UFO_SCOUT_SPRITE.rows.length * SPRITE_SCALE).toBeLessThanOrEqual(GCELL);
+    expect(PROBE_SCOUT_SPRITE.rows.length * SPRITE_SCALE).toBeLessThanOrEqual(GCELL);
     expect(FIGHTER_SPRITE.rows.length * SPRITE_SCALE).toBeLessThanOrEqual(GCELL);
   });
 });
@@ -516,7 +516,7 @@ describe('спрайти геосцени (піксель-арт П6.12)', () =>
       { cx: 18, cy: 18, landed: false, kind: 'збирач' as const },
     ]) {
       const s = mockCtx();
-      drawUfoSprite(s.ctx, u);
+      drawProbeSprite(s.ctx, u);
       imgs.push(s.calls.find((c) => c.m === 'drawImage')!.args[0]);
     }
     expect(new Set(imgs).size).toBe(3);
@@ -558,7 +558,7 @@ describe('П6.9: м’які позначки НЛО геосцени', () => {
       { cx: 18, cy: 18, landed: false, kind: 'збирач' as const },
     ]) {
       const s = animCtx();
-      drawUfoSprite(s.ctx, u);
+      drawProbeSprite(s.ctx, u);
       const alphas = s.sets.filter((p) => p.p === 'globalAlpha').map((p) => p.v);
       expect(alphas[0]).toBeCloseTo(0.85);
       expect(alphas[alphas.length - 1]).toBe(1);
@@ -567,7 +567,7 @@ describe('П6.9: м’які позначки НЛО геосцени', () => {
 
   it('позначка в межах клітинки 44px (урок П6.6; П13.5): 12×12 у масштабі 2× → 24px', () => {
     const { ctx, calls } = mockCtx();
-    drawUfoSprite(ctx, { cx: 22, cy: 22, landed: true, kind: 'збирач' });
+    drawProbeSprite(ctx, { cx: 22, cy: 22, landed: true, kind: 'збирач' });
     const e = extent(calls);
     expect(e.maxX - e.minX).toBeLessThanOrEqual(24);
     expect(e.maxY - e.minY).toBeLessThanOrEqual(24);

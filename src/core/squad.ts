@@ -11,8 +11,8 @@
 // і найм детерміновані (фіксований пул імен, циклічний за лічильником hired).
 // Ростер — окремий стан партії поруч із GeoState: geo.ts нічого не знає про солдатів,
 // mission.ts приймає загін ззовні (opts.squad). Цикл шару застосунка:
-//   createRoster() → missionSquad(roster) → createMission(geo, ufoId, { squad })
-//   → бій → applyMissionResult(roster, mission.state) → completeMission(geo, ufoId, …)
+//   createRoster() → missionSquad(roster) → createMission(geo, probeId, { squad })
+//   → бій → applyMissionResult(roster, mission.state) → completeMission(geo, probeId, …)
 // Втрати покриваються наймом (П4.3): hireSoldier(econ, roster) списує hirePrice
 // з EconomyState і додає солдата в кінець ростеру (ветерани йдуть у бій першими);
 // fireSoldier(roster, id) — звільнення на прохання гравця.

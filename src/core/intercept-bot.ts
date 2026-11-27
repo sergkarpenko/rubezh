@@ -5,7 +5,7 @@
 // Детерміновані (ADR-0003): рішення залежать лише від стану, кидки — окремий
 // RNG перехоплення.
 
-import { chebyshevWrap, createGeoGame, geoTick, type GeoState, type Ufo, type UfoKind } from './geo';
+import { chebyshevWrap, createGeoGame, geoTick, type GeoState, type Probe, type ProbeKind } from './geo';
 import { createEconomy, economyTick, type EconomyState } from './economy';
 import {
   FIGHTER_MAX_HP,
@@ -27,9 +27,9 @@ export type InterceptPolicyRange = 'впритул' | 'середня' | 'дал
 export interface InterceptPolicy {
   name: string;
   // запускати перехоплення на даного НЛО (виявлений, «летить»)?
-  shouldLaunch: (kind: UfoKind, dist: number) => boolean;
+  shouldLaunch: (kind: ProbeKind, dist: number) => boolean;
   // дистанція раунду залежно від типу НЛО та HP винищувача
-  chooseRange: (kind: UfoKind, fighterHp: number) => InterceptPolicyRange;
+  chooseRange: (kind: ProbeKind, fighterHp: number) => InterceptPolicyRange;
 }
 
 // Агресивна політика: запуск на будь-який виявлений НЛО, завжди впритул.
@@ -79,8 +79,8 @@ export interface InterceptSimResult {
   repairSpent: number;
   bonusEarned: number; // премії за збиття у повітрі (SHOT_DOWN_BONUS)
   // Розріз за типом НЛО та дистанцією (П7.6: «шанс збиття за тип НЛО і дистанцію»)
-  engagementsByKind: Record<UfoKind, number>;
-  shotDownByKind: Record<UfoKind, number>;
+  engagementsByKind: Record<ProbeKind, number>;
+  shotDownByKind: Record<ProbeKind, number>;
   roundsByRange: Record<InterceptPolicyRange, number>;
   hitRoundsByRange: Record<InterceptPolicyRange, number>; // раунди з влучанням винищувача
   ticks: number;
@@ -91,21 +91,21 @@ export interface InterceptSimResult {
 export function interceptBotStep(ic: InterceptState, geo: GeoState, econ: EconomyState, policy: InterceptPolicy): void {
   const f = ic.fighters[0];
   if (f.status === 'на базі' && f.hp === FIGHTER_MAX_HP) {
-    const target = detectedFlyingUfo(geo);
+    const target = detectedFlyingProbe(geo);
     if (target && policy.shouldLaunch(target.kind, chebyshevWrap(geo.base, target.pos))) {
       startIntercept(ic, geo, target.id);
     }
   } else if (f.status === 'на базі' && f.hp < FIGHTER_MAX_HP && !f.repairTicksLeft) {
     // Пошкоджений без ремонту: платимо одразу, як лише є гроші (X-COM досвід, ADR-0021).
     if (econ.money >= FIGHTER_REPAIR_COST) startRepair(ic, geo, econ);
-  } else if (f.status === 'бій' && ic.activeUfoId) {
-    const ufo = geo.ufos.find((u) => u.id === ic.activeUfoId);
-    if (ufo) interceptRound(ic, geo, policy.chooseRange(ufo.kind, f.hp), econ);
+  } else if (f.status === 'бій' && ic.activeProbeId) {
+    const probe = geo.probes.find((u) => u.id === ic.activeProbeId);
+    if (probe) interceptRound(ic, geo, policy.chooseRange(probe.kind, f.hp), econ);
   }
 }
 
-function detectedFlyingUfo(geo: GeoState): Ufo | null {
-  const list = geo.ufos.filter((u) => u.detected && u.status === 'летить');
+function detectedFlyingProbe(geo: GeoState): Probe | null {
+  const list = geo.probes.filter((u) => u.detected && u.status === 'летить');
   return list.length ? list[0] : null;
 }
 
@@ -113,7 +113,7 @@ function detectedFlyingUfo(geo: GeoState): Ufo | null {
 // Детермінована (ADR-0003): сід геосцени + сід перехоплення + детермінована політика.
 // Використовує лише публічне API ядра; симуляції міряють баланс (критерії — workflow.md П7.6).
 export function simulateInterceptCampaign(seed: number, policy: InterceptPolicy, days = 10): InterceptSimResult {
-  const geo = createGeoGame({ seed, spawnChance: 0.06, maxUfos: 3 });
+  const geo = createGeoGame({ seed, spawnChance: 0.06, maxProbes: 3 });
   const ic = createIntercept(seed ^ 0x9e3779b9);
   const econ = createEconomy();
   const res: InterceptSimResult = {
@@ -148,12 +148,12 @@ export function simulateInterceptCampaign(seed: number, policy: InterceptPolicy,
       if (e.type === 'intercept_start') res.launches++;
       if (e.type === 'intercept_engage') {
         res.engagements++;
-        const kind = geo.ufos.find((u) => u.id === e.ufoId)?.kind;
+        const kind = geo.probes.find((u) => u.id === e.probeId)?.kind;
         if (kind) res.engagementsByKind[kind]++;
       }
-      if (e.type === 'ufo_shot_down') {
+      if (e.type === 'probe_shot_down') {
         res.shotDown++;
-        const kind = geo.ufos.find((u) => u.id === e.ufoId)?.kind;
+        const kind = geo.probes.find((u) => u.id === e.probeId)?.kind;
         if (kind) res.shotDownByKind[kind]++;
       }
       if (e.type === 'intercept_round' && e.choice !== 'відступ') {

@@ -75,14 +75,14 @@ import {
   SOLDIER_STAND,
   SOLDIER_STEP,
   SPRITE_SCALE,
-  UFO_HARVESTER_SPRITE,
-  UFO_LANDED_SPRITE,
-  UFO_SCOUT_SPRITE,
+  PROBE_HARVESTER_SPRITE,
+  PROBE_LANDED_SPRITE,
+  PROBE_SCOUT_SPRITE,
   type BaseSprite,
   type FighterSprite,
   type PixelSprite,
   type UnitSprite,
-  type UfoSprite,
+  type ProbeSprite,
 } from './core/sprites';
 import unitAtlasUrl from '../assets/units-atlas.png';
 import metroBgUrl from '../assets/metro-bg.webp';
@@ -93,7 +93,7 @@ import geoIconsUrl from '../assets/geo-icons.png';
 import lowCoverUrl from '../assets/low-cover.png';
 
 const SELECT_RING = '#9adfff'; // П12.7: рамка вибору — гама ціану «Рубіжу» (ADR-0064)
-const UFO_SOFT_ALPHA = 0.85;
+const PROBE_SOFT_ALPHA = 0.85;
 const RADAR_PULSE = '#00e5ff'; // П12.7: пульс сенсорної сітки — неоновий ціан «Рубіжу» (ADR-0064)
 
 // --- П6.12 (ADR-0031): піксель-арт — offscreen-канваси ---
@@ -748,26 +748,26 @@ export function drawFighterSprite(ctx: CanvasRenderingContext2D, f: FighterSprit
 }
 
 // п19.5: приземлений зонд зі значком — кільце посадки під ним і приглушений значок.
-export const UFO_LANDED_RING = 'rgba(255,46,136,0.75)';
-export const UFO_LANDED_ALPHA = 0.8;
+export const PROBE_LANDED_RING = 'rgba(255,46,136,0.75)';
+export const PROBE_LANDED_ALPHA = 0.8;
 
-export function drawUfoSprite(ctx: CanvasRenderingContext2D, u: UfoSprite): void {
+export function drawProbeSprite(ctx: CanvasRenderingContext2D, u: ProbeSprite): void {
   if (geoIconsImg !== null) {
     if (u.landed) {
-      ctx.strokeStyle = UFO_LANDED_RING;
+      ctx.strokeStyle = PROBE_LANDED_RING;
       ctx.lineWidth = 2;
       ctx.beginPath();
       ctx.ellipse(u.cx, u.cy + 10, 16, 6, 0, 0, Math.PI * 2);
       ctx.stroke();
       ctx.lineWidth = 1;
-      ctx.globalAlpha = UFO_LANDED_ALPHA;
+      ctx.globalAlpha = PROBE_LANDED_ALPHA;
     }
     drawGeoIcon(ctx, u.kind === 'розвідник' ? 'scout' : 'harvester', u.cx, u.cy);
     ctx.globalAlpha = 1;
     return;
   }
-  ctx.globalAlpha = UFO_SOFT_ALPHA;
-  const def = u.landed ? UFO_LANDED_SPRITE : u.kind === 'розвідник' ? UFO_SCOUT_SPRITE : UFO_HARVESTER_SPRITE;
+  ctx.globalAlpha = PROBE_SOFT_ALPHA;
+  const def = u.landed ? PROBE_LANDED_SPRITE : u.kind === 'розвідник' ? PROBE_SCOUT_SPRITE : PROBE_HARVESTER_SPRITE;
   drawPixelSprite(ctx, def, u.cx, u.cy, SPRITE_SCALE); // П13.5: 12×12 → 24px у клітинці GCELL 44
   ctx.globalAlpha = 1;
 }

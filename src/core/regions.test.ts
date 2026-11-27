@@ -13,7 +13,7 @@ import {
   totalTrust,
   trustDelta,
   TRUST_TOTAL_MAX,
-  ufoLastPos,
+  probeLastPos,
   type RegionId,
 } from './regions';
 import { campaignTick, createCampaign, DIFFICULTY_MULTIPLIERS, threatDelta, type DifficultyPreset } from './campaign';
@@ -26,16 +26,16 @@ const PRESETS: DifficultyPreset[] = ['легкий', 'норма', 'складн
 // Зонд id: поява в from, рух до pos, посадка, (виявлення), далі хвіст подій.
 function probe(id: string, pos: { x: number; y: number }, detected: boolean, tail: GeoEvent[] = []): GeoEvent[] {
   return [
-    { type: 'ufo_spawned', ufoId: id, kind: 'розвідник', pos: { x: 0, y: 0 }, minute: 0 },
-    { type: 'ufo_move', ufoId: id, from: { x: 0, y: 0 }, to: pos, minute: 30 },
-    ...(detected ? [{ type: 'ufo_detected', ufoId: id, pos, minute: 30 } as GeoEvent] : []),
-    { type: 'ufo_landed', ufoId: id, pos, minute: 30 },
+    { type: 'probe_spawned', probeId: id, kind: 'розвідник', pos: { x: 0, y: 0 }, minute: 0 },
+    { type: 'probe_move', probeId: id, from: { x: 0, y: 0 }, to: pos, minute: 30 },
+    ...(detected ? [{ type: 'probe_detected', probeId: id, pos, minute: 30 } as GeoEvent] : []),
+    { type: 'probe_landed', probeId: id, pos, minute: 30 },
     ...tail,
   ];
 }
 
-const left = (id: string): GeoEvent => ({ type: 'ufo_left', ufoId: id, minute: 300 });
-const won = (id: string): GeoEvent => ({ type: 'mission_won', ufoId: id, minute: 200 });
+const left = (id: string): GeoEvent => ({ type: 'probe_left', probeId: id, minute: 300 });
+const won = (id: string): GeoEvent => ({ type: 'mission_won', probeId: id, minute: 200 });
 
 describe('п19.2: розклад регіонів (ADR-0159 п. 9, EARS 1)', () => {
   it('сітка 16 × 9 як мапа геоцени; кожна клітинка — рівно один із чотирьох регіонів', () => {
@@ -77,14 +77,14 @@ describe('п19.2: розклад регіонів (ADR-0159 п. 9, EARS 1)', () 
 describe('п19.2: зміна довіри від подій журналу (ADR-0159 п. 10–11, EARS 2)', () => {
   it('відліт без бою: виявлений −30, невиявлений −15 — регіон клітинки посадки', () => {
     const a = [...probe('u1', { x: 13, y: 2 }, true), left('u1')];
-    expect(trustDelta(a, a.length - 1)).toEqual({ region: 'east', delta: -30, reason: 'ufo_left' });
+    expect(trustDelta(a, a.length - 1)).toEqual({ region: 'east', delta: -30, reason: 'probe_left' });
     const b = [...probe('u2', { x: 6, y: 7 }, false), left('u2')];
-    expect(trustDelta(b, b.length - 1)).toEqual({ region: 'south', delta: -15, reason: 'ufo_left' });
+    expect(trustDelta(b, b.length - 1)).toEqual({ region: 'south', delta: -15, reason: 'probe_left' });
   });
 
   it('відліт після програної місії чи евакуації — довіра без змін', () => {
     for (const type of ['mission_lost', 'mission_evacuated'] as const) {
-      const log = [...probe('u1', { x: 1, y: 1 }, true, [{ type, ufoId: 'u1', minute: 100 }]), left('u1')];
+      const log = [...probe('u1', { x: 1, y: 1 }, true, [{ type, probeId: 'u1', minute: 100 }]), left('u1')];
       expect(trustDelta(log, log.length - 1)).toBeNull();
     }
   });
@@ -94,19 +94,19 @@ describe('п19.2: зміна довіри від подій журналу (ADR-
     expect(trustDelta(log, log.length - 1)).toEqual({ region: 'west', delta: 10, reason: 'mission_won' });
     const shot: GeoEvent[] = [
       ...probe('u2', { x: 13, y: 1 }, true),
-      { type: 'ufo_shot_down', ufoId: 'u2', pos: { x: 9, y: 6 }, minute: 60 },
+      { type: 'probe_shot_down', probeId: 'u2', pos: { x: 9, y: 6 }, minute: 60 },
       won('u2'),
     ];
-    expect(ufoLastPos(shot, shot.length - 1, 'u2')).toEqual({ x: 9, y: 6 });
+    expect(probeLastPos(shot, shot.length - 1, 'u2')).toEqual({ x: 9, y: 6 });
     expect(trustDelta(shot, shot.length - 1)).toEqual({ region: 'south', delta: 10, reason: 'mission_won' });
   });
 
   it('самі події програної місії, евакуації і збиття — без змін (аудит PR #521)', () => {
     const log: GeoEvent[] = [
       ...probe('u1', { x: 8, y: 2 }, true),
-      { type: 'mission_lost', ufoId: 'u1', minute: 100 },
-      { type: 'mission_evacuated', ufoId: 'u1', minute: 110 },
-      { type: 'ufo_shot_down', ufoId: 'u1', pos: { x: 8, y: 2 }, minute: 120 },
+      { type: 'mission_lost', probeId: 'u1', minute: 100 },
+      { type: 'mission_evacuated', probeId: 'u1', minute: 110 },
+      { type: 'probe_shot_down', probeId: 'u1', pos: { x: 8, y: 2 }, minute: 120 },
     ];
     for (let i = log.length - 3; i < log.length; i++) expect(trustDelta(log, i)).toBeNull();
   });
@@ -201,7 +201,7 @@ describe('п19.2: кампанія — довіра з журналу, трає�
 
   it('загроза ігнорує події довіри (threatDelta 0)', () => {
     const log: GeoEvent[] = [
-      { type: 'region_trust', region: 'west', delta: -30, trust: 70, reason: 'ufo_left', minute: 1 },
+      { type: 'region_trust', region: 'west', delta: -30, trust: 70, reason: 'probe_left', minute: 1 },
       { type: 'region_out', region: 'west', minute: 1 },
     ];
     expect([threatDelta(log, 0), threatDelta(log, 1)]).toEqual([0, 0]);

@@ -30,8 +30,8 @@ import { createRoster, missionSquad, type Roster } from './squad';
 import { createIntercept } from './intercept';
 
 // Геосцена без НЛО, щоб тести не залежали від спавну (прецедент research.test.ts).
-function geoNoUfo(seed = 7): GeoState {
-  return createGeoGame({ seed, spawnChance: 0, maxUfos: 0 });
+function geoNoProbe(seed = 7): GeoState {
+  return createGeoGame({ seed, spawnChance: 0, maxProbes: 0 });
 }
 
 // Економіка з великим балансом — тести замовлень не про банкрутство.
@@ -170,8 +170,8 @@ describe('тик виробництва (1 виклик = 1 тік геосце�
 
 describe('ізоляція від геосцени (критерій П11.3: geo.rng не витягується)', () => {
   it('траєкторія геосцени з цехом і без нього — байт-у-байт однакова', () => {
-    const withWorkshop = geoNoUfo(42);
-    const withoutWorkshop = geoNoUfo(42);
+    const withWorkshop = geoNoProbe(42);
+    const withoutWorkshop = geoNoProbe(42);
     const econ = richEcon();
     const workshop = createWorkshop();
     orderItem(econ, workshop, researchWith('medkit'), 'medkit');
@@ -189,7 +189,7 @@ describe('ізоляція від геосцени (критерій П11.3: geo
   });
 
   it('партія без замовлень: тік цеху — no-op поряд із геосценою', () => {
-    const geo = geoNoUfo(42);
+    const geo = geoNoProbe(42);
     const workshop = createWorkshop();
     advanceTime(geo, 48);
     workshopTick(workshop);

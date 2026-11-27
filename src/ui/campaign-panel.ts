@@ -4,7 +4,7 @@
 // юніт-тестів; render* лише пишуть DOM. Числа — з констант ядра (урок П9.1), ядро не змінюється (ADR-0002).
 
 import { ASSAULT_THRESHOLDS, THREAT_MAX, campaignScore, type CampaignScore } from '../core/campaign';
-import { SCORE_PER_MISSION_WON, SCORE_PER_MONEY, SCORE_PER_UFO_SHOT_DOWN, SCORE_PER_VETERAN_ALIVE } from '../core/campaign';
+import { SCORE_PER_MISSION_WON, SCORE_PER_MONEY, SCORE_PER_PROBE_SHOT_DOWN, SCORE_PER_VETERAN_ALIVE } from '../core/campaign';
 import { gateKeyDone, gateOpen } from '../core/assault';
 import { ENEMY_KINDS, ENEMY_ORDER } from '../core/enemies';
 import { TICK_MINUTES, geoDay } from '../core/geo';
@@ -111,9 +111,9 @@ export function endScore(party: Party): CampaignScore {
 export function scoreLinesText(s: CampaignScore): string {
   return (
     'зонди ' +
-    s.ufosShotDown +
+    s.probesShotDown +
     ' × ' +
-    SCORE_PER_UFO_SHOT_DOWN +
+    SCORE_PER_PROBE_SHOT_DOWN +
     ' · місії ' +
     s.missionsWon +
     ' × ' +

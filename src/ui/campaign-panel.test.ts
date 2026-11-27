@@ -131,7 +131,7 @@ describe('п18.5: панель «Мета кампанії»', () => {
 });
 
 describe('п18.5: екрани кінця партії (рішення власника «А. Два вікна + зупинка»)', () => {
-  const score = { ufosShotDown: 3, missionsWon: 5, veteransAlive: 4, moneyLeft: 400, total: 1350 };
+  const score = { probesShotDown: 3, missionsWon: 5, veteransAlive: 4, moneyLeft: 400, total: 1350 };
 
   it('розклад рахунку дослівно з превʼю власника', () => {
     expect(scoreLinesText(score)).toBe('зонди 3 × 100 · місії 5 × 150 · живі 4 × 50 · кредити 0,25 × 400');

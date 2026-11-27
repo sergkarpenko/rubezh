@@ -135,7 +135,7 @@ describe('П8.5: оркестратор — повна партія (фіксо�
     // поранених 24 → 28, залишок 2179, тотал 5595; місії, втрати й штурми ті самі.
     // п20.3 (ADR-0167): ШІ ворогів і бот загону шукають укриття — місій 26 → 27, поразок 4 → 5, втрати 34 → 38,
     // поранених 28 → 24, найм 31 → 36, ветеранів 3 → 4, залишок 1895, тотал 5574; поразка — та сама 36-та доба.
-    expect(r.score).toEqual({ ufosShotDown: 16, missionsWon: 22, veteransAlive: 4, moneyLeft: 1895, total: 5574 });
+    expect(r.score).toEqual({ probesShotDown: 16, missionsWon: 22, veteransAlive: 4, moneyLeft: 1895, total: 5574 });
     expect([r.launches, r.shotDown]).toEqual([19, 16]);
     expect(r.missionsLaunched).toBe(27);
     expect(r.missionsWon).toBe(22);

@@ -449,15 +449,15 @@ describeScenario('UI-флоу прев’ю: геосцена → місія →
   step('btn-tick: +30 хв; btn-day: +1 доба із зупинкою на виявленні зонда (Т.43)', () => {
     btn('btn-tick').click();
     expect($('clock').textContent).toBe('Д1 00:30');
-    expect(document.querySelectorAll('#ufos .ufo').length).toBe(0);
+    expect(document.querySelectorAll('#probes .probe').length).toBe(0);
     // сід 42: перший зонд виявлено о 09:30 першої доби — «+1 доба» стає тут
     btn('btn-day').click();
     expect($('clock').textContent).toBe('Д1 09:30');
-    expect(document.querySelectorAll('#ufos .ufo').length).toBe(1);
+    expect(document.querySelectorAll('#probes .probe').length).toBe(1);
     // наступний клік іде далі й стає на приземленні цього зонда (вікно місії відкрите)
     btn('btn-day').click();
     expect($('clock').textContent).toBe('Д1 11:00');
-    expect(document.querySelector('#ufos button.mission')).not.toBeNull();
+    expect(document.querySelector('#probes button.mission')).not.toBeNull();
   });
 
   step('нова партія зі сідом: годинник і журнал', () => {
@@ -797,7 +797,7 @@ describePage('панель збереження: 3 слоти, лише на г�
       found = document.querySelector('button.mission') !== null;
     }
     expect(found).toBe(true);
-    const ufosBefore = $('ufos').textContent;
+    const probesBefore = $('probes').textContent;
     const rosterBefore = $('roster').textContent;
     expect($('clock').textContent).toBe('Д1 09:00'); // 18-й тік (детерміновано, сід 27)
 
@@ -810,13 +810,13 @@ describePage('панель збереження: 3 слоти, лише на г�
     // «перезавантаження сторінки»: свіжа партія — слот виживає у localStorage
     startParty('27');
     expect($('clock').textContent).toBe('Д1 00:00');
-    expect($('ufos').textContent).toContain('Нічого не виявлено');
+    expect($('probes').textContent).toContain('Нічого не виявлено');
 
     // завантаження відновлює партію: час, трекінг НЛО, ростер, фінанси
     btn('btn-load-1').click();
     expect($('log').textContent).toContain('Завантажено: слот 1');
     expect($('clock').textContent).toBe('Д1 09:00');
-    expect($('ufos').textContent).toBe(ufosBefore);
+    expect($('probes').textContent).toBe(probesBefore);
     expect($('roster').textContent).toBe(rosterBefore);
     expect($('money').textContent).toBe('300');
 
@@ -984,8 +984,8 @@ describePage('панель збереження: 3 слоти, лише на г�
     expect($('start-screen').classList.contains('hidden')).toBe(true);
     exitToStart(false);
     const good = localStorage.getItem('rubezh.save.1') as string;
-    const bad = JSON.parse(good) as { state: { geo: { ufos: unknown } } };
-    bad.state.geo.ufos = [null]; // метадані читаються (слот лишається останнім), розбір партії падає
+    const bad = JSON.parse(good) as { state: { geo: { probes: unknown } } };
+    bad.state.geo.probes = [null]; // метадані читаються (слот лишається останнім), розбір партії падає
     const failures = (): number => ($('log').textContent ?? '').split('✗ Завантаження не вдалось').length - 1;
     const failuresBefore = failures();
     localStorage.setItem('rubezh.save.1', JSON.stringify(bad));
@@ -1437,7 +1437,7 @@ describePage('П7.4: винищувач — запуск → бій → пошк
     let rounds = 0;
     let guard = 0;
     while (guard++ < 6000) {
-      if (fighterText().includes('Бій з')) {
+      if (fighterText().includes('Бій із зондом')) {
         if (battleMoney < 0) battleMoney = Number($('money').textContent);
         const choice = document.querySelector<HTMLButtonElement>('button.intercept-range[data-choice="впритул"]');
         if (!choice) break; // бій завершився попереднім кліком
@@ -1499,12 +1499,12 @@ describePage('П7.5: повітряний бій — контекст-стріч
   // Погоня/бій: клікаємо «Перехопити» при нагоді, тікаємо час до бою; guard — страховка від зависання.
   const pursueBattle = (maxTicks = 200): boolean => {
     for (let i = 0; i < maxTicks; i++) {
-      if (fighterText().includes('Бій з')) return true;
+      if (fighterText().includes('Бій із зондом')) return true;
       const b = interceptBtn();
       if (b) b.click();
       btn('btn-tick').click();
     }
-    return fighterText().includes('Бій з');
+    return fighterText().includes('Бій із зондом');
   };
 
   it('контекст-стрічка прихована на геосцені, видима в погоню/бій, ховається після бою', () => {
@@ -1517,7 +1517,7 @@ describePage('П7.5: повітряний бій — контекст-стріч
       const b = interceptBtn();
       if (b) {
         b.click();
-        launched = fighterText().includes('погоня') || fighterText().includes('Бій з');
+        launched = fighterText().includes('погоня') || fighterText().includes('Бій із зондом');
       }
       if (!launched) btn('btn-tick').click();
     }
@@ -1532,24 +1532,24 @@ describePage('П7.5: повітряний бій — контекст-стріч
     expect(pursueBattle()).toBe(true);
     expect($('ictx-round').textContent).toMatch(/^\d+$/);
     expect($('ictx-fighter').textContent).toContain('HP 4/4');
-    expect($('ictx-ufo').textContent).toMatch(/HP \d+/);
+    expect($('ictx-probe').textContent).toMatch(/HP \d+/);
     // Т.16: у бою час геосцени заморожено — кнопки вимкнені, а обробники
     // (виклик в обхід disabled) не рухають ні годинника, ні зондів, ні фінансів
     expect(btn('btn-tick').disabled).toBe(true);
     expect(btn('btn-day').disabled).toBe(true);
-    const frozen = (): string[] => [$('clock').textContent, $('ufos').textContent, $('money').textContent, $('ictx').textContent];
+    const frozen = (): string[] => [$('clock').textContent, $('probes').textContent, $('money').textContent, $('ictx').textContent];
     const before = frozen();
     btn('btn-tick').onclick!(new MouseEvent('click') as PointerEvent);
     btn('btn-day').onclick!(new MouseEvent('click') as PointerEvent);
     expect(frozen()).toEqual(before);
     // доводимо бій до результату — стрічка ховається, збереження повертається
     let guard = 0;
-    while (guard++ < 6000 && fighterText().includes('Бій з')) {
+    while (guard++ < 6000 && fighterText().includes('Бій із зондом')) {
       const choice = document.querySelector<HTMLButtonElement>('button.intercept-range[data-choice="впритул"]');
       if (!choice || choice.disabled) break;
       choice.click();
     }
-    expect(fighterText()).not.toContain('Бій з');
+    expect(fighterText()).not.toContain('Бій із зондом');
     expect($('ictx').classList.contains('hidden')).toBe(true);
     expect(btn('btn-save-1').disabled).toBe(false);
     expect(btn('btn-tick').disabled).toBe(false); // Т.16: бій завершено — час знову йде
@@ -1625,7 +1625,7 @@ describeScenario('п18.3: загроза 100 — поразка; перемог�
       c.status = 'поразка';
       c.threat = 100;
       c.defeatDay = 1;
-      c.score = { ufosShotDown: 0, missionsWon: 0, veteransAlive: 6, moneyLeft: 300, total: 375 };
+      c.score = { probesShotDown: 0, missionsWon: 0, veteransAlive: 6, moneyLeft: 300, total: 375 };
     });
     expect($('campaign-defeat').classList.contains('hidden')).toBe(false);
     expect($('campaign-defeat-text').textContent).toBe('Загроза Розриву досягла 100 на 1-й добі.');
@@ -1649,7 +1649,7 @@ describeScenario('п18.3: загроза 100 — поразка; перемог�
     saveWithCampaign((c) => {
       c.status = 'перемога';
       c.victoryDay = 1;
-      c.score = { ufosShotDown: 0, missionsWon: 0, veteransAlive: 6, moneyLeft: 300, total: 375 };
+      c.score = { probesShotDown: 0, missionsWon: 0, veteransAlive: 6, moneyLeft: 300, total: 375 };
     });
     expect($('campaign-goal').textContent).toContain('Браму Розриву зачинено'); // п18.5
     expect($('campaign-victory').classList.contains('hidden')).toBe(false);
@@ -1818,7 +1818,7 @@ describePage('П11.6: критичний флоу «дослідити → ви�
     // (endless, ADR-0033: загроза не росте), як після «Грати далі»
     saveWithCampaign((c) => {
       c.status = 'перемога';
-      c.score = { ufosShotDown: 0, missionsWon: 0, veteransAlive: 6, moneyLeft: 300, total: 375 };
+      c.score = { probesShotDown: 0, missionsWon: 0, veteransAlive: 6, moneyLeft: 300, total: 375 };
     });
     btn('btn-continue').click();
 
@@ -2034,7 +2034,7 @@ describePage('Т.78: гарматний модуль вручну — панел
 
 describePage('П12.5: зрозумілість розвитку — числові ефекти до дії (ADR-0065)', () => {
   const rowText = (root: string, name: string): string =>
-    Array.from(document.querySelectorAll('#' + root + ' .ufo, #' + root + ' .sci-card'))
+    Array.from(document.querySelectorAll('#' + root + ' .probe, #' + root + ' .sci-card'))
       .map((r) => r.textContent ?? '')
       .find((t) => t.includes(name)) ?? '';
 
@@ -2086,7 +2086,7 @@ describePage('П12.5: зрозумілість розвитку — числов
 
 describePage('Т.43: «До події», зупинки «+1 доба» і пробіл', () => {
   const clock = (): string | null => $('clock').textContent;
-  const ufoCount = (): number => document.querySelectorAll('#ufos .ufo').length;
+  const probeCount = (): number => document.querySelectorAll('#probes .probe').length;
   // повертає defaultPrevented: істина лише для пробілу, що зрушив час
   const space = (target: EventTarget = document): boolean => {
     const ev = new KeyboardEvent('keydown', { key: ' ', code: 'Space', bubbles: true, cancelable: true });
@@ -2099,8 +2099,8 @@ describePage('Т.43: «До події», зупинки «+1 доба» і пр
 
   it('еталон: кліками «+1 тік» до першого виявлення зонда (сід 42)', () => {
     startParty();
-    for (let i = 0; i < 48 && ufoCount() === 0; i++) btn('btn-tick').click();
-    expect(ufoCount()).toBe(1);
+    for (let i = 0; i < 48 && probeCount() === 0; i++) btn('btn-tick').click();
+    expect(probeCount()).toBe(1);
     expect(clock()).toBe(firstDetection);
   });
 
@@ -2111,7 +2111,7 @@ describePage('Т.43: «До події», зупинки «+1 доба» і пр
     expect(btn('btn-event').title).toBe('Час іде до першої події, найдовше 1 добу (пробіл)');
     btn('btn-event').click();
     expect(clock()).toBe(firstDetection);
-    expect(ufoCount()).toBe(1);
+    expect(probeCount()).toBe(1);
   });
 
   it('пробіл на геосцені — те саме, що клік «До події»', () => {
@@ -2193,7 +2193,7 @@ describePage('Т.43: «До події», зупинки «+1 доба» і пр
     btn('btn-event').click(); // Д1 09:30 — зонд виявлено в повітрі
     expect(step.textContent).toBe('Наступний крок: зонд у повітрі — перехопіть або чекайте приземлення');
     btn('btn-event').click(); // Д1 11:00 — приземлився
-    const win = /вікно ([\d.]+) год/.exec(document.querySelector('#ufos .ufo')!.textContent)![1];
+    const win = /вікно ([\d.]+) год/.exec(document.querySelector('#probes .probe')!.textContent)![1];
     expect(step.textContent).toBe('Наступний крок: зонд приземлився — запустіть місію (вікно ' + win + ' год)');
     document.querySelector<HTMLButtonElement>('button.mission')!.click();
     deploy();
@@ -2270,9 +2270,9 @@ describePage('Т.43: «До події», зупинки «+1 доба» і пр
     btn('btn-event').click(); // зонд у повітрі
     btn('btn-event').click(); // приземлився
     btn('next-step').click();
-    const ufo = document.querySelector('#ufos button.mission')!;
-    expect(ufo.id).toMatch(/^btn-mission-/);
-    expect(document.activeElement).toBe(ufo);
+    const probe = document.querySelector('#probes button.mission')!;
+    expect(probe.id).toMatch(/^btn-mission-/);
+    expect(document.activeElement).toBe(probe);
   });
 
   it('Т.79: цілі рядка «Наступний крок» — на тих вкладках, які називає nextStep', () => {
@@ -2280,7 +2280,7 @@ describePage('Т.43: «До події», зупинки «+1 доба» і пр
     const tab = (id: string): string | undefined => document.getElementById(id)?.closest<HTMLElement>('section[data-tab]')?.dataset.tab;
     expect(tab('btn-hire')).toBe('squad');
     expect(tab('roster')).toBe('squad');
-    expect(tab('ufos')).toBe('base');
+    expect(tab('probes')).toBe('base');
     expect(tab('workshop')).toBe('base');
     expect(tab('fighter')).toBeUndefined(); // п19.4: «Перехоплювачі» — середня колонка без вкладки (ціль tab: null)
     expect($('fighter').closest('#mid')).not.toBeNull();
@@ -2402,9 +2402,9 @@ describePage('Т.98: гарячі клавіші геосцени D / T / N', ()
   });
 });
 
-// Т.51: рядок #fighter-last має зникати, коли зонд події (приземлився → ufo_left) вже не в geo.ufos.
+// Т.51: рядок #fighter-last має зникати, коли зонд події (приземлився → probe_left) вже не в geo.probes.
 describePage('Т.51: переривання перехоплення при приземленні зонда — журнал і панель #fighter-last', () => {
-  it('сід 42, пресет «норма»: ufo1 виявлено, старт перехоплення, abort (ufo_landed); після ufo_left рядка немає', () => {
+  it('сід 42, пресет «норма»: probe1 виявлено, старт перехоплення, abort (probe_landed); після probe_left рядка немає', () => {
     startParty();
     const interceptBtn = (): HTMLButtonElement | null => {
       for (const b of document.querySelectorAll<HTMLButtonElement>('button.intercept')) {
@@ -2432,20 +2432,20 @@ describePage('Т.51: переривання перехоплення при пр
     }
     expect(shown).toBe(true);
     // 3. текст #fighter-last — точно рядок журналу про abort; у #log такий самий рядок, «зник з трекінгу» ще немає
-    const abortedText = '✦ Зонд Розриву ufo1 приземлився — перехоплення перервано';
-    const leftText = 'Зонд Розриву ufo1 відлетів і зник';
+    const abortedText = '✦ Зонд Розриву №1 приземлився — перехоплення перервано';
+    const leftText = 'Зонд Розриву №1 відлетів і зник';
     expect($('fighter-last').textContent).toBe(abortedText);
     expect($('log').textContent ?? '').toContain(abortedText);
     expect($('log').textContent ?? '').not.toContain(leftText);
     expect($('log').textContent ?? '').not.toContain('зник з трекінгу');
-    // 4. тикаємо, доки в #log не з'явиться рядок ufo_left (запобіжник — 400 кліків)
+    // 4. тикаємо, доки в #log не з'явиться рядок probe_left (запобіжник — 400 кліків)
     let left = false;
     for (let i = 0; i < 400 && !left; i++) {
       btn('btn-tick').click();
       left = ($('log').textContent ?? '').includes(leftText);
     }
     expect(left).toBe(true);
-    // 5. зонд ufo1 вже не в geo.ufos — елемента #fighter-last немає
+    // 5. зонд probe1 вже не в geo.probes — елемента #fighter-last немає
     expect(document.getElementById('fighter-last')).toBeNull();
   });
 });
@@ -2606,8 +2606,8 @@ describePage('Т.58: стартовий екран після невдалого
     const good = freshSave();
     exitViaMenu();
     expect(hidden('start-note')).toBe(true);
-    const bad = JSON.parse(good) as { state: { geo: { ufos: unknown } } };
-    bad.state.geo.ufos = [null]; // метадані читаються (слот лишається останнім), розбір партії падає
+    const bad = JSON.parse(good) as { state: { geo: { probes: unknown } } };
+    bad.state.geo.probes = [null]; // метадані читаються (слот лишається останнім), розбір партії падає
     localStorage.setItem('rubezh.save.1', JSON.stringify(bad));
     try {
       btn('btn-start-continue').click();
@@ -2635,8 +2635,8 @@ describePage('Т.58: стартовий екран після невдалого
       btn('btn-defeat-exit').click();
       expect(hidden('start-screen')).toBe(false);
       expect(hidden('campaign-defeat')).toBe(true);
-      const bad = JSON.parse(good) as { state: { geo: { ufos: unknown } } };
-      bad.state.geo.ufos = [null];
+      const bad = JSON.parse(good) as { state: { geo: { probes: unknown } } };
+      bad.state.geo.probes = [null];
       localStorage.setItem('rubezh.save.1', JSON.stringify(bad));
       btn('btn-start-continue').click();
       expect(hidden('start-note')).toBe(false);
@@ -2660,8 +2660,8 @@ describePage('Т.58: стартовий екран після невдалого
       expect(hidden('start-screen')).toBe(false);
       expect(hidden('campaign-victory')).toBe(true);
       // невдале «Продовжити» перемальовує панелі покинутої партії — екран перемоги не повертається
-      const bad = JSON.parse(good) as { state: { geo: { ufos: unknown } } };
-      bad.state.geo.ufos = [null];
+      const bad = JSON.parse(good) as { state: { geo: { probes: unknown } } };
+      bad.state.geo.probes = [null];
       localStorage.setItem('rubezh.save.1', JSON.stringify(bad));
       btn('btn-start-continue').click();
       expect(hidden('start-note')).toBe(false);
@@ -2750,9 +2750,9 @@ describePage('Т.64: зупинка авто-бою в battle.close на сто�
 
 // Т.66 (кандидат 55, після Т.51; план — docs/plans/t66-fighter-last-mission.md): рядок #fighter-last
 // після перерваного перехоплення (зонд приземлився) зникає, коли місію на цьому зонді виграно, — зонда
-// вже немає в geo.ufos (completeMission), хоча відліт ufo_left так і не настав. Досі це тримав лише тест модуля.
+// вже немає в geo.probes (completeMission), хоча відліт probe_left так і не настав. Досі це тримав лише тест модуля.
 describePage('Т.66: рядок #fighter-last зникає після виграної місії', () => {
-  it('Т.66: сід 42, пресет «норма»: перехоплення ufo1 перервано приземленням, місію на ufo1 виграно — рядка немає', async () => {
+  it('Т.66: сід 42, пресет «норма»: перехоплення probe1 перервано приземленням, місію на probe1 виграно — рядка немає', async () => {
     startParty();
     // 1. тикаємо, доки не з'явиться активна кнопка перехоплення (запобіжник — 60 кліків), і клікаємо її
     let launched = false;
@@ -2766,12 +2766,12 @@ describePage('Т.66: рядок #fighter-last зникає після вигра
     expect(launched).toBe(true);
     // 2. тикаємо, доки не з'явиться #fighter-last (запобіжник — 10 кліків): зонд приземлився під час погоні
     for (let i = 0; i < 10 && document.getElementById('fighter-last') === null; i++) btn('btn-tick').click();
-    const abortedText = '✦ Зонд Розриву ufo1 приземлився — перехоплення перервано';
+    const abortedText = '✦ Зонд Розриву №1 приземлився — перехоплення перервано';
     expect(document.getElementById('fighter-last')?.textContent).toBe(abortedText);
-    // у списку зондів — один зонд (ufo1; назв зондів список не показує) з кнопкою місії
-    expect(document.querySelectorAll('#ufos .ufo')).toHaveLength(1);
-    // 3. місія на ufo1 — одразу, без жодного тіку: відліт ufo_left не настає
-    const mission = document.querySelector<HTMLButtonElement>('#ufos .ufo button.mission');
+    // у списку зондів — один зонд (probe1; назв зондів список не показує) з кнопкою місії
+    expect(document.querySelectorAll('#probes .probe')).toHaveLength(1);
+    // 3. місія на probe1 — одразу, без жодного тіку: відліт probe_left не настає
+    const mission = document.querySelector<HTMLButtonElement>('#probes .probe button.mission');
     expect(mission).not.toBeNull();
     expect(mission!.disabled).toBe(false);
     mission!.click();
@@ -2781,14 +2781,14 @@ describePage('Т.66: рядок #fighter-last зникає після вигра
     await runAutoBattle();
     expect($('bresult').textContent).toContain('ЗАЧИЩЕНО');
     // 5. уже на картці результату (finish перемальовує панелі): зонда в списку немає, рядка немає — ні елемента, ні тексту
-    expect(document.querySelectorAll('#ufos .ufo')).toHaveLength(0);
+    expect(document.querySelectorAll('#probes .probe')).toHaveLength(0);
     expect(document.getElementById('fighter-last')).toBeNull();
     expect($('fighter').textContent ?? '').not.toContain(abortedText);
     // 6. назад на геосцену: те саме, а в журналі рядок про переривання лишився, рядка про відліт немає
     closeBattle();
     expect($('geo-panel').classList.contains('hidden')).toBe(false);
-    expect(document.querySelectorAll('#ufos .ufo')).toHaveLength(0);
-    expect($('log').textContent ?? '').not.toContain('Зонд Розриву ufo1 відлетів і зник');
+    expect(document.querySelectorAll('#probes .probe')).toHaveLength(0);
+    expect($('log').textContent ?? '').not.toContain('Зонд Розриву №1 відлетів і зник');
     expect($('log').textContent ?? '').toContain(abortedText);
     expect(document.getElementById('fighter-last')).toBeNull();
     expect($('fighter').textContent ?? '').not.toContain(abortedText);
@@ -2797,9 +2797,9 @@ describePage('Т.66: рядок #fighter-last зникає після вигра
 
 // Т.69 (кандидат 55, після Т.66; план — docs/plans/t69-fighter-last-lost.md): рядок #fighter-last
 // після перерваного перехоплення (зонд приземлився) лишається, коли місію на цьому зонді програно, — зонд
-// лишається в geo.ufos (completeMission). Виграну місію тримає тест Т.66; евакуйованої зі сторінки не досягти.
+// лишається в geo.probes (completeMission). Виграну місію тримає тест Т.66; евакуйованої зі сторінки не досягти.
 describePage('Т.69: рядок #fighter-last лишається після програної місії', () => {
-  it('Т.69: сід 36, пресет «складний»: перехоплення ufo1 перервано приземленням, місію на ufo1 програно — рядок лишається', async () => {
+  it('Т.69: сід 36, пресет «складний»: перехоплення probe1 перервано приземленням, місію на probe1 програно — рядок лишається', async () => {
     startParty('36', 'складний');
     // 1. тикаємо, доки не з'явиться активна кнопка перехоплення (запобіжник — 60 кліків), і клікаємо її
     let launched = false;
@@ -2813,10 +2813,10 @@ describePage('Т.69: рядок #fighter-last лишається після пр
     expect(launched).toBe(true);
     // 2. тикаємо, доки не з'явиться #fighter-last (запобіжник — 10 кліків): зонд приземлився під час погоні
     for (let i = 0; i < 10 && document.getElementById('fighter-last') === null; i++) btn('btn-tick').click();
-    const abortedText = '✦ Зонд Розриву ufo1 приземлився — перехоплення перервано';
+    const abortedText = '✦ Зонд Розриву №1 приземлився — перехоплення перервано';
     expect(document.getElementById('fighter-last')?.textContent).toBe(abortedText);
-    // 3. місія на ufo1 — одразу, без жодного тіку
-    const mission = document.querySelector<HTMLButtonElement>('#ufos .ufo button.mission');
+    // 3. місія на probe1 — одразу, без жодного тіку
+    const mission = document.querySelector<HTMLButtonElement>('#probes .probe button.mission');
     expect(mission).not.toBeNull();
     expect(mission!.disabled).toBe(false);
     mission!.click();
@@ -2827,19 +2827,19 @@ describePage('Т.69: рядок #fighter-last лишається після пр
     for (let i = 0; i < 200 && $('bresult').textContent === ''; i++) btn('btn-end').click();
     expect($('bresult').textContent).toContain('ЗАГІН ВТРАЧЕНО');
     // 5. уже на картці результату (finish перемальовує панелі): зонд лишився в списку, рядок на панелі — той самий, один
-    expect(document.querySelectorAll('#ufos .ufo')).toHaveLength(1);
+    expect(document.querySelectorAll('#probes .probe')).toHaveLength(1);
     expect(document.querySelectorAll('#fighter-last')).toHaveLength(1);
     expect(document.getElementById('fighter-last')?.textContent).toBe(abortedText);
     // 6. назад на геосцену: зонд у списку, місію можна повторити, рядок на панелі лишився
     closeBattle();
     expect($('geo-panel').classList.contains('hidden')).toBe(false);
-    expect(document.querySelectorAll('#ufos .ufo button.mission')).toHaveLength(1);
+    expect(document.querySelectorAll('#probes .probe button.mission')).toHaveLength(1);
     expect(document.getElementById('fighter-last')?.textContent).toBe(abortedText);
   });
 });
 
 // Т.78 (кандидат 55, після Т.66 і Т.69): рядок #fighter-last лишається після евакуації місії —
-// при outcome 'евакуйовано' completeMission не прибирає зонд з geo.ufos, тому рядок не зникає (на відміну від перемоги, Т.66).
+// при outcome 'евакуйовано' completeMission не прибирає зонд з geo.probes, тому рядок не зникає (на відміну від перемоги, Т.66).
 describePage('кандидат 55: рядок #fighter-last лишається після евакуації місії', () => {
   it('кандидат 55: сід 42, пресет «норма»: місія без тіків, евакуація трьох оперативників — рядок лишається', () => {
     startParty('42');
@@ -2854,10 +2854,10 @@ describePage('кандидат 55: рядок #fighter-last лишається �
     }
     expect(launched).toBe(true);
     for (let i = 0; i < 10 && document.getElementById('fighter-last') === null; i++) btn('btn-tick').click();
-    const abortedText = '✦ Зонд Розриву ufo1 приземлився — перехоплення перервано';
+    const abortedText = '✦ Зонд Розриву №1 приземлився — перехоплення перервано';
     expect(document.getElementById('fighter-last')?.textContent).toBe(abortedText);
-    // 2. місія на ufo1 без тіків; поки бойова панель видима (#battle-panel видно) — #fighter-last є, з тим самим текстом
-    const mission = document.querySelector<HTMLButtonElement>('#ufos .ufo button.mission');
+    // 2. місія на probe1 без тіків; поки бойова панель видима (#battle-panel видно) — #fighter-last є, з тим самим текстом
+    const mission = document.querySelector<HTMLButtonElement>('#probes .probe button.mission');
     expect(mission).not.toBeNull();
     expect(mission!.disabled).toBe(false);
     mission!.click();
@@ -2876,14 +2876,14 @@ describePage('кандидат 55: рядок #fighter-last лишається �
     }
     btn('btn-evac-yes').click();
     expect($('bresult').textContent).toContain('ЗАГІН ЕВАКУЙОВАНО — врятовані на базі, зонд Розриву лишається активним');
-    // 4. картка результату: у #ufos .ufo — один зонд; #fighter-last — один, з тим самим текстом
-    expect(document.querySelectorAll('#ufos .ufo')).toHaveLength(1);
+    // 4. картка результату: у #probes .probe — один зонд; #fighter-last — один, з тим самим текстом
+    expect(document.querySelectorAll('#probes .probe')).toHaveLength(1);
     expect(document.querySelectorAll('#fighter-last')).toHaveLength(1);
     expect(document.getElementById('fighter-last')?.textContent).toBe(abortedText);
-    // 5. btn-close → геосцена: кнопка місії одна (#ufos .ufo button.mission — одна), #fighter-last з тим самим текстом
+    // 5. btn-close → геосцена: кнопка місії одна (#probes .probe button.mission — одна), #fighter-last з тим самим текстом
     closeBattle();
     expect($('geo-panel').classList.contains('hidden')).toBe(false);
-    expect(document.querySelectorAll('#ufos .ufo button.mission')).toHaveLength(1);
+    expect(document.querySelectorAll('#probes .probe button.mission')).toHaveLength(1);
     expect(document.querySelectorAll('#fighter-last')).toHaveLength(1);
     expect(document.getElementById('fighter-last')?.textContent).toBe(abortedText);
   });
@@ -3380,16 +3380,16 @@ describePage('Т.99: зупинки «До події» на сторінці і
     startParty();
     for (let i = 0; i < 4; i++) btn('btn-event').click(); // сід 42: Д1 13:30 — обидва зонди сидять, вікна 1,5 і 4 год
     expect(clock()).toBe('Д1 13:30');
-    expect(document.querySelectorAll('#ufos button.mission').length).toBe(2);
+    expect(document.querySelectorAll('#probes button.mission').length).toBe(2);
     const base = saveBase();
     // еталон: тіками до відльоту обох
-    for (let i = 0; i < 48 && document.querySelector('#ufos button.mission') !== null; i++) btn('btn-tick').click();
-    expect(document.querySelector('#ufos button.mission')).toBeNull();
+    for (let i = 0; i < 48 && document.querySelector('#probes button.mission') !== null; i++) btn('btn-tick').click();
+    expect(document.querySelector('#probes button.mission')).toBeNull();
     const departed = minutes(clock());
     load(base);
     btn('btn-event').click();
     expect(minutes(clock())).toBeGreaterThan(departed); // наступна зупинка — виявлення нового зонда
-    expect(document.querySelector('#ufos button.mission')).toBeNull();
+    expect(document.querySelector('#probes button.mission')).toBeNull();
   });
 
   // Банкрутство настає на межі доби: дотація +75, утримання 8 техномантів −80 → 95 < 100 (найм на «нормі»),
@@ -3781,7 +3781,7 @@ describePage('п16.4: вікно вибору ролі і ростер', () => {
 describePage('п18.2 (ADR-0153 п. 12): радар 6 після «Пеленгу брами» — тік партії на сторінці', () => {
   type Raw = {
     state: {
-      geo: { base: { x: number; y: number }; ufos: Record<string, unknown>[] };
+      geo: { base: { x: number; y: number }; ufos: Record<string, unknown>[] }; // Т.218: сейв на диску — старі ключі `ufo`;
       research: { completed: string[] };
     };
   };

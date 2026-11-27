@@ -11,14 +11,14 @@ import {
   DIFFICULTY_MULTIPLIERS,
   SCORE_PER_MONEY,
   SCORE_PER_MISSION_WON,
-  SCORE_PER_UFO_SHOT_DOWN,
+  SCORE_PER_PROBE_SHOT_DOWN,
   SCORE_PER_VETERAN_ALIVE,
   sciencePrice,
   THREAT_MAX,
   THREAT_MISSION_WON,
   THREAT_PER_DAY,
-  THREAT_UFO_LEFT_DETECTED,
-  THREAT_UFO_LEFT_UNDETECTED,
+  THREAT_PROBE_LEFT_DETECTED,
+  THREAT_PROBE_LEFT_UNDETECTED,
   threatDelta,
   type CampaignContext,
 } from './campaign';
@@ -52,7 +52,7 @@ describe('campaign — початковий стан (ADR-0033)', () => {
     expect(m.hpBonusMultiplier).toBeLessThan(DIFFICULTY_MULTIPLIERS['норма'].hpBonusMultiplier);
     expect(m.economyMultiplier).toBeLessThan(DIFFICULTY_MULTIPLIERS['норма'].economyMultiplier);
     // спавн — не ручка тиску (probe П8.6: більше НЛО → більше премій → легше)
-    expect(m.ufoSpawnMultiplier).toBe(DIFFICULTY_MULTIPLIERS['норма'].ufoSpawnMultiplier);
+    expect(m.probeSpawnMultiplier).toBe(DIFFICULTY_MULTIPLIERS['норма'].probeSpawnMultiplier);
   });
 });
 
@@ -60,7 +60,7 @@ describe('п18.3: campaignTick — шкала загрози (ADR-0153 п. 13)',
   const day = (d: number) => ({ type: 'day' as const, day: d, minute: (d - 1) * 1440 });
 
   it('числа-кандидати ADR-0153 п. 13', () => {
-    expect([THREAT_PER_DAY, THREAT_UFO_LEFT_DETECTED, THREAT_UFO_LEFT_UNDETECTED, THREAT_MISSION_WON, THREAT_MAX]).toEqual([
+    expect([THREAT_PER_DAY, THREAT_PROBE_LEFT_DETECTED, THREAT_PROBE_LEFT_UNDETECTED, THREAT_MISSION_WON, THREAT_MAX]).toEqual([
       2, 6, 2, -1, 100,
     ]);
     expect(createCampaign()).toMatchObject({ threat: 0, threatCursor: 0, defeatDay: null });
@@ -69,8 +69,8 @@ describe('п18.3: campaignTick — шкала загрози (ADR-0153 п. 13)',
   it('доба +2, виграна місія −1 (не нижче 0); курсор — кінець журналу', () => {
     const geo = createGeoGame({ seed: 1 });
     const c = createCampaign();
-    geo.log.push({ type: 'mission_won', ufoId: 'u0', minute: 1 }); // 0 − 1 → межа 0
-    geo.log.push(day(2), day(3), { type: 'mission_won', ufoId: 'u1', minute: 2 });
+    geo.log.push({ type: 'mission_won', probeId: 'u0', minute: 1 }); // 0 − 1 → межа 0
+    geo.log.push(day(2), day(3), { type: 'mission_won', probeId: 'u1', minute: 2 });
     campaignTick(ctxOf(geo), c);
     expect(c.threat).toBe(3);
     expect(c.threatCursor).toBe(geo.log.length);
@@ -81,22 +81,22 @@ describe('п18.3: campaignTick — шкала загрози (ADR-0153 п. 13)',
   it('зонд відлетів: виявлений без бою +6, невиявлений +2, після поразки чи евакуації — 0', () => {
     const geo = createGeoGame({ seed: 2 });
     const pos = { x: 1, y: 1 };
-    const spawn = (id: string) => ({ type: 'ufo_spawned' as const, ufoId: id, kind: 'розвідник' as const, pos, minute: 0 });
-    geo.log.push(spawn('a'), { type: 'ufo_detected', ufoId: 'a', pos, minute: 1 }, { type: 'ufo_left', ufoId: 'a', minute: 2 });
-    geo.log.push(spawn('b'), { type: 'ufo_left', ufoId: 'b', minute: 3 });
+    const spawn = (id: string) => ({ type: 'probe_spawned' as const, probeId: id, kind: 'розвідник' as const, pos, minute: 0 });
+    geo.log.push(spawn('a'), { type: 'probe_detected', probeId: 'a', pos, minute: 1 }, { type: 'probe_left', probeId: 'a', minute: 2 });
+    geo.log.push(spawn('b'), { type: 'probe_left', probeId: 'b', minute: 3 });
     geo.log.push(
       spawn('c'),
-      { type: 'ufo_detected', ufoId: 'c', pos, minute: 1 },
-      { type: 'mission_lost', ufoId: 'c', minute: 2 },
-      { type: 'ufo_left', ufoId: 'c', minute: 4 }
+      { type: 'probe_detected', probeId: 'c', pos, minute: 1 },
+      { type: 'mission_lost', probeId: 'c', minute: 2 },
+      { type: 'probe_left', probeId: 'c', minute: 4 }
     );
     geo.log.push(
       spawn('d'),
-      { type: 'ufo_detected', ufoId: 'd', pos, minute: 1 },
-      { type: 'mission_evacuated', ufoId: 'd', minute: 2 },
-      { type: 'ufo_left', ufoId: 'd', minute: 5 }
+      { type: 'probe_detected', probeId: 'd', pos, minute: 1 },
+      { type: 'mission_evacuated', probeId: 'd', minute: 2 },
+      { type: 'probe_left', probeId: 'd', minute: 5 }
     );
-    const lefts = geo.log.flatMap((e, i) => (e.type === 'ufo_left' ? [threatDelta(geo.log, i)] : []));
+    const lefts = geo.log.flatMap((e, i) => (e.type === 'probe_left' ? [threatDelta(geo.log, i)] : []));
     expect(lefts).toEqual([6, 2, 0, 0]);
     const c = createCampaign();
     campaignTick(ctxOf(geo), c);
@@ -108,7 +108,7 @@ describe('п18.3: campaignTick — шкала загрози (ADR-0153 п. 13)',
     geo.minute = 60 * 1440;
     const c = createCampaign();
     c.threat = 98;
-    geo.log.push(day(61), { type: 'mission_won', ufoId: 'u', minute: 1 }); // 98 + 2 = 100 — перемога після неї не рятує
+    geo.log.push(day(61), { type: 'mission_won', probeId: 'u', minute: 1 }); // 98 + 2 = 100 — перемога після неї не рятує
     campaignTick(ctxOf(geo), c);
     expect(c.status).toBe('поразка');
     expect(c.threat).toBe(THREAT_MAX);
@@ -118,7 +118,7 @@ describe('п18.3: campaignTick — шкала загрози (ADR-0153 п. 13)',
     expect(ev).toEqual([{ type: 'campaign_defeat', day: 61, score: c.score!.total, minute: geo.minute }]);
     expect(c.threatCursor).toBe(geo.log.length);
     const frozen = { ...c, score: { ...c.score! } };
-    geo.log.push(day(62), { type: 'mission_won', ufoId: 'v', minute: 2 });
+    geo.log.push(day(62), { type: 'mission_won', probeId: 'v', minute: 2 });
     campaignTick(ctxOf(geo), c);
     expect(c).toEqual(frozen);
     expect(geo.log.filter((e) => e.type === 'campaign_defeat')).toHaveLength(1);
@@ -134,9 +134,9 @@ describe('п18.3: campaignTick — шкала загрози (ADR-0153 п. 13)',
     const d = createCampaign();
     d.threat = 99;
     geo.log.push(
-      { type: 'ufo_spawned', ufoId: 'x', kind: 'збирач', pos: { x: 0, y: 0 }, minute: 0 },
-      { type: 'ufo_detected', ufoId: 'x', pos: { x: 0, y: 0 }, minute: 0 },
-      { type: 'ufo_left', ufoId: 'x', minute: 0 }
+      { type: 'probe_spawned', probeId: 'x', kind: 'збирач', pos: { x: 0, y: 0 }, minute: 0 },
+      { type: 'probe_detected', probeId: 'x', pos: { x: 0, y: 0 }, minute: 0 },
+      { type: 'probe_left', probeId: 'x', minute: 0 }
     );
     d.threatCursor = 1; // лише відліт: 99 + 6 → 100
     campaignTick(ctxOf(geo), d);
@@ -171,7 +171,7 @@ describe('п18.3: campaignTick — шкала загрози (ADR-0153 п. 13)',
     const strip = (log: typeof geoA.log) =>
       log.filter((e) => e.type !== 'campaign_defeat' && e.type !== 'base_assault' && e.type !== 'region_trust' && e.type !== 'region_out');
     expect(strip(geoA.log)).toEqual(geoB.log);
-    expect(geoA.ufos).toEqual(geoB.ufos);
+    expect(geoA.probes).toEqual(geoB.probes);
   });
 });
 
@@ -181,27 +181,27 @@ import { geoTick as geoTickX } from './geo';
 describe('campaignScore — похідні метрики (ADR-0033)', () => {
   it('рахунок = збиті НЛО + переможні місії + живі ветерани + залишок коштів, за константами', () => {
     const geo = createGeoGame({ seed: 5 });
-    geo.log.push({ type: 'ufo_shot_down', ufoId: 'ufo1', pos: { x: 1, y: 1 }, minute: 100 });
-    geo.log.push({ type: 'ufo_shot_down', ufoId: 'ufo2', pos: { x: 2, y: 1 }, minute: 200 });
-    geo.log.push({ type: 'mission_won', ufoId: 'ufo3', minute: 300 });
+    geo.log.push({ type: 'probe_shot_down', probeId: 'probe1', pos: { x: 1, y: 1 }, minute: 100 });
+    geo.log.push({ type: 'probe_shot_down', probeId: 'probe2', pos: { x: 2, y: 1 }, minute: 200 });
+    geo.log.push({ type: 'mission_won', probeId: 'probe3', minute: 300 });
     const roster = createRoster(4);
     const econ = createEconomy();
     const s = campaignScore(geo, roster, econ);
-    expect(s.ufosShotDown).toBe(2);
+    expect(s.probesShotDown).toBe(2);
     expect(s.missionsWon).toBe(1);
     expect(s.veteransAlive).toBe(4);
     expect(s.moneyLeft).toBe(econ.money);
     expect(s.total).toBe(
-      2 * SCORE_PER_UFO_SHOT_DOWN + 1 * SCORE_PER_MISSION_WON + 4 * SCORE_PER_VETERAN_ALIVE + Math.round(econ.money * SCORE_PER_MONEY)
+      2 * SCORE_PER_PROBE_SHOT_DOWN + 1 * SCORE_PER_MISSION_WON + 4 * SCORE_PER_VETERAN_ALIVE + Math.round(econ.money * SCORE_PER_MONEY)
     );
   });
 
   it('місії-поразки та інші події в рахунок не входять', () => {
     const geo = createGeoGame({ seed: 6 });
-    geo.log.push({ type: 'mission_lost', ufoId: 'ufo1', minute: 100 });
+    geo.log.push({ type: 'mission_lost', probeId: 'probe1', minute: 100 });
     const s = campaignScore(geo, createRoster(2), createEconomy());
     expect(s.missionsWon).toBe(0);
-    expect(s.ufosShotDown).toBe(0);
+    expect(s.probesShotDown).toBe(0);
   });
 });
 

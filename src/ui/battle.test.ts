@@ -172,17 +172,17 @@ describe('battle: флоу місії (запуск/закриття/завер�
 
   it('запуск місії: стан скинуто, журнал і підказка, renderAll; повторний launch — no-op', () => {
     const f = makeFixture();
-    const ufoId = firstTarget(f);
+    const probeId = firstTarget(f);
     f.ui.selectedId = 'x'; // брудний стан попереднього бою — має скидатись
-    f.battle.launch(ufoId);
+    f.battle.launch(probeId);
     expect(f.ui.mission).not.toBeNull();
     expect(f.ui.selectedId).toBeNull();
     expect(f.deps.resetBattleLog).toHaveBeenCalled();
-    expect(f.deps.journal).toHaveBeenCalledWith('▶ Місія: загін висаджено біля зонду Розриву ' + ufoId, '', 'battle');
+    expect(f.deps.journal).toHaveBeenCalledWith('▶ Місія: загін висаджено біля зонду Розриву ' + probeId, '', 'battle');
     expect(document.getElementById('binfo')!.textContent).toContain('Ваш хід');
     expect(f.deps.renderAll).toHaveBeenCalled();
     const first = f.ui.mission;
-    f.battle.launch(ufoId); // бій уже триває — ігнор
+    f.battle.launch(probeId); // бій уже триває — ігнор
     expect(f.ui.mission).toBe(first);
   });
 
@@ -258,8 +258,8 @@ describe('battle: флоу місії (запуск/закриття/завер�
 
   it('перемога: банер, журнал втрат/поранених, премія, кнопка повернення закриває', () => {
     const f = makeFixture();
-    const ufoId = firstTarget(f);
-    f.battle.launch(ufoId);
+    const probeId = firstTarget(f);
+    f.battle.launch(probeId);
     const st = f.ui.mission!.state;
     for (const u of st.units) if (u.side === 'alien') u.alive = false; // зачищено
     const moneyBefore = f.party.econ.money;
@@ -619,15 +619,15 @@ describe('battle: флоу місії (запуск/закриття/завер�
 
   it('П15.2 (ADR-0075): «евакуйовано» — банер, без премії, НЛО лишається активним', () => {
     const f = makeFixture();
-    const ufoId = firstTarget(f);
-    f.battle.launch(ufoId);
+    const probeId = firstTarget(f);
+    f.battle.launch(probeId);
     const moneyBefore = f.party.econ.money;
     f.battle.finish('евакуйовано');
     expect(f.ui.battleResult).toBe('евакуйовано');
     expect(document.getElementById('bresult')!.innerHTML).toContain('ЕВАКУЙОВАНО');
     expect(f.party.econ.money).toBe(moneyBefore); // премія не нараховується (creditMissionBonus не викликається)
-    expect(f.party.geo.ufos.some((u) => u.id === ufoId)).toBe(true); // НЛО лишається приземленим
-    expect(f.party.geo.log.some((e) => e.type === 'mission_evacuated' && e.ufoId === ufoId)).toBe(true);
+    expect(f.party.geo.probes.some((u) => u.id === probeId)).toBe(true); // НЛО лишається приземленим
+    expect(f.party.geo.log.some((e) => e.type === 'mission_evacuated' && e.probeId === probeId)).toBe(true);
   });
 
   it('checkOutcome: усі прибульці мертві → перемога і фініш (одним викликом)', () => {

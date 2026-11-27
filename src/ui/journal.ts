@@ -17,7 +17,7 @@ import { EVAC_AP_COST, type GameEvent, type ShotMode } from '../core/combat';
 import { ENEMY_KINDS, ENEMY_ORDER } from '../core/enemies';
 import { claimHint, type Party } from '../core/save';
 import { el } from './dom';
-import { byGender, plural, ticksText } from './text';
+import { byGender, plural, probeNo, ticksText } from './text';
 
 // Підписи режимів пострілу (спільні для журналу і панелі керування боєм).
 export const MODE_LABEL: Record<ShotMode, string> = { snap: 'швидкий', aimed: 'прицільний', auto: 'черга' };
@@ -90,14 +90,14 @@ export function createJournal(deps: JournalDeps): Journal {
   }
 
   // Geo-події → журнал (туман стратегічного шару: лише виявлені НЛО, як у 4.2).
-  // П7: чистий фільтр туману; knownDetected веде журнал (ufo_detected
-  // додається до набору ДО перевірки ufo_landed/ufo_left у тому ж batch).
+  // П7: чистий фільтр туману; knownDetected веде журнал (probe_detected
+  // додається до набору ДО перевірки probe_landed/probe_left у тому ж batch).
   function drainGeoLog(): void {
     const log = deps.geoLog();
     const p = deps.party();
     for (; seenGeoLog < log.length; seenGeoLog++) {
       const e = log[seenGeoLog];
-      if (e.type === 'ufo_detected') knownDetected.add(e.ufoId);
+      if (e.type === 'probe_detected') knownDetected.add(e.probeId);
       const msg = geoEventText(e, knownDetected);
       if (msg) journal(msg.text, msg.cls);
       // П9.2: «Ремонт завершено» — подія ядра; підказка один раз за партію.
@@ -121,7 +121,7 @@ export function createJournal(deps: JournalDeps): Journal {
     // «Можна перехопити»: виявлений НЛО у повітрі + боєготовий винищувач (п19.4: будь-який)
     if (
       p.intercept.fighters.some((f) => f.status === 'на базі' && f.hp === FIGHTER_MAX_HP) &&
-      p.geo.ufos.some((u) => u.detected && u.status === 'летить')
+      p.geo.probes.some((u) => u.detected && u.status === 'летить')
     ) {
       if (claimHint(p.hints, 'intercept')) {
         journal(
@@ -201,7 +201,7 @@ export function createJournal(deps: JournalDeps): Journal {
   function adopt(p: Party): void {
     seenGeoLog = p.geo.log.length;
     knownDetected.clear();
-    for (const e of p.geo.log) if (e.type === 'ufo_detected') knownDetected.add(e.ufoId);
+    for (const e of p.geo.log) if (e.type === 'probe_detected') knownDetected.add(e.probeId);
     seenEconLog = p.econ.log.length;
     seenResearchLog = p.research.log.length; // П11.6
     seenWorkshopLog = p.workshop.log.length; // П11.6
@@ -274,18 +274,20 @@ function hangarName(e: { region?: RegionId }): string {
   return REGION_NAMES[e.region ?? 'north'];
 }
 
-// П7: чистий фільтр туману; knownDetected веде викликаючий (ufo_detected
-// додається до набору ДО перевірки ufo_landed/ufo_left у тому ж batch).
+// П7: чистий фільтр туману; knownDetected веде викликаючий (probe_detected
+// додається до набору ДО перевірки probe_landed/probe_left у тому ж batch).
 export function geoEventText(e: GeoEvent, knownDetected: ReadonlySet<string>): { text: string; cls: string } | null {
   switch (e.type) {
     case 'day':
       return { text: '— Доба ' + e.day + ' —', cls: '' };
-    case 'ufo_detected':
-      return { text: 'Виявлено зонд Розриву: ' + e.ufoId, cls: '' };
-    case 'ufo_landed':
-      return knownDetected.has(e.ufoId) ? { text: 'Зонд Розриву ' + e.ufoId + ' приземлився — відкрито вікно місії', cls: '' } : null;
-    case 'ufo_left':
-      return knownDetected.has(e.ufoId) ? { text: 'Зонд Розриву ' + e.ufoId + ' відлетів і зник', cls: '' } : null;
+    case 'probe_detected':
+      return { text: 'Виявлено зонд Розриву ' + probeNo(e.probeId), cls: '' };
+    case 'probe_landed':
+      return knownDetected.has(e.probeId)
+        ? { text: 'Зонд Розриву ' + probeNo(e.probeId) + ' приземлився — відкрито вікно місії', cls: '' }
+        : null;
+    case 'probe_left':
+      return knownDetected.has(e.probeId) ? { text: 'Зонд Розриву ' + probeNo(e.probeId) + ' відлетів і зник', cls: '' } : null;
     case 'mission_won':
       return { text: 'Місію зачищено ✓', cls: 'win' };
     case 'mission_evacuated': // Т.75 (рішення власника 19.11.2026): у парі до «зачищено ✓» / «втрачено ✗»
@@ -297,12 +299,12 @@ export function geoEventText(e: GeoEvent, knownDetected: ReadonlySet<string>): {
     case 'intercept_start':
       return e.fighter !== undefined
         ? {
-            text: '✦ Перехоплювач ' + e.fighter + ' піднявся з ангара «' + hangarName(e) + '» на зонд Розриву ' + e.ufoId,
+            text: '✦ Перехоплювач ' + e.fighter + ' піднявся з ангара «' + hangarName(e) + '» на зонд Розриву ' + probeNo(e.probeId),
             cls: '',
           }
-        : { text: '✦ Перехоплення: перехоплювач піднявся на зонд Розриву ' + e.ufoId, cls: '' };
+        : { text: '✦ Перехоплення: перехоплювач піднявся на зонд Розриву ' + probeNo(e.probeId), cls: '' };
     case 'intercept_engage':
-      return { text: '✦ Перехоплювач' + num(e) + ' зблизився із зондом Розриву ' + e.ufoId + ' — повітряний бій', cls: '' };
+      return { text: '✦ Перехоплювач' + num(e) + ' зблизився із зондом Розриву ' + probeNo(e.probeId) + ' — повітряний бій', cls: '' };
     case 'intercept_break_off':
       return e.fighter !== undefined
         ? { text: '✦ Розрив контакту — перехоплювач ' + e.fighter + ' повертається в ангар', cls: '' }
@@ -313,14 +315,14 @@ export function geoEventText(e: GeoEvent, knownDetected: ReadonlySet<string>): {
         text:
           e.reason === 'fighter_damaged'
             ? '✦ Перехоплювач' + num(e) + ' пошкоджений — вимушене переривання бою'
-            : e.reason === 'ufo_landed'
-              ? '✦ Зонд Розриву ' + e.ufoId + ' приземлився — перехоплення перервано' + by // Т.49: текст власника з номером зонда
-              : '✦ Зонд Розриву ' + e.ufoId + ' зник з трекінгу — перехоплення перервано' + by,
+            : e.reason === 'probe_landed'
+              ? '✦ Зонд Розриву ' + probeNo(e.probeId) + ' приземлився — перехоплення перервано' + by // Т.49: текст власника з номером зонда
+              : '✦ Зонд Розриву ' + probeNo(e.probeId) + ' зник з трекінгу — перехоплення перервано' + by,
         cls: e.reason === 'fighter_damaged' ? 'lose' : '',
       };
     }
-    case 'ufo_shot_down':
-      return { text: '✦ Зонд Розриву ' + e.ufoId + ' збитий! На місці падіння — місія', cls: 'win' };
+    case 'probe_shot_down':
+      return { text: '✦ Зонд Розриву ' + probeNo(e.probeId) + ' збитий! На місці падіння — місія', cls: 'win' };
     case 'fighter_returned':
       return e.fighter !== undefined
         ? { text: '✦ Перехоплювач ' + e.fighter + ' повернувся в ангар «' + hangarName(e) + '»', cls: '' }
@@ -360,7 +362,7 @@ export function geoEventText(e: GeoEvent, knownDetected: ReadonlySet<string>): {
     case 'region_out':
       return { text: '✗ Регіон «' + REGION_NAMES[e.region] + '» вийшов — його частки дотації більше немає', cls: 'lose' };
     default:
-      return null; // ufo_spawned / ufo_move — приховано туманом
+      return null; // probe_spawned / probe_move — приховано туманом
   }
 }
 

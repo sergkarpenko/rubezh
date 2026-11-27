@@ -115,7 +115,7 @@ export function createWorkshopPanel(deps: WorkshopPanelDeps): WorkshopPanel {
     for (const id of WORKSHOP_UI_ITEMS) {
       const def = WORKSHOP_CATALOG[id];
       const row = document.createElement('div');
-      row.className = 'ufo';
+      row.className = 'probe';
       row.style.marginBottom = '4px';
       const info = document.createElement('span');
       const price = sciencePrice(def.cost, party.campaign.preset);
@@ -158,7 +158,7 @@ export function createWorkshopPanel(deps: WorkshopPanelDeps): WorkshopPanel {
   // кнопка на кожен регіон (і той, що вийшов — рішення власника п19.3); разом із замовленими — до трьох.
   function interceptorRow(party: Party, busy: boolean): HTMLElement {
     const row = document.createElement('div');
-    row.className = 'ufo';
+    row.className = 'probe';
     row.id = 'interceptor-order';
     row.style.marginBottom = '4px';
     const price = sciencePrice(INTERCEPTOR_COST, party.campaign.preset);

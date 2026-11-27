@@ -10,7 +10,7 @@
 // Назви регіонів і рядки журналу — рішення власника п19.2 (Т.205, кнопками).
 
 import type { Vec2 } from './combat';
-import { ufoLeftKind, type GeoEvent } from './geo';
+import { probeLeftKind, type GeoEvent } from './geo';
 
 export type RegionId = 'west' | 'north' | 'east' | 'south';
 export const REGION_IDS: readonly RegionId[] = ['west', 'north', 'east', 'south'];
@@ -19,8 +19,8 @@ export const REGION_NAMES: Record<RegionId, string> = { west: 'Захід', nort
 
 export const TRUST_MAX = 100; // старт і стеля довіри регіону
 export const TRUST_TOTAL_MAX = TRUST_MAX * REGION_IDS.length; // Σ довір за повної довіри — дотація як у v0.10.0
-export const TRUST_UFO_LEFT_DETECTED = -30; // виявлений зонд відлетів без бою
-export const TRUST_UFO_LEFT_UNDETECTED = -15; // невиявлений зонд відлетів без бою
+export const TRUST_PROBE_LEFT_DETECTED = -30; // виявлений зонд відлетів без бою
+export const TRUST_PROBE_LEFT_UNDETECTED = -15; // невиявлений зонд відлетів без бою
 export const TRUST_MISSION_WON = 10; // виграна місія в регіоні
 
 function regionAtCell(x: number, y: number): RegionId {
@@ -67,14 +67,14 @@ export function totalTrust(regions: Regions): number {
   return sum;
 }
 
-// Остання позиція зонда ufoId у журналі до індексу i (ADR-0159 п. 10): рух, посадка, падіння,
-// виявлення чи поява; подія 'ufo_left' позиції не має. Немає — null.
-export function ufoLastPos(log: GeoEvent[], i: number, ufoId: string): Vec2 | null {
+// Остання позиція зонда probeId у журналі до індексу i (ADR-0159 п. 10): рух, посадка, падіння,
+// виявлення чи поява; подія 'probe_left' позиції не має. Немає — null.
+export function probeLastPos(log: GeoEvent[], i: number, probeId: string): Vec2 | null {
   for (let j = i - 1; j >= 0; j--) {
     const e = log[j];
-    if (!('ufoId' in e) || e.ufoId !== ufoId) continue;
-    if (e.type === 'ufo_move') return e.to;
-    if (e.type === 'ufo_landed' || e.type === 'ufo_shot_down' || e.type === 'ufo_detected' || e.type === 'ufo_spawned') {
+    if (!('probeId' in e) || e.probeId !== probeId) continue;
+    if (e.type === 'probe_move') return e.to;
+    if (e.type === 'probe_landed' || e.type === 'probe_shot_down' || e.type === 'probe_detected' || e.type === 'probe_spawned') {
       return e.pos;
     }
   }
@@ -84,22 +84,22 @@ export function ufoLastPos(log: GeoEvent[], i: number, ufoId: string): Vec2 | nu
 export interface TrustChange {
   region: RegionId;
   delta: number; // кандидат до меж 0..100
-  reason: 'ufo_left' | 'mission_won';
+  reason: 'probe_left' | 'mission_won';
 }
 
 // Зміна довіри від однієї події журналу (ADR-0159 п. 11); решта подій — null.
 export function trustDelta(log: GeoEvent[], i: number): TrustChange | null {
   const e = log[i];
-  if (e.type !== 'ufo_left' && e.type !== 'mission_won') return null;
-  const pos = ufoLastPos(log, i, e.ufoId);
+  if (e.type !== 'probe_left' && e.type !== 'mission_won') return null;
+  const pos = probeLastPos(log, i, e.probeId);
   if (pos === null) return null;
   if (e.type === 'mission_won') return { region: regionOf(pos), delta: TRUST_MISSION_WON, reason: 'mission_won' };
-  const kind = ufoLeftKind(log, i, e.ufoId);
+  const kind = probeLeftKind(log, i, e.probeId);
   if (kind === 'fought') return null; // відлетів після бою — не «без бою»
   return {
     region: regionOf(pos),
-    delta: kind === 'detected' ? TRUST_UFO_LEFT_DETECTED : TRUST_UFO_LEFT_UNDETECTED,
-    reason: 'ufo_left',
+    delta: kind === 'detected' ? TRUST_PROBE_LEFT_DETECTED : TRUST_PROBE_LEFT_UNDETECTED,
+    reason: 'probe_left',
   };
 }
 

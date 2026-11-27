@@ -16,7 +16,7 @@
 
 import { mulberry32, type StatefulRng, type Unit, type Vec2 } from './combat';
 import { WEAPONS, isForgeWeapon } from './weapons';
-import { WORLD_H, WORLD_W, createGeoGame, geoDay, type GeoEvent, type GeoState, type Ufo } from './geo';
+import { WORLD_H, WORLD_W, createGeoGame, geoDay, type GeoEvent, type GeoState, type Probe } from './geo';
 import { createRoster, type Roster } from './squad';
 import { applyRankBonus, newCareer, rankOf, type SoldierCareer, type SoldierRole } from './career';
 import { createEconomy, type EconomyEvent, type EconomyState } from './economy';
@@ -160,10 +160,10 @@ interface GeoSave {
   rngState: number;
   minute: number;
   base: Vec2;
-  ufos: Ufo[];
+  probes: Probe[];
   log: GeoEvent[];
   spawnChance: number;
-  maxUfos: number;
+  maxProbes: number;
   nextId: number;
 }
 
@@ -241,8 +241,8 @@ interface InterceptSave {
   rngState: number;
   fighter?: Omit<Fighter, 'id' | 'region'> & Partial<Pick<Fighter, 'id' | 'region'>>;
   fighters?: Fighter[];
-  ufoHp: Record<string, number>;
-  activeUfoId: string | null;
+  probeHp: Record<string, number>;
+  activeProbeId: string | null;
   round: number;
   log: InterceptEvent[];
 }
@@ -393,10 +393,10 @@ export function serializeParty(party: Party, savedAt: string = ''): string {
         rngState: rng.state >>> 0,
         minute: party.geo.minute,
         base: { ...party.geo.base },
-        ufos: party.geo.ufos.map((u) => ({ ...u, pos: { ...u.pos }, target: { ...u.target } })),
+        probes: party.geo.probes.map((u) => ({ ...u, pos: { ...u.pos }, target: { ...u.target } })),
         log: party.geo.log.slice(),
         spawnChance: party.geo.spawnChance,
-        maxUfos: party.geo.maxUfos,
+        maxProbes: party.geo.maxProbes,
         nextId: party.geo.nextId,
       },
       roster: {
@@ -413,8 +413,8 @@ export function serializeParty(party: Party, savedAt: string = ''): string {
       intercept: {
         rngState: interceptRngState(party.intercept),
         fighters: party.intercept.fighters.map((f) => ({ ...f, pos: { ...f.pos } })), // п19.3
-        ufoHp: { ...party.intercept.ufoHp },
-        activeUfoId: party.intercept.activeUfoId,
+        probeHp: { ...party.intercept.probeHp },
+        activeProbeId: party.intercept.activeProbeId,
         round: party.intercept.round,
         log: party.intercept.log.slice(),
       },
@@ -450,7 +450,36 @@ export function serializeParty(party: Party, savedAt: string = ''): string {
       },
     },
   };
-  return JSON.stringify(data);
+  return JSON.stringify(toDisk(data)); // Т.218: ключі `ufo` на диску
+}
+
+// Т.218 (рішення власника «probe / «зонд»»): у коді сутність — `probe`, на диску — старі ключі й
+// значення `ufo` (сейв v4 байт у байт: старі сейви вантажаться, нові читає й попередня версія гри).
+// Ключі з `probe` ↔ `ufo` (регістр зберігається: `probes` ↔ `ufos`, `activeProbeId` ↔ `activeUfoId`),
+// рядкові значення ідентифікаторів і типів подій: `probe3` ↔ `ufo3`, `probe_landed` ↔ `ufo_landed`.
+const DISK = { probe: 'ufo', Probe: 'Ufo', PROBE: 'UFO' } as const;
+const MEM = { ufo: 'probe', Ufo: 'Probe', UFO: 'PROBE' } as const;
+function renameKey(k: string, map: Readonly<Record<string, string>>): string {
+  return k.replace(/probe|Probe|PROBE|ufo|Ufo|UFO/g, (m) => map[m] ?? m);
+}
+function renameValue(v: string, from: string, to: string): string {
+  return v.startsWith(from) && /^[_0-9]/.test(v.charAt(from.length)) ? to + v.slice(from.length) : v;
+}
+function translate(v: unknown, map: Readonly<Record<string, string>>, from: string, to: string): unknown {
+  if (typeof v === 'string') return renameValue(v, from, to);
+  if (Array.isArray(v)) return v.map((x) => translate(x, map, from, to));
+  if (v !== null && typeof v === 'object') {
+    const out: Record<string, unknown> = {};
+    for (const [k, x] of Object.entries(v)) out[renameKey(k, map)] = translate(x, map, from, to);
+    return out;
+  }
+  return v;
+}
+export function toDisk(v: unknown): unknown {
+  return translate(v, DISK, 'probe', 'ufo');
+}
+export function fromDisk(v: unknown): unknown {
+  return translate(v, MEM, 'ufo', 'probe');
 }
 
 function fail(msg: string): never {
@@ -462,7 +491,7 @@ function fail(msg: string): never {
 function parseSave(json: string): SaveData {
   let data: SaveData;
   try {
-    data = JSON.parse(json) as SaveData;
+    data = fromDisk(JSON.parse(json)) as SaveData; // Т.218: ключі `ufo` з диска — у `probe`
   } catch {
     fail('Пошкоджені дані збереження: некоректний JSON');
   }
@@ -492,8 +521,8 @@ function parseSave(json: string): SaveData {
     !Number.isInteger(st.geo?.minute) ||
     !Number.isInteger(st.geo?.nextId) ||
     typeof st.geo?.spawnChance !== 'number' ||
-    !Number.isInteger(st.geo?.maxUfos) ||
-    !Array.isArray(st.geo?.ufos) ||
+    !Number.isInteger(st.geo?.maxProbes) ||
+    !Array.isArray(st.geo?.probes) ||
     !Array.isArray(st.geo?.log) ||
     typeof st.geo?.base?.x !== 'number' ||
     typeof st.geo?.base?.y !== 'number'
@@ -531,7 +560,7 @@ function parseSave(json: string): SaveData {
       (icsv.fighters !== undefined
         ? !validFighters(icsv.fighters) ||
           // аудит PR #522: «бій» у переліку ⇔ активний зонд бою
-          (data.version === SAVE_VERSION && icsv.fighters.some((f) => f.status === 'бій') !== (icsv.activeUfoId != null))
+          (data.version === SAVE_VERSION && icsv.fighters.some((f) => f.status === 'бій') !== (icsv.activeProbeId != null))
         : icsv.fighter === null || typeof icsv.fighter !== 'object'))
   ) {
     fail('Пошкоджені дані збереження: перехоплення');
@@ -681,10 +710,10 @@ export function deserializeParty(json: string): Party {
   const geo = createGeoGame({ seed: data.seed, rng: mulberry32(g.rngState) });
   geo.minute = g.minute;
   geo.base = { x: g.base.x, y: g.base.y };
-  geo.ufos = g.ufos.map((u) => ({ ...u, pos: { ...u.pos }, target: { ...u.target } }));
+  geo.probes = g.probes.map((u) => ({ ...u, pos: { ...u.pos }, target: { ...u.target } }));
   geo.log = g.log.slice();
   geo.spawnChance = g.spawnChance;
-  geo.maxUfos = g.maxUfos;
+  geo.maxProbes = g.maxProbes;
   geo.nextId = g.nextId;
   // П7.4 (ADR-0032): відсутнє поле intercept (старі сейви) = боєготовий на базі;
   // rng відновлюється з позиції потоку mulberry32 — бій продовжується байт-у-байт.
@@ -699,8 +728,8 @@ export function deserializeParty(json: string): Party {
       const one = sv.fighter ?? sv.fighters![0];
       ic.fighters = [{ ...one, id: 1, region: 'north', pos: { ...one.pos } }];
     }
-    ic.ufoHp = { ...sv.ufoHp };
-    ic.activeUfoId = sv.activeUfoId;
+    ic.probeHp = { ...sv.probeHp };
+    ic.activeProbeId = sv.activeProbeId;
     ic.round = sv.round;
     ic.log = sv.log.slice();
   }

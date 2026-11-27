@@ -26,7 +26,7 @@
 
 import { FORGE_WEAPONS, type ForgeWeaponId } from './weapons';
 import type { Unit } from './combat';
-import { TICK_MINUTES, advanceTime, chebyshevWrap, geoDay, missionTargets, type GeoState, type Ufo } from './geo';
+import { TICK_MINUTES, advanceTime, chebyshevWrap, geoDay, missionTargets, type GeoState, type Probe } from './geo';
 import { creditMissionBonus, economyTick, hirePrice } from './economy';
 import { REGION_IDS, totalTrust, type RegionId } from './regions';
 import {
@@ -266,18 +266,18 @@ export interface SimulatePartyOptions {
 
 // Виявлені НЛО у повітрі, яких ще не переслідує жоден перехоплювач, — цілі запуску в порядку
 // списку геосцени (дзеркало intercept-bot.ts; з одним перехоплювачем — лише перша).
-function freeFlyingUfos(party: Party): Ufo[] {
+function freeFlyingProbes(party: Party): Probe[] {
   const chased = new Set(party.intercept.fighters.filter((f) => f.status === 'погоня' || f.status === 'бій').map((f) => f.targetId));
-  return party.geo.ufos.filter((u) => u.detected && u.status === 'летить' && !chased.has(u.id));
+  return party.geo.probes.filter((u) => u.detected && u.status === 'летить' && !chased.has(u.id));
 }
 
 // п19.6 (ADR-0159 п. 17): найближчий до цілі боєготовий перехоплювач (від ангара, Чебишев із
 // замиканням по X); рівні — менший id.
-function nearestFighter(ready: Fighter[], geo: GeoState, ufo: Ufo): Fighter | null {
+function nearestFighter(ready: Fighter[], geo: GeoState, probe: Probe): Fighter | null {
   let best: Fighter | null = null;
   let bestDist = Infinity;
   for (const f of ready) {
-    const d = chebyshevWrap(hangarPos(f.region, geo), ufo.pos);
+    const d = chebyshevWrap(hangarPos(f.region, geo), probe.pos);
     if (d < bestDist) {
       best = f;
       bestDist = d;
@@ -287,12 +287,12 @@ function nearestFighter(ready: Fighter[], geo: GeoState, ufo: Ufo): Fighter | nu
 }
 
 // Раунд повітряного бою бота: дистанція — за політикою; зонда вже немає — interceptRound сам перериває
-// бій (`ufo_lost`), вибір для нього не важить. п19.6 (аудит PR #525): до п19.6 охорона «є зонд» лишала
+// бій (`probe_lost`), вибір для нього не важить. п19.6 (аудит PR #525): до п19.6 охорона «є зонд» лишала
 // перехоплювач у «бою» назавжди, коли бот вигравав місію на зонді, з яким той ще бився.
 function botRound(party: Party, policy: InterceptPolicy, f: Fighter): void {
   const ic = party.intercept;
-  const ufo = party.geo.ufos.find((u) => u.id === ic.activeUfoId);
-  const choice = ufo ? policy.chooseRange(ufo.kind, f.hp) : 'відступ';
+  const probe = party.geo.probes.find((u) => u.id === ic.activeProbeId);
+  const choice = probe ? policy.chooseRange(probe.kind, f.hp) : 'відступ';
   interceptRound(ic, party.geo, choice, party.econ, party.campaign.preset, party.roster);
 }
 
@@ -306,7 +306,7 @@ export function partyBotAirBattle(party: Party, policy: InterceptPolicy): number
   let rounds = 0;
   for (
     let f = fighterInBattle(party.intercept);
-    f && party.intercept.activeUfoId && rounds < AIR_BATTLE_MAX_ROUNDS;
+    f && party.intercept.activeProbeId && rounds < AIR_BATTLE_MAX_ROUNDS;
     f = fighterInBattle(party.intercept)
   ) {
     botRound(party, policy, f);
@@ -328,7 +328,7 @@ export function partyBotInterceptStep(party: Party, policy: InterceptPolicy): vo
   const inBattle = fighterInBattle(ic);
   const damaged = fighters.filter((f) => f.status === 'на базі' && f.hp < FIGHTER_MAX_HP && !f.repairTicksLeft);
   const ready = fighters.filter((f) => f.status === 'на базі' && f.hp === FIGHTER_MAX_HP);
-  if (inBattle && ic.activeUfoId) botRound(party, policy, inBattle);
+  if (inBattle && ic.activeProbeId) botRound(party, policy, inBattle);
   for (const f of damaged) {
     // Пошкоджений без ремонту: платимо одразу, як лише є гроші (X-COM досвід, ADR-0021).
     // Т.22 (ADR-0089): без боєготових ремонт чекає — цей крок іде раніше за найм,
@@ -337,7 +337,7 @@ export function partyBotInterceptStep(party: Party, policy: InterceptPolicy): vo
       startRepair(ic, party.geo, party.econ, f.id);
     }
   }
-  for (const target of freeFlyingUfos(party)) {
+  for (const target of freeFlyingProbes(party)) {
     const f = nearestFighter(ready, party.geo, target);
     if (!f) break;
     if (!policy.shouldLaunch(target.kind, chebyshevWrap(hangarPos(f.region, party.geo), target.pos))) break;
@@ -610,7 +610,7 @@ export function partyBotMissionStep(party: Party, policy: PartyBotPolicy): Missi
   // Т.76: «евакуйовано» — НЛО лишається, премії немає (completeMission); тупик — поразка, як і раніше.
   const outcome: 'перемога' | 'поразка' | 'евакуйовано' =
     battle.outcome === 'перемога' ? 'перемога' : battle.outcome === 'евакуйовано' ? 'евакуйовано' : 'поразка';
-  completeMission(party.geo, mission.briefing.ufoId, outcome);
+  completeMission(party.geo, mission.briefing.probeId, outcome);
   awardTrophies(party.research, mission.state, outcome); // п18.2 (ADR-0153 п. 9): трофеї лише за перемогу
   const aftermath = applyMissionResult(party.roster, mission.state);
   assignBotRoles(party.roster); // п16.3 (ADR-0147 п. 12): роль кожному, хто дослужився до «Боєць»
@@ -711,7 +711,7 @@ export function simulateParty(seed: number, preset: DifficultyPreset = DEFAULT_P
     outcome: 'триває',
     endDay: 0,
     ticks: 0,
-    score: { ufosShotDown: 0, missionsWon: 0, veteransAlive: 0, moneyLeft: 0, total: 0 },
+    score: { probesShotDown: 0, missionsWon: 0, veteransAlive: 0, moneyLeft: 0, total: 0 },
     missionsLaunched: 0,
     missionsWon: 0,
     missionsLost: 0,
@@ -759,7 +759,7 @@ export function simulateParty(seed: number, preset: DifficultyPreset = DEFAULT_P
     for (const e of party.intercept.log.slice(icCursor)) {
       if (e.type === 'intercept_start') res.launches += 1;
       if (e.type === 'intercept_engage') res.engagements += 1;
-      if (e.type === 'ufo_shot_down') res.shotDown += 1;
+      if (e.type === 'probe_shot_down') res.shotDown += 1;
       if (e.type === 'fighter_repair_start') res.repairs += 1;
       if (e.type === 'intercept_aborted' && e.reason === 'fighter_damaged') {
         // Гроші міряємо в мить події — до дотації цієї доби (семантика intercept-bot.ts).

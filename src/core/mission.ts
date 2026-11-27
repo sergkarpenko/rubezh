@@ -10,7 +10,7 @@
 // Дизайн (MVP):
 // - Місію можна запустити лише з приземленого виявленого НЛО (missionTargets).
 // - Час геосцени не тікає, поки триває бій: місія — «вирваний» тактичний раунд.
-// - Бойовище детерміноване: сід місії = FNV-1a(ufoId + ':' + geo.minute).
+// - Бойовище детерміноване: сід місії = FNV-1a(probeId + ':' + geo.minute).
 //   geo.rng не витягається → траєкторія геосцени не залежить від запуску місії.
 // - Мапа: makeTestMap, але з гарантією зв'язності (зони висадки (2,2) і НЛО (17,2)
 //   завжди чисті, проте генератор не гарантує зв'язності): missionMap перебирає
@@ -43,7 +43,7 @@ import {
   type Vec2,
 } from './combat';
 import { makeTestMap } from './map';
-import { missionTargets, type GeoState, type Ufo, type UfoKind } from './geo';
+import { missionTargets, type GeoState, type Probe, type ProbeKind } from './geo';
 import { enemyMix, kindsForThreat, makeEnemies } from './enemies';
 
 export const MISSION_MAP_W = 20;
@@ -60,12 +60,14 @@ export const ALIEN_SPAWN: Vec2[] = [
   { x: 17, y: 3 },
 ];
 
-export const ALIENS_PER_KIND: Record<UfoKind, number> = { розвідник: 2, збирач: 3 };
+export const ALIENS_PER_KIND: Record<ProbeKind, number> = { розвідник: 2, збирач: 3 };
 
 // Детермінований сід місії (FNV-1a) з ідентифікатора НЛО та хвилини запуску.
 // Один і той самий хід гри → та сама мапа і той самий бойовий RNG.
-export function missionSeed(geo: GeoState, ufoId: string): number {
-  return textSeed(ufoId + ':' + geo.minute);
+// Т.218: id зонда в коді — `probeN` (до Т.218 — `ufoN`); сід бойовища рахується зі старого вигляду
+// id, тож місії тих самих партій — ті самі (фіксовані сіди, сейви — байт у байт).
+export function missionSeed(geo: GeoState, probeId: string): number {
+  return textSeed(probeId.replace(/^probe(?=\d)/, 'ufo') + ':' + geo.minute);
 }
 
 // FNV-1a рядка — сід бойовища (п18.4: штурм і брама беруть свій рядок, ADR-0156).
@@ -177,8 +179,8 @@ export function makeSoldier(id: string, name: string): Unit {
 export type MissionOp = 'штурм' | 'брама';
 
 export interface MissionBriefing {
-  ufoId: string; // п18.4: у штурмі й брамі — 'база' / 'брама' (зонда немає)
-  kind: UfoKind; // п18.4: у штурмі й брамі — не має значення (премії немає)
+  probeId: string; // п18.4: у штурмі й брамі — 'база' / 'брама' (зонда немає)
+  kind: ProbeKind; // п18.4: у штурмі й брамі — не має значення (премії немає)
   op?: MissionOp;
   aliens: number; // прибульців на бойовищі
   minute: number; // хвилина геосцени на момент запуску
@@ -199,16 +201,16 @@ export interface CreateMissionOptions {
 }
 
 // Пошук цілі місії з валідацією: лише приземлений виявлений НЛО.
-function findTarget(geo: GeoState, ufoId: string): Ufo {
-  const ufo = missionTargets(geo).find((u) => u.id === ufoId);
-  if (!ufo) throw new Error('Місію можна запустити лише з приземленого виявленого зонду Розриву: ' + ufoId);
-  return ufo;
+function findTarget(geo: GeoState, probeId: string): Probe {
+  const probe = missionTargets(geo).find((u) => u.id === probeId);
+  if (!probe) throw new Error('Місію можна запустити лише з приземленого виявленого зонду Розриву: ' + probeId);
+  return probe;
 }
 
 // Створити тактичну місію з НЛО. Не змінює geo: геосцена «заморожена» на час бою.
-export function createMission(geo: GeoState, ufoId: string, opts: CreateMissionOptions = {}): Mission {
-  const ufo = findTarget(geo, ufoId);
-  const seed = missionSeed(geo, ufoId);
+export function createMission(geo: GeoState, probeId: string, opts: CreateMissionOptions = {}): Mission {
+  const probe = findTarget(geo, probeId);
+  const seed = missionSeed(geo, probeId);
   const map = connectedMap(seed);
   const rng = mulberry32(seed);
 
@@ -225,7 +227,7 @@ export function createMission(geo: GeoState, ufoId: string, opts: CreateMissionO
   // п17.2 (ADR-0149 п. 8, 12): склад окремим генератором від сіду місії — бойовий RNG
   // не зсувається; п18.3 (ADR-0153 п. 14): доступні типи — за загрозою, а не за добою.
   // П12.6 (ADR-0064): «демон Розриву», не «прибулець».
-  const n = ALIENS_PER_KIND[ufo.kind];
+  const n = ALIENS_PER_KIND[probe.kind];
   const aliens: Unit[] = makeEnemies(enemyMix(kindsForThreat(opts.threat ?? 0), n, seed), ALIEN_SPAWN);
 
   const state = createGame({
@@ -237,7 +239,7 @@ export function createMission(geo: GeoState, ufoId: string, opts: CreateMissionO
     roles: opts.roles,
     cover: true, // п20.2 (ADR-0165 п. 10): укриття в шансі — бої місій
   });
-  return { briefing: { ufoId: ufo.id, kind: ufo.kind, aliens: n, minute: geo.minute }, state };
+  return { briefing: { probeId: probe.id, kind: probe.kind, aliens: n, minute: geo.minute }, state };
 }
 
 export type MissionOutcome = 'триває' | 'перемога' | 'поразка' | 'евакуйовано';
@@ -262,15 +264,15 @@ export function missionOutcome(state: GameState): MissionOutcome {
 // тікає чинною логікою geo.ts), премія не нараховується (creditMissionBonus
 // не викликається), місію можна повторити новим загоном (missionTargets
 // без змін); подія mission_evacuated у журнал партії.
-export function completeMission(geo: GeoState, ufoId: string, outcome: 'перемога' | 'поразка' | 'евакуйовано'): void {
-  const ufo = geo.ufos.find((u) => u.id === ufoId);
-  if (!ufo) throw new Error('Невідомий зонд Розриву: ' + ufoId);
+export function completeMission(geo: GeoState, probeId: string, outcome: 'перемога' | 'поразка' | 'евакуйовано'): void {
+  const probe = geo.probes.find((u) => u.id === probeId);
+  if (!probe) throw new Error('Невідомий зонд Розриву: ' + probeId);
   if (outcome === 'перемога') {
-    geo.ufos = geo.ufos.filter((u) => u.id !== ufoId);
-    geo.log.push({ type: 'mission_won', ufoId, minute: geo.minute });
+    geo.probes = geo.probes.filter((u) => u.id !== probeId);
+    geo.log.push({ type: 'mission_won', probeId, minute: geo.minute });
   } else if (outcome === 'евакуйовано') {
-    geo.log.push({ type: 'mission_evacuated', ufoId, minute: geo.minute });
+    geo.log.push({ type: 'mission_evacuated', probeId, minute: geo.minute });
   } else {
-    geo.log.push({ type: 'mission_lost', ufoId, minute: geo.minute });
+    geo.log.push({ type: 'mission_lost', probeId, minute: geo.minute });
   }
 }

@@ -13,7 +13,7 @@
 // масовими симуляціями Фази 8 (П8.5/П8.6). Пресети складності ('легкий'/'норма' —
 // П8.4, 'складний' — П10.3); тут лише ім'я пресета в стані (дефолт «норма», ADR-0033).
 
-import { geoDay, ufoLeftKind, type GeoEvent, type GeoState } from './geo';
+import { geoDay, probeLeftKind, type GeoEvent, type GeoState } from './geo';
 import { createRegions, regionsTick, type Regions } from './regions';
 import type { Roster } from './squad';
 import type { EconomyState } from './economy';
@@ -21,8 +21,8 @@ import type { EconomyState } from './economy';
 // п18.3 (ADR-0153 п. 13): числа шкали загрози — перемір probe п18.6 без змін (ADR-0158).
 export const THREAT_MAX = 100; // загроза 100 — поразка партії
 export const THREAT_PER_DAY = 2; // за кожну завершену добу (подія 'day')
-export const THREAT_UFO_LEFT_DETECTED = 6; // виявлений зонд відлетів без бою
-export const THREAT_UFO_LEFT_UNDETECTED = 2; // невиявлений зонд відлетів (радар має ціну)
+export const THREAT_PROBE_LEFT_DETECTED = 6; // виявлений зонд відлетів без бою
+export const THREAT_PROBE_LEFT_UNDETECTED = 2; // невиявлений зонд відлетів (радар має ціну)
 export const THREAT_MISSION_WON = -1; // виграна місія стримує загрозу
 export const THREAT_BATTLE_LOST = 10; // п18.4: програний штурм бази чи фінал (ADR-0153 п. 13)
 // п18.4 (ADR-0153 п. 16): штурм бази — коли загроза вперше досягає порога (по одному на поріг).
@@ -31,7 +31,7 @@ export const ASSAULT_THRESHOLDS: readonly number[] = [60, 75, 90];
 // Вагові коефіцієнти рахунку — константи (ADR-0033); зафіксовано П8.6 за симуляціями
 // (120 сідів × 2 пресети, docs/reports/p8.6-tuning.md): ветерани ×2 (ростер — головний
 // актив кампанії, ADR-0021), гроші ×0.5 — рахунок про людей і перемоги, а не про купу грошей.
-export const SCORE_PER_UFO_SHOT_DOWN = 100;
+export const SCORE_PER_PROBE_SHOT_DOWN = 100;
 export const SCORE_PER_MISSION_WON = 150;
 export const SCORE_PER_VETERAN_ALIVE = 50;
 export const SCORE_PER_MONEY = 0.25;
@@ -41,7 +41,7 @@ export const DEFAULT_PRESET: DifficultyPreset = 'норма'; // ADR-0033: де�
 
 // P8.4: множники для пресетів. П10.3: «складний» — початкові числа за probe П8.6
 // (спавн — не ручка тиску: більше НЛО → більше місій → більше премій → легше,
-// docs/reports/p8.6-tuning.md), тож ufoSpawnMultiplier = 1.0; тиск — HP солдатів
+// docs/reports/p8.6-tuning.md), тож probeSpawnMultiplier = 1.0; тиск — HP солдатів
 // і економіка (менше грошей). П10.4: числа затверджено власником 2026-10-17 за
 // симуляціями 120 сідів (docs/reports/p10.4-tuning.md): HP ×0.9 (ефективно 9 HP,
 // ручка дискретна через Math.round) + економіка ×0.9 → 58.3% перемог бот-гравця
@@ -49,19 +49,19 @@ export const DEFAULT_PRESET: DifficultyPreset = 'норма'; // ADR-0033: де�
 // не міняли: probe на «складному» дав обернений знак (spawn 1.2 → 19.2% перемог).
 export const DIFFICULTY_MULTIPLIERS = {
   легкий: {
-    ufoSpawnMultiplier: 0.7,
+    probeSpawnMultiplier: 0.7,
     hpBonusMultiplier: 1.2,
     economyMultiplier: 1.2,
     scienceMultiplier: 0.5,
   },
   норма: {
-    ufoSpawnMultiplier: 1.0,
+    probeSpawnMultiplier: 1.0,
     hpBonusMultiplier: 1.0,
     economyMultiplier: 1.0,
     scienceMultiplier: 1.0,
   },
   складний: {
-    ufoSpawnMultiplier: 1.0,
+    probeSpawnMultiplier: 1.0,
     hpBonusMultiplier: 0.9,
     economyMultiplier: 0.9,
     scienceMultiplier: 0.9,
@@ -80,7 +80,7 @@ export function sciencePrice(base: number, preset: DifficultyPreset = DEFAULT_PR
 export type CampaignStatus = 'триває' | 'перемога' | 'поразка';
 
 export interface CampaignScore {
-  ufosShotDown: number; // збиті в повітрі НЛО (intercept, ADR-0032)
+  probesShotDown: number; // збиті в повітрі НЛО (intercept, ADR-0032)
   missionsWon: number; // переможні тактичні місії (mission.ts)
   veteransAlive: number; // живі ветерани кампанії (ростер)
   moneyLeft: number; // залишок коштів (economy.ts)
@@ -118,10 +118,10 @@ export function createCampaign(preset: DifficultyPreset = DEFAULT_PRESET): Campa
   };
 }
 
-// Зонд відлетів: виявлений і без бою — +6, невиявлений — +2, після бою — 0 (ufoLeftKind, geo.ts).
-function ufoLeftDelta(log: GeoEvent[], i: number, ufoId: string): number {
-  const kind = ufoLeftKind(log, i, ufoId);
-  return kind === 'fought' ? 0 : kind === 'detected' ? THREAT_UFO_LEFT_DETECTED : THREAT_UFO_LEFT_UNDETECTED;
+// Зонд відлетів: виявлений і без бою — +6, невиявлений — +2, після бою — 0 (probeLeftKind, geo.ts).
+function probeLeftDelta(log: GeoEvent[], i: number, probeId: string): number {
+  const kind = probeLeftKind(log, i, probeId);
+  return kind === 'fought' ? 0 : kind === 'detected' ? THREAT_PROBE_LEFT_DETECTED : THREAT_PROBE_LEFT_UNDETECTED;
 }
 
 // Зміна загрози від однієї події журналу геоцени (ADR-0153 п. 13); решта подій — 0.
@@ -129,7 +129,7 @@ export function threatDelta(log: GeoEvent[], i: number): number {
   const e = log[i];
   if (e.type === 'day') return THREAT_PER_DAY;
   if (e.type === 'mission_won') return THREAT_MISSION_WON;
-  if (e.type === 'ufo_left') return ufoLeftDelta(log, i, e.ufoId);
+  if (e.type === 'probe_left') return probeLeftDelta(log, i, e.probeId);
   if (e.type === 'assault_lost' || e.type === 'gate_lost') return THREAT_BATTLE_LOST; // п18.4
   return 0;
 }
@@ -142,16 +142,16 @@ function countEvents(log: GeoEvent[], type: GeoEvent['type']): number {
 
 // Підсумковий рахунок партії — похідні метрики без нового стану (ADR-0033).
 export function campaignScore(geo: GeoState, roster: Roster, econ: EconomyState): CampaignScore {
-  const ufosShotDown = countEvents(geo.log, 'ufo_shot_down');
+  const probesShotDown = countEvents(geo.log, 'probe_shot_down');
   const missionsWon = countEvents(geo.log, 'mission_won');
   const veteransAlive = roster.soldiers.length;
   const moneyLeft = econ.money;
   const total =
-    ufosShotDown * SCORE_PER_UFO_SHOT_DOWN +
+    probesShotDown * SCORE_PER_PROBE_SHOT_DOWN +
     missionsWon * SCORE_PER_MISSION_WON +
     veteransAlive * SCORE_PER_VETERAN_ALIVE +
     moneyLeft * SCORE_PER_MONEY;
-  return { ufosShotDown, missionsWon, veteransAlive, moneyLeft, total: Math.round(total) };
+  return { probesShotDown, missionsWon, veteransAlive, moneyLeft, total: Math.round(total) };
 }
 
 export interface CampaignContext {

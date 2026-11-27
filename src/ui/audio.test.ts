@@ -41,12 +41,12 @@ describe('battleSounds/geoSounds: подія → набір звуків (ADR-00
     expect(battleSounds(evB({ type: 'grenade' }))).toEqual([]);
   });
   it('геосцена: виявлення НЛО, перемога/поразка місії; туман — тихо', () => {
-    expect(geoSounds(evG({ type: 'ufo_detected' }))).toEqual(['detect']);
+    expect(geoSounds(evG({ type: 'probe_detected' }))).toEqual(['detect']);
     expect(geoSounds(evG({ type: 'mission_won' }))).toEqual(['win']);
     expect(geoSounds(evG({ type: 'mission_lost' }))).toEqual(['lose']);
     expect(geoSounds(evG({ type: 'day' }))).toEqual([]);
-    expect(geoSounds(evG({ type: 'ufo_spawned' }))).toEqual([]);
-    expect(geoSounds(evG({ type: 'ufo_move' }))).toEqual([]);
+    expect(geoSounds(evG({ type: 'probe_spawned' }))).toEqual([]);
+    expect(geoSounds(evG({ type: 'probe_move' }))).toEqual([]);
   });
 });
 
@@ -58,7 +58,7 @@ describe('typeof-гейт: без WebAudio — no-op без винятків (AD
       s.play('click');
       s.play('shot-snap');
       s.battleEvent(evB({ type: 'shot', mode: 'auto', hit: true }));
-      s.geoEvent(evG({ type: 'ufo_detected' }));
+      s.geoEvent(evG({ type: 'probe_detected' }));
     }).not.toThrow();
     expect(makeContext).toHaveBeenCalledTimes(1);
   });

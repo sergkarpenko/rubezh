@@ -169,7 +169,7 @@ describe('п18.3: склад місії за загрозою (ADR-0153 п. 14, 
 function geoOnDay(day: number, kind: 'розвідник' | 'збирач' = 'збирач'): GeoState {
   const g = createGeoGame({ seed: 9, spawnChance: 0 });
   g.minute = (day - 1) * 1440 + 600;
-  g.ufos.push({ id: 'u1', kind, pos: { ...g.base }, target: { ...g.base }, detected: true, status: 'приземлився', landedTicksLeft: 8 });
+  g.probes.push({ id: 'u1', kind, pos: { ...g.base }, target: { ...g.base }, detected: true, status: 'приземлився', landedTicksLeft: 8 });
   return g;
 }
 

@@ -128,7 +128,7 @@ describe('П7.6: масивні симуляції — 128 сідів × 10 ді
   it('geo.rng не витягується: дії бота перехоплення не зсувають гео-генератор', () => {
     // Пряма перевірка інваріанту ADR-0032: перехоплення живе окремим RNG; стан geo.rng
     // (mulberry32) не змінюється від дій бот-гравця (запуск/погоня/бій/ремонт).
-    const geo = createGeoGame({ seed: 5, spawnChance: 0.06, maxUfos: 3 });
+    const geo = createGeoGame({ seed: 5, spawnChance: 0.06, maxProbes: 3 });
     for (let t = 0; t < 24; t++) geoTick(geo); // народити виявлені НЛО
     const geoRng = geo.rng as unknown as { state?: number };
     const before = geoRng.state;

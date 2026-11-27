@@ -9,7 +9,7 @@
 // інваріанти циклу (заморожений час, цілісність ростеру, події геосцени).
 
 import { describe, expect, it } from 'vitest';
-import { advanceTime, createGeoGame, geoTick, missionTargets, type GeoEvent, type GeoState, type Ufo } from './core/geo';
+import { advanceTime, createGeoGame, geoTick, missionTargets, type GeoEvent, type GeoState, type Probe } from './core/geo';
 import { completeMission, createMission, missionOutcome, type Mission } from './core/mission';
 import {
   applyMissionResult,
@@ -27,12 +27,12 @@ import { createIntercept, interceptRound, interceptTick, startIntercept } from '
 
 // Геопартія, де перший НЛО вже приземлився в зоні радара (кандидат на місію).
 // Спавн кожен тік (spawnChance: 1) — ціль не довго чекати; сід фіксований → детермінізм.
-function geoWithTarget(seed = 11, ticks = 48 * 20): { geo: GeoState; ufo: Ufo } {
+function geoWithTarget(seed = 11, ticks = 48 * 20): { geo: GeoState; probe: Probe } {
   const geo = createGeoGame({ seed, spawnChance: 1 });
   for (let t = 0; t < ticks; t++) {
     geoTick(geo);
     const target = missionTargets(geo)[0];
-    if (target) return { geo, ufo: target };
+    if (target) return { geo, probe: target };
   }
   throw new Error('за ' + ticks + ' тіків жодного НЛО в зоні радара (seed ' + seed + ')');
 }
@@ -73,18 +73,18 @@ function withoutMissionEvents(log: GeoEvent[]): GeoEvent[] {
 
 describe('інтеграція: повний цикл (геосцена → місія → бій → результат)', () => {
   it('вікно місії: НЛО виявляється радаром і приземляється', () => {
-    const { geo, ufo } = geoWithTarget();
-    expect(ufo.detected).toBe(true);
-    expect(ufo.status).toBe('приземлився');
-    expect(geo.log.some((e) => e.type === 'ufo_detected' && e.ufoId === ufo.id)).toBe(true);
-    expect(geo.log.some((e) => e.type === 'ufo_landed' && e.ufoId === ufo.id)).toBe(true);
+    const { geo, probe } = geoWithTarget();
+    expect(probe.detected).toBe(true);
+    expect(probe.status).toBe('приземлився');
+    expect(geo.log.some((e) => e.type === 'probe_detected' && e.probeId === probe.id)).toBe(true);
+    expect(geo.log.some((e) => e.type === 'probe_landed' && e.probeId === probe.id)).toBe(true);
   });
 
   it('перемога: НЛО зачищено, поранені йдуть у лікарню і одужують тіками; час заморожено під час бою', () => {
-    const { geo, ufo } = geoWithTarget(11);
+    const { geo, probe } = geoWithTarget(11);
     const roster = createRoster();
-    const mission = createMission(geo, ufo.id, { squad: strongSquad(roster) });
-    expect(mission.briefing.ufoId).toBe(ufo.id);
+    const mission = createMission(geo, probe.id, { squad: strongSquad(roster) });
+    expect(mission.briefing.probeId).toBe(probe.id);
     expect(mission.briefing.minute).toBe(geo.minute);
 
     const minuteBefore = geo.minute;
@@ -95,11 +95,11 @@ describe('інтеграція: повний цикл (геосцена → мі
     expect(geo.minute).toBe(minuteBefore); // геосцена не тікає, поки триває бій
 
     const aftermath = applyMissionResult(roster, mission.state);
-    completeMission(geo, mission.briefing.ufoId, outcome);
+    completeMission(geo, mission.briefing.probeId, outcome);
 
     // наслідки для геосцени: НЛО зник, подія «зачищено»
-    expect(geo.ufos.find((u) => u.id === ufo.id)).toBeUndefined();
-    expect(geo.log.at(-1)).toMatchObject({ type: 'mission_won', ufoId: ufo.id, minute: geo.minute });
+    expect(geo.probes.find((u) => u.id === probe.id)).toBeUndefined();
+    expect(geo.log.at(-1)).toMatchObject({ type: 'mission_won', probeId: probe.id, minute: geo.minute });
 
     // наслідки для ростеру (ADR-0021): миттєвого лікування немає — виживший
     // або боєготовий, або поранений у лікарні на (maxHp − hp) × 2 тиків
@@ -130,15 +130,15 @@ describe('інтеграція: повний цикл (геосцена → мі
   });
 
   it('поразка: перма-смерть у ростері, НЛО лишається, місію можна повторити', () => {
-    const { geo, ufo } = geoWithTarget(23);
+    const { geo, probe } = geoWithTarget(23);
     const roster = createRoster();
-    const mission = createMission(geo, ufo.id, { squad: doomedSquad(roster) });
+    const mission = createMission(geo, probe.id, { squad: doomedSquad(roster) });
     const res = autoBattle(mission.state, 240);
     const outcome = finalOutcome(res.outcome);
     expect(outcome).toBe('поразка');
 
     const aftermath = applyMissionResult(roster, mission.state);
-    completeMission(geo, mission.briefing.ufoId, outcome);
+    completeMission(geo, mission.briefing.probeId, outcome);
 
     // перма-смерть: весь загін вилучено, ростер порідів
     expect(aftermath.lost).toHaveLength(3);
@@ -146,27 +146,27 @@ describe('інтеграція: повний цикл (геосцена → мі
     expect(roster.soldiers.map((s) => s.id)).toEqual(['s4', 's5', 's6']);
 
     // НЛО лишається активним до кінця вікна
-    expect(geo.ufos.find((u) => u.id === ufo.id)).toBeDefined();
-    expect(geo.log.at(-1)).toMatchObject({ type: 'mission_lost', ufoId: ufo.id });
+    expect(geo.probes.find((u) => u.id === probe.id)).toBeDefined();
+    expect(geo.log.at(-1)).toMatchObject({ type: 'mission_lost', probeId: probe.id });
 
     // повторна місія тим самим НЛО — з решти ростеру
-    const second = createMission(geo, ufo.id, { squad: doomedSquad(roster) });
-    expect(second.briefing.ufoId).toBe(ufo.id);
+    const second = createMission(geo, probe.id, { squad: doomedSquad(roster) });
+    expect(second.briefing.probeId).toBe(probe.id);
     expect(second.state.units.filter((u) => u.side === 'player').map((u) => u.id)).toEqual(['s4', 's5', 's6']);
 
     // вікно закінчується — НЛО відлітає, місія більше недоступна
     advanceTime(geo, 48 * 20);
-    expect(geo.ufos.find((u) => u.id === ufo.id)).toBeUndefined();
-    expect(geo.log.some((e) => e.type === 'ufo_left' && e.ufoId === ufo.id)).toBe(true);
-    expect(() => createMission(geo, ufo.id)).toThrow();
+    expect(geo.probes.find((u) => u.id === probe.id)).toBeUndefined();
+    expect(geo.log.some((e) => e.type === 'probe_left' && e.probeId === probe.id)).toBe(true);
+    expect(() => createMission(geo, probe.id)).toThrow();
   });
 });
 
 describe('інтеграція: детермінізм і ізоляція шарів', () => {
   it('той самий хід гри — байт-у-байт той самий бій', () => {
     const run = () => {
-      const { geo, ufo } = geoWithTarget(11);
-      const mission = createMission(geo, ufo.id, { squad: strongSquad(createRoster()) });
+      const { geo, probe } = geoWithTarget(11);
+      const mission = createMission(geo, probe.id, { squad: strongSquad(createRoster()) });
       const res = autoBattle(mission.state, 240);
       return {
         outcome: res.outcome,
@@ -200,7 +200,7 @@ describe('інтеграція: детермінізм і ізоляція ша�
     advanceTime(b, 96);
 
     expect(a.minute).toBe(b.minute);
-    expect(JSON.stringify(a.ufos)).toBe(JSON.stringify(b.ufos));
+    expect(JSON.stringify(a.probes)).toBe(JSON.stringify(b.probes));
     expect(JSON.stringify(withoutMissionEvents(a.log))).toBe(JSON.stringify(withoutMissionEvents(b.log)));
   });
 });
@@ -269,15 +269,15 @@ describe('інтеграція П7.3: перехоплення → збиття 
     const geo = createGeoGame({ seed: 42, spawnChance: 1 });
     const ic = createIntercept(7);
     // дочекатися виявленого НЛО у повітрі (spawnChance: 1 — ціль не довго чекати)
-    let target: Ufo | undefined;
+    let target: Probe | undefined;
     for (let t = 0; t < 48 * 20 && !target; t++) {
       geoTick(geo);
-      target = geo.ufos.find((u) => u.detected && u.status === 'летить');
+      target = geo.probes.find((u) => u.detected && u.status === 'летить');
     }
     expect(target).toBeDefined();
-    const ufoId = target!.id;
+    const probeId = target!.id;
     // перехоплення: погоня на тіках геосцени, бій, раунди до результату
-    startIntercept(ic, geo, ufoId);
+    startIntercept(ic, geo, probeId);
     let guard = 0;
     while (guard++ < 500) {
       if (ic.fighters[0].status === 'погоня') {
@@ -291,33 +291,33 @@ describe('інтеграція П7.3: перехоплення → збиття 
     }
     // винищувач міг піти в ремонт (пошкодження) — тоді збиття не сталося; для
     // наскрізного сценарію гарантуємо збиття: боєготовий б'є поки не зіб'є
-    if (ic.fighters[0].status !== 'на базі' || !geo.ufos.some((u) => u.id === ufoId && u.status === 'збитий')) {
+    if (ic.fighters[0].status !== 'на базі' || !geo.probes.some((u) => u.id === probeId && u.status === 'збитий')) {
       throw new Error('сценарій не привів до збиття — перевірити константи/сід');
     }
-    const shotDown = geo.ufos.find((u) => u.id === ufoId)!;
+    const shotDown = geo.probes.find((u) => u.id === probeId)!;
     expect(shotDown.status).toBe('збитий');
     expect(shotDown.landedTicksLeft).toBe(0);
     // збитий НЕ зникає сам тіками геосцени — чекає тактичної місії
     const minuteAtCrash = geo.minute;
     for (let t = 0; t < 100; t++) geoTick(geo);
-    expect(geo.ufos.find((u) => u.id === ufoId)?.status).toBe('збитий');
+    expect(geo.probes.find((u) => u.id === probeId)?.status).toBe('збитий');
     // події перехоплення — у geo.log (туман: НЛО був виявлений)
-    expect(geo.log.some((e) => e.type === 'intercept_start' && e.ufoId === ufoId)).toBe(true);
-    expect(geo.log.some((e) => e.type === 'ufo_shot_down' && e.ufoId === ufoId)).toBe(true);
+    expect(geo.log.some((e) => e.type === 'intercept_start' && e.probeId === probeId)).toBe(true);
+    expect(geo.log.some((e) => e.type === 'probe_shot_down' && e.probeId === probeId)).toBe(true);
     // місія на місці падіння — через missionTargets, правила mission.ts без змін
-    const missionTarget = missionTargets(geo).find((u) => u.id === ufoId);
+    const missionTarget = missionTargets(geo).find((u) => u.id === probeId);
     expect(missionTarget).toBeDefined();
     expect(missionTarget!.pos).toEqual(shotDown.pos);
     const roster = createRoster();
-    const mission = createMission(geo, ufoId, { squad: strongSquad(roster) });
+    const mission = createMission(geo, probeId, { squad: strongSquad(roster) });
     const res = autoBattle(mission.state, 240);
     const outcome = finalOutcome(res.outcome);
     expect(outcome).toBe('перемога');
     applyMissionResult(roster, mission.state);
-    completeMission(geo, ufoId, outcome);
+    completeMission(geo, probeId, outcome);
     // після перемоги у місії на падінні — НЛО зник з геосцени
-    expect(geo.ufos.find((u) => u.id === ufoId)).toBeUndefined();
-    expect(geo.log.at(-1)).toMatchObject({ type: 'mission_won', ufoId, minute: geo.minute });
+    expect(geo.probes.find((u) => u.id === probeId)).toBeUndefined();
+    expect(geo.log.at(-1)).toMatchObject({ type: 'mission_won', probeId, minute: geo.minute });
     expect(geo.minute).toBeGreaterThan(minuteAtCrash);
   });
 });

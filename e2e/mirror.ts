@@ -31,7 +31,7 @@ import {
 import { DemoSteps, aliensTurn } from '../src/core/ai-bot';
 import { awaitingRole, newCareer, RANK_NAMES, rankOf, type SoldierRole } from '../src/core/career';
 import { campaignTick, type DifficultyPreset } from '../src/core/campaign';
-import { advanceTime, detectedUfos, geoClock, missionTargets, type Ufo } from '../src/core/geo';
+import { advanceTime, detectedProbes, geoClock, missionTargets, type Probe } from '../src/core/geo';
 import { findPath, pathApCost, sideVisibleCells } from '../src/core/map';
 import { completeMission, createMission, missionOutcome, type Mission, type MissionOutcome } from '../src/core/mission';
 import { awardTrophies, radarRange } from '../src/core/research';
@@ -112,7 +112,9 @@ export class CoreMirror {
       this.tick();
       const probe = geo.log
         .slice(seen)
-        .some((e) => e.type === 'ufo_detected' || (e.type === 'ufo_landed' && geo.ufos.some((u) => u.id === e.ufoId && u.detected)));
+        .some(
+          (e) => e.type === 'probe_detected' || (e.type === 'probe_landed' && geo.probes.some((u) => u.id === e.probeId && u.detected))
+        );
       const recovered = wounded.some((id) => this.party.roster.hospital[id] === undefined);
       if (probe || (stopOnRecovery && recovered)) return done;
     }
@@ -133,11 +135,11 @@ export class CoreMirror {
     return geoClock(this.party.geo);
   }
 
-  detected(): Ufo[] {
-    return detectedUfos(this.party.geo);
+  detected(): Probe[] {
+    return detectedProbes(this.party.geo);
   }
 
-  targets(): Ufo[] {
+  targets(): Probe[] {
     return missionTargets(this.party.geo);
   }
 
@@ -184,10 +186,10 @@ export class CoreMirror {
 
   // --- бій: ті самі виклики ядра, що в src/ui/battle.ts та src/ui/input.ts ---
 
-  launch(ufoId: string): Mission {
+  launch(probeId: string): Mission {
     const squad = missionSquad(this.party.roster);
     const roles = deployRoles(this.party.roster, squad); // п16.4: як launch у src/ui/battle.ts
-    this.mission = createMission(this.party.geo, ufoId, {
+    this.mission = createMission(this.party.geo, probeId, {
       squad,
       items: deployConsumables(this.party.workshop, squad),
       ...(roles !== null ? { roles } : {}),
@@ -377,7 +379,7 @@ export class CoreMirror {
     const outcome = this.outcome();
     if (mission === null || outcome === 'триває') throw new Error('Дзеркало: бій ще триває');
     const aftermath = applyMissionResult(this.party.roster, mission.state);
-    completeMission(this.party.geo, mission.briefing.ufoId, outcome);
+    completeMission(this.party.geo, mission.briefing.probeId, outcome);
     awardTrophies(this.party.research, mission.state, outcome); // п18.2: дзеркало finish у battle.ts
     this.mission = null;
     if (outcome === 'перемога') {

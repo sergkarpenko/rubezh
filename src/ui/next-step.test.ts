@@ -4,7 +4,7 @@
 // 15.11.2026; стан готується правкою партії createParty(42).
 
 import { describe, expect, it, vi } from 'vitest';
-import { TICK_MINUTES, type Ufo, type UfoStatus } from '../core/geo';
+import { TICK_MINUTES, type Probe, type ProbeStatus } from '../core/geo';
 import { FIGHTER_MAX_HP } from '../core/intercept';
 import { createParty, type Party } from '../core/save';
 import { NEXT_STEP, NEXT_STEP_PREFIX, nextStep, nextStepText, renderNextStep, showStepTarget } from './next-step';
@@ -12,9 +12,9 @@ import { NEXT_STEP, NEXT_STEP_PREFIX, nextStep, nextStepText, renderNextStep, sh
 const GEO = { inBattle: false, gameOver: false };
 const text = (p: Party): string | null => nextStepText(p, GEO);
 
-function addUfo(p: Party, status: UfoStatus, detected = true, landedTicksLeft = 8): void {
-  const id = 'u' + p.geo.ufos.length;
-  p.geo.ufos.push({ id, kind: 'розвідник', pos: { x: 1, y: 1 }, target: { x: 1, y: 1 }, status, detected, landedTicksLeft } as Ufo);
+function addProbe(p: Party, status: ProbeStatus, detected = true, landedTicksLeft = 8): void {
+  const id = 'u' + p.geo.probes.length;
+  p.geo.probes.push({ id, kind: 'розвідник', pos: { x: 1, y: 1 }, target: { x: 1, y: 1 }, status, detected, landedTicksLeft } as Probe);
 }
 function woundAll(p: Party): void {
   for (const s of p.roster.soldiers) p.roster.hospital[s.id] = 10;
@@ -27,21 +27,21 @@ describe('Т.43: вісім рядків «Наступний крок» — д�
 
   it('1. зонд приземлився: вікно в годинах — з ядра, найменше з кількох', () => {
     const p = createParty(42);
-    addUfo(p, 'приземлився', true, 5);
+    addProbe(p, 'приземлився', true, 5);
     expect(text(p)).toBe('Наступний крок: зонд приземлився — запустіть місію (вікно 2.5 год)');
-    addUfo(p, 'приземлився', true, 2);
+    addProbe(p, 'приземлився', true, 2);
     expect(text(p)).toBe('Наступний крок: зонд приземлився — запустіть місію (вікно 1 год)');
   });
 
   it('2. збитий зонд чекає', () => {
     const p = createParty(42);
-    addUfo(p, 'збитий');
+    addProbe(p, 'збитий');
     expect(text(p)).toBe('Наступний крок: збитий зонд чекає — запустіть місію');
   });
 
   it('3. зонд у повітрі, перехоплювач на базі з повним HP', () => {
     const p = createParty(42);
-    addUfo(p, 'летить');
+    addProbe(p, 'летить');
     expect(text(p)).toBe('Наступний крок: зонд у повітрі — перехопіть або чекайте приземлення');
   });
 
@@ -79,26 +79,26 @@ describe('Т.43: вісім рядків «Наступний крок» — д�
 describe('Т.43: пріоритети і межі умов', () => {
   it('приземлений зонд без боєготових — рядок 4, не 1; невиявлений зонд не рахується', () => {
     const p = createParty(42);
-    addUfo(p, 'приземлився', false);
-    addUfo(p, 'летить', false);
+    addProbe(p, 'приземлився', false);
+    addProbe(p, 'летить', false);
     expect(text(p)).toContain('рухайте час');
-    addUfo(p, 'приземлився');
+    addProbe(p, 'приземлився');
     woundAll(p);
     expect(text(p)).toContain('немає боєготових');
   });
 
   it('порядок: приземлився → збитий → у повітрі', () => {
     const p = createParty(42);
-    addUfo(p, 'летить');
-    addUfo(p, 'збитий');
+    addProbe(p, 'летить');
+    addProbe(p, 'збитий');
     expect(text(p)).toContain('збитий зонд чекає');
-    addUfo(p, 'приземлився');
+    addProbe(p, 'приземлився');
     expect(text(p)).toContain('зонд приземлився');
   });
 
   it('зонд у повітрі з пошкодженим або зайнятим перехоплювачем — не рядок 3', () => {
     const p = createParty(42);
-    addUfo(p, 'летить');
+    addProbe(p, 'летить');
     p.intercept.fighters[0].hp = 1;
     expect(text(p)).toContain('замовте ремонт');
     p.intercept.fighters[0].status = 'ремонт';
@@ -110,7 +110,7 @@ describe('Т.43: пріоритети і межі умов', () => {
 
   it('зонд у повітрі без боєготових — рядок 3 раніше за рядок 4', () => {
     const p = createParty(42);
-    addUfo(p, 'летить');
+    addProbe(p, 'летить');
     woundAll(p);
     expect(text(p)).toContain('зонд у повітрі');
   });
@@ -149,7 +149,7 @@ describe('Т.43: пріоритети і межі умов', () => {
     p.intercept.fighters[0].hp = 1;
     p.workshop.store.armor = 1;
     p.research.completed.push('medkit');
-    addUfo(p, 'збитий');
+    addProbe(p, 'збитий');
     expect(text(p)).toContain('немає боєготових');
   });
 
@@ -284,26 +284,26 @@ describe('Т.79: куди веде клік по рядку', () => {
     landed: {
       party: () => {
         const p = ready();
-        addUfo(p, 'приземлився');
+        addProbe(p, 'приземлився');
         return p;
       },
-      target: (p) => ({ tab: 'base', id: 'btn-mission-' + p.geo.ufos[0].id }),
+      target: (p) => ({ tab: 'base', id: 'btn-mission-' + p.geo.probes[0].id }),
     },
     shotDown: {
       party: () => {
         const p = ready();
-        addUfo(p, 'збитий');
+        addProbe(p, 'збитий');
         return p;
       },
-      target: (p) => ({ tab: 'base', id: 'btn-mission-' + p.geo.ufos[0].id }),
+      target: (p) => ({ tab: 'base', id: 'btn-mission-' + p.geo.probes[0].id }),
     },
     inAir: {
       party: () => {
         const p = ready();
-        addUfo(p, 'летить');
+        addProbe(p, 'летить');
         return p;
       },
-      target: () => ({ tab: 'base', selector: '#ufos button.intercept' }),
+      target: () => ({ tab: 'base', selector: '#probes button.intercept' }),
     },
     noReady: {
       party: () => {
@@ -366,25 +366,25 @@ describe('Т.79: куди веде клік по рядку', () => {
       const p = CASES[key].party();
       const step = nextStep(p, GEO)!;
       const want = NEXT_STEP[key];
-      expect(step.text).toBe(typeof want === 'string' ? want : want((8 * TICK_MINUTES) / 60)); // addUfo: вікно 8 тіків
+      expect(step.text).toBe(typeof want === 'string' ? want : want((8 * TICK_MINUTES) / 60)); // addProbe: вікно 8 тіків
       expect(step.target).toEqual(CASES[key].target(p));
     });
   }
   it('Т.97: «запустіть місію» веде до зонда з найменшим вікном, а не до першого', () => {
     const p = createParty(42);
-    addUfo(p, 'приземлився', true, 12);
-    addUfo(p, 'збитий');
-    addUfo(p, 'приземлився', true, 4);
-    addUfo(p, 'приземлився', true, 4); // рівне вікно — перший з рівних
+    addProbe(p, 'приземлився', true, 12);
+    addProbe(p, 'збитий');
+    addProbe(p, 'приземлився', true, 4);
+    addProbe(p, 'приземлився', true, 4); // рівне вікно — перший з рівних
     const step = nextStep(p, GEO)!;
     expect(step.text).toBe(NEXT_STEP.landed((4 * TICK_MINUTES) / 60));
     expect(step.target).toEqual({ tab: 'base', id: 'btn-mission-u2' });
   });
   it('Т.97: збитий зонд — перший збитий серед цілей місій; невиявлений не рахується', () => {
     const p = createParty(42);
-    addUfo(p, 'летить', false);
-    addUfo(p, 'збитий', false);
-    addUfo(p, 'збитий');
+    addProbe(p, 'летить', false);
+    addProbe(p, 'збитий', false);
+    addProbe(p, 'збитий');
     expect(nextStep(p, GEO)?.target).toEqual({ tab: 'base', id: 'btn-mission-u2' });
   });
   it('без рядка — без цілі', () => {

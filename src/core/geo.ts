@@ -31,67 +31,67 @@ export const WORLD_W = 16;
 export const WORLD_H = 9;
 export const RADAR_RANGE = 4; // Чебишев, із замиканням по X
 export const DEFAULT_SPAWN_CHANCE = 0.03; // за тік ≈ 1.5 НЛО/добу (за симуляціями 20 сідів × 10 днів)
-export const DEFAULT_MAX_UFOS = 3;
+export const DEFAULT_MAX_PROBES = 3;
 
-export type UfoKind = 'розвідник' | 'збирач';
+export type ProbeKind = 'розвідник' | 'збирач';
 
 export interface KindProfile {
   moveEveryTicks: number;
   landingTicks: number;
 }
 
-export const UFO_KINDS: Record<UfoKind, KindProfile> = {
+export const PROBE_KINDS: Record<ProbeKind, KindProfile> = {
   розвідник: { moveEveryTicks: 1, landingTicks: 8 }, // швидкий, коротке вікно (4 год)
   збирач: { moveEveryTicks: 2, landingTicks: 16 }, // повільний, широке вікно (8 год)
 };
 
-export type UfoStatus = 'летить' | 'приземлився' | 'збитий';
+export type ProbeStatus = 'летить' | 'приземлився' | 'збитий';
 
-export interface Ufo {
+export interface Probe {
   id: string;
-  kind: UfoKind;
+  kind: ProbeKind;
   pos: Vec2;
   target: Vec2;
   detected: boolean;
-  status: UfoStatus;
+  status: ProbeStatus;
   landedTicksLeft: number;
 }
 
 export type GeoEvent =
-  | { type: 'ufo_spawned'; ufoId: string; kind: UfoKind; pos: Vec2; minute: number }
-  | { type: 'ufo_move'; ufoId: string; from: Vec2; to: Vec2; minute: number }
-  | { type: 'ufo_detected'; ufoId: string; pos: Vec2; minute: number }
-  | { type: 'ufo_landed'; ufoId: string; pos: Vec2; minute: number }
-  | { type: 'ufo_left'; ufoId: string; minute: number }
+  | { type: 'probe_spawned'; probeId: string; kind: ProbeKind; pos: Vec2; minute: number }
+  | { type: 'probe_move'; probeId: string; from: Vec2; to: Vec2; minute: number }
+  | { type: 'probe_detected'; probeId: string; pos: Vec2; minute: number }
+  | { type: 'probe_landed'; probeId: string; pos: Vec2; minute: number }
+  | { type: 'probe_left'; probeId: string; minute: number }
   | { type: 'day'; day: number; minute: number }
   // Ітерація 5.0 (записує модуль mission.ts):
-  | { type: 'mission_won'; ufoId: string; minute: number }
-  | { type: 'mission_lost'; ufoId: string; minute: number }
+  | { type: 'mission_won'; probeId: string; minute: number }
+  | { type: 'mission_lost'; probeId: string; minute: number }
   // П15.2 (ADR-0075): третій результат місії — загін евакуйований
   // (НЛО лишається приземленим, премії немає); записує mission.ts.
-  | { type: 'mission_evacuated'; ufoId: string; minute: number }
+  | { type: 'mission_evacuated'; probeId: string; minute: number }
   // П7.3 (ADR-0032): події перехоплення — в журналі геосцени (туман: події лише
   // про виявлені НЛО, бо запуск перехоплення можливий лише на виявлений).
   // Записує модуль intercept.ts; geoTick про винищувача не знає (ADR-0002/0032).
   // п19.3 (ADR-0161): поле fighter (id перехоплювача) — лише коли перехоплювачів два і більше,
   // region — ангар вильоту й повернення; fighter_assigned — перепризначення в інший ангар.
   | ((
-      | { type: 'intercept_start'; ufoId: string; pos: Vec2; minute: number }
+      | { type: 'intercept_start'; probeId: string; pos: Vec2; minute: number }
       | { type: 'intercept_move'; from: Vec2; to: Vec2; minute: number }
-      | { type: 'intercept_engage'; ufoId: string; pos: Vec2; minute: number }
+      | { type: 'intercept_engage'; probeId: string; pos: Vec2; minute: number }
       | {
           type: 'intercept_round';
           round: number;
           choice: 'далека' | 'середня' | 'впритул' | 'відступ';
           fighterHit: boolean;
           fighterDamage: number;
-          ufoHit: boolean;
-          ufoDamage: number;
+          probeHit: boolean;
+          probeDamage: number;
           minute: number;
         }
-      | { type: 'intercept_break_off'; ufoId: string; minute: number }
-      | { type: 'intercept_aborted'; ufoId: string; reason: 'ufo_lost' | 'ufo_landed' | 'fighter_damaged'; pos: Vec2; minute: number }
-      | { type: 'ufo_shot_down'; ufoId: string; pos: Vec2; minute: number }
+      | { type: 'intercept_break_off'; probeId: string; minute: number }
+      | { type: 'intercept_aborted'; probeId: string; reason: 'probe_lost' | 'probe_landed' | 'fighter_damaged'; pos: Vec2; minute: number }
+      | { type: 'probe_shot_down'; probeId: string; pos: Vec2; minute: number }
       | { type: 'fighter_returned'; pos: Vec2; minute: number }
       | { type: 'fighter_repair_start'; minute: number } // П7.4: ремонт оплачемо
       | { type: 'fighter_repair_done'; minute: number }
@@ -109,19 +109,19 @@ export type GeoEvent =
   | { type: 'assault_lost'; money: number; minute: number }
   | { type: 'gate_lost'; minute: number }
   // п19.2 (ADR-0159 п. 11): зміна довіри регіону і вихід регіону (записує regions.ts з campaignTick).
-  | { type: 'region_trust'; region: RegionId; delta: number; trust: number; reason: 'ufo_left' | 'mission_won'; minute: number }
+  | { type: 'region_trust'; region: RegionId; delta: number; trust: number; reason: 'probe_left' | 'mission_won'; minute: number }
   | { type: 'region_out'; region: RegionId; minute: number };
 
-// п19.2: як відлетів зонд ufoId (подія з індексом i): виявлений чи ні без бою, або після бою
+// п19.2: як відлетів зонд probeId (подія з індексом i): виявлений чи ні без бою, або після бою
 // (програна місія чи евакуація) — спільне правило загрози (ADR-0155) і довіри (ADR-0159 п. 11).
-export function ufoLeftKind(log: GeoEvent[], i: number, ufoId: string): 'detected' | 'undetected' | 'fought' {
+export function probeLeftKind(log: GeoEvent[], i: number, probeId: string): 'detected' | 'undetected' | 'fought' {
   let detected = false;
   for (let j = i - 1; j >= 0; j--) {
     const e = log[j];
-    if (!('ufoId' in e) || e.ufoId !== ufoId) continue;
+    if (!('probeId' in e) || e.probeId !== probeId) continue;
     if (e.type === 'mission_lost' || e.type === 'mission_evacuated') return 'fought'; // зонд відлетів після бою
-    if (e.type === 'ufo_detected') detected = true;
-    if (e.type === 'ufo_spawned') break;
+    if (e.type === 'probe_detected') detected = true;
+    if (e.type === 'probe_spawned') break;
   }
   return detected ? 'detected' : 'undetected';
 }
@@ -130,10 +130,10 @@ export interface GeoState {
   minute: number; // хвилини від старту; 0 = 00:00 дня 1
   rng: RNG;
   base: Vec2; // єдина база «Рубіж»
-  ufos: Ufo[]; // усі НЛО, включно з невиявленими (туман: гравець бачить лише detected)
+  probes: Probe[]; // усі НЛО, включно з невиявленими (туман: гравець бачить лише detected)
   log: GeoEvent[];
   spawnChance: number;
-  maxUfos: number;
+  maxProbes: number;
   nextId: number;
 }
 
@@ -142,7 +142,7 @@ export interface GeoOptions {
   rng?: RNG;
   base?: Vec2;
   spawnChance?: number;
-  maxUfos?: number;
+  maxProbes?: number;
   preset?: DifficultyPreset;
 }
 
@@ -157,10 +157,10 @@ export function createGeoGame(opts: GeoOptions = {}): GeoState {
     minute: 0,
     rng: opts.rng ?? mulberry32(opts.seed ?? 42),
     base: { ...base },
-    ufos: [],
+    probes: [],
     log: [],
-    spawnChance: (opts.spawnChance ?? DEFAULT_SPAWN_CHANCE) * multipliers.ufoSpawnMultiplier,
-    maxUfos: Math.round((opts.maxUfos ?? DEFAULT_MAX_UFOS) * multipliers.ufoSpawnMultiplier),
+    spawnChance: (opts.spawnChance ?? DEFAULT_SPAWN_CHANCE) * multipliers.probeSpawnMultiplier,
+    maxProbes: Math.round((opts.maxProbes ?? DEFAULT_MAX_PROBES) * multipliers.probeSpawnMultiplier),
     nextId: 1,
   };
 }
@@ -213,46 +213,46 @@ export function geoTick(state: GeoState, radar: number = RADAR_RANGE): void {
 
   // Фаза 1: спавн нового НЛО (якщо є місце і пощастило з шансом). Збиті НЛО
   // ліміт не займають (Т.17, ADR-0086): вони чекають місії без строку.
-  const airborne = state.ufos.filter((u) => u.status !== 'збитий').length;
-  if (airborne < state.maxUfos && state.rng() < state.spawnChance) {
-    const kind: UfoKind = state.rng() < 0.7 ? 'розвідник' : 'збирач';
+  const airborne = state.probes.filter((u) => u.status !== 'збитий').length;
+  if (airborne < state.maxProbes && state.rng() < state.spawnChance) {
+    const kind: ProbeKind = state.rng() < 0.7 ? 'розвідник' : 'збирач';
     const pos = randomCell(state.rng);
-    const ufo: Ufo = {
-      id: 'ufo' + state.nextId++,
+    const probe: Probe = {
+      id: 'probe' + state.nextId++,
       kind,
       pos,
       target: randomCell(state.rng),
       detected: false,
       status: 'летить',
-      landedTicksLeft: UFO_KINDS[kind].landingTicks,
+      landedTicksLeft: PROBE_KINDS[kind].landingTicks,
     };
-    state.ufos.push(ufo);
-    state.log.push({ type: 'ufo_spawned', ufoId: ufo.id, kind, pos: { ...pos }, minute: state.minute });
+    state.probes.push(probe);
+    state.log.push({ type: 'probe_spawned', probeId: probe.id, kind, pos: { ...pos }, minute: state.minute });
   }
 
   // Фаза 2: рух, посадка, відлік вікна, відліт.
-  for (const ufo of [...state.ufos]) {
-    if (ufo.status === 'летить') {
-      const prof = UFO_KINDS[ufo.kind];
+  for (const probe of [...state.probes]) {
+    if (probe.status === 'летить') {
+      const prof = PROBE_KINDS[probe.kind];
       if ((state.minute / TICK_MINUTES) % prof.moveEveryTicks !== 0) continue;
       // вже на місці (рідкісний випадок спавну в клітинці цілі) — одразу посадка
-      if (ufo.pos.x === ufo.target.x && ufo.pos.y === ufo.target.y) {
-        ufo.status = 'приземлився';
-        state.log.push({ type: 'ufo_landed', ufoId: ufo.id, pos: { ...ufo.pos }, minute: state.minute });
+      if (probe.pos.x === probe.target.x && probe.pos.y === probe.target.y) {
+        probe.status = 'приземлився';
+        state.log.push({ type: 'probe_landed', probeId: probe.id, pos: { ...probe.pos }, minute: state.minute });
         continue;
       }
-      const from = { ...ufo.pos };
-      ufo.pos = stepToward(ufo.pos, ufo.target);
-      state.log.push({ type: 'ufo_move', ufoId: ufo.id, from, to: { ...ufo.pos }, minute: state.minute });
-      if (ufo.pos.x === ufo.target.x && ufo.pos.y === ufo.target.y) {
-        ufo.status = 'приземлився';
-        state.log.push({ type: 'ufo_landed', ufoId: ufo.id, pos: { ...ufo.pos }, minute: state.minute });
+      const from = { ...probe.pos };
+      probe.pos = stepToward(probe.pos, probe.target);
+      state.log.push({ type: 'probe_move', probeId: probe.id, from, to: { ...probe.pos }, minute: state.minute });
+      if (probe.pos.x === probe.target.x && probe.pos.y === probe.target.y) {
+        probe.status = 'приземлився';
+        state.log.push({ type: 'probe_landed', probeId: probe.id, pos: { ...probe.pos }, minute: state.minute });
       }
-    } else if (ufo.status === 'приземлився') {
-      ufo.landedTicksLeft -= 1;
-      if (ufo.landedTicksLeft <= 0) {
-        state.ufos = state.ufos.filter((u) => u !== ufo);
-        state.log.push({ type: 'ufo_left', ufoId: ufo.id, minute: state.minute });
+    } else if (probe.status === 'приземлився') {
+      probe.landedTicksLeft -= 1;
+      if (probe.landedTicksLeft <= 0) {
+        state.probes = state.probes.filter((u) => u !== probe);
+        state.log.push({ type: 'probe_left', probeId: probe.id, minute: state.minute });
       }
     }
     // «збитий» (П7.3, ADR-0032): сидить на місці падіння як кандидат на тактичну
@@ -261,10 +261,10 @@ export function geoTick(state: GeoState, radar: number = RADAR_RANGE): void {
   }
 
   // Фаза 3: виявлення радаром бази (виявлений НЛО лишається на звіті — трекінг).
-  for (const ufo of state.ufos) {
-    if (!ufo.detected && chebyshevWrap(state.base, ufo.pos) <= radar) {
-      ufo.detected = true;
-      state.log.push({ type: 'ufo_detected', ufoId: ufo.id, pos: { ...ufo.pos }, minute: state.minute });
+  for (const probe of state.probes) {
+    if (!probe.detected && chebyshevWrap(state.base, probe.pos) <= radar) {
+      probe.detected = true;
+      state.log.push({ type: 'probe_detected', probeId: probe.id, pos: { ...probe.pos }, minute: state.minute });
     }
   }
 }
@@ -277,12 +277,12 @@ export function advanceTime(state: GeoState, ticks: number, radar: number = RADA
 }
 
 // НЛО, видимі гравцеві (туман стратегічного шару: лише виявлені радаром).
-export function detectedUfos(state: GeoState): Ufo[] {
-  return state.ufos.filter((u) => u.detected);
+export function detectedProbes(state: GeoState): Probe[] {
+  return state.probes.filter((u) => u.detected);
 }
 
 // Приземлені виявлені НЛО — кандидати на тактичну місію (зв'язок шарів — ітерація 5).
 // П7.3 (ADR-0032): збиті перехопленням НЛО — теж кандидати (місія на місці падіння).
-export function missionTargets(state: GeoState): Ufo[] {
-  return state.ufos.filter((u) => u.detected && (u.status === 'приземлився' || u.status === 'збитий'));
+export function missionTargets(state: GeoState): Probe[] {
+  return state.probes.filter((u) => u.detected && (u.status === 'приземлився' || u.status === 'збитий'));
 }

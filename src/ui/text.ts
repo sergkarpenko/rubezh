@@ -46,3 +46,10 @@ export function plural(n: number, one: string, few: string, many: string): strin
   if (d >= 2 && d <= 4 && (dd < 12 || dd > 14)) return n + ' ' + few;
   return n + ' ' + many;
 }
+
+// Т.218 (рішення власника «probe / «зонд»»): номер зонда для тексту — «№3» з id `probe3` (старий сейв — `ufo3`
+// на диску, у пам'яті теж `probe3`); id без номера — як є.
+export function probeNo(id: string): string {
+  const m = /\d+$/.exec(id);
+  return m ? '№' + m[0] : id;
+}
