@@ -404,6 +404,7 @@ describe('Т.218: «Сценарії для перевірки» — посил�
     expect(document.activeElement).toBe(items[0]);
     btn('btn-scenario-cancel').click();
     expect(visible('scenario-dialog')).toBe(false);
+    expect(document.activeElement).toBe(btn('btn-start-scenarios'));
     expect(deps.onScenario).not.toHaveBeenCalled();
   });
 

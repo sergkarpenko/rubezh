@@ -3821,4 +3821,17 @@ describePage('Т.218: сценарій для перевірки зі старт
     expect($('exit-confirm').classList.contains('hidden')).toBe(true); // контрольна точка — стан сценарію
     expect($('start-screen').classList.contains('hidden')).toBe(false);
   });
+
+  it('аудит PR #535: «Штурм бази» — бій відкривається першим рухом часу; слоти збережень не змінюються; Esc закриває вікно', () => {
+    const before = JSON.stringify(Object.fromEntries(Object.entries(localStorage)));
+    btn('btn-start-scenarios').click();
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true }));
+    expect($('scenario-dialog').classList.contains('hidden')).toBe(true);
+    btn('btn-start-scenarios').click();
+    (document.querySelector('[data-scenario="assault"]') as HTMLButtonElement).click();
+    expect($('battle-panel').classList.contains('hidden')).toBe(true);
+    btn('btn-tick').click();
+    expect($('battle-panel').classList.contains('hidden')).toBe(false);
+    expect(JSON.stringify(Object.fromEntries(Object.entries(localStorage)))).toBe(before);
+  });
 });

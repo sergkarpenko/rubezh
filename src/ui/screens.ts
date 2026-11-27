@@ -318,7 +318,10 @@ export function createScreens(deps: ScreensDeps): Screens {
     scenarioDialog.classList.remove('hidden');
     scenarioDialog.querySelector<HTMLButtonElement>('.scenario-item')?.focus();
   };
-  el('btn-scenario-cancel').onclick = () => scenarioDialog.classList.add('hidden');
+  el('btn-scenario-cancel').onclick = () => {
+    scenarioDialog.classList.add('hidden');
+    el<HTMLButtonElement>('btn-start-scenarios').focus(); // фокус — туди, звідки відкрили (аудит PR #535)
+  };
   for (const b of scenarioDialog.querySelectorAll<HTMLButtonElement>('.scenario-item')) {
     b.onclick = () => {
       hideDialogs();

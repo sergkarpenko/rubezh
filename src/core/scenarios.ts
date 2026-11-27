@@ -7,7 +7,9 @@
 // Детерміновано (ADR-0003): той самий сід і код — той самий стан.
 import { gateOpen } from './assault';
 import type { DifficultyPreset } from './campaign';
+import type { EnemyKind } from './enemies';
 import { missionTargets } from './geo';
+import { createMission } from './mission';
 import { CAMPAIGN_POLICY, simulateParty } from './party-bot';
 import { deserializeParty, serializeParty, type Party } from './save';
 
@@ -27,16 +29,28 @@ const ALL_KINDS_THREAT = 27;
 const EDGE_THREAT = 90;
 const FORGE_PROTOCOLS = ['shotgun', 'mg', 'sniper'] as const;
 const landed = (p: Readonly<Party>): boolean => missionTargets(p.geo).length > 0;
+// Типи ворогів місії кожного приземленого зонда — склад, як у бою (`createMission` geo не змінює).
+// Місія — 2–3 ворогів (`ALIENS_PER_KIND`), тож усі чотири типи разом — лише в штурмі й Брамі.
+export function landedKinds(p: Readonly<Party>): Set<EnemyKind>[] {
+  return missionTargets(p.geo).map(
+    (u) =>
+      new Set(
+        createMission(p.geo, u.id, { threat: p.campaign.threat })
+          .state.units.filter((x) => x.side === 'alien')
+          .map((x) => x.kind ?? 'demon')
+      )
+  );
+}
 
 // Сіди й доби — скан сідів 1–30 на «нормі» (Т.218); доба — коли бот доходить до віхи.
 export const SCENARIOS: readonly Scenario[] = [
   {
     id: 'kinds',
-    title: 'Усі типи ворогів',
-    desc: 'Загроза 27+: у місіях — демон, гончак, голем і око; зонд приземлився (14-та доба)',
-    seed: 3,
+    title: 'Нові типи ворогів',
+    desc: 'Зонд приземлився: у місії три різні типи, серед них голем і око; усі чотири разом — у «Штурмі бази» і «Перед Брамою» (22-га доба)',
+    seed: 6,
     preset: 'норма',
-    until: (p) => p.campaign.threat >= ALL_KINDS_THREAT && landed(p),
+    until: (p) => p.campaign.threat >= ALL_KINDS_THREAT && landedKinds(p).some((k) => k.size === 3 && k.has('golem') && k.has('eye')),
   },
   {
     id: 'arsenal',
@@ -49,7 +63,7 @@ export const SCENARIOS: readonly Scenario[] = [
   {
     id: 'assault',
     title: 'Штурм бази',
-    desc: 'Загроза дійшла до порогу — штурм почнеться з першим рухом часу (28-ма доба)',
+    desc: 'Загроза дійшла до порогу — штурм почнеться з першим рухом часу; на полі — усі чотири типи ворогів (28-ма доба)',
     seed: 9,
     preset: 'норма',
     until: (p) => p.campaign.assaultPending === true,
@@ -73,7 +87,7 @@ export const SCENARIOS: readonly Scenario[] = [
   {
     id: 'edge',
     title: 'На межі поразки',
-    desc: 'Загроза 90+: на 100 — поразка (42-га доба)',
+    desc: 'Загроза 90+: третій штурм бази почнеться з першим рухом часу; на 100 — поразка (42-га доба)',
     seed: 2,
     preset: 'норма',
     until: (p) => p.campaign.threat >= EDGE_THREAT,
@@ -81,7 +95,7 @@ export const SCENARIOS: readonly Scenario[] = [
   {
     id: 'fleet',
     title: 'Два перехоплювачі, регіон на межі',
-    desc: 'Другий перехоплювач куплено; довіра регіону 30 чи менше — ще один пропущений зонд, і він вийде (23-тя доба)',
+    desc: 'Другий перехоплювач куплено; довіра регіону 30 чи менше — ще один пропущений виявлений зонд (−30), і регіон вийде (23-тя доба)',
     seed: 8,
     preset: 'норма',
     until: (p) => p.intercept.fighters.length >= 2 && Object.values(p.campaign.regions).some((r) => !r.out && r.trust > 0 && r.trust <= 30),

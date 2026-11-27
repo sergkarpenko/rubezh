@@ -2013,7 +2013,7 @@
       .start-link {
         background: none;
         border: none;
-        padding: 0;
+        padding: 6px 4px; /* ціль пальця ≈ 28 px заввишки (аудит PR #535) */
         font: inherit;
         color: #7fdcff;
         text-decoration: underline;
@@ -2022,6 +2022,10 @@
       }
       #scenario-dialog .screen-dialog {
         max-width: 460px;
+        margin: auto; /* аудит PR #535: у низькому вікні — від верху з прокруткою, а не обрізано згори */
+      }
+      #scenario-dialog {
+        align-items: flex-start;
       }
       .dialog-hint {
         margin: 6px 0 10px;
