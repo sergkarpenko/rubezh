@@ -74,7 +74,17 @@ describe('П12.6: сейви ≤0.3.0 вантажаться (критерій 1
     expect(p.research.log[10]).toEqual({ type: 'project_started', id: 'grenade' });
     // «Кузня»: черга, склад (нулі мержаться з emptyStore), екіпірування
     expect(p.workshop.queue).toEqual([{ id: 'optics', ticksLeft: 7 }]);
-    expect(p.workshop.store).toEqual({ medkit: 1, grenade: 0, optics: 0, armor: 0, 'gun-module': 0, 'breach-charge': 0 }); // п18.2: новий ключ складу — 0
+    expect(p.workshop.store).toEqual({
+      medkit: 1,
+      grenade: 0,
+      optics: 0,
+      armor: 0,
+      'gun-module': 0,
+      'breach-charge': 0,
+      shotgun: 0,
+      sniper: 0,
+      mg: 0,
+    }); // п18.2, п20.4: нові ключі складу — 0
     expect(p.workshop.equipped).toEqual({ s1: { armor: false, optics: false, medkit: true, grenade: false } });
     expect(kinds(p.workshop.log)).toEqual(['order', 'order', 'produced', 'equip', 'order', 'produced']);
     expect(p.workshop.log[0]).toEqual({ type: 'order', id: 'medkit', ticks: 12 });
@@ -189,7 +199,17 @@ describe('П12.6: продовження сіда 42 — види подій і 
     expect(p.research.pool).toBe(0);
     expect(p.research.active).toEqual([{ id: 'grenade', invested: 8 }]);
     expect(p.workshop.queue).toEqual([]);
-    expect(p.workshop.store).toEqual({ medkit: 1, grenade: 0, optics: 1, armor: 0, 'gun-module': 0, 'breach-charge': 0 });
+    expect(p.workshop.store).toEqual({
+      medkit: 1,
+      grenade: 0,
+      optics: 1,
+      armor: 0,
+      'gun-module': 0,
+      'breach-charge': 0,
+      shotgun: 0,
+      sniper: 0,
+      mg: 0,
+    });
   });
 });
 

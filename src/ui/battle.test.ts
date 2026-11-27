@@ -14,6 +14,7 @@ import { initPixelSprites, initUnitAtlas } from '../render';
 import { ALIEN_RING, RING_DY, RING_RX, fighterLook, makeDeathAnim, makeMoveAnim, makeTracerAnim } from '../core/render-core';
 import { createBattleUI, validFireTargets, validHealTargets, type BattleDeps, type BattleUIState } from './battle';
 import { createToolbar } from './toolbar';
+import { SHOTGUN, SNIPER_RIFLE } from '../core/weapons';
 
 // Піксельний рушій (ADR-0031): тестовий мок фабрики offscreen-канвасів —
 // той самий патерн, що й у main.ui.test.ts (jsdom без пакета canvas).
@@ -512,6 +513,39 @@ describe('battle: флоу місії (запуск/закриття/завер�
     expect(cap('btn-snap').textContent).toBe('Швидкий');
     expect(cap('btn-snap').classList.contains('tb-why')).toBe(false);
     expect(cap('btn-grenade').textContent).toBe('Граната');
+  });
+
+  it('п20.4 (EARS 6, ADR-0168): режими, яких зброя не має, — вимкнені плитки «немає в зброї»; «Точний» без прицільного', () => {
+    const f = makeFixture();
+    f.battle.launch(firstTarget(f));
+    const st = f.ui.mission!.state;
+    const sel = st.units.find((u) => u.side === 'player')!;
+    f.ui.selectedId = sel.id;
+    st.roles = { [sel.id]: { role: 'sniper', used: false } };
+    const cap = (id: string): HTMLElement => document.querySelector<HTMLElement>('#' + id + ' .tb-cap')!;
+    const tile = (id: string): HTMLButtonElement => document.getElementById(id) as HTMLButtonElement;
+    sel.weapon = SHOTGUN;
+    f.battle.renderBattle();
+    expect(['btn-snap', 'btn-aimed', 'btn-auto'].map((id) => [cap(id).textContent, tile(id).disabled])).toEqual([
+      ['Швидкий', false],
+      ['немає в зброї', true],
+      ['немає в зброї', true],
+    ]);
+    expect(tile('btn-aimed').title).toContain('— у зброї «Дробовик «Шквал»» цього режиму немає');
+    expect([cap('btn-role').textContent, tile('btn-role').disabled]).toEqual(['без прицільного', true]);
+    expect(tile('btn-role').title).toContain('не має прицільного режиму');
+    sel.ap = 0; // причина «немає в зброї» старша за «мало AP»
+    f.battle.renderBattle();
+    expect([cap('btn-snap').textContent, cap('btn-aimed').textContent]).toEqual(['мало AP', 'немає в зброї']);
+    sel.ap = sel.maxAp;
+    sel.weapon = SNIPER_RIFLE;
+    f.battle.renderBattle();
+    expect(['btn-snap', 'btn-aimed', 'btn-auto'].map((id) => cap(id).textContent)).toEqual([
+      'немає в зброї',
+      'Прицільний',
+      'немає в зброї',
+    ]);
+    expect([cap('btn-role').textContent, tile('btn-role').disabled]).toEqual(['Точний', false]);
   });
 
   it('п16.4: плитка «Роль» — підпис, іконка й ціна за роллю вибраного, причина з ядра (EARS 6)', () => {

@@ -18,6 +18,7 @@ import { spend, type EconomyState } from './economy';
 import { type DifficultyPreset, DEFAULT_PRESET, sciencePrice } from './campaign';
 import type { GameState } from './combat';
 import { ENEMY_KINDS, ENEMY_ORDER, enemyKind, type EnemyKind } from './enemies';
+import { WEAPONS, type ForgeWeaponId } from './weapons';
 
 export const HIRE_SCIENTIST_PRICE = 100; // кандидат (П11.8); прецедент найму солдата, ADR-0021
 export const SCIENTIST_SALARY = 10; // зарплата за добу за вченого; Т.28 (ADR-0091): 20 → 10
@@ -27,7 +28,8 @@ export const MAX_LAB_SLOTS = 3; // після проєкту «Розширен�
 // Ідентифікатори проєктів — стабільні англійські ключі (П12.6, ADR-0064:
 // ключі — не відображувані назви; сейви ≤0.3.0 мігруються при завантаженні,
 // save.ts). Відображувані назви — поле name каталогу.
-export type ProjectId = 'armor' | 'optics' | 'medkit' | 'lab-extension' | 'grenade' | 'gun-module' | KeyProjectId;
+// п20.4 (ADR-0168): протоколи зброї — ключі зброї «Кузні» (ForgeWeaponId, weapons.ts).
+export type ProjectId = 'armor' | 'optics' | 'medkit' | 'lab-extension' | 'grenade' | 'gun-module' | KeyProjectId | ForgeWeaponId;
 
 // п18.2 (ADR-0153 п. 1, 10; ADR-0154): ключові протоколи ланцюжка до фінальної місії.
 export type KeyProjectId = 'rift-anatomy' | 'gate-bearing' | 'gate-key';
@@ -85,6 +87,15 @@ export const KEY_PROJECTS: ProjectDef[] = [
   },
 ];
 
+// п20.4 (ADR-0165 п. 6, 12; ADR-0168): свій протокол на кожну зброю (рішення власника п20.1
+// «А. Свій протокол на кожну + виріб у «Кузні»»); назва — назва зброї; числа — кандидати, probe п20.6.
+// Окремий масив, як KEY_PROJECTS: PROJECTS і його порядок лишаються (бот, скрипти, тести).
+export const WEAPON_PROJECTS: ProjectDef[] = [
+  { id: 'shotgun', name: WEAPONS.shotgun.name, cost: 80, points: 20 },
+  { id: 'sniper', name: WEAPONS.sniper.name, cost: 96, points: 24, prerequisite: 'optics' },
+  { id: 'mg', name: WEAPONS.mg.name, cost: 110, points: 28, prerequisite: 'armor' },
+];
+
 export const LAB_EXTENSION_PROJECT: ProjectId = 'lab-extension';
 
 // п18.2 (ADR-0153 п. 12): радіус радара бази — 4, після «Пеленгу брами» — 6.
@@ -126,7 +137,7 @@ export function awardTrophies(research: ResearchState, battle: Pick<GameState, '
 }
 
 export const PROJECT_CATALOG: Record<ProjectId, ProjectDef> = Object.fromEntries(
-  [...PROJECTS, ...KEY_PROJECTS].map((p) => [p.id, p])
+  [...PROJECTS, ...KEY_PROJECTS, ...WEAPON_PROJECTS].map((p) => [p.id, p])
 ) as Record<ProjectId, ProjectDef>;
 
 // Відображувана назва протоколу за ключем (для throw-текстів, журналу і

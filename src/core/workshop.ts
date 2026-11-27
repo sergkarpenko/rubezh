@@ -25,6 +25,7 @@ import { HIT_CHANCE_CAP, type Unit, type UnitItems } from './combat';
 import { addFighter, baseWhere, fighterById, MAX_FIGHTERS, type InterceptState } from './intercept';
 import type { GeoState } from './geo';
 import type { RegionId } from './regions';
+import { isForgeWeapon, WEAPONS, type ForgeWeaponId, type WeaponId } from './weapons';
 
 // Предмети «Кузні» — завершені протоколи науки, крім «Розширення лабораторії».
 // П12.6 (ADR-0064): ключі англійські (стабільні, збігаються з ProjectId),
@@ -50,6 +51,10 @@ export const WORKSHOP_CATALOG: Record<ItemId, WorkshopItemDef> = {
   'gun-module': { name: 'Гарматний модуль перехоплювача', cost: 80, ticks: 32 },
   // п18.2 (ADR-0153 п. 11, ADR-0154; числа — перемір п18.6 без змін, ADR-0158)
   'breach-charge': { name: 'Пробивний заряд', cost: 50, ticks: 16, unlockedBy: 'rift-anatomy', trophies: { hound: 1 } },
+  // п20.4 (ADR-0165 п. 6, 12; ADR-0168): зброя — виріб «Кузні» за своїм протоколом; не витратник
+  shotgun: { name: WEAPONS.shotgun.name, cost: 60, ticks: 16 },
+  sniper: { name: WEAPONS.sniper.name, cost: 70, ticks: 20 },
+  mg: { name: WEAPONS.mg.name, cost: 80, ticks: 24 },
 };
 
 // Предмети, які показують панелі «Кузні» і порада «Наступний крок». п18.2: «Пробивний
@@ -63,7 +68,7 @@ export function itemUnlocked(research: Pick<ResearchState, 'completed'>, id: Ite
 }
 
 // п18.2: предмет за ключем запису екіпірування (ключ «charge» — «Пробивний заряд»).
-export function equipKeyItem(k: keyof SoldierEquipment): SoldierItemId {
+export function equipKeyItem(k: ItemSlot): SoldierItemId {
   return k === 'charge' ? 'breach-charge' : k;
 }
 
@@ -80,8 +85,8 @@ export function orderName(o: Pick<WorkshopOrder, 'id'>): string {
 
 // Предмети, що екіпіруються на оперативника ростеру (ADR-0058). Гарматний
 // модуль — озброєння перехоплювача, на оперативникові він не носиться
-// (встановлення — intercept).
-export type SoldierItemId = Exclude<ItemId, 'gun-module'>;
+// (встановлення — intercept). п20.4: зброя — окремий слот (`SoldierEquipment.weapon`, equipWeapon).
+export type SoldierItemId = Exclude<ItemId, 'gun-module' | ForgeWeaponId>;
 
 // п19.3 (ADR-0159 п. 13, ADR-0161): перехоплювач — замовлення в черзі «Кузні» поруч із предметами
 // (одне активне); ціна — 200 × множник науки пресета (sciencePrice), виготовлення — 48 тіків (1 доба);
@@ -95,10 +100,10 @@ export const OPTICS_ACCURACY_BONUS = 0.05; // «Кібернетичне око�
 export type WorkshopEvent =
   | { type: 'order'; id: ItemId; ticks: number } // замовлення оплачено і поставлено в чергу
   | { type: 'produced'; id: ItemId } // предмет готовий → склад
-  | { type: 'equip'; soldierId: string; id: SoldierItemId } // предмет зі складу на солдата
-  | { type: 'unequip'; soldierId: string; id: SoldierItemId } // предмет з солдата назад на склад
-  | { type: 'equipment_lost'; soldierId: string; items: (keyof SoldierEquipment)[] } // витратники загиблого зникли (до Т.28 — усі предмети)
-  | { type: 'equipment_returned'; soldierId: string; items: ('armor' | 'optics')[] } // броня й око загиблого — на склад (ADR-0091)
+  | { type: 'equip'; soldierId: string; id: SoldierItemId | ForgeWeaponId } // предмет (п20.4: і зброя) зі складу на солдата
+  | { type: 'unequip'; soldierId: string; id: SoldierItemId | ForgeWeaponId } // предмет (зброя) з солдата назад на склад
+  | { type: 'equipment_lost'; soldierId: string; items: ItemSlot[] } // витратники загиблого зникли (до Т.28 — усі предмети)
+  | { type: 'equipment_returned'; soldierId: string; items: ('armor' | 'optics' | ForgeWeaponId)[] } // броня, око (п20.4: і зброя) загиблого — на склад (ADR-0091)
   | { type: 'gun_module_installed'; fighter?: number } // модуль зі складу на винищувач (п19.3: id — коли їх ≥ 2)
   | { type: 'gun_module_removed'; fighter?: number } // модуль з винищувача назад на склад
   | { type: 'interceptor_order'; region: RegionId; ticks: number } // п19.3: перехоплювач замовлено
@@ -122,7 +127,12 @@ export interface SoldierEquipment {
   medkit: boolean; // «Регенеративний гель»
   grenade: boolean; // «Імпульсна граната»
   charge?: boolean; // п18.2: «Пробивний заряд» (витратник; поле лише за наявності — сейви без нього байт-у-байт)
+  // п20.4 (ADR-0165 п. 13, ADR-0168): зброя з «Кузні»; без поля — «Гарт» (у кожного, на складі не рахується)
+  weapon?: ForgeWeaponId;
 }
+
+// п20.4: слоти предметів (прапорці) — без слоту зброї.
+export type ItemSlot = Exclude<keyof SoldierEquipment, 'weapon'>;
 
 function emptyEquipment(): SoldierEquipment {
   return { armor: false, optics: false, medkit: false, grenade: false };
@@ -138,7 +148,7 @@ export interface WorkshopState {
 // Порожній склад: усі предмети каталогу з нульовими лічильниками (мерж у сейві
 // лишає валідні ключі майбутніх предметів).
 export function emptyStore(): Record<ItemId, number> {
-  return { medkit: 0, grenade: 0, optics: 0, armor: 0, 'gun-module': 0, 'breach-charge': 0 };
+  return { medkit: 0, grenade: 0, optics: 0, armor: 0, 'gun-module': 0, 'breach-charge': 0, shotgun: 0, sniper: 0, mg: 0 };
 }
 
 export function createWorkshop(): WorkshopState {
@@ -238,6 +248,7 @@ export function equipItem(workshop: WorkshopState, soldier: Unit, id: ItemId): v
   if (id === 'gun-module') {
     throw new Error('Гарматний модуль перехоплювача — озброєння перехоплювача, на оперативникові не носиться');
   }
+  if (isForgeWeapon(id)) return equipWeapon(workshop, soldier, id); // п20.4: зброя — свій слот
   const soldierId = SoldierItemIdOf(id);
   if (workshop.store[id] <= 0) {
     throw new Error('Предмета немає на складі: ' + itemName(id));
@@ -267,6 +278,11 @@ export function unequipItem(workshop: WorkshopState, soldier: Unit, id: ItemId):
   if (id === 'gun-module') {
     throw new Error('Гарматний модуль перехоплювача — озброєння перехоплювача, на оперативникові не носиться');
   }
+  if (isForgeWeapon(id)) {
+    // п20.4: зняти зброю — повернути «Гарт»
+    if (workshop.equipped[soldier.id]?.weapon !== id) throw new Error('Зброї немає в оперативника: ' + itemName(id));
+    return equipWeapon(workshop, soldier, 'rifle');
+  }
   const soldierId = SoldierItemIdOf(id);
   const eq = workshop.equipped[soldier.id];
   if (!eq || !eq[soldierId]) {
@@ -290,6 +306,31 @@ export function unequipItem(workshop: WorkshopState, soldier: Unit, id: ItemId):
   workshop.log.push({ type: 'unequip', soldierId: soldier.id, id });
 }
 
+// п20.4 (ADR-0165 п. 6, 13; ADR-0168): видати оперативникові зброю — «Гарт» (rifle) завжди є,
+// решта — зі складу «Кузні». Попередня зброя з «Кузні» повертається на склад; зброя оперативника
+// (`Unit.weapon`, яку бере бій і зберігає сейв) — об'єкт каталогу WEAPONS. Та сама зброя — throw,
+// стан не змінюється. Події — ті самі `equip` / `unequip`, що в предметів (журнал «Кузні»).
+export function equipWeapon(workshop: WorkshopState, soldier: Unit, id: WeaponId): void {
+  if (!Object.prototype.hasOwnProperty.call(WEAPONS, id)) throw new Error('Невідома зброя: ' + id);
+  const eq = equipmentOf(workshop, soldier.id);
+  const current: WeaponId = eq.weapon ?? 'rifle';
+  if (current === id) throw new Error('Ця зброя вже в оперативника: ' + WEAPONS[id].name);
+  if (id !== 'rifle' && workshop.store[id] <= 0) throw new Error('Зброї немає на складі: ' + WEAPONS[id].name);
+  if (current !== 'rifle') {
+    workshop.store[current] += 1;
+    workshop.log.push({ type: 'unequip', soldierId: soldier.id, id: current });
+  }
+  if (id === 'rifle') delete eq.weapon;
+  else {
+    workshop.store[id] -= 1;
+    eq.weapon = id;
+    workshop.log.push({ type: 'equip', soldierId: soldier.id, id });
+  }
+  soldier.weapon = WEAPONS[id];
+  if (isEmptyEquipment(eq)) delete workshop.equipped[soldier.id];
+  else workshop.equipped[soldier.id] = eq;
+}
+
 // Спорядження загиблого (Т.28, ADR-0091; змінює П11.3, ADR-0058): броня й око
 // повертаються на склад (подія equipment_returned), витратники — гель і
 // граната — зникають разом з оперативником (подія equipment_lost). Запис
@@ -299,8 +340,9 @@ export function removeLostEquipment(workshop: WorkshopState, lost: Unit[]): void
   for (const soldier of lost) {
     const eq = workshop.equipped[soldier.id];
     if (!eq) continue;
-    const items = (Object.keys(eq) as (keyof SoldierEquipment)[]).filter((k) => eq[k]);
-    const returned = items.filter((k): k is 'armor' | 'optics' => k === 'armor' || k === 'optics');
+    const items = (Object.keys(eq) as (keyof SoldierEquipment)[]).filter((k): k is ItemSlot => k !== 'weapon' && eq[k] === true);
+    const returned: ('armor' | 'optics' | ForgeWeaponId)[] = items.filter((k): k is 'armor' | 'optics' => k === 'armor' || k === 'optics');
+    if (eq.weapon !== undefined) returned.push(eq.weapon); // п20.4: зброя загиблого — на склад, як броня
     const gone = items.filter((k) => k === 'medkit' || k === 'grenade' || k === 'charge');
     delete workshop.equipped[soldier.id];
     for (const k of returned) workshop.store[k] += 1;
@@ -311,7 +353,7 @@ export function removeLostEquipment(workshop: WorkshopState, lost: Unit[]): void
 
 // Порожній запис екіпірування (не тримаємо в сейві).
 function isEmptyEquipment(eq: SoldierEquipment): boolean {
-  return !eq.armor && !eq.optics && !eq.medkit && !eq.grenade && !eq.charge;
+  return !eq.armor && !eq.optics && !eq.medkit && !eq.grenade && !eq.charge && eq.weapon === undefined;
 }
 
 // Запис екіпірування солдата (створюється порожнім при першому зверненні).
@@ -393,7 +435,7 @@ export function settleConsumables(workshop: WorkshopState, survivors: Unit[], it
 
 // Ключ запису екіпірування за предметом каталогу (гарматний модуль відсіюється
 // guard'ом у equipItem/unequipItem — звуження типу до SoldierItemId).
-export function SoldierItemIdOf(id: SoldierItemId): keyof SoldierEquipment {
+export function SoldierItemIdOf(id: SoldierItemId): ItemSlot {
   switch (id) {
     case 'armor':
       return 'armor';

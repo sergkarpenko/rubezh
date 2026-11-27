@@ -26,6 +26,7 @@ import {
   distance,
   grenadeZone,
   hasLineOfSight,
+  weaponHasMode,
   type GameState,
   type ShotMode,
   type Unit,
@@ -698,12 +699,18 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
     for (const m of ['snap', 'aimed', 'auto'] as ShotMode[]) {
       const b = el<HTMLButtonElement>('btn-' + m);
       const cost = sel ? sel.weapon.modes[m].apCost : 0;
-      const noAp = sel !== undefined && sel.ap < cost;
-      b.disabled = busy || noAp;
+      // п20.4 (EARS 6, ADR-0168): режим, якого зброя не має, — вимкнена плитка з причиною (рішення власника «немає в зброї»)
+      const noMode = sel !== undefined && !weaponHasMode(sel.weapon, m);
+      const noAp = sel !== undefined && !noMode && sel.ap < cost;
+      b.disabled = busy || noMode || noAp;
       const hint = b.dataset.hint || b.title;
       b.dataset.hint = hint;
-      b.title = noAp ? hint + ' — не вистачає AP (потрібно ' + cost + ')' : hint;
-      tileReason(b, noAp ? 'мало AP' : null);
+      b.title = noMode
+        ? hint + ' — у зброї «' + sel?.weapon.name + '» цього режиму немає'
+        : noAp
+          ? hint + ' — не вистачає AP (потрібно ' + cost + ')'
+          : hint;
+      tileReason(b, noMode ? 'немає в зброї' : noAp ? 'мало AP' : null);
       b.classList.toggle('armed', ui.fireMode === m && ui.itemMode !== 'precise'); // п16.4: «Точний» світить плитку ролі
     }
     const ow = el<HTMLButtonElement>('btn-ow');

@@ -385,6 +385,9 @@ function soldierEquipKey(id: ItemId): 'armor' | 'optics' | 'medkit' | 'grenade' 
       return 'charge'; // п18.2; замовляє політика кампанії (п18.6, CAMPAIGN_POLICY)
     case 'gun-module':
       throw new Error('Гарматний модуль перехоплювача — озброєння перехоплювача, ключ екіпірування оперативника недосяжний');
+    default:
+      // п20.4: зброя — свій слот (equipWeapon); бот зброю до п20.6 не замовляє (ADR-0168)
+      throw new Error('Зброя — не предмет екіпірування: ' + id);
   }
 }
 

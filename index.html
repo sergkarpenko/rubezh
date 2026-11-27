@@ -925,6 +925,31 @@
         display: block;
         margin-top: 2px;
       }
+      /* п20.4 (ADR-0168): вікно «Спорядження перед вильотом» — картка на бійця, кнопки зброї й предметів */
+      #loadout-dialog .screen-dialog {
+        max-width: 520px;
+      }
+      .lo-card {
+        margin: 8px 0;
+        padding: 6px 8px;
+        border: 1px solid #2a3344;
+        border-radius: 4px;
+      }
+      .lo-row {
+        margin-top: 4px;
+      }
+      .lo-row button {
+        margin: 2px 4px 2px 0;
+      }
+      .lo-weapon[aria-pressed='true'] {
+        border-color: #ffb454;
+        color: #ffb454;
+      }
+      .lo-actions {
+        display: flex;
+        gap: 8px;
+        margin-top: 10px;
+      }
       /* T.39: панель «Дослідження» — смуга кроків і картки протоколів
          (ескіз: docs/reports/t39/sketch.webp) */
       .sci-steps {
@@ -1843,6 +1868,7 @@
       #exit-confirm,
       #evac-confirm,
       #role-dialog,
+      #loadout-dialog,
       #settings-dialog,
       #save-dialog {
         position: fixed;
@@ -2594,6 +2620,8 @@
     <!-- Т.71 (ADR-0075): підтвердження евакуації останнього оперативника — контент генерує src/main.ts -->
     <section class="hidden" id="evac-confirm"></section>
     <section class="hidden" id="role-dialog" role="dialog" aria-modal="true" aria-labelledby="role-dialog-title"></section>
+    <!-- п20.4 (ADR-0168): «Спорядження перед вильотом» — вміст будує src/ui/loadout.ts -->
+    <section class="hidden" id="loadout-dialog" role="dialog" aria-modal="true" aria-labelledby="loadout-title"></section>
     <!-- П12.3 (ADR-0065/0059): скелет вікна «Налаштування» — контент генерує
          src/ui/settings.ts; тумблер звуку мігрував сюди з топбара (П11.7) -->
     <section class="hidden" id="settings-dialog"></section>

@@ -435,8 +435,7 @@ export function workshopEventText(e: WorkshopEvent): { text: string; cls: string
       };
     case 'equipment_returned':
       return {
-        text:
-          '⚑ Кузня: спорядження ' + e.soldierId + ' повернуто на склад (' + e.items.map((k) => itemName(equipKeyItem(k))).join(', ') + ')',
+        text: '⚑ Кузня: спорядження ' + e.soldierId + ' повернуто на склад (' + e.items.map((k) => itemName(k)).join(', ') + ')',
         cls: '',
       };
     case 'gun_module_installed':

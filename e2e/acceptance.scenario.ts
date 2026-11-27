@@ -589,7 +589,7 @@ test('сценарій приймання ADR-0030: партія → місія 
   await test.step('T.39: панель «Дослідження», крок «3. Видати», довідка на 1366 × 768', async () => {
     await page.locator('#status-tab-base').click();
     const cards = page.locator('#research .sci-card');
-    await expect(cards).toHaveCount(9); // п18.5 (ADR-0157): + три ключові протоколи
+    await expect(cards).toHaveCount(12); // п18.5 (ADR-0157): + три ключові протоколи; п20.4 — + три протоколи зброї
     const armor = cards.first();
     await expect(armor.locator('.sci-name')).toHaveText('Композитна броня');
     await expect(armor.locator('.sci-badge')).toHaveText('потрібен техномант'); // техномантів 0, кредитів вистачає
@@ -598,7 +598,7 @@ test('сценарій приймання ADR-0030: партія → місія 
     // Т.100: картки з невиконаною передумовою згорнуті до кнопки-назви з плашкою; панель на новій партії
     // вікно сценарію тут 1440 × 900 (колонка тієї ж ширини): локально 1048 px, як на 1366 × 768 (до кроку 1516;
     // docs/reports/t100/measure.mjs); межа з запасом на шрифти CI
-    await expect(page.locator('#research .sci-card.folded')).toHaveCount(5); // п18.5: + три ключові (без трофеїв — згорнуті)
+    await expect(page.locator('#research .sci-card.folded')).toHaveCount(7); // п18.5: + три ключові (без трофеїв — згорнуті); п20.4: «Голка», «Град»
     // у згорнутій картці — лише кнопка-назва; тап показує рядок ефекту
     await expect(page.locator('#research .sci-card.folded button:not(.sci-toggle)')).toHaveCount(0);
     await page.locator('#btn-sci-eff-grenade').click();
@@ -610,12 +610,15 @@ test('сценарій приймання ADR-0030: партія → місія 
     );
     // п18.5 (ADR-0157): блок ключових протоколів (заголовок і три згорнуті картки) міряється окремо —
     // гейт Т.100 стоїть на частині до нього; блок на новій партії — локально ≈ 290 px
-    const keyH = await page.evaluate(() => {
-      const head = document.querySelector('#research .sci-key-head')!.getBoundingClientRect();
-      return Math.round(document.getElementById('research')!.closest('section')!.getBoundingClientRect().bottom - head.top);
+    // п20.4 (ADR-0168): за ним — блок зброї (свій заголовок), міряється окремо
+    const [keyH, weaponH] = await page.evaluate(() => {
+      const heads = [...document.querySelectorAll('#research .sci-key-head')].map((h) => h.getBoundingClientRect().top);
+      const bottom = document.getElementById('research')!.closest('section')!.getBoundingClientRect().bottom;
+      return [Math.round(heads[1] - heads[0]), Math.round(bottom - heads[1])];
     });
-    expect(researchH - keyH, 'висота панелі «Дослідження» без ключових протоколів').toBeLessThanOrEqual(1150); // варіант Б без А — 1193
+    expect(researchH - keyH - weaponH, 'висота панелі «Дослідження» без ключових протоколів і зброї').toBeLessThanOrEqual(1150); // варіант Б без А — 1193
     expect(keyH, 'висота блоку ключових протоколів').toBeLessThanOrEqual(340);
+    expect(weaponH, 'висота блоку зброї').toBeLessThanOrEqual(420); // локально 371 px на новій партії
     await expect(armor.locator('#btn-start-0')).toHaveText('Дослідити — 96 кр.');
     await expect(page.locator('#btn-hire-scientist')).toHaveText('Вербувати техноманта (100)'); // Т.128
     // смуга кроків: три кнопки; «3. Видати» перемикає вкладку на «Загін»
@@ -790,6 +793,7 @@ test('сценарій приймання ADR-0030: партія → місія 
     await expect(clock).not.toHaveText(saved);
     await page.locator('#status-tab-base').click();
     await page.locator('#ufos button.mission').first().click();
+    await page.locator('#btn-deploy').click(); // п20.4 (ADR-0168): вікно спорядження — «Висадити загін»
     await expect(page.locator('#battle-panel')).toBeVisible();
     // Т.48: авто-бій запущено до виходу і справді йде — у журналі з'явились його рядки
     const logBeforeAuto = await page.locator('#log').innerHTML();
@@ -878,6 +882,18 @@ test('сценарій приймання ADR-0030: партія → місія 
     const mission = mirror.launch(mirror.targets()[0].id);
     await page.locator('#status-tab-base').click();
     await page.locator('#ufos button.mission').first().click();
+    // п20.4 (ADR-0165 п. 7, EARS 7; ADR-0168): спершу вікно спорядження — картка на бійця загону, «Гарт» у кожного;
+    // Esc закриває вікно без бою, «Висадити загін» починає бій
+    const box = page.locator('#loadout-dialog');
+    await expect(page.locator('#loadout-title')).toHaveText('Спорядження перед вильотом');
+    await expect(box.locator('.lo-card')).toHaveCount(mission.state.units.filter((u) => u.side === 'player').length);
+    await expect(box.locator('.lo-weapon[aria-pressed="true"]')).toHaveText(Array(3).fill('АР-14 «Гарт»'));
+    await page.keyboard.press('Escape');
+    await expect(box).toBeHidden();
+    await expect(page.locator('#battle-panel')).toBeHidden();
+    await page.locator('#ufos button.mission').first().click();
+    await page.locator('#btn-deploy').click();
+    await expect(box).toBeHidden();
     await expect(page.locator('#battle-panel')).toBeVisible();
     await expect(page.locator('#bctx-kind')).toHaveText(mission.briefing.kind);
     await expect(page.locator('#next-step')).toBeHidden(); // Т.43: у бою рядка «Наступний крок» немає
@@ -1844,6 +1860,7 @@ test('Т.71: евакуація — плитка, клавіша V і вікно
   const mission = page.locator('#ufos button.mission').first();
   for (let i = 0; i < MAX_TICKS_TO_MISSION && !(await mission.isVisible()); i++) await page.locator('#btn-tick').click();
   await mission.click();
+  await page.locator('#btn-deploy').click(); // п20.4 (ADR-0168): вікно спорядження — «Висадити загін»
   await expect(page.locator('#battle-panel')).toBeVisible();
   const box = (await page.locator('#battle').boundingBox())!;
   const k = box.width / (MISSION_MAP_W * 48);
@@ -1916,6 +1933,7 @@ test('п16.4: вікно ролі після сейву v1, ростер, кар
   const mission = page.locator('#ufos button.mission').first();
   for (let i = 0; i < MAX_TICKS_TO_MISSION && !(await mission.isVisible()); i++) await page.locator('#btn-tick').click();
   await mission.click();
+  await page.locator('#btn-deploy').click(); // п20.4 (ADR-0168): вікно спорядження — «Висадити загін»
   await expect(page.locator('#battle-panel')).toBeVisible();
   const card = page.locator('#bsquad .sq-card').first();
   await expect(card.locator('.sq-name')).toHaveText('»Крук');
@@ -1953,6 +1971,7 @@ test('Т.121: тап по порожній клітинці під час ані
   const mission = page.locator('#ufos button.mission').first();
   for (let i = 0; i < MAX_TICKS_TO_MISSION && !(await mission.isVisible()); i++) await page.locator('#btn-tick').click();
   await mission.click();
+  await page.locator('#btn-deploy').click(); // п20.4 (ADR-0168): вікно спорядження — «Висадити загін»
   await expect(page.locator('#battle-panel')).toBeVisible();
   const info = page.locator('#binfo');
   const taps = (cells: [number, number][]): Promise<string[]> =>
@@ -2029,6 +2048,9 @@ test.describe('Т.179: телефон пальцем (hasTouch, isMobile)', () =
     mirror.launch(mirror.targets()[0]!.id);
     await page.locator('#status-tab-base').tap();
     await page.locator('#ufos button.mission').first().tap();
+    // п20.4 (ADR-0168): вікно спорядження на телефоні — «Висадити загін» пальцем
+    await expect(page.locator('#loadout-title')).toHaveText('Спорядження перед вильотом');
+    await page.locator('#btn-deploy').tap();
     await expect(page.locator('#battle-panel')).toBeVisible();
     await expect(page.locator('#bctx-turn')).toHaveText('хід 1 · загін');
 

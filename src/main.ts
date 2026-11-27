@@ -44,6 +44,7 @@ import { geoHotkey, isSpaceForEvent, runTime, type RunMode } from './ui/time-con
 import { nextStep, renderNextStep, showStepTarget, type StepTarget } from './ui/next-step';
 // пR.2 (ADR-0037): бойовище і флоу бою — модуль src/ui/battle.ts.
 import { createBattleUI, type BattleUIState } from './ui/battle';
+import { createLoadout } from './ui/loadout';
 // П13.2 (ADR-0066): вертикальний тулбар бойових дій збоку — модуль src/ui/toolbar.ts.
 import { createToolbar } from './ui/toolbar';
 import { cellFromPoint, createInput } from './ui/input';
@@ -236,6 +237,7 @@ const OVERLAY_IDS = [
   'campaign-defeat', // п18.5 (ADR-0157): екран поразки
   'evac-confirm',
   'role-dialog', // п16.4 (ADR-0147): вікно вибору ролі — Esc і клік поза ним його не закривають
+  'loadout-dialog', // п20.4 (ADR-0168): «Спорядження перед вильотом»
 ];
 // Т.73: одна перевірка «відкрите вікно» (той самий OVERLAY_IDS, що й в обробнику пробілу нижче)
 function overlayOpen(): boolean {
@@ -244,6 +246,7 @@ function overlayOpen(): boolean {
 // Т.73: безпечна кнопка кожного вікна для Esc — у порядку, в якому Esc перебирає вікна (таблиця плану);
 // екрана перемоги кампанії (campaign-victory) тут немає — Esc його не закриває
 const OVERLAY_ESC_CLOSE: Record<string, string> = {
+  'loadout-dialog': 'btn-deploy-cancel', // п20.4: Esc — «Скасувати», бій не починається
   'evac-confirm': 'btn-evac-no',
   'exit-confirm': 'btn-exit-no',
   'settings-dialog': 'settings-close',
@@ -414,14 +417,32 @@ const savePanel = createSavePanel({
 // фінанси, ростер, чипи кампанії, екран перемоги) — модуль src/ui/panels.ts;
 // тут — лише зв'язування зі станом застосунку (party/mission/gameOver),
 // журналом (drain*), анімацією геосцени (пульс радара) і запуском місії.
+// п20.4 (ADR-0165 п. 7, EARS 7; ADR-0168): «Запустити місію» і «Атакувати Браму Розриву» відкривають
+// вікно спорядження; бій — кнопкою «Висадити загін». Штурм бази (launchAssault) — бій одразу, як у v0.11.0.
+let loadoutOpener: string | null = null; // id кнопки, що відкрила вікно (фокус після «Скасувати»)
+const loadout = createLoadout({
+  box: el('loadout-dialog'),
+  getParty: () => activeParty(),
+  journal: (text, cls) => journal(text, cls),
+  renderAll: () => renderAll(),
+  closed: () => {
+    if (loadoutOpener !== null) document.getElementById(loadoutOpener)?.focus();
+  },
+});
+function openLoadout(go: () => void): void {
+  if (ui.mission !== null) return;
+  loadoutOpener = document.activeElement?.id || null;
+  loadout.open(go);
+}
+
 const panels = createPanels({
   getParty: () => activeParty(),
   inBattle: () => ui.mission !== null,
   isGameOver: () => gameOver,
   journal,
   renderAll,
-  launchMission: battle.launch,
-  launchGate: battle.launchGate, // п18.4: фінал «Брама Розриву»
+  launchMission: (ufoId) => openLoadout(() => battle.launch(ufoId)), // п20.4: спершу вікно спорядження
+  launchGate: () => openLoadout(battle.launchGate), // п18.4: фінал «Брама Розриву»; п20.4 — через вікно спорядження
   drainGeo: () => journalUI.drainGeo(),
   drainEcon: () => journalUI.drainEcon(),
   activeGeoAnim: () => geoAnim.active(),

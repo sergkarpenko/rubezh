@@ -113,6 +113,7 @@ export function roleDialogHtml(career: SoldierCareer): string {
 function shortReason(full: string): string {
   if (full.startsWith('Немає ролі')) return 'без ролі';
   if (full.includes('вже використано')) return 'вже було';
+  if (full.includes('прицільного режиму')) return 'без прицільного'; // п20.4 (рішення власника «А»)
   if (full.startsWith('Недостатньо')) return 'мало AP';
   return 'недоступно';
 }

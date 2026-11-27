@@ -22,6 +22,7 @@ import {
 } from './core/squad';
 import {
   KEY_PROJECTS,
+  WEAPON_PROJECTS,
   PROJECTS,
   PROJECT_CATALOG,
   awardTrophies,
@@ -50,7 +51,7 @@ import {
   unequipItem,
   workshopTick,
   type ItemId,
-  type SoldierEquipment,
+  type ItemSlot,
 } from './core/workshop';
 import {
   FIGHTER_MAX_HP,
@@ -68,14 +69,16 @@ import {
 import { ASSAULT_THRESHOLDS, DIFFICULTY_MULTIPLIERS, THREAT_MAX, campaignTick, threatDelta, type DifficultyPreset } from './core/campaign';
 import { GATE_RETRY_MINUTES, completeAssault, completeGate, createAssault, createGateMission, gateKeyDone } from './core/assault';
 import { completeMission, createMission } from './core/mission';
+import { FORGE_WEAPONS, isForgeWeapon, WEAPONS } from './core/weapons';
 import { autoBattle } from './core/ai-bot';
 import { createParty, deserializeParty, serializeParty, type Party } from './core/save';
 import { awaitingRole, KILL_XP, MISSION_XP, RANK_ACCURACY_BONUS, RANK_HP_BONUS, rankOf, ROLE_RANK } from './core/career';
 
 const RUN = { seed: 20261111, numRuns: 100 };
 // п18.2: генератор бере й ключові протоколи та «Пробивний заряд» (у панелях до п18.5 сховані).
-const ALL_PROJECTS = [...PROJECTS, ...KEY_PROJECTS];
-const ALL_ITEMS: ItemId[] = [...ITEM_IDS, 'breach-charge'];
+// п20.4 (ADR-0168): і протоколи та виріб зброї; видача зброї — equipItem (делегує equipWeapon)
+const ALL_PROJECTS = [...PROJECTS, ...KEY_PROJECTS, ...WEAPON_PROJECTS];
+const ALL_ITEMS: ItemId[] = [...ITEM_IDS, 'breach-charge', ...FORGE_WEAPONS];
 const CHOICES = ['далека', 'середня', 'впритул', 'відступ'] as const;
 
 // Команда: тип і два «сирі» числа — скільки часу минає або який за порядком об'єкт.
@@ -195,7 +198,7 @@ function mission(p: Party, i: number): void {
 }
 
 // Ключ запису екіпірування за предметом (п18.2: заряд — «charge»).
-const slotOf = (id: ItemId): keyof SoldierEquipment => (id === 'breach-charge' ? 'charge' : (id as keyof SoldierEquipment));
+const slotOf = (id: ItemId): ItemSlot => (id === 'breach-charge' ? 'charge' : (id as ItemSlot));
 
 // Виконати команду. Три рази з чотирьох вона бере придатний об'єкт (досліджений
 // предмет, протокол із виконаною передумовою, зонд у повітрі), раз — будь-який, тож
@@ -219,7 +222,10 @@ function apply(p: Party, c: Cmd): Party {
   );
   const researched = (id: ItemId): boolean => itemUnlocked(research, id);
   const inStore = (id: ItemId): boolean => workshop.store[id] > 0;
-  const wears = (id: ItemId): boolean => workshop.equipped[equipped?.id ?? '']?.[slotOf(id)] === true;
+  const wears = (id: ItemId): boolean => {
+    const eq = workshop.equipped[equipped?.id ?? ''];
+    return isForgeWeapon(id) ? eq?.weapon === id : eq?.[slotOf(id)] === true;
+  };
   const flying = (): Ufo[] => geo.ufos.filter((u) => u.detected && u.status === 'летить');
   const open = ALL_PROJECTS.filter(
     (d) => !research.completed.includes(d.id) && (!d.prerequisite || research.completed.includes(d.prerequisite))
@@ -358,6 +364,8 @@ function broken(p: Party): string[] {
       (eq?.armor ? ARMOR_MAX_HP_BONUS : 0) +
       rank * RANK_HP_BONUS;
     const accuracy = 0.6 + (eq?.optics ? OPTICS_ACCURACY_BONUS : 0) + rank * RANK_ACCURACY_BONUS;
+    // п20.4 (ADR-0168): зброя ростеру — об'єкт каталогу за слотом екіпірування (без слоту — «Гарт»)
+    must(JSON.stringify(s.weapon) === JSON.stringify(WEAPONS[eq?.weapon ?? 'rifle']), s.id + ': зброя ' + s.weapon.name);
     must(
       s.maxHp === maxHp && Math.abs(s.firingAccuracy - accuracy) < 1e-9,
       s.id + ': характеристики не відповідають екіпіруванню і званню'
@@ -397,7 +405,9 @@ function broken(p: Party): string[] {
     const worn =
       id === 'gun-module'
         ? p.intercept.fighters.filter((f) => f.gunModule).length
-        : Object.values(workshop.equipped).filter((eq) => eq[slot]).length;
+        : isForgeWeapon(id) // п20.4: зброя — свій слот; із загиблим повертається на склад
+          ? Object.values(workshop.equipped).filter((eq) => eq.weapon === id).length
+          : Object.values(workshop.equipped).filter((eq) => eq[slot]).length;
     const lost = workshop.log.filter((e) => e.type === 'equipment_lost' && e.items.includes(slot)).length;
     // п18.4: програний штурм бази забирає половину складу — подія store_lost
     const raided = workshop.log.reduce((sum, e) => sum + (e.type === 'store_lost' ? (e.lost[id] ?? 0) : 0), 0);
@@ -415,7 +425,9 @@ function broken(p: Party): string[] {
     'замовлення цеху з нулем тіків'
   );
   must(
-    Object.entries(workshop.equipped).every(([id, eq]) => ids.has(id) && (eq.armor || eq.optics || eq.medkit || eq.grenade || eq.charge)),
+    Object.entries(workshop.equipped).every(
+      ([id, eq]) => ids.has(id) && (eq.armor || eq.optics || eq.medkit || eq.grenade || eq.charge || eq.weapon !== undefined)
+    ),
     'екіпірування без власника або порожнє'
   );
 

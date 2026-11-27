@@ -30,6 +30,8 @@ import type { AnimEngine } from './core/render-core';
 
 const $ = (id: string): HTMLElement => document.getElementById(id) as HTMLElement;
 const btn = (id: string): HTMLButtonElement => $(id) as HTMLButtonElement;
+// п20.4 (ADR-0168): «Запустити місію» і «Атакувати Браму» відкривають вікно спорядження — «Висадити загін»
+const deploy = (): void => document.querySelector<HTMLButtonElement>('#btn-deploy')?.click();
 // Т.130: вибраний боєць — підпис вибраної картки смуги загону (замість плашки «Юніт»)
 const unitLabel = (): string => document.querySelector('#bsquad .sq-card.sel')?.getAttribute('aria-label') ?? 'не вибраний';
 
@@ -500,8 +502,23 @@ describeScenario('UI-флоу прев’ю: геосцена → місія →
     expect(doc.getElementById('btn-hire')!.textContent).not.toMatch(/\d/);
   });
 
+  step('п20.4 (ADR-0168, EARS 7): «Запустити місію» — вікно спорядження; Esc — без бою, фокус на кнопку місії', () => {
+    const m = document.querySelector('button.mission') as HTMLButtonElement;
+    m.focus();
+    m.click();
+    expect($('loadout-dialog').classList.contains('hidden')).toBe(false);
+    expect(document.activeElement?.id).toBe('loadout-title');
+    expect($('battle-panel').classList.contains('hidden')).toBe(true);
+    expect(btn('btn-event').disabled).toBe(false); // вікно — ще не бій
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    expect($('loadout-dialog').classList.contains('hidden')).toBe(true);
+    expect($('battle-panel').classList.contains('hidden')).toBe(true);
+    expect(document.activeElement?.id).toBe(m.id);
+  });
+
   step('запуск місії: панель бою відкрита, геосцена прихована, час геосцени заблоковано', () => {
     (document.querySelector('button.mission') as HTMLButtonElement).click();
+    deploy();
     expect($('battle-panel').classList.contains('hidden')).toBe(false);
     expect($('geo-panel').classList.contains('hidden')).toBe(true); // П6.2: фокусна зона — бій (ADR-0027)
     expect($('bctx-turn').textContent).toContain('хід 1'); // П6.3: чий хід — у контекст-стрічці
@@ -654,6 +671,7 @@ describeScenario('критичний флоу економіки: найм → �
     }
     expect(found).toBe(true);
     (document.querySelector('button.mission') as HTMLButtonElement).click();
+    deploy();
     expect($('battle-panel').classList.contains('hidden')).toBe(false);
     expect(btn('btn-tick').disabled).toBe(true);
   });
@@ -810,6 +828,7 @@ describePage('панель збереження: 3 слоти, лише на г�
   it('під час бою панель збереження вимкнена (ADR-0026: місія не переривається)', async () => {
     btn('btn-save-1').click(); // сейв слота 1, щоб після бою load-1 був доступний (issue #378)
     (document.querySelector('button.mission') as HTMLButtonElement).click();
+    deploy();
     expect($('battle-panel').classList.contains('hidden')).toBe(false);
     expect(btn('btn-save-1').disabled).toBe(true);
     expect(btn('btn-load-1').disabled).toBe(true);
@@ -827,6 +846,7 @@ describePage('панель збереження: 3 слоти, лише на г�
     startParty('7');
     for (let i = 0; i < 1500 && document.querySelector('button.mission') === null; i++) btn('btn-tick').click();
     (document.querySelector('button.mission') as HTMLButtonElement).click();
+    deploy();
     await runAutoBattle();
     closeBattle();
     expect($('roster').textContent).toContain('лікарня: 16 тіків');
@@ -872,6 +892,7 @@ describePage('панель збереження: 3 слоти, лише на г�
     btn('btn-tick').click();
     expect($('clock').textContent).toBe('Д1 09:30');
     (document.querySelector('button.mission') as HTMLButtonElement).click();
+    deploy();
     expect($('battle-panel').classList.contains('hidden')).toBe(false);
     return money;
   };
@@ -901,6 +922,7 @@ describePage('панель збереження: 3 слоти, лише на г�
     expectLoadedGeo(money);
     // місія з сейву на місці: новий бій починається з першого ходу
     (document.querySelector('button.mission') as HTMLButtonElement).click();
+    deploy();
     expect($('bctx-turn').textContent).toBe('хід 1 · загін');
     exitToStart(true);
   });
@@ -1018,6 +1040,7 @@ describeScenario('бойова фокусна зона (П6.3, ADR-0027)', (step
     }
     expect(found).toBe(true);
     (document.querySelector('button.mission') as HTMLButtonElement).click();
+    deploy();
     expect($('battle-panel').classList.contains('hidden')).toBe(false);
     // сід 42: перша місія — «розвідник» на 22-му тіку (детерміновано)
     expect($('bctx-kind').textContent).toBe('розвідник');
@@ -1072,6 +1095,7 @@ describeScenario('керування: гарячі клавіші і тач-па
     }
     expect(found).toBe(true);
     (document.querySelector('button.mission') as HTMLButtonElement).click();
+    deploy();
     tap(2, 2); // зона висадки — свій солдат
     expect(unitLabel()).toContain('AP 10/10');
   });
@@ -1157,6 +1181,7 @@ describeScenario('П6.14: UX прицілювання — обведення ц�
     }
     expect(found).toBe(true);
     (document.querySelector('button.mission') as HTMLButtonElement).click();
+    deploy();
     tap(3, 2); // вибір солдата у зоні висадки
     tap(4, 2); // перший тап — прев'ю шляху (1 AP)
     tap(4, 2); // повторний тап — хід
@@ -1320,6 +1345,7 @@ describe('Т.159: меню на ворогові з клавіатури — «�
     }
     expect(found).toBe(true);
     (document.querySelector('button.mission') as HTMLButtonElement).click();
+    deploy();
     expect(fixtureMission).not.toBe(null); // обгортка бачила createMission сторінки
     const olena = unitNamed('Олена');
     expect(olena.pos).toEqual({ x: 3, y: 2 });
@@ -1733,6 +1759,7 @@ describeScenario('п18.4: штурм бази і «Брама Розриву»',
       const gate = btn('btn-gate');
       expect(gate.textContent).toBe('▶ Атакувати Браму Розриву');
       gate.click();
+      deploy();
       expect($('battle-panel').classList.contains('hidden')).toBe(false);
       expect($('bctx-kind').textContent).toBe('Брама Розриву');
       expect(btn('btn-evac').hidden).toBe(false);
@@ -1749,6 +1776,7 @@ describeScenario('п18.4: штурм бази і «Брама Розриву»',
       $('geo').dispatchEvent(new MouseEvent('click', { clientX: 8 * 48 + 24, clientY: 4 * 48 + 24 })); // вузол — нічого
       expect($('battle-panel').classList.contains('hidden')).toBe(true);
       $('geo').dispatchEvent(new MouseEvent('click', { clientX: 9 * 48 + 24, clientY: 4 * 48 + 24 }));
+      deploy();
       expect($('battle-panel').classList.contains('hidden')).toBe(false);
       expect($('bctx-kind').textContent).toBe('Брама Розриву');
     },
@@ -1823,6 +1851,7 @@ describePage('П11.6: критичний флоу «дослідити → ви�
     }
     expect(found).toBe(true);
     (document.querySelector('button.mission') as HTMLButtonElement).click();
+    deploy();
     expect($('battle-panel').classList.contains('hidden')).toBe(false);
 
     // 5. БОЙОВА ДІЯ: s1 у (2,2) — граната в скупчення (friendly fire ADR-0058 —
@@ -1935,6 +1964,7 @@ describePage('П12.4: вкладки статус-колонки «Загін»/
     }
     expect(found).toBe(true); // сід 42: місія детерміновано
     (document.querySelector('button.mission') as HTMLButtonElement).click();
+    deploy();
     expect($('status').classList.contains('dimmed')).toBe(true); // чинний механізм П6.3
     expect($('status').contains($('status-tabs'))).toBe(true); // вкладки приглушуються разом з колонкою
     await runAutoBattle();
@@ -1960,6 +1990,7 @@ describePage('П12.4: вкладки статус-колонки «Загін»/
     }
     expect(found).toBe(true);
     (document.querySelector('button.mission') as HTMLButtonElement).click();
+    deploy();
     expect($('status').classList.contains('dimmed')).toBe(true);
     expect(btn('status-tab-squad').querySelector('.tab-badge')).toBeNull(); // 0 — бейдж не показується
     await runAutoBattle();
@@ -2152,6 +2183,7 @@ describePage('Т.43: «До події», зупинки «+1 доба» і пр
     const win = /вікно ([\d.]+) год/.exec(document.querySelector('#ufos .ufo')!.textContent)![1];
     expect(step.textContent).toBe('Наступний крок: зонд приземлився — запустіть місію (вікно ' + win + ' год)');
     document.querySelector<HTMLButtonElement>('button.mission')!.click();
+    deploy();
     expect(step.classList.contains('hidden')).toBe(true);
     expect(step.textContent).toBe('');
   });
@@ -2253,6 +2285,7 @@ describePage('Т.43: «До події», зупинки «+1 доба» і пр
       const m = document.querySelector<HTMLButtonElement>('button.mission');
       if (m && !m.disabled) {
         m.click();
+        deploy();
         launched = true;
       } else btn('btn-tick').click();
     }
@@ -2347,6 +2380,7 @@ describePage('Т.98: гарячі клавіші геосцени D / T / N', ()
     startParty();
     for (let i = 0; i < 1500 && document.querySelector('button.mission') === null; i++) btn('btn-tick').click();
     (document.querySelector('button.mission') as HTMLButtonElement).click();
+    deploy();
     const before = clock();
     expect(key('KeyT')).toBe(false);
     expect(key('KeyD')).toBe(false);
@@ -2413,6 +2447,7 @@ describePage('Т.53: меню і «Як грати» зупиняють авто
     startParty('27');
     for (let i = 0; i < 1500 && document.querySelector('button.mission') === null; i++) btn('btn-tick').click();
     (document.querySelector('button.mission') as HTMLButtonElement).click();
+    deploy();
     expect($('battle-panel').classList.contains('hidden')).toBe(false);
     // 2. фейк-таймери — як у блоці Т.48
     vi.useFakeTimers(PAGE_FAKE_TIMERS);
@@ -2468,6 +2503,7 @@ describeScenario('Т.55: тести після Т.53 — меню без авт�
     startParty('27');
     for (let i = 0; i < 1500 && document.querySelector('button.mission') === null; i++) btn('btn-tick').click();
     (document.querySelector('button.mission') as HTMLButtonElement).click();
+    deploy();
     expect($('battle-panel').classList.contains('hidden')).toBe(false);
     expect(cap()).toBe('Авто');
     // 2. «Меню» без авто-бою: жодної операції на канві
@@ -2648,6 +2684,7 @@ describePage('Т.64: зупинка авто-бою в battle.close на сто�
     startParty('27');
     for (let i = 0; i < 1500 && document.querySelector('button.mission') === null; i++) btn('btn-tick').click();
     (document.querySelector('button.mission') as HTMLButtonElement).click();
+    deploy();
     expect($('battle-panel').classList.contains('hidden')).toBe(false);
     btn('btn-auto-battle').click();
     await vi.advanceTimersByTimeAsync(AUTO_STEP_MS * 3);
@@ -2689,6 +2726,7 @@ describePage('Т.64: зупинка авто-бою в battle.close на сто�
       // стан драйвера теж скинуто, а не лише таймер: у наступному бою плитка — «Авто», а не «Стоп»
       for (let i = 0; i < 1500 && document.querySelector('button.mission') === null; i++) btn('btn-tick').click();
       (document.querySelector('button.mission') as HTMLButtonElement).click();
+      deploy();
       expect($('battle-panel').classList.contains('hidden')).toBe(false);
       expect(cap()).toBe('Авто');
     } finally {
@@ -2724,6 +2762,7 @@ describePage('Т.66: рядок #fighter-last зникає після вигра
     expect(mission).not.toBeNull();
     expect(mission!.disabled).toBe(false);
     mission!.click();
+    deploy();
     expect($('battle-panel').classList.contains('hidden')).toBe(false);
     // 4. авто-бій до результату — перемога (сід 42)
     await runAutoBattle();
@@ -2768,6 +2807,7 @@ describePage('Т.69: рядок #fighter-last лишається після пр
     expect(mission).not.toBeNull();
     expect(mission!.disabled).toBe(false);
     mission!.click();
+    deploy();
     expect($('battle-panel').classList.contains('hidden')).toBe(false);
     // 4. загін лише закінчує хід — демони добивають його до поразки. п17.4 (ADR-0151): з туманом
     // із блокуванням авто-бій першої місії тут виграє (сід 36 і всі сіди 37–379, де сценарій доходить до бою), тож поразка — без дій гравця
@@ -2808,6 +2848,7 @@ describePage('кандидат 55: рядок #fighter-last лишається �
     expect(mission).not.toBeNull();
     expect(mission!.disabled).toBe(false);
     mission!.click();
+    deploy();
     expect($('battle-panel').classList.contains('hidden')).toBe(false);
     expect(document.querySelectorAll('#fighter-last')).toHaveLength(1);
     expect(document.getElementById('fighter-last')?.textContent).toBe(abortedText);
@@ -2847,6 +2888,7 @@ describePage('Т.71: евакуація на сторінці — плитка, 
     startParty('42');
     for (let i = 0; i < 1500 && document.querySelector('button.mission') === null; i++) btn('btn-tick').click();
     (document.querySelector('button.mission') as HTMLButtonElement).click();
+    deploy();
     expect($('battle-panel').classList.contains('hidden')).toBe(false);
     expect(btn('btn-evac').hidden).toBe(false);
     expect(btn('btn-evac').title).toBe(
@@ -2882,6 +2924,7 @@ describePage('Т.71: евакуація на сторінці — плитка, 
     startParty('42');
     for (let i = 0; i < 1500 && document.querySelector('button.mission') === null; i++) btn('btn-tick').click();
     (document.querySelector('button.mission') as HTMLButtonElement).click();
+    deploy();
     const keyV = (): void => void document.dispatchEvent(new KeyboardEvent('keydown', { key: 'v', code: 'KeyV', bubbles: true }));
     for (const [x, y] of [
       [2, 2],
@@ -2911,6 +2954,7 @@ describePage('Т.72: підказка «Можна евакуюватись» н
     $('log').replaceChildren(); // журнал сторінки зберігає записи попередніх тестів файла
     for (let i = 0; i < 1500 && document.querySelector('button.mission') === null; i++) btn('btn-tick').click();
     (document.querySelector('button.mission') as HTMLButtonElement).click();
+    deploy();
     expect($('battle-panel').classList.contains('hidden')).toBe(false);
     expect(hints()).toHaveLength(0);
     for (let i = 0; i < 30 && hints().length === 0 && $('bresult').textContent === ''; i++) btn('btn-end').click();
@@ -2937,6 +2981,7 @@ describePage('Т.73: вікна поверх бою — клавіші, плит
     startParty('42');
     for (let i = 0; i < 1500 && document.querySelector('button.mission') === null; i++) btn('btn-tick').click();
     (document.querySelector('button.mission') as HTMLButtonElement).click();
+    deploy();
     expect($('battle-panel').classList.contains('hidden')).toBe(false);
     tap(2, 2); // оперативник на синій клітинці висадки (як у тесті Т.71)
   };
@@ -3133,6 +3178,7 @@ describePage('Т.75: пастка фокусу у вікнах поверх гр
     startParty('42');
     for (let i = 0; i < 1500 && document.querySelector('button.mission') === null; i++) btn('btn-tick').click();
     (document.querySelector('button.mission') as HTMLButtonElement).click();
+    deploy();
     $('battle').dispatchEvent(new MouseEvent('click', { clientX: 2 * 48 + 24, clientY: 2 * 48 + 24 }));
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'v', code: 'KeyV', bubbles: true }));
     const name = /^Евакуйовано: (.+?)\./.exec($('binfo').textContent ?? '')?.[1];
@@ -3169,6 +3215,7 @@ describePage('Т.75: пастка фокусу у вікнах поверх гр
     startParty('42');
     for (let i = 0; i < 1500 && document.querySelector('button.mission') === null; i++) btn('btn-tick').click();
     (document.querySelector('button.mission') as HTMLButtonElement).click();
+    deploy();
     // як у Т.71: троє з синіх клітинок (2,2), (3,2), (2,3); на останньому — вікно підтвердження
     tap(2, 2);
     evac();
@@ -3460,6 +3507,7 @@ describePage('Т.128: «Збереження» — вікно з «Меню» (A
     startParty('42');
     for (let i = 0; i < 1500 && document.querySelector('button.mission') === null; i++) btn('btn-tick').click();
     (document.querySelector('button.mission') as HTMLButtonElement).click();
+    deploy();
     openSave();
     expect(open('save-dialog')).toBe(true);
     expect($('save-busy').textContent).toBe('Під час бою збереження недоступне');
@@ -3503,6 +3551,7 @@ describePage('Т.137: зміна вікна перемальовує канву 
     startParty('42');
     for (let i = 0; i < 1500 && document.querySelector('button.mission') === null; i++) btn('btn-tick').click();
     (document.querySelector('button.mission') as HTMLButtonElement).click();
+    deploy();
     expect($('battle-panel').classList.contains('hidden')).toBe(false);
     const turn = $('bctx-turn').textContent;
     $('bctx-turn').textContent = '—'; // мітка: стрічку бою пише лише renderBattle
@@ -3546,6 +3595,7 @@ describe('Т.143: «менше руху» змінилось — перемал�
     expect(canvasOps.length).toBeGreaterThan(0);
     for (let i = 0; i < 1500 && document.querySelector('button.mission') === null; i++) btn('btn-tick').click();
     (document.querySelector('button.mission') as HTMLButtonElement).click();
+    deploy();
     expect($('battle-panel').classList.contains('hidden')).toBe(false);
     canvasOps.length = 0;
     matches = true;

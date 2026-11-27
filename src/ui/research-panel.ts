@@ -23,6 +23,7 @@
 import {
   HIRE_SCIENTIST_PRICE,
   KEY_PROJECTS,
+  WEAPON_PROJECTS,
   PROJECTS,
   PROJECT_CATALOG,
   SCIENTIST_SALARY,
@@ -217,13 +218,20 @@ export function createResearchPanel(deps: ResearchPanelDeps): ResearchPanel {
     const catalog = document.createElement('div');
     const ref = party.roster.soldiers[0];
     // п18.5 (ADR-0157): після звичайних — три ключові протоколи ланцюжка до Брами Розриву (до п18.5 сховано)
-    const all = [...PROJECTS, ...KEY_PROJECTS];
+    // п20.4 (ADR-0168): за ними — протоколи зброї (свій на кожну, виріб у «Кузні»)
+    const all = [...PROJECTS, ...KEY_PROJECTS, ...WEAPON_PROJECTS];
     for (let i = 0; i < all.length; i++) {
       const def = all[i];
       if (i === PROJECTS.length) {
         const sep = document.createElement('div');
         sep.className = 'sci-row sci-key-head';
         sep.innerHTML = '<b>Ключові протоколи</b> — шлях до Брами Розриву, потрібні трофеї';
+        catalog.appendChild(sep);
+      }
+      if (i === PROJECTS.length + KEY_PROJECTS.length) {
+        const sep = document.createElement('div');
+        sep.className = 'sci-row sci-key-head';
+        sep.innerHTML = '<b>Зброя</b> — виріб у «Кузні», видача — у вікні спорядження перед вильотом';
         catalog.appendChild(sep);
       }
       const active = r.active.find((p) => p.id === def.id);

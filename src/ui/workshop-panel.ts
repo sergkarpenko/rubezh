@@ -8,6 +8,7 @@
 // геосцені (прецедент панелі збереження, П5.3): у бою кнопки вимкнені.
 // Детермінізм: панель лише читає стан ядра, жодного RNG.
 
+import { FORGE_WEAPONS } from '../core/weapons';
 import {
   INTERCEPTOR_COST,
   INTERCEPTOR_TICKS,
@@ -28,7 +29,8 @@ import { missingTrophies } from '../core/research';
 
 // п18.5 (ADR-0157): «Пробивний заряд» (після «Анатомії Розриву») — у панелі поруч із чинними предметами
 // (ITEM_IDS ядра лишається п'ятьма предметами: на нього спираються бот і скрипти вимірів).
-export const WORKSHOP_UI_ITEMS: readonly ItemId[] = [...ITEM_IDS, 'breach-charge'];
+// п20.4 (ADR-0168): і зброя «Кузні» — замовлення і склад тут, видача — у вікні спорядження
+export const WORKSHOP_UI_ITEMS: readonly ItemId[] = [...ITEM_IDS, 'breach-charge', ...FORGE_WEAPONS];
 import type { Party } from '../core/save';
 import { itemEffect } from './effects';
 import { el, setWhy } from './dom';
