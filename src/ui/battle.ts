@@ -593,7 +593,7 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
           cy: at.y * BCELL + BCELL / 2,
           r: 8,
           hp: shownHp.get(u.id) ?? 0, // Т.218: до кадру влучання — HP до нього
-          maxHp: u.maxHp, // смерть уже застосована — порожня смуга (П14.4)
+          maxHp: u.maxHp, // П14.4: смуга за HP; Т.218 — до кадру влучання HP до нього, далі порожня
           selected: false,
           overwatch: false,
           kind: u.kind, // п17.5: ряд атласа за типом

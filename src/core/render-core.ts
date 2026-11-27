@@ -858,8 +858,9 @@ export function animsFromEvents(
     if (e.type === 'heal') {
       // П14.4: зцілення — зелене «+N» над ціллю (лише видима ціль)
       const t = byId.get(e.targetId);
+      const hi = anims.length;
       if (t !== undefined && e.healed > 0 && seen(t.pos)) anims.push(makeDNumAnim(t.pos, e.healed, true));
-      fx(anims.length - 1, e.targetId, e.healed); // кадр — «+N»; без нього (туман) — лише рахунок
+      fx(hi, e.targetId, e.healed); // кадр — «+N»; без нього (туман) — лише рахунок, не чужий кадр (аудит PR #534)
       i++;
       continue;
     }

@@ -144,7 +144,12 @@ describe('П12.2: діалог «Нова партія» — сід і скла�
     btn('btn-start-new').click();
     const cards = [...document.querySelectorAll<HTMLElement>('#new-game-preset .preset-card')];
     expect(cards.map((c) => c.querySelector('.preset-name')?.textContent)).toEqual(['Легкий', 'Норма', 'Складний']);
-    expect(cards[0].querySelector('.preset-desc')?.textContent).toBe(PRESET_TEXT['легкий']);
+    expect(cards.map((c) => c.querySelector('.preset-desc')?.textContent)).toEqual([
+      'Зондів менше (×0,7), бійці міцніші (HP ×1,2), наука вдвічі дешевша, дотація, премії й найм ×1,2',
+      'Базові числа гри',
+      'Бійці слабші (HP ×0,9), дотація, премії й найм ×0,9',
+    ]); // тексти власника (Т.218)
+    expect(PRESET_TEXT['норма']).toBe('Базові числа гри');
     expect($('new-game-seed').closest('details')?.querySelector('summary')?.textContent).toBe('Додатково');
     const rnd = vi.spyOn(Math, 'random').mockReturnValue(0.5);
     try {

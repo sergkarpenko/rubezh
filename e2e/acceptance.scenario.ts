@@ -448,7 +448,7 @@ test('сценарій приймання ADR-0030: партія → місія 
     const helpClose = page.locator('#btn-help-close'); // перший візит — «Як грати» поверх стартового екрана
     if (await helpClose.isVisible()) await helpClose.click();
     await page.locator('#btn-start-new').click();
-    await page.locator('#new-game-more').evaluate((d) => ((d as HTMLDetailsElement).open = true)); // Т.218: сід — у «Додатково»
+    await page.locator('#new-game-more summary').click(); // Т.218: сід — у «Додатково» (клік, як гравець)
     await page.locator('#new-game-seed').fill(String(SEED));
     await page.locator(`input[name="new-game-preset"][value="${PRESET}"]`).check(); // Т.218: картки складності
     await page.locator('#btn-new-game-start').click();

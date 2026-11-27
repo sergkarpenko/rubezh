@@ -892,4 +892,11 @@ describe('Т.218: промінь на крутих кутах — з центр�
     expect(g.calls.find((c) => c.m === 'moveTo')?.args).not.toEqual([2 * 48 + 24, 5 * 48 + 24]);
     expect(g.calls.filter((c) => c.m === 'arc').length).toBeGreaterThan(0);
   });
+  it('турель (силует кодом) — з кінчика ствола і на крутому куті (аудит PR #534)', () => {
+    const up = makeTracerAnim('player', { x: 2, y: 5 }, { x: 2, y: 1 }, false);
+    up.start = 0;
+    const f = animCtx();
+    drawAnimFrame(f.ctx, up, up.dur * 0.1, 48, 8, 480, 480, { side: 'player', flip: false, turret: true });
+    expect(f.calls.find((c) => c.m === 'moveTo')?.args).not.toEqual([2 * 48 + 24, 5 * 48 + 24]);
+  });
 });

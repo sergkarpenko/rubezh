@@ -811,6 +811,36 @@ describe('Фікс П14.8 (фідбек валідації): смерть у ч�
     expect(ops2.some((o) => o.startsWith('fillText(4,'))).toBe(true); // черга відіграла — HP ядра
   });
 
+  it('Т.218 (аудит PR #534): знімок HP передається з бою — надлишкова шкода смертельного влучання не завищує «до»', () => {
+    const pushed: unknown[][] = [];
+    const f = makeFixture({ hasRaf: () => true });
+    f.deps.anim.push = (a: unknown[]) => pushed.push(a);
+    f.battle.launch(firstTarget(f));
+    const g = createGame({
+      map: { width: 20, height: 20, blocked: new Set<string>() },
+      units: [
+        makeUnit({ id: 's1', side: 'player', name: 'Гарт', pos: { x: 2, y: 2 }, hp: 10, maxHp: 10 }),
+        makeUnit({ id: 'a1', side: 'alien', name: 'Морок', pos: { x: 6, y: 2 }, hp: 10, maxHp: 10 }),
+      ],
+    });
+    f.ui.mission!.state = g;
+    const a1 = g.units[1]!;
+    f.battle.enqueueAnims(g.log.length); // знімок до першої пачки: 10
+    a1.hp = 6;
+    g.log.push({ type: 'shot', shooterId: 's1', targetId: 'a1', mode: 'snap', hit: true, damage: 4 });
+    f.battle.enqueueAnims(g.log.length - 1);
+    a1.hp = 0;
+    a1.alive = false;
+    g.log.push(
+      { type: 'death', unitId: 'a1', killerId: 's1' },
+      { type: 'shot', shooterId: 's1', targetId: 'a1', mode: 'snap', hit: true, damage: 8 }
+    );
+    f.battle.enqueueAnims(g.log.length - 2);
+    const fx = (batch: unknown[]) => (batch.find((a) => (a as { kind: string }).kind === 'tracer') as { hpFx?: unknown[] }).hpFx;
+    expect(fx(pushed[pushed.length - 2])).toEqual([{ unitId: 'a1', before: 10, after: 6 }]);
+    expect(fx(pushed[pushed.length - 1])).toEqual([{ unitId: 'a1', before: 6, after: 0 }]); // без знімка — 8
+  });
+
   // Фідбек власника 2026-10-22: трасер бою стартує з ДУЛА стрільця (якір
   // MUZZLE_ANCHOR у render.ts), фліп — фактичний facing кадру: демон у нативі
   // (вліво) — дуло лівого краю кадру (Т.132: якір у просторі 96); постріл по солдату праворуч від
