@@ -43,7 +43,11 @@ import { el, setWhy } from './dom';
 import { setIconText } from './icons';
 import type { LogCat } from './journal';
 import { daysText, ticksText } from './text';
+import { portraitHtml } from './portrait';
 import { ENEMY_KINDS, ENEMY_ORDER } from '../core/enemies';
+
+// п21.4 (ADR-0178): сторона аватара техноманта в рядку штату, CSS px — рішення власника «Б. Більші»
+export const STAFF_AVATAR = 32;
 
 // п18.5 (ADR-0157): ціна ключового протоколу в трофеях — «демон 6, гончак 3» (порядок типів ядра).
 export function trophyCostText(def: ProjectDef): string {
@@ -185,6 +189,7 @@ export function createResearchPanel(deps: ResearchPanelDeps): ResearchPanel {
     // штат вчених — по рядку на вченого з кнопкою звільнення
     if (r.scientists.length > 0) {
       const staff = document.createElement('div');
+      staff.className = 'staff';
       staff.style.margin = '6px 0';
       for (const s of r.scientists) {
         const row = document.createElement('div');
@@ -193,6 +198,8 @@ export function createResearchPanel(deps: ResearchPanelDeps): ResearchPanel {
         const name = document.createElement('span');
         name.style.minWidth = '64px';
         name.textContent = s.name;
+        // п21.4 (ADR-0178): мальований бюст техноманта перед іменем; шолом кодом — запасний
+        row.insertAdjacentHTML('beforeend', portraitHtml(s.id, STAFF_AVATAR));
         const fire = document.createElement('button');
         fire.id = 'btn-fire-' + s.id;
         fire.textContent = 'Звільнити';

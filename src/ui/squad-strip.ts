@@ -6,7 +6,7 @@
 import type { GameState } from '../core/combat';
 import { rankOf, type SoldierCareer } from '../core/career';
 import { fighterLook } from '../core/render-core';
-import { helmetSvg } from './avatar';
+import { portraitHtml } from './portrait';
 import { ROLE_INFO, chevronHtml } from './roles';
 import { byGender } from './text';
 import { weaponIconHtml, weaponIdOf } from './weapon-icon';
@@ -35,6 +35,8 @@ export interface SquadCardView {
 export const SQUAD_CLIP_PREFIX = 'sq-cp-';
 // п20.5: ширина іконки зброї на картці, CSS px (42 × 14)
 export const SQUAD_WEAPON_W = 42;
+// п21.4 (ADR-0178): сторона аватара (бюст у кільці) на картці смуги загону, CSS px — рішення власника «Б. Більші»
+export const SQUAD_AVATAR = 32;
 
 // Порядок карток — порядок висадки (перші id оперативників у стані бою);
 // загиблий лишається в units, евакуйований переходить у evacuated — картка
@@ -131,8 +133,8 @@ function cardHtml(c: SquadCardView): string {
     '>' +
     // п16.4: шеврон звання — у куті аватара (на вузькій картці не забирає місця в позивного)
     (c.rank !== undefined
-      ? '<span class="sq-av">' + helmetSvg(c.id, 24, SQUAD_CLIP_PREFIX) + chevronHtml(c.rank) + '</span>'
-      : helmetSvg(c.id, 24, SQUAD_CLIP_PREFIX)) +
+      ? '<span class="sq-av">' + portraitHtml(c.id, SQUAD_AVATAR, SQUAD_CLIP_PREFIX) + chevronHtml(c.rank) + '</span>'
+      : portraitHtml(c.id, SQUAD_AVATAR, SQUAD_CLIP_PREFIX)) +
     '<span class="sq-body"><span class="sq-head"><span class="sq-name">' +
     (c.roleGlyph !== undefined ? '<span class="sq-role">' + c.roleGlyph + '</span>' : '') +
     (c.callsign ?? c.name) +

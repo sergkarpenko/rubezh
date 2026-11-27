@@ -1,0 +1,258 @@
+[
+ {
+  "sheet": "t222-ops-m.jpg",
+  "cell": [
+   0,
+   0
+  ],
+  "split": [
+   0,
+   407
+  ],
+  "headTop": 161,
+  "bustH": 433,
+  "centerX": 214,
+  "side": 355,
+  "greenMax": 0
+ },
+ {
+  "sheet": "t222-ops-m.jpg",
+  "cell": [
+   1,
+   0
+  ],
+  "split": [
+   407,
+   728
+  ],
+  "headTop": 150,
+  "bustH": 444,
+  "centerX": 135,
+  "side": 364,
+  "greenMax": 0
+ },
+ {
+  "sheet": "t222-ops-m.jpg",
+  "cell": [
+   2,
+   0
+  ],
+  "split": [
+   728,
+   1052
+  ],
+  "headTop": 165,
+  "bustH": 429,
+  "centerX": 131,
+  "side": 351,
+  "greenMax": 0
+ },
+ {
+  "sheet": "t222-ops-m.jpg",
+  "cell": [
+   3,
+   0
+  ],
+  "split": [
+   1052,
+   1376
+  ],
+  "headTop": 152,
+  "bustH": 442,
+  "centerX": 128,
+  "side": 362,
+  "greenMax": 0
+ },
+ {
+  "sheet": "t222-ops-f.jpg",
+  "cell": [
+   4,
+   0
+  ],
+  "split": [
+   0,
+   352
+  ],
+  "headTop": 199,
+  "bustH": 372,
+  "centerX": 202,
+  "side": 305,
+  "greenMax": 0
+ },
+ {
+  "sheet": "t222-ops-f.jpg",
+  "cell": [
+   5,
+   0
+  ],
+  "split": [
+   352,
+   677
+  ],
+  "headTop": 187,
+  "bustH": 384,
+  "centerX": 167,
+  "side": 314,
+  "greenMax": 0
+ },
+ {
+  "sheet": "t222-ops-f.jpg",
+  "cell": [
+   6,
+   0
+  ],
+  "split": [
+   677,
+   1001
+  ],
+  "headTop": 200,
+  "bustH": 389,
+  "centerX": 176,
+  "side": 318,
+  "greenMax": 0
+ },
+ {
+  "sheet": "t222-ops-f.jpg",
+  "cell": [
+   7,
+   0
+  ],
+  "split": [
+   1001,
+   1376
+  ],
+  "headTop": 189,
+  "bustH": 382,
+  "centerX": 166,
+  "side": 313,
+  "greenMax": 0
+ },
+ {
+  "sheet": "t222-tech-m.jpg",
+  "cell": [
+   0,
+   1
+  ],
+  "split": [
+   0,
+   360
+  ],
+  "headTop": 189,
+  "bustH": 392,
+  "centerX": 197,
+  "side": 321,
+  "greenMax": 0
+ },
+ {
+  "sheet": "t222-tech-m.jpg",
+  "cell": [
+   1,
+   1
+  ],
+  "split": [
+   360,
+   681
+  ],
+  "headTop": 183,
+  "bustH": 398,
+  "centerX": 162,
+  "side": 326,
+  "greenMax": 0
+ },
+ {
+  "sheet": "t222-tech-m.jpg",
+  "cell": [
+   2,
+   1
+  ],
+  "split": [
+   681,
+   1011
+  ],
+  "headTop": 190,
+  "bustH": 391,
+  "centerX": 170,
+  "side": 320,
+  "greenMax": 0
+ },
+ {
+  "sheet": "t222-tech-m.jpg",
+  "cell": [
+   3,
+   1
+  ],
+  "split": [
+   1011,
+   1376
+  ],
+  "headTop": 184,
+  "bustH": 397,
+  "centerX": 168,
+  "side": 325,
+  "greenMax": 0
+ },
+ {
+  "sheet": "t222-tech-f.jpg",
+  "cell": [
+   4,
+   1
+  ],
+  "split": [
+   0,
+   367
+  ],
+  "headTop": 136,
+  "bustH": 479,
+  "centerX": 216,
+  "side": 392,
+  "greenMax": 0
+ },
+ {
+  "sheet": "t222-tech-f.jpg",
+  "cell": [
+   5,
+   1
+  ],
+  "split": [
+   367,
+   688
+  ],
+  "headTop": 154,
+  "bustH": 461,
+  "centerX": 157,
+  "side": 378,
+  "greenMax": 0
+ },
+ {
+  "sheet": "t222-tech-f.jpg",
+  "cell": [
+   6,
+   1
+  ],
+  "split": [
+   688,
+   1004
+  ],
+  "headTop": 145,
+  "bustH": 470,
+  "centerX": 150,
+  "side": 385,
+  "greenMax": 0
+ },
+ {
+  "sheet": "t222-tech-f.jpg",
+  "cell": [
+   7,
+   1
+  ],
+  "split": [
+   1004,
+   1376
+  ],
+  "headTop": 152,
+  "bustH": 463,
+  "centerX": 153,
+  "side": 379,
+  "greenMax": 0
+ }
+]

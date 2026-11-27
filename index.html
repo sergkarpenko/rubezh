@@ -845,9 +845,40 @@
       #roster .soldier {
         align-items: center;
       }
-      #roster .soldier .avatar {
+      #roster .soldier > .avatar {
         flex: none;
         margin-right: -4px;
+      }
+      /* п21.4 (ADR-0178; рішення власника «Б. Більші»): бюст 40 px ліворуч від усіх трьох рядків —
+         рядок не вищає, біографія й досвід — від лівого краю тексту, без відступу під аватар */
+      #roster .soldier.with-pt {
+        position: relative;
+        padding-left: 48px;
+        min-height: 46px;
+      }
+      #roster .soldier > .pt {
+        position: absolute;
+        left: 0;
+        top: 4px;
+      }
+      #roster .soldier.with-pt .s-bio,
+      #roster .soldier.with-pt .s-stats {
+        padding-left: 0;
+      }
+      /* п21.4 (ADR-0178): мальований бюст поверх шолома кодом (шолом — запасний, якщо атлас не завантажився) */
+      .pt {
+        position: relative;
+        display: inline-block;
+        flex: none;
+        line-height: 0;
+      }
+      .pt > i {
+        position: absolute;
+        border-radius: 50%;
+        background-repeat: no-repeat;
+      }
+      .staff .soldier {
+        align-items: center;
       }
       /* п16.4 (ADR-0147, рішення власника «А. Три рядки»): ім'я «позивний», шеврон, звання, роль;
          біографія і досвід — окремими рядками під ними (з відступом під аватар) */
@@ -2552,6 +2583,10 @@
         #bsquad .sq-st-txt {
           display: none;
         }
+        /* п21.4 (ADR-0178): на вузькій картці телефона бюст — 24 px, як шолом (32 px обрізав позивний на 320 px) */
+        #bsquad .pt {
+          zoom: 0.75;
+        }
         body:has(#layout.in-battle) header#topbar {
           position: static;
         }
@@ -2574,6 +2609,10 @@
         /* Т.130 (аудит PR #443): альбомний телефон — теж лише значок вибулого, як до 599 px */
         #bsquad .sq-st-txt {
           display: none;
+        }
+        /* п21.4 (ADR-0178): на вузькій картці телефона бюст — 24 px, як шолом (32 px обрізав позивний на 320 px) */
+        #bsquad .pt {
+          zoom: 0.75;
         }
         body:has(#layout.in-battle) header#topbar {
           position: static;

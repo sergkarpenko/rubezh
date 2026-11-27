@@ -12,7 +12,18 @@ import { ARMOR_MAX_HP_BONUS, OPTICS_ACCURACY_BONUS } from '../core/workshop';
 import { GRENADE_DAMAGE, GRENADE_RANGE, HEAL_AMOUNT, HIT_CHANCE_CAP } from '../core/combat';
 import { initPixelSprites } from '../render';
 import { fighterLook } from '../core/render-core';
-import { ROSTER_WEAPON_W, createPanels, gateCell, gunModuleReady, hpColor, inAirCombat, readyToIssue, type PanelsDeps } from './panels';
+import {
+  ROSTER_AVATAR,
+  ROSTER_WEAPON_W,
+  createPanels,
+  gateCell,
+  gunModuleReady,
+  hpColor,
+  inAirCombat,
+  readyToIssue,
+  type PanelsDeps,
+} from './panels';
+import { portraitCell } from './portrait';
 import { SNIPER_RIFLE } from '../core/weapons';
 
 // Піксельний рушій (ADR-0031): тестовий мок фабрики offscreen-канвасів —
@@ -579,12 +590,30 @@ describe('renderRoster: ростер і чип боєготових (ADR-0027)',
   it('Т.129 (ADR-0118): у кожному рядку — аватар «шолом» кольору бійця, кліп із власним id', () => {
     const f = makeFixture();
     f.panels.renderRoster();
-    const svgs = [...document.querySelectorAll('#roster .soldier > svg.avatar')];
+    const svgs = [...document.querySelectorAll('#roster .soldier > .pt > svg.avatar')];
     expect(svgs.length).toBe(f.party.roster.soldiers.length);
     expect(svgs.map((s) => s.getAttribute('data-color'))).toEqual(f.party.roster.soldiers.map((s) => fighterLook(s.id).color));
     const clips = [...document.querySelectorAll('#roster clipPath')].map((c) => c.id);
     expect(new Set(clips).size).toBe(clips.length);
     expect(svgs[0]!.querySelector('g')!.getAttribute('clip-path')).toBe('url(#' + clips[0] + ')');
+  });
+
+  it('п21.4 (ADR-0178): у кожному рядку — мальований бюст поверх шолома, клітинка атласа — за id', () => {
+    const f = makeFixture();
+    f.panels.renderRoster();
+    const pts = [...document.querySelectorAll<HTMLElement>('#roster .soldier > .pt')];
+    expect(pts.map((p) => p.dataset.portrait)).toEqual(
+      f.party.roster.soldiers.map((s) => {
+        const c = portraitCell(s.id)!;
+        return c.col + ',' + c.row;
+      })
+    );
+    expect(pts[0]!.style.width).toBe(ROSTER_AVATAR + 'px');
+    expect(pts.map((p) => p.querySelector('svg.avatar')!.getAttribute('data-color'))).toEqual(
+      f.party.roster.soldiers.map((s) => fighterLook(s.id).color)
+    );
+    expect(pts.every((p) => p.parentElement!.classList.contains('with-pt'))).toBe(true);
+    expect(pts[0]!.querySelector('i')!.style.backgroundImage).toContain('portraits');
   });
 
   it('п20.5 (ADR-0169; рішення власника «Б. + ростер «Загін»»): у третьому рядку — іконка зброї бійця', () => {
