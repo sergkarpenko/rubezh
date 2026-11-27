@@ -11,6 +11,7 @@ import {
   GRENADE_AP_COST,
   GRENADE_RANGE,
   calculateHitChance,
+  shotCover,
   distance,
   hasLineOfSight,
   hasTerrainLine,
@@ -85,7 +86,7 @@ export function enemyMenuView(state: GameState, target: Unit, shooter: Unit | un
       mode,
       label: SHOT_LABEL[mode],
       ap: p.apCost,
-      chancePct: Math.round(calculateHitChance(shooter, mode) * 100),
+      chancePct: Math.round(calculateHitChance(shooter, mode, shotCover(state, shooter, target)) * 100), // п20.2: з укриттям цілі
       shots: p.shots,
       block,
     };

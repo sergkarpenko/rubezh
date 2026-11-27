@@ -77,6 +77,16 @@ describe('enemyMenuView', () => {
     expect(enemyMenuHtml(v)).not.toContain('<button');
   });
 
+  it('п20.2 (ADR-0166): бій з укриттям — шанс кнопок з укриттям цілі (низька перешкода між ними — пів ×0,75)', () => {
+    const st = game({ x: 2, y: 2 }, { x: 5, y: 2 });
+    st.cover = true;
+    st.map = { ...st.map, low: new Set(['4,2']) };
+    const s = unit(st, 's1');
+    const v = enemyMenuView(st, unit(st, 'a1'), s);
+    for (const shot of v.shooter!.shots) expect(shot.chancePct).toBe(Math.round(calculateHitChance(s, shot.mode, 'half') * 100));
+    expect(enemyMenuHtml(v)).toContain('>Швидкий</span><span class="em-meta">3 AP · ~39%<'); // 0,65 × 0,8 × 0,75
+  });
+
   it('постріли — у порядку плиток 1–3, AP і шанс з ядра; доступна граната', () => {
     const st = game({ x: 2, y: 2 }, { x: 5, y: 2 });
     const s = unit(st, 's1');

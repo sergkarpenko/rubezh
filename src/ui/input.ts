@@ -16,6 +16,7 @@ import {
   HEAL_AP_COST,
   OVERWATCH_AP_COST,
   calculateHitChance,
+  shotCover,
   distance,
   endTurn,
   evacuate,
@@ -373,7 +374,7 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
         ui.hoverPath = null;
         battle.binfo(
           '~' +
-            Math.round(calculateHitChance(sel, ui.fireMode) * 100) +
+            Math.round(calculateHitChance(sel, ui.fireMode, shotCover(st, sel, u)) * 100) + // п20.2: з укриттям цілі
             '% · повторний тап у цю саму ціль — постріл (' +
             (ui.itemMode === 'precise' ? '«Точний постріл»' : MODE_LABEL[ui.fireMode]) + // аудит PR #501
             ').'

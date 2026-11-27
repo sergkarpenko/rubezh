@@ -113,6 +113,9 @@ export interface GameMap {
   width: number;
   height: number;
   blocked: ReadonlySet<string>;
+  // п20.2 (ADR-0165 п. 3, 11): низькі перешкоди (ящики, уламки) — не проходяться, але огляд,
+  // вогонь і гранату не закривають; дають пів-укриття. Без поля — мапа як до п20.2.
+  low?: ReadonlySet<string>;
 } // "x,y"
 export interface GameState {
   map: GameMap;
@@ -132,6 +135,9 @@ export interface GameState {
   // п18.4 (ADR-0156): зона ворогів, до якої йде бот загону, поки ворога не видно
   // (фінал «Брама Розриву» — свій кут мапи); без поля — ALIEN_SPAWN, як досі.
   enemyZone?: Vec2[];
+  // п20.2 (ADR-0165 п. 10): укриття цілі множить шанс пострілу й дозору (бої місій);
+  // без поля — шанс і журнал як до п20.2.
+  cover?: boolean;
 }
 
 export const MOVE_AP_PER_CELL = 1;
@@ -254,6 +260,15 @@ export function isInside(map: GameMap, pos: Vec2): boolean {
 export function isBlocked(map: GameMap, pos: Vec2): boolean {
   return map.blocked.has(key(pos));
 }
+// п20.2: низька перешкода (ADR-0165 п. 11).
+export function isLow(map: GameMap, pos: Vec2): boolean {
+  return map.low?.has(key(pos)) ?? false;
+}
+// п20.2: клітинка не проходиться — стіна чи низька перешкода (рух, шлях, зона руху);
+// огляд, вогонь і граната — лише стіни (`isBlocked`).
+export function isImpassable(map: GameMap, pos: Vec2): boolean {
+  return isBlocked(map, pos) || isLow(map, pos);
+}
 export function unitAt(state: GameState, pos: Vec2): Unit | undefined {
   return state.units.find((u) => u.alive && u.pos.x === pos.x && u.pos.y === pos.y);
 }
@@ -367,10 +382,54 @@ export function weaponHasMode(w: Weapon, mode: ShotMode): boolean {
   return w.only === undefined || w.only.includes(mode);
 }
 
-// Влучність не залежить від цілі (як в оригіналі): точність солдата × режим пострілу.
-export function calculateHitChance(attacker: Unit, mode: ShotMode): number {
+// п20.2 (ADR-0165 п. 1–2, 9–10; ADR-0166): укриття цілі з боку стрільця.
+export type CoverLevel = 'none' | 'half' | 'full';
+// Множник шансу за укриттям цілі: фланг (без укриття) ×1,2, пів ×0,75, повне ×0,5.
+export const COVER_MULT: Readonly<Record<CoverLevel, number>> = { none: 1.2, half: 0.75, full: 0.5 };
+const COVER_RANK: Readonly<Record<CoverLevel, number>> = { none: 0, half: 1, full: 2 };
+
+// Укриття цілі target від стрільця в клітинці shooter. Сусід N = target + a, a = (dx, dy) —
+// «з боку стрільця», коли кут між a і b = shooter − target не більший за 45° (цілочисельно:
+// dot > 0 і 2·dot² ≥ |a|²·|b|², межа включно); стіна в такому сусіді — повне, низька
+// перешкода — пів, з кількох — найсильніше; немає — фланг. Стрілець у сусідній клітинці
+// цілі (впритул, і по діагоналі) — завжди фланг (рішення власника п20.2 «Б»). Юніти укриття
+// не дають (ADR-0151).
+export function coverOf(map: GameMap, target: Vec2, shooter: Vec2): CoverLevel {
+  const bx = shooter.x - target.x,
+    by = shooter.y - target.y;
+  if (Math.max(Math.abs(bx), Math.abs(by)) <= 1) return 'none';
+  const bb = bx * bx + by * by;
+  let best: CoverLevel = 'none';
+  for (let dy = -1; dy <= 1; dy++) {
+    for (let dx = -1; dx <= 1; dx++) {
+      const dot = dx * bx + dy * by;
+      if (dot <= 0 || 2 * dot * dot < (dx * dx + dy * dy) * bb) continue;
+      const n = { x: target.x + dx, y: target.y + dy };
+      const c: CoverLevel = isBlocked(map, n) ? 'full' : isLow(map, n) ? 'half' : 'none';
+      if (COVER_RANK[c] > COVER_RANK[best]) best = c;
+    }
+  }
+  return best;
+}
+
+// Укриття, що діє на постріл shooter → target у цьому бою: undefined — бій без опції
+// `cover` чи зброя ближнього бою (дальність 1, «Кігті»): шанс як до п20.2.
+export function shotCover(state: GameState, shooter: Unit, target: Unit): CoverLevel | undefined {
+  if (!state.cover || shooter.weapon.range <= 1) return undefined;
+  return coverOf(state.map, target.pos, shooter.pos);
+}
+
+// Шанс у межах HIT_CHANCE_FLOOR…HIT_CHANCE_CAP.
+function clampChance(p: number): number {
+  return Math.min(HIT_CHANCE_CAP, Math.max(HIT_CHANCE_FLOOR, p));
+}
+
+// Точність солдата × режим пострілу (ADR-0004); п20.2: × множник укриття цілі, якщо його
+// передано (`shotCover`); без укриття — як до п20.2.
+export function calculateHitChance(attacker: Unit, mode: ShotMode, cover?: CoverLevel): number {
   const mod = attacker.weapon.modes[mode].accuracyMod;
-  return Math.min(HIT_CHANCE_CAP, Math.max(HIT_CHANCE_FLOOR, attacker.firingAccuracy * mod));
+  if (cover === undefined) return clampChance(attacker.firingAccuracy * mod);
+  return clampChance(attacker.firingAccuracy * mod * COVER_MULT[cover]);
 }
 
 // --- Фабрики ---
@@ -400,6 +459,7 @@ export interface CreateGameOptions {
   evacZone?: Vec2[]; // П15.2 (ADR-0075): зона висадки для евакуації (mission.ts)
   roles?: Record<string, UnitRole>; // п16.3: ролі оперативників (deployRoles у squad.ts)
   enemyZone?: Vec2[]; // п18.4: зона ворогів для бота загону (брама)
+  cover?: boolean; // п20.2 (ADR-0165 п. 10): укриття в шансі — бої місій
 }
 
 export function createGame(opts: CreateGameOptions): GameState {
@@ -417,6 +477,7 @@ export function createGame(opts: CreateGameOptions): GameState {
   // п16.3: копія — бій змінює used, переданий об'єкт лишається як був; без ролей — стан як до п16.3
   if (opts.roles) state.roles = Object.fromEntries(Object.entries(opts.roles).map(([id, r]) => [id, { ...r }]));
   if (opts.enemyZone) state.enemyZone = opts.enemyZone.map((c) => ({ ...c })); // п18.4: без поля — стан як досі
+  if (opts.cover) state.cover = true; // п20.2: без опції — стан як досі
   for (const u of state.units) if (u.side === state.activeSide) u.ap = u.maxAp;
   return state;
 }
@@ -453,7 +514,7 @@ function assertStep(state: GameState, u: Unit, step: Vec2): void {
     throw new Error('Крок не суміжний (дозволені 4 напрямки)');
   }
   if (!isInside(state.map, step)) throw new Error('Крок за межі мапи');
-  if (isBlocked(state.map, step)) throw new Error('Крок у перешкоду');
+  if (isImpassable(state.map, step)) throw new Error('Крок у перешкоду');
   if (unitAt(state, step)) throw new Error('Клітинка зайнята');
   if (u.ap < MOVE_AP_PER_CELL) throw new Error('Недостатньо очок дій');
 }
@@ -520,7 +581,10 @@ function fireOnce(
 // `modes.snap` дорівнює дозволеному, подія пише режим `only[0]`.
 function fireReaction(state: GameState, shooter: Unit, target: Unit): void {
   const profile = shooter.weapon.modes.snap;
-  const chance = Math.min(HIT_CHANCE_CAP, Math.max(HIT_CHANCE_FLOOR, shooter.firingAccuracy * profile.accuracyMod * OVERWATCH_ACC_PENALTY));
+  // п20.2: укриття цілі — множником після штрафу дозору; без укриття — вираз як до п20.2
+  const cover = shotCover(state, shooter, target);
+  const base = shooter.firingAccuracy * profile.accuracyMod * OVERWATCH_ACC_PENALTY;
+  const chance = clampChance(cover === undefined ? base : base * COVER_MULT[cover]);
   fireOnce(state, shooter, target, shooter.weapon.only?.[0] ?? 'snap', chance);
 }
 
@@ -578,7 +642,7 @@ export function resolveAttack(state: GameState, shooterId: string, targetId: str
   assertCanFire(state, s, t, mode);
   const profile = s.weapon.modes[mode];
   s.ap -= profile.apCost;
-  const chance = calculateHitChance(s, mode);
+  const chance = calculateHitChance(s, mode, shotCover(state, s, t));
   const pierce = useCharge(state, s, t);
   const result: AttackResult = { shots: [], targetDown: false };
   for (let i = 0; i < profile.shots; i++) {
@@ -793,7 +857,7 @@ export function preciseShot(state: GameState, shooterId: string, targetId: strin
   slot.used = true;
   state.log.push({ type: 'precise_shot', shooterId: s.id, targetId: t.id });
   const pierce = useCharge(state, s, t);
-  const shot = fireOnce(state, s, t, 'aimed', calculateHitChance(s, 'aimed'), PRECISE_DAMAGE_MULT, pierce);
+  const shot = fireOnce(state, s, t, 'aimed', calculateHitChance(s, 'aimed', shotCover(state, s, t)), PRECISE_DAMAGE_MULT, pierce);
   return { shots: [shot], targetDown: !t.alive };
 }
 

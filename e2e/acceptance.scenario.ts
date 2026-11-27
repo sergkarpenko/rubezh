@@ -15,7 +15,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { TICK_MINUTES } from '../src/core/geo';
 import { MISSION_MAP_H, MISSION_MAP_W } from '../src/core/mission';
-import type { Vec2 } from '../src/core/combat';
+import { calculateHitChance, type Vec2 } from '../src/core/combat';
 import {
   FIGHTER_COLORS,
   HP_BAR_Y,
@@ -896,7 +896,10 @@ test('сценарій приймання ADR-0030: партія → місія 
     const seen = mirror.seen();
     const st = mirror.state;
     const plain = (x: number, y: number): boolean =>
-      !st.map.blocked.has(x + ',' + y) && cellHash(x, y) % 37 > 2 && !st.units.some((u) => u.pos.x === x && u.pos.y === y);
+      !st.map.blocked.has(x + ',' + y) &&
+      !st.map.low?.has(x + ',' + y) &&
+      cellHash(x, y) % 37 > 2 &&
+      !st.units.some((u) => u.pos.x === x && u.pos.y === y);
     const inSeen = (x: number, y: number): boolean => seen.has(x + ',' + y);
     const fogCells: Vec2[] = [];
     const seenCells: Vec2[] = [];
@@ -1069,7 +1072,13 @@ test('сценарій приймання ADR-0030: партія → місія 
     const seenStart = mirror.seen();
     for (let y = 0; y < MISSION_MAP_H; y++)
       for (let x = 0; x < MISSION_MAP_W; x++)
-        if (!seenStart.has(x + ',' + y) && !mirror.state.map.blocked.has(x + ',' + y) && !occupiedAt(x, y)) fogCells.push({ x, y });
+        if (
+          !seenStart.has(x + ',' + y) &&
+          !mirror.state.map.blocked.has(x + ',' + y) &&
+          !mirror.state.map.low?.has(x + ',' + y) &&
+          !occupiedAt(x, y)
+        )
+          fogCells.push({ x, y });
     expect(fogCells.length, 'Т.143: клітинки туману на старті').toBeGreaterThan(20);
     const hatch = await page.evaluate(
       ({ cells, step }) => {
@@ -1316,9 +1325,10 @@ test('сценарій приймання ADR-0030: партія → місія 
     await tap(page, shot.shooter.pos);
     await expect(unit).toHaveAttribute('aria-label', unitLine(shot.shooter));
     await page.locator('#btn-snap').click();
-    await expect(info).toContainText('~' + shot.chancePct + '%');
+    // п20.2 (ADR-0166): рядок зведення цілі не знає — шанс без укриття; перший тап по цілі — з укриттям (дзеркало)
+    await expect(info).toContainText('~' + Math.round(calculateHitChance(shot.shooter, 'snap') * 100) + '%');
     await tap(page, shot.target.pos); // перший тап — шанс влучання
-    await expect(info).toContainText('повторний тап у цю саму ціль — постріл');
+    await expect(info).toContainText('~' + shot.chancePct + '% · повторний тап у цю саму ціль — постріл');
     await tap(page, shot.target.pos); // повторний тап — постріл
     mirror.shoot(shot, 'snap');
     if (mirror.outcome() !== 'триває') return;

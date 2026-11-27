@@ -97,6 +97,7 @@ export function createAssault(party: Party, opts: CampaignBattleOptions): Missio
     rng: mulberry32(seed),
     items: opts.items,
     roles: opts.roles,
+    cover: true, // п20.2 (ADR-0165 п. 10)
   });
   return { briefing: { ufoId: 'база', kind: 'збирач', aliens: aliens.length, minute: party.geo.minute, op: 'штурм' }, state };
 }
@@ -159,6 +160,7 @@ export function createGateMission(party: Party, opts: CampaignBattleOptions): Mi
     roles: opts.roles,
     evacZone: SQUAD_SPAWN,
     enemyZone: GATE_SPAWN,
+    cover: true, // п20.2 (ADR-0165 п. 10)
   });
   return { briefing: { ufoId: 'брама', kind: 'збирач', aliens: aliens.length, minute: party.geo.minute, op: 'брама' }, state };
 }

@@ -626,9 +626,11 @@ describeScenario('критичний флоу економіки: найм → �
   // перемога, Олена гине, Іван поранений 3/10 → лікарня 14 тіків; премія +110.
   // Т.18 (ADR-0087): до симетричної лінії вогню флоу йшов на сіді 42 — там
   // авто-бій тепер минає без поранених.
+  // п20.2 (ADR-0166): укриття і низькі перешкоди — на сіді 27 авто-бій без поранених; знову сід 42
+  // (скан 1–60): місія на 22-му тіку, рекрут «Шрам» гине, Іван поранений 8/10 → лікарня 4 тіки.
 
   step('скидання партії: баланс 300, ростер 6', () => {
-    startParty('27');
+    startParty('42');
     expect($('money').textContent).toBe('300');
     expect($('roster').textContent).toContain('6 оперативників (6 боєготових)');
   });
@@ -658,7 +660,7 @@ describeScenario('критичний флоу економіки: найм → �
     await runAutoBattle();
     expect($('bresult').textContent).toContain('ЗАЧИЩЕНО');
     expect($('bresult').textContent).toContain('поранених: 1');
-    expect($('log').textContent).toContain('Іван поранений — лікарня: 14 тіків');
+    expect($('log').textContent).toContain('Іван поранений — лікарня: 4 тіки');
     expect($('log').textContent).toContain('Премія за місію (розвідник): +110');
     expect($('money').textContent).toBe('310'); // 300 − 100 найм + 110 премія (П8.6)
   });
@@ -667,28 +669,29 @@ describeScenario('критичний флоу економіки: найм → �
     closeBattle();
     expect($('battle-panel').classList.contains('hidden')).toBe(true);
     expect($('roster').textContent).toContain('6 оперативників (5 боєготових)');
-    expect($('roster').textContent).toContain('лікарня: 14 тіків');
-    expect($('roster').textContent).toContain('HP 4/11'); // п16.2: 2 вбивства + місія → «Боєць», +1 HP
+    expect($('roster').textContent).toContain('лікарня: 4 тіки');
+    expect($('roster').textContent).toContain('HP 8/10'); // п20.2: рекрут без вбивств — без підвищення
     expect(btn('btn-tick').disabled).toBe(false);
   });
 
-  step('одужання: 14 тіків — ветеран знову боєготовий, баланс і годинник цілі', () => {
-    for (let i = 0; i < 14; i++) btn('btn-tick').click();
+  step('одужання: 4 тіки — поранений знову боєготовий, баланс і годинник цілі', () => {
+    for (let i = 0; i < 4; i++) btn('btn-tick').click();
     expect($('roster').textContent).not.toContain('лікарня');
     expect($('roster').textContent).toContain('HP 10/10');
     expect($('roster').textContent).toContain('6 оперативників (6 боєготових)');
     expect($('money').textContent).toBe('310'); // доти не було — доба не завершена
-    expect($('clock').textContent).toBe('Д1 16:00'); // 18 + 14 тіків по 30 хв
+    expect($('clock').textContent).toBe('Д1 13:00'); // 22 + 4 тіки по 30 хв
   });
 
-  // п19.2 (ADR-0159 п. 11–12): невиявлений зонд відлетів у добу 1 — довіра регіону −15, дотація 75 × 385 / 400 ≈ 72
-  step('дотація: завершення доби 1 — +72 у журналі і балансі (довіра 385 з 400)', () => {
-    for (let i = 0; i < 16; i++) btn('btn-tick').click(); // 48 тіків усього
+  // п19.2 (ADR-0159 п. 11–12): невиявлений зонд відлетів у добу 1 — довіра регіону −15, дотація 75 × 385 / 400 ≈ 72.
+  // п20.2 (сід 42): виявлений зонд відлетів без бою — «Схід» −30, дотація 75 × 370 / 400 ≈ 69
+  step('дотація: завершення доби 1 — +69 у журналі і балансі (довіра 370 з 400)', () => {
+    for (let i = 0; i < 22; i++) btn('btn-tick').click(); // 48 тіків усього
     expect($('clock').textContent).toBe('Д2 00:00');
-    expect($('money').textContent).toBe('382');
-    expect($('log').textContent).toContain('Дотація за добу 1: +72');
+    expect($('money').textContent).toBe('379');
+    expect($('log').textContent).toContain('Дотація за добу 1: +69');
     expect($('log').textContent).toContain(': зонд відлетів без бою');
-    expect($('econ-rates').textContent).toContain('· дотація 72/добу'); // рядок ставок — з поточної Σ довір (аудит PR #521)
+    expect($('econ-rates').textContent).toContain('· дотація 69/добу'); // рядок ставок — з поточної Σ довір (аудит PR #521)
   });
 });
 
@@ -815,18 +818,21 @@ describePage('панель збереження: 3 слоти, лише на г�
   });
 
   it('лікарня у сейві: поранений відновлюється після завантаження', async () => {
-    // авто-бій цієї партії: перемога, один загиблий, Іван поранений 4/11 (сід 27; п16.2 — «Боєць»)
+    // авто-бій цієї партії: перемога, один загиблий, Іван поранений 4/11 (сід 27; п16.2 — «Боєць»).
+    // п20.2 (ADR-0166): на сіді 27 бій тепер без поранених — сід 42: Іван поранений 8/10, лікарня 4 тіки
+    startParty('42');
+    for (let i = 0; i < 1500 && document.querySelector('button.mission') === null; i++) btn('btn-tick').click();
     (document.querySelector('button.mission') as HTMLButtonElement).click();
     await runAutoBattle();
     closeBattle();
-    expect($('roster').textContent).toContain('лікарня: 14 тіків');
+    expect($('roster').textContent).toContain('лікарня: 4 тіки');
     expect($('money').textContent).toBe('410'); // 300 + премія 110 (П8.6)
     btn('btn-save-3').click();
-    for (let i = 0; i < 14; i++) btn('btn-tick').click(); // одужання
+    for (let i = 0; i < 4; i++) btn('btn-tick').click(); // одужання
     expect($('roster').textContent).not.toContain('лікарня');
     btn('btn-load-3').click();
-    expect($('roster').textContent).toContain('лікарня: 14 тіків');
-    expect($('roster').textContent).toContain('HP 4/11'); // п16.2: 2 вбивства + місія → «Боєць», +1 HP
+    expect($('roster').textContent).toContain('лікарня: 4 тіки');
+    expect($('roster').textContent).toContain('HP 8/10');
     expect($('money').textContent).toBe('410');
   });
 
@@ -1170,8 +1176,11 @@ describeScenario('П6.14: UX прицілювання — обведення ц�
     hover(16, 2);
     const chance = $('binfo').textContent.match(/~(\d+)%/);
     expect(chance).not.toBe(null);
-    // елемент журналу — уся операція з координатами, тому префіксний пошук
-    expect(canvasOps.some((o) => o.startsWith('fillText(~' + chance![1] + '%,'))).toBe(true);
+    // елемент журналу — уся операція з координатами, тому префіксний пошук.
+    // п20.2 (ADR-0166): у бою місії плашка — шанс з укриттям цілі, рядок зведення — без цілі (база):
+    // демон (16,2) без укриття з боку стрільця (4,2) — фланг ×1,2: 0,6 × 0,8 = 48 % → 58 %
+    expect(chance![1]).toBe('48');
+    expect(canvasOps.some((o) => o.startsWith('fillText(~58%,'))).toBe(true);
   });
 
   step('тап без режиму — підказка; тап-тап пострілу: перший тап — шанс (AP не змінюється), другий — постріл', () => {
@@ -1185,7 +1194,7 @@ describeScenario('П6.14: UX прицілювання — обведення ц�
     btn('btn-snap').click(); // зведено; Т.131: плитка закриває меню
     expect($('benemy').classList.contains('hidden')).toBe(true);
     tap(16, 2); // перший тап по цілі — прев'ю шансу
-    expect($('binfo').textContent).toContain('повторний тап у цю саму ціль');
+    expect($('binfo').textContent).toContain('~58% · повторний тап у цю саму ціль'); // п20.2: з укриттям цілі (фланг)
     expect($('binfo').textContent).toContain('~');
     expect(unitLabel()).toContain('AP 9/10'); // пострілу ще не було
     // фідбек не ламає тап-тап: тап в ІНШУ клітинку — прев'ю руху, режим знято

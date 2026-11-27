@@ -9,7 +9,7 @@ import {
   MOVE_AP_PER_CELL,
   hasLineOfSight,
   seenEnemies,
-  isBlocked,
+  isImpassable,
   isInside,
   mulberry32,
   unitAt,
@@ -42,7 +42,7 @@ export function findPath(state: GameState, start: Vec2, goal: Vec2, maxNodes = 2
   const k = (p: Vec2) => p.x + ',' + p.y;
   if (k(start) === k(goal)) return []; // спершу старт = ціль, потім перевірка зайнятості
   const occupied = (p: Vec2): boolean => unitAt(state, p) !== undefined && (seen === undefined || seen.has(k(p)));
-  const passable = (p: Vec2): boolean => isInside(state.map, p) && !isBlocked(state.map, p) && !occupied(p);
+  const passable = (p: Vec2): boolean => isInside(state.map, p) && !isImpassable(state.map, p) && !occupied(p);
   if (!passable(goal)) return null;
 
   const h = (p: Vec2) => Math.abs(p.x - goal.x) + Math.abs(p.y - goal.y);
@@ -120,7 +120,7 @@ export function reachableCells(state: GameState, start: Vec2, ap: number, seen?:
       ]) {
         const nk = key(n);
         if (nk === startKey || out.has(nk)) continue;
-        if (!isInside(state.map, n) || isBlocked(state.map, n)) continue;
+        if (!isInside(state.map, n) || isImpassable(state.map, n)) continue;
         if (unitAt(state, n) !== undefined && (seen === undefined || seen.has(nk))) continue;
         out.add(nk);
         next.push(n);
