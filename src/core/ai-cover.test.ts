@@ -7,6 +7,7 @@ import {
   createGame,
   endTurn,
   makeUnit,
+  moveUnit,
   mulberry32,
   type GameMap,
   type GameState,
@@ -368,6 +369,13 @@ describe('п20.6: дозор з укриттям (hold «cover»)', () => {
     s1(tight).ap = OW; // рівно на дозор: на хід AP не лишається
     botTurn(tight, undefined, 'cover');
     expect([moves(tight), s1(tight).overwatch]).toEqual([0, true]);
+  });
+
+  it('уже ходив цього півходу (аудит PR #533) — далі не йде, лише дозор', () => {
+    const st = setup(true);
+    moveUnit(st, 's1', [{ x: 4, y: 7 }]); // крок не в укриття
+    botTurn(st, undefined, 'cover');
+    expect([moves(st), s1(st).pos, s1(st).overwatch]).toEqual([1, { x: 4, y: 7 }, true]);
   });
 
   it('найближча клітинка з укриттям: з (4, 5) — один крок у (5, 5)', () => {

@@ -72,6 +72,15 @@ describe('partyBotScienceStep: виріб і видача зброї', () => {
     expect([weaponOf(p, 1), p.workshop.store.mg]).toEqual(['mg', 0]);
   });
 
+  it('озброєний за роллю — не в дефіциті (аудит PR #533): склад порожній, замовлення немає', () => {
+    const p = party([null, null, null], ['mg']);
+    p.workshop.store.mg = 3;
+    partyBotScienceStep(p, W);
+    expect([weaponOf(p, 0), weaponOf(p, 1), weaponOf(p, 2), p.workshop.store.mg]).toEqual(['mg', 'mg', 'mg', 0]);
+    partyBotScienceStep(p, W);
+    expect(p.workshop.queue).toEqual([]);
+  });
+
   it('гроші нижче резерву — без замовлення; протокол не завершено — без замовлення і видачі', () => {
     const p = party(['sniper', 'assault', null]);
     p.econ.money = W.hireReserve + 59; // «Шквал» 60 — після оплати лишилось би менше резерву

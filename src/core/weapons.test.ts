@@ -214,6 +214,21 @@ describe('сейв (ADR-0165 п. 13; EARS 8): v4 з необов’язкови�
     expect(serializeParty(q)).toBe(json);
   });
 
+  it('п20.6 (ADR-0170, аудит PR #533): видана зброя «Кузні» — профіль з каталогу, а не зі старого сейва («Град» ×0,45 → ×0,6)', () => {
+    const p = createParty(42);
+    const s = p.roster.soldiers[0];
+    done(p.research, 'mg');
+    stock(p.workshop, 'mg', 1);
+    equipWeapon(p.workshop, s, 'mg');
+    const data = JSON.parse(serializeParty(p));
+    data.state.roster.soldiers[0].weapon.modes.auto.accuracyMod = 0.45; // сейв між п20.4 і п20.6
+    data.state.roster.soldiers[1].weapon.name = 'стара назва «Гарта»'; // «Гарт» — як у сейві
+    const q = deserializeParty(JSON.stringify(data));
+    expect(q.roster.soldiers[0].weapon).toEqual(MACHINE_GUN);
+    expect(q.roster.soldiers[0].weapon.modes.auto.accuracyMod).toBe(0.6);
+    expect(q.roster.soldiers[1].weapon.name).toBe('стара назва «Гарта»');
+  });
+
   it('сейв v4 без полів зброї: у кожного «Гарт», склад зброї порожній, протоколи зброї не досліджено', () => {
     const p = createParty(42);
     const data = JSON.parse(serializeParty(p));
