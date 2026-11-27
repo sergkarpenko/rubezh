@@ -122,9 +122,13 @@ describe('ResearchPanel: каталог проєктів (картки T.39)', (
   it('усі 6 проєктів каталогу і 3 ключові (п18.5) — картки; кнопки старту — у 4 (5 згорнуті: передумова чи трофеї); назви з каталогу', () => {
     const panel = createResearchPanel(makeDeps());
     panel.render();
-    expect(document.querySelectorAll('#research .sci-card')).toHaveLength(9);
-    expect(document.querySelectorAll<HTMLButtonElement>('[id^="btn-start-"]')).toHaveLength(4);
-    expect(document.querySelectorAll('#research .sci-card.folded')).toHaveLength(5);
+    // п20.4 (ADR-0168): і три протоколи зброї — «Шквал» без передумови, «Голка» й «Град» згорнуті
+    expect(document.querySelectorAll('#research .sci-card')).toHaveLength(12);
+    expect(document.querySelectorAll<HTMLButtonElement>('[id^="btn-start-"]')).toHaveLength(5);
+    expect(document.querySelectorAll('#research .sci-card.folded')).toHaveLength(7);
+    expect(el('btn-start-9').textContent).toBe('Дослідити — 80 кр.'); // «Дробовик «Шквал»»
+    expect(card('Дробовик «Шквал»').textContent).toContain('Шкода 4–8, дальність 6; лише «Швидкий» — 3 AP, ×1');
+    expect(el('research').textContent).toContain('Зброя — виріб у «Кузні»');
     expect(el('research').textContent).toContain('Композитна броня');
     expect(el('research').textContent).toContain('Імпульсна граната');
     expect(el('research').textContent).toContain('Гарматний модуль перехоплювача');

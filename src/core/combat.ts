@@ -818,6 +818,9 @@ export function roleActionBlock(state: GameState, unitId: string, role: BattleRo
   if (!u) return 'Оперативника немає на полі бою'; // евакуйований (ADR-0075)
   if (!u.alive) return 'Оперативник загинув';
   if (u.side !== state.activeSide) return 'Зараз хід демонів Розриву';
+  // п20.4 (рішення власника «А. Вимкнена з причиною», ADR-0168): «Точний постріл» — прицільний режим зброї
+  if (role === 'sniper' && !weaponHasMode(u.weapon, 'aimed'))
+    return ROLE_ACTION_NAMES[role] + ': зброя «' + u.weapon.name + '» не має прицільного режиму';
   if (u.ap < ROLE_AP_COST[role]) return 'Недостатньо очок дій: ' + ROLE_ACTION_NAMES[role] + ' — ' + ROLE_AP_COST[role] + ' AP';
   return null;
 }

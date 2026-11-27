@@ -527,6 +527,10 @@ describe('цех: Т.12 — зняття саме того предмета, щ�
       armor: { name: 'Композитна броня', cost: 60, ticks: 24 },
       'gun-module': { name: 'Гарматний модуль перехоплювача', cost: 80, ticks: 32 },
       'breach-charge': { name: 'Пробивний заряд', cost: 50, ticks: 16, unlockedBy: 'rift-anatomy', trophies: { hound: 1 } },
+      // п20.4 (ADR-0165 п. 12, ADR-0168): вироби зброї
+      shotgun: { name: 'Дробовик «Шквал»', cost: 60, ticks: 16 },
+      sniper: { name: 'Гвинтівка «Голка»', cost: 70, ticks: 20 },
+      mg: { name: 'Кулемет «Град»', cost: 80, ticks: 24 },
     });
     expect(itemName('гаубиця' as ItemId)).toBe('гаубиця');
   });

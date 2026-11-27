@@ -31,6 +31,7 @@ import {
   throwGrenade,
   useDash,
   useMedkit,
+  weaponHasMode,
   type ShotMode,
   type Unit,
   type Vec2,
@@ -571,6 +572,11 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
     }
     // П6.14: без достатку AP режим не зводиться — кнопка приглушена, гаряча
     // клавіша дає ту саму відмову з причиною (фідбек не розходиться з кнопками).
+    // п20.4 (EARS 6): режим, якого зброя не має, не зводиться — та сама відмова, що на плитці
+    if (!weaponHasMode(sel.weapon, mode)) {
+      battle.binfo('У зброї «' + sel.weapon.name + '» немає режиму «' + MODE_LABEL[mode] + '».');
+      return;
+    }
     const cost = sel.weapon.modes[mode].apCost;
     if (sel.ap < cost) {
       battle.binfo('Не вистачає AP: ' + MODE_LABEL[mode] + ' постріл коштує ' + cost + ', є ' + sel.ap + '.');

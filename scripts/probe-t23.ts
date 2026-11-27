@@ -73,6 +73,7 @@ import {
   partyBotMissionStep,
   partyBotScienceStep,
   simulateParty,
+  type BotItemId,
   type PartyBotPolicy,
   partyBotAssaultStep,
 } from '../src/core/party-bot';
@@ -218,11 +219,11 @@ function run(name: string, v: Variant, preset: DifficultyPreset, seed: number): 
     party.research.completed = [...v.done];
     sci.scientistsUpTo = 0;
     sci.projects = [];
-    sci.workshopOrders = v.done.filter((id) => id in WORKSHOP_CATALOG) as ItemId[]; // п18.2: ключові протоколи предмета не мають
+    sci.workshopOrders = v.done.filter((id) => id in WORKSHOP_CATALOG) as BotItemId[]; // п18.2: ключові протоколи предмета не мають
   }
   if (v.projects) {
     sci.projects = v.projects;
-    sci.workshopOrders = v.projects.filter((id) => id in WORKSHOP_CATALOG) as ItemId[];
+    sci.workshopOrders = v.projects.filter((id) => id in WORKSHOP_CATALOG) as BotItemId[];
   }
   const reserve = v.reserve(preset);
   const sciStep: PartyBotPolicy = reserve === null ? sci : { ...sci, hireReserve: reserve };

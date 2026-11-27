@@ -4,10 +4,20 @@
 // текст ефекту не дублює числа руками. Ядро лише читається (ADR-0002);
 // детермінізм: жодного RNG, усе відображення констант.
 
-import { GRENADE_AP_COST, GRENADE_DAMAGE, GRENADE_RANGE, HEAL_AP_COST, HEAL_AMOUNT, HIT_CHANCE_CAP, type Unit } from '../core/combat';
+import {
+  GRENADE_AP_COST,
+  GRENADE_DAMAGE,
+  GRENADE_RANGE,
+  HEAL_AP_COST,
+  HEAL_AMOUNT,
+  HIT_CHANCE_CAP,
+  type ShotMode,
+  type Unit,
+} from '../core/combat';
 import { BASE_LAB_SLOTS, MAX_LAB_SLOTS, RADAR_RANGE_BASE, RADAR_RANGE_WIDE, type KeyProjectId, type ProjectId } from '../core/research';
 import { ARMOR_MAX_HP_BONUS, OPTICS_ACCURACY_BONUS, type ItemId } from '../core/workshop';
 import { GUN_MODULE_DAMAGE } from '../core/intercept';
+import { isForgeWeapon, WEAPONS, type ForgeWeaponId, type WeaponId } from '../core/weapons';
 
 // Частка у відсотках: 0.05 → «5%», 0.95 → «95%».
 export function pct(x: number): string {
@@ -92,8 +102,26 @@ export const KEY_PROJECT_EFFECTS: Record<KeyProjectId, string> = {
 };
 export const BREACH_CHARGE_EFFECT = 'Атака по броньованій цілі — без броні (один раз)';
 
-function keyProjectEffect(id: KeyProjectId): string {
-  return KEY_PROJECT_EFFECTS[id];
+// п20.4 (ADR-0168): ефект протоколу й виробу зброї — числа з каталогу WEAPONS (weapons.ts); режим — єдиний (`only`).
+const WEAPON_MODE_NAMES: Record<ShotMode, string> = { snap: '«Швидкий»', aimed: '«Прицільний»', auto: '«Черга»' };
+export function weaponEffect(id: WeaponId): string {
+  const w = WEAPONS[id];
+  const m = w.only?.[0];
+  const mode =
+    m === undefined
+      ? 'усі три режими'
+      : 'лише ' +
+        WEAPON_MODE_NAMES[m] +
+        ' — ' +
+        w.modes[m].apCost +
+        ' AP, ×' +
+        String(w.modes[m].accuracyMod).replace('.', ',') +
+        (w.modes[m].shots > 1 ? ', ' + w.modes[m].shots + ' кулі' : '');
+  return 'Шкода ' + w.damage[0] + '–' + w.damage[1] + ', дальність ' + w.range + '; ' + mode;
+}
+
+function keyProjectEffect(id: KeyProjectId | ForgeWeaponId): string {
+  return isForgeWeapon(id) ? weaponEffect(id) : KEY_PROJECT_EFFECTS[id];
 }
 
 // Ефект предмета «Кузні» ДО замовлення (механіка витратників — у підказках).

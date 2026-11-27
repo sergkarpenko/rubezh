@@ -15,6 +15,7 @@ import {
   distance,
   hasLineOfSight,
   hasTerrainLine,
+  weaponHasMode,
   type GameState,
   type ShotMode,
   type Unit,
@@ -24,7 +25,8 @@ import { ATLAS_ROW } from '../render';
 import unitAtlasUrl from '../../assets/units-atlas.png';
 
 // Чому дія недоступна — ті самі перевірки, що й assertCanFire / throwGrenade ядра
-export type MenuBlock = 'ap' | 'range' | 'los' | 'none' | null;
+// п20.4 (ADR-0168): 'mode' — режиму немає у зброї стрільця (перша перевірка assertCanFire після цілі)
+export type MenuBlock = 'mode' | 'ap' | 'range' | 'los' | 'none' | null;
 
 export interface EnemyMenuShot {
   mode: ShotMode;
@@ -54,6 +56,7 @@ export interface EnemyMenuView {
 export const MENU_SHOTS: readonly ShotMode[] = ['snap', 'aimed', 'auto'];
 const SHOT_LABEL: Record<ShotMode, string> = { snap: 'Швидкий', aimed: 'Прицільний', auto: 'Черга' };
 const BLOCK_TEXT: Record<Exclude<MenuBlock, null>, string> = {
+  mode: 'немає в зброї', // п20.4: той самий підпис, що на плитці режиму
   ap: 'мало AP',
   range: 'далеко',
   los: 'немає лінії',
@@ -80,8 +83,16 @@ export function enemyMenuView(state: GameState, target: Unit, shooter: Unit | un
   const los = hasLineOfSight(state, shooter.pos, target.pos, shooter.side);
   const shots = MENU_SHOTS.map((mode): EnemyMenuShot => {
     const p = shooter.weapon.modes[mode];
-    // порядок причин — як у assertCanFire: дальність, лінія, AP
-    const block: MenuBlock = dist > shooter.weapon.range ? 'range' : !los ? 'los' : shooter.ap < p.apCost ? 'ap' : null;
+    // порядок причин — як у assertCanFire: режим зброї (п20.4), дальність, лінія, AP
+    const block: MenuBlock = !weaponHasMode(shooter.weapon, mode)
+      ? 'mode'
+      : dist > shooter.weapon.range
+        ? 'range'
+        : !los
+          ? 'los'
+          : shooter.ap < p.apCost
+            ? 'ap'
+            : null;
     return {
       mode,
       label: SHOT_LABEL[mode],

@@ -58,7 +58,7 @@ function everProduced(party: Party, id: ItemId): boolean {
 
 // Предмет завершеного протоколу, якого зараз ніде немає (ні на складі, ні в черзі
 // «Кузні», ні в оперативників, ні на перехоплювачі), а кредитів на нього вистачає.
-function canOrderNew(party: Party, id: ItemId): boolean {
+function canOrderNew(party: Party, id: (typeof ITEM_IDS)[number]): boolean {
   const w = party.workshop;
   if (!itemUnlocked(party.research, id)) return false;
   if (w.store[id] > 0 || w.queue.some((o) => o.id === id)) return false;

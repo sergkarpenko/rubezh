@@ -26,11 +26,14 @@ import {
   distance,
   grenadeZone,
   hasLineOfSight,
+  weaponHasMode,
+  RIFLE,
   type GameState,
   type ShotMode,
   type Unit,
   type Vec2,
 } from '../core/combat';
+import { TILE_KEY, fireModeHint } from './toolbar';
 import { reachableCells, sideVisibleCells } from '../core/map';
 import { geoClock } from '../core/geo';
 import type { Party } from '../core/save';
@@ -698,12 +701,20 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
     for (const m of ['snap', 'aimed', 'auto'] as ShotMode[]) {
       const b = el<HTMLButtonElement>('btn-' + m);
       const cost = sel ? sel.weapon.modes[m].apCost : 0;
-      const noAp = sel !== undefined && sel.ap < cost;
-      b.disabled = busy || noAp;
-      const hint = b.dataset.hint || b.title;
-      b.dataset.hint = hint;
-      b.title = noAp ? hint + ' — не вистачає AP (потрібно ' + cost + ')' : hint;
-      tileReason(b, noAp ? 'мало AP' : null);
+      // п20.4 (EARS 6, ADR-0168): режим, якого зброя не має, — вимкнена плитка з причиною (рішення власника «немає в зброї»)
+      const noMode = sel !== undefined && !weaponHasMode(sel.weapon, m);
+      const noAp = sel !== undefined && !noMode && sel.ap < cost;
+      b.disabled = busy || noMode || noAp;
+      // п20.4 (аудит PR #531): ціна в кутку і тултіп — за зброєю вибраного (без вибору — «Гарт»)
+      const hint = fireModeHint(m, TILE_KEY[m]!, sel?.weapon);
+      const apCorner = b.querySelector<HTMLElement>('.tb-ap');
+      if (apCorner !== null) apCorner.textContent = (sel ? cost : RIFLE.modes[m].apCost) + ' AP';
+      b.title = noMode
+        ? hint + ' — у зброї «' + sel?.weapon.name + '» цього режиму немає'
+        : noAp
+          ? hint + ' — не вистачає AP (потрібно ' + cost + ')'
+          : hint;
+      tileReason(b, noMode ? 'немає в зброї' : noAp ? 'мало AP' : null);
       b.classList.toggle('armed', ui.fireMode === m && ui.itemMode !== 'precise'); // п16.4: «Точний» світить плитку ролі
     }
     const ow = el<HTMLButtonElement>('btn-ow');

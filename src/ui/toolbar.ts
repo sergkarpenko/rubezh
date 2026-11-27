@@ -15,6 +15,7 @@ import {
   HEAL_AMOUNT,
   OVERWATCH_AP_COST,
   RIFLE,
+  type Weapon,
 } from '../core/combat';
 import { createIcon, type IconName } from './icons';
 
@@ -35,8 +36,9 @@ export interface ToolbarAction {
 
 // П12.5 (ADR-0065): підказки режимів пострілу — числа ТІЛЬКИ з констант
 // RIFLE (combat.ts, одне місце правди): AP, множник точності, кількість куль.
-function fireModeHint(mode: 'snap' | 'aimed' | 'auto', key: string): string {
-  const m = RIFLE.modes[mode];
+// п20.4 (аудит PR #531): числа — зброї вибраного бійця (battle.ts); без вибору — «Гарт».
+export function fireModeHint(mode: 'snap' | 'aimed' | 'auto', key: string, w: Weapon = RIFLE): string {
+  const m = w.modes[mode];
   return m.apCost + ' AP · ×' + m.accuracyMod + ' · ' + m.shots + (m.shots === 1 ? ' куля' : ' кулі') + ' · клавіша ' + key;
 }
 
@@ -101,7 +103,7 @@ export const TOOLBAR_ACTIONS: readonly ToolbarAction[] = [
 ];
 
 // Т.33: клавіша і ціна в AP — у кутках плитки (висота плитки без змін); ціни — з констант ядра.
-const TILE_KEY: Partial<Record<ToolbarActionId, string>> = {
+export const TILE_KEY: Partial<Record<ToolbarActionId, string>> = {
   snap: '1',
   aimed: '2',
   auto: '3',

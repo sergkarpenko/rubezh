@@ -7,6 +7,7 @@
 
 import { describe, expect, it } from 'vitest';
 import fc from 'fast-check';
+import { WEAPONS, WEAPON_IDS } from './core/weapons';
 import { ENEMY_ORDER, makeEnemy } from './core/enemies';
 import {
   createGame,
@@ -85,7 +86,9 @@ function build(a: Arena): GameState {
     taken.add(c);
     if (i === 0) first = c;
     const side = i % 2 === 0 ? 'player' : 'alien';
-    if (side === 'player') return makeUnit({ id: side[0] + i, side, pos: at(c), hp: 10 - (i % 3) });
+    // п20.4 (ADR-0168): зброя оперативника з «Кузні» — за номером клітинки (spot < 11 — «Гарт»: приклади лишаються)
+    const weapon = WEAPONS[spot < 11 ? 'rifle' : WEAPON_IDS[spot % WEAPON_IDS.length]];
+    if (side === 'player') return makeUnit({ id: side[0] + i, side, pos: at(c), hp: 10 - (i % 3), weapon });
     // п17.2 (ADR-0149): вороги всіх чотирьох типів — тип з номера клітинки (spot < 7 — демон: приклади Т.18 лишаються з демоном)
     const e = makeEnemy(ENEMY_ORDER[Math.floor(spot / 7) % ENEMY_ORDER.length], side[0] + i, 0, at(c));
     e.hp = e.maxHp - (i % 3);

@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { GRENADE_AP_COST, GRENADE_RANGE, calculateHitChance, createGame, makeUnit, type GameState, type Unit } from '../core/combat';
 import { FACE_SCALE, MENU_SHOTS, enemyFaceStyle, enemyMenuHtml, enemyMenuPlace, enemyMenuView } from './enemy-menu';
 import { makeEnemy } from '../core/enemies';
+import { MACHINE_GUN, SHOTGUN } from '../core/weapons';
 
 function game(shooterAt: { x: number; y: number }, alienAt: { x: number; y: number }, blocked: string[] = []): GameState {
   const map = { width: 20, height: 20, blocked: new Set(blocked) };
@@ -123,6 +124,18 @@ describe('enemyMenuView', () => {
     const html = enemyMenuHtml(enemyMenuView(st, unit(st, 'a1'), s));
     expect(html).toContain('data-act="aimed" disabled><span class="em-lbl">Прицільний</span><span class="em-meta">мало AP<');
     expect(html).toContain('data-act="snap"><span');
+  });
+
+  it('п20.4 (ADR-0168, аудит Vibe PR #531): режим, якого зброя стрільця не має, — «немає в зброї» (раніше за AP і дальність)', () => {
+    const st = game({ x: 2, y: 2 }, { x: 5, y: 2 });
+    const s = unit(st, 's1');
+    s.weapon = SHOTGUN;
+    expect(enemyMenuView(st, unit(st, 'a1'), s).shooter!.shots.map((x) => x.block)).toEqual([null, 'mode', 'mode']);
+    s.ap = 0;
+    s.weapon = MACHINE_GUN;
+    expect(enemyMenuView(st, unit(st, 'a1'), s).shooter!.shots.map((x) => x.block)).toEqual(['mode', 'mode', 'ap']);
+    const html = enemyMenuHtml(enemyMenuView(st, unit(st, 'a1'), s));
+    expect(html).toContain('data-act="snap" disabled><span class="em-lbl">Швидкий</span><span class="em-meta">немає в зброї<');
   });
 
   it('далеко і немає лінії — для пострілів і гранати; дальність гранати менша за дальність зброї', () => {
