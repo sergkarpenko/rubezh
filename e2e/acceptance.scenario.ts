@@ -15,7 +15,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { TICK_MINUTES } from '../src/core/geo';
 import { MISSION_MAP_H, MISSION_MAP_W } from '../src/core/mission';
-import { calculateHitChance, type Vec2 } from '../src/core/combat';
+import { type Vec2 } from '../src/core/combat';
 import {
   FIGHTER_COLORS,
   HP_BAR_Y,
@@ -1341,8 +1341,9 @@ test('сценарій приймання ADR-0030: партія → місія 
     await tap(page, shot.shooter.pos);
     await expect(unit).toHaveAttribute('aria-label', unitLine(shot.shooter));
     await page.locator('#btn-snap').click();
-    // п20.2 (ADR-0166): рядок зведення цілі не знає — шанс без укриття; перший тап по цілі — з укриттям (дзеркало)
-    await expect(info).toContainText('~' + Math.round(calculateHitChance(shot.shooter, 'snap') * 100) + '%');
+    // п20.5 (кандидат 202 а; рішення власника «А. Прибрати шанс»): рядок зведення — без шансу; перший тап по цілі —
+    // шанс з укриттям (дзеркало)
+    await expect(info).toContainText('3 AP · тапніть обведену ціль — шанс з укриттям');
     await tap(page, shot.target.pos); // перший тап — шанс влучання
     await expect(info).toContainText('~' + shot.chancePct + '% · повторний тап у цю саму ціль — постріл');
     await tap(page, shot.target.pos); // повторний тап — постріл

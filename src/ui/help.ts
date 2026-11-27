@@ -8,7 +8,7 @@
 // змінюється (ADR-0002) — модуль лише імпортує його константи.
 
 import { DAILY_ALLOWANCE, HIRE_PRICE, MISSION_BONUS } from '../core/economy';
-import { EVAC_AP_COST } from '../core/combat';
+import { COVER_MULT, EVAC_AP_COST } from '../core/combat';
 import { FIGHTER_REPAIR_COST, MAX_FIGHTERS } from '../core/intercept';
 import { TRUST_MISSION_WON, TRUST_UFO_LEFT_DETECTED, TRUST_UFO_LEFT_UNDETECTED } from '../core/regions';
 import { INTERCEPTOR_COST } from '../core/workshop';
@@ -50,6 +50,9 @@ export function isFirstVisit(storageOk: boolean, slotsEmpty: boolean): boolean {
 
 // Контент екрана (конкатенація рядків — стиль шару відображення, панель —
 // клас .panel з index.html; клавіші — за ev.code, друковані як латиниця).
+// п20.5: множник укриття — «×0,5», з комою, як у меню на ворогові
+const mult = (k: number): string => '×' + String(k).replace('.', ',');
+
 function helpHtml(): string {
   const bonusScout = MISSION_BONUS['розвідник'];
   const bonusHarvester = MISSION_BONUS['збирач'];
@@ -154,10 +157,19 @@ function helpHtml(): string {
     ' кр. за добу кожен; до ' +
     BASE_LAB_SLOTS +
     ' протоколів одночасно.</li>' +
-    '<li><b>«Кузня»</b>: протокол відкриває предмет — замовте й дочекайтесь виготовлення; там же — до ' +
+    '<li><b>«Кузня»</b>: протокол відкриває предмет чи зброю — замовте виготовлення; там же — до ' +
     MAX_FIGHTERS +
-    ' перехоплювачів, в ангар обраного регіону.</li>' +
-    '<li><b>Видача</b>: готовий предмет видайте на вкладці «Загін»; гель, граната й заряд витрачаються в бою, броня й око — ні.</li>' +
+    ' перехоплювачів.</li>' +
+    // п20.5 (рішення власника «А. Як на аркуші»): «Кузня» і «Видача» коротші — місце для «Укриття» (гейт 736 px)
+    '<li><b>Видача</b>: зброя й предмети — у вікні перед вильотом; гель, граната й заряд витрачаються в бою.</li>' +
+    // п20.5 (ADR-0169; рішення власника «А. Як на аркуші»): укриття одним рядком — множники з COVER_MULT
+    '<li><b>Укриття</b>: стіна — шанс ' +
+    mult(COVER_MULT.full) +
+    ', ящик — ' +
+    mult(COVER_MULT.half) +
+    ', фланг — ' +
+    mult(COVER_MULT.none) +
+    '.</li>' +
     '</ul></div>' +
     '</div>' +
     // П10.2: версія гри — константа __APP_VERSION__ зі зборки (vite define з

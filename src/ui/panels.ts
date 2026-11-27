@@ -56,6 +56,10 @@ import type { Anim } from '../core/render-core';
 import { el, setWhy } from './dom';
 import { setIconText } from './icons';
 import { helmetSvg } from './avatar';
+import { weaponIconHtml, weaponIdOf } from './weapon-icon';
+
+// п20.5: ширина іконки зброї в ростері, CSS px (42 × 14)
+export const ROSTER_WEAPON_W = 42;
 import { RANK_NAMES, rankOf } from '../core/career';
 import { chevronHtml, roleLabel, xpLine } from './roles';
 import { GCELL } from './grid';
@@ -769,6 +773,8 @@ export function createPanels(deps: PanelsDeps): Panels {
         s.maxHp +
         '</span>' +
         (heal !== undefined ? '<span class="meta">лікарня: ' + ticksText(heal) + '</span>' : '') +
+        // п20.5 (ADR-0169; рішення власника «Б. + ростер «Загін»»): мальована іконка зброї бійця
+        weaponIconHtml(weaponIdOf(s.weapon) ?? 'rifle', ROSTER_WEAPON_W, 'wpn-icon s-wpn') +
         '<span class="kills">⚔ ' +
         s.kills +
         '</span>' +

@@ -126,7 +126,7 @@ describe('тулбар: числові підказки механіки з ко
     for (const mode of ['snap', 'aimed', 'auto'] as const) {
       const m = RIFLE.modes[mode];
       expect(hint(mode)).toContain(m.apCost + ' AP');
-      expect(hint(mode)).toContain('×' + m.accuracyMod);
+      expect(hint(mode)).toContain('×' + String(m.accuracyMod).replace('.', ',')); // п20.5: кома
       expect(hint(mode)).toContain(m.shots + (m.shots === 1 ? ' куля' : ' кулі'));
     }
   });

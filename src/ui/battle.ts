@@ -67,6 +67,7 @@ import { ROLE_INFO, roleTileView } from './roles';
 import { byGender, ticksText } from './text';
 import { squadCards, squadOrder, squadStripHtml } from './squad-strip';
 import { enemyMenuHtml, enemyMenuPlace, enemyMenuView } from './enemy-menu';
+import { previewCover } from './cover-ui';
 import {
   resultCardHtml,
   summarizeAlienTurn,
@@ -540,6 +541,8 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
         cell: BCELL,
         cw: cv.width,
         px,
+        // п20.5 (EARS 4; рішення власника «А. Найслабше»): щиток укриття на клітинці цілі ходу
+        cover: previewCover(st, sel, ui.hoverPath[ui.hoverPath.length - 1] ?? sel.pos, vis),
       });
     }
 
