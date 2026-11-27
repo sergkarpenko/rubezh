@@ -59,6 +59,7 @@ import {
   orderItem,
   workshopTick,
   type ItemId,
+  type SoldierItemId,
 } from '../src/core/workshop';
 import {
   DEFAULT_PARTY_POLICY,
@@ -189,7 +190,8 @@ function scienceTail(party: ReturnType<typeof createParty>, policy: PartyBotPoli
           ? party.intercept.fighters[0].gunModule
             ? 0
             : 1
-          : squad.filter((s) => !w.equipped[s.id]?.[SoldierItemIdOf(id)]).length;
+          : // п20.4: зброї в політиці probe немає (ADR-0168) — лише предмети-прапорці
+            squad.filter((s) => !w.equipped[s.id]?.[SoldierItemIdOf(id as SoldierItemId)]).length;
       if (lacking - w.store[id] - w.queue.filter((o) => o.id === id).length <= 0) continue;
       const price = sciencePrice(WORKSHOP_CATALOG[id].cost, preset);
       if (party.econ.money - price < policy.hireReserve) continue;
