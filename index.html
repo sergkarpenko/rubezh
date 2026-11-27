@@ -851,7 +851,7 @@
       }
       /* п21.4 (ADR-0178; рішення власника «Б. Більші»): бюст 40 px ліворуч від усіх трьох рядків —
          рядок не вищає, біографія й досвід — від лівого краю тексту, без відступу під аватар */
-      #roster .soldier:has(> .pt) {
+      #roster .soldier.with-pt {
         position: relative;
         padding-left: 48px;
         min-height: 46px;
@@ -861,8 +861,8 @@
         left: 0;
         top: 4px;
       }
-      #roster .soldier:has(> .pt) .s-bio,
-      #roster .soldier:has(> .pt) .s-stats {
+      #roster .soldier.with-pt .s-bio,
+      #roster .soldier.with-pt .s-stats {
         padding-left: 0;
       }
       /* п21.4 (ADR-0178): мальований бюст поверх шолома кодом (шолом — запасний, якщо атлас не завантажився) */

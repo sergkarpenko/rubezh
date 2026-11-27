@@ -609,6 +609,10 @@ describe('renderRoster: ростер і чип боєготових (ADR-0027)',
       })
     );
     expect(pts[0]!.style.width).toBe(ROSTER_AVATAR + 'px');
+    expect(pts.map((p) => p.querySelector('svg.avatar')!.getAttribute('data-color'))).toEqual(
+      f.party.roster.soldiers.map((s) => fighterLook(s.id).color)
+    );
+    expect(pts.every((p) => p.parentElement!.classList.contains('with-pt'))).toBe(true);
     expect(pts[0]!.querySelector('i')!.style.backgroundImage).toContain('portraits');
   });
 

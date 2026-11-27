@@ -14,6 +14,7 @@ import { GUN_MODULE_DAMAGE } from '../core/intercept';
 import { ARMOR_MAX_HP_BONUS, OPTICS_ACCURACY_BONUS, WORKSHOP_CATALOG } from '../core/workshop';
 import { sciencePrice } from '../core/campaign';
 import { STAFF_AVATAR, createResearchPanel, type ResearchPanelDeps } from './research-panel';
+import { TECHNOMANCER_RING } from './portrait';
 import { el } from './dom';
 import { ticksText } from './text';
 
@@ -61,6 +62,7 @@ describe('ResearchPanel: штат вчених', () => {
     const pt = el('research').querySelector<HTMLElement>('.staff .soldier > .pt')!;
     expect(pt.dataset.portrait).toBe('4,1');
     expect(pt.style.width).toBe(STAFF_AVATAR + 'px');
+    expect(pt.querySelector('svg.avatar')!.getAttribute('data-color')).toBe(TECHNOMANCER_RING); // рішення власника «Так, як на аркуші»
   });
 
   it('найм без грошей — кнопка вимкнена, штат не змінюється', () => {

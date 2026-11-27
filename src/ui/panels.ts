@@ -55,7 +55,7 @@ import {
 import type { Anim } from '../core/render-core';
 import { el, setWhy } from './dom';
 import { setIconText } from './icons';
-import { portraitHtml } from './portrait';
+import { portraitCell, portraitHtml } from './portrait';
 import { weaponIconHtml, weaponIdOf } from './weapon-icon';
 import { RANK_NAMES, rankOf } from '../core/career';
 import { chevronHtml, roleLabel, xpLine } from './roles';
@@ -757,7 +757,8 @@ export function createPanels(deps: PanelsDeps): Panels {
     for (const s of soldiers) {
       const heal = party.roster.hospital[s.id];
       const row = document.createElement('div');
-      row.className = 'soldier';
+      // п21.4 (ADR-0178): клас рядка з бюстом — відступ під бюст 40 px без `:has()` (аудит PR #541)
+      row.className = portraitCell(s.id) !== null ? 'soldier with-pt' : 'soldier';
       // п16.4 (ADR-0147 п. 6, EARS 8; рішення власника «А. Три рядки»): ім'я «позивний», шеврон, звання,
       // роль, HP, вбивства; під ними — біографія і досвід до наступного звання
       const career = party.roster.careers[s.id];
