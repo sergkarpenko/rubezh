@@ -27,7 +27,7 @@ import {
   OVERWATCH_AP_COST,
   distance,
   hasLineOfSight,
-  isBlocked,
+  isImpassable,
   isInside,
   moveUnit,
   resolveAttack,
@@ -196,7 +196,7 @@ function reachable(state: GameState, start: Vec2, steps: number): Reach[] {
         const k = n.x + ',' + n.y;
         if (seen.has(k)) continue;
         seen.add(k);
-        if (!isInside(state.map, n) || isBlocked(state.map, n) || unitAt(state, n) !== undefined) continue;
+        if (!isInside(state.map, n) || isImpassable(state.map, n) || unitAt(state, n) !== undefined) continue;
         const r = { pos: n, path: [...cur.path, n] };
         out.push(r);
         next.push(r);

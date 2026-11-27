@@ -22,6 +22,7 @@ import {
   HEAL_AP_COST,
   OVERWATCH_AP_COST,
   calculateHitChance,
+  shotCover,
   distance,
   grenadeZone,
   hasLineOfSight,
@@ -501,7 +502,9 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
     const cells: TerrainCell[] = Array.from({ length: st.map.height }, (_, y) =>
       Array.from({ length: st.map.width }, (_, x): TerrainCell => {
         const k2 = x + ',' + y;
-        return { x, y, blocked: st.map.blocked.has(k2), visible: vis.has(k2) };
+        const cell: TerrainCell = { x, y, blocked: st.map.blocked.has(k2), visible: vis.has(k2) };
+        if (st.map.low?.has(k2) === true) cell.low = true; // п20.2: без поля — клітинка як досі
+        return cell;
       })
     ).flat();
     const px = cv.clientWidth > 0 ? cv.width / cv.clientWidth : 1;
@@ -664,12 +667,15 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
     if (ui.fireMode !== null && sel && playerTurnActive()) {
       const focus = [ui.aimCell, ui.tapCell].find((c) => c !== null && targets.some((t) => t.pos.x === c!.x && t.pos.y === c!.y));
       if (focus) {
+        // п20.2 (ADR-0166): шанс з укриттям цілі — той самий, що кидає ядро (`shotCover`)
+        const tgt = targets.find((t) => t.pos.x === focus.x && t.pos.y === focus.y);
+        const cover = tgt === undefined ? undefined : shotCover(st, sel, tgt);
         drawChanceLabel(ctx, {
           gx: focus.x,
           gy: focus.y,
           cell: BCELL,
           cw: cv.width,
-          text: '~' + Math.round(calculateHitChance(sel, ui.fireMode) * 100) + '%',
+          text: '~' + Math.round(calculateHitChance(sel, ui.fireMode, cover) * 100) + '%',
         });
       }
     }

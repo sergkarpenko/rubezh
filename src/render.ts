@@ -779,6 +779,34 @@ export function drawHangarSprite(ctx: CanvasRenderingContext2D, h: { cx: number;
 // не залежать). Чиста функція без RNG і DOM-стану; викликається кожен
 // кадр після clearRect (урок П6.6) — кадр еквівалентний малюванню з
 // нуля. w/h — розмір buffer'а канви в пікселях, cell — BCELL.
+// п20.2 (ADR-0166, рішення власника «А. Тимчасово кодом»): низька перешкода — темний ящик
+// з рамкою і двома планками; мальований тайл замінить його в п20.5. Малюється до туману —
+// у тумані ящик приглушено, як стіну (рельєф видно, ADR-0006).
+export const LOW_CRATE_FILL = '#2b3036';
+export const LOW_CRATE_EDGE = '#8a96a3';
+function drawLowCrates(ctx: CanvasRenderingContext2D, cells: readonly TerrainCell[], cell: number): void {
+  const inset = Math.round(cell * 0.18);
+  const size = cell - 2 * inset;
+  ctx.save();
+  ctx.lineWidth = Math.max(1, Math.round(cell / 22));
+  for (const c of cells) {
+    if (c.low !== true) continue;
+    const x0 = c.x * cell + inset;
+    const y0 = c.y * cell + inset;
+    ctx.fillStyle = LOW_CRATE_FILL;
+    ctx.fillRect(x0, y0, size, size);
+    ctx.strokeStyle = LOW_CRATE_EDGE;
+    ctx.strokeRect(x0, y0, size, size);
+    ctx.beginPath();
+    ctx.moveTo(x0, y0);
+    ctx.lineTo(x0 + size, y0 + size);
+    ctx.moveTo(x0 + size, y0);
+    ctx.lineTo(x0, y0 + size);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
 export function drawNightTerrain(
   ctx: CanvasRenderingContext2D,
   w: number,
@@ -819,13 +847,14 @@ export function drawNightTerrain(
         ctx.drawImage(metroTilesImg, wx + q.sx, q.sy, q.sw, q.sh, (c.x + q.dx) * cell, (c.y + q.dy) * cell, cell / 2, cell / 2);
       }
     }
-    // декори — рідкий детермінований розклад на відкритих (без RNG)
+    // декори — рідкий детермінований розклад на відкритих (без RNG); п20.2: не під ящиком
     for (const c of cells) {
-      if (c.blocked) continue;
+      if (c.blocked || c.low === true) continue;
       const dcol = decorCol(c.x, c.y);
       if (dcol === null) continue;
       ctx.drawImage(metroTilesImg, dcol * METRO_TILE, 0, METRO_TILE, METRO_TILE, c.x * cell, c.y * cell, cell, cell);
     }
+    drawLowCrates(ctx, cells, cell);
     // Т.44: знебарвлення клітинок туману — до приглушення; режим накладання
     // повертає restore
     ctx.save();
@@ -865,6 +894,7 @@ export function drawNightTerrain(
       ctx.fillStyle = terrainShade(c.x, c.y, c.blocked, c.visible);
       ctx.fillRect(c.x * cell, c.y * cell, cell - 1, cell - 1);
     }
+    drawLowCrates(ctx, cells, cell);
     // тонка сітка: 1px у проміжках між клітинками (стовпці і рядки)
     ctx.fillStyle = GRID_COLOR;
     const cols = Math.floor(w / cell);

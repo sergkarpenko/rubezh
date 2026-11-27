@@ -39,6 +39,8 @@ import {
   drawGeoBaseSprite,
   drawGeoTerrain,
   drawNightTerrain,
+  LOW_CRATE_EDGE,
+  LOW_CRATE_FILL,
   drawPathPreview,
   drawReachZone,
   drawSoldierSprite,
@@ -1611,5 +1613,59 @@ describe('Т.129: кільце кольору бійця під ногами', (
     const iBracket = calls.map((c) => c.m).lastIndexOf('stroke');
     expect(iE).toBeGreaterThanOrEqual(0);
     expect(iBracket).toBeGreaterThan(iE + 1); // друга лінія після кільця — дужки
+  });
+});
+
+// п20.2 (ADR-0166, рішення власника «А. Тимчасово кодом»): низька перешкода — ящик кодом до тайла п20.5.
+describe('п20.2: низька перешкода — тимчасовий ящик кодом', () => {
+  const crate = (ops: Op[]): Array<unknown[]> => {
+    const out: Array<unknown[]> = [];
+    let fill = '';
+    for (const o of ops) {
+      if ('set' in o && o.set === 'fillStyle') fill = o.v as string;
+      if ('m' in o && o.m === 'fillRect' && fill === LOW_CRATE_FILL) out.push(o.args);
+    }
+    return out;
+  };
+  const cells = (low: boolean): TerrainCell[] => [
+    { x: 0, y: 0, blocked: false, visible: true },
+    { x: 1, y: 0, blocked: false, visible: true, ...(low ? { low: true } : {}) },
+  ];
+
+  it('фолбек: ящик з відступом 18 % і рамкою поверх клітинки; без низьких — потік операцій як до п20.2', () => {
+    const a = seqCtx();
+    drawNightTerrain(a.ctx, 96, 48, cells(true), 48);
+    expect(crate(a.ops)).toEqual([[48 + 9, 9, 30, 30]]);
+    expect(a.ops.some((o) => 'set' in o && o.set === 'strokeStyle' && o.v === LOW_CRATE_EDGE)).toBe(true);
+    const b = seqCtx();
+    drawNightTerrain(b.ctx, 96, 48, cells(false), 48);
+    const c = seqCtx();
+    drawNightTerrain(c.ctx, 96, 48, [{ ...cells(false)[0] }, { x: 1, y: 0, blocked: false, visible: true, low: false }], 48);
+    expect(crate(b.ops)).toEqual([]);
+    expect(c.ops).toEqual(b.ops);
+  });
+
+  it('з ассетами: ящик поверх підлоги, декору на клітинці ящика немає', () => {
+    initMetroMap((_url, onLoad) => onLoad({ width: 1024, height: 1024 } as unknown as CanvasImageSource));
+    const tiles = { width: 192, height: 48 } as unknown as CanvasImageSource;
+    initMetroTiles((_url, onLoad) => onLoad(tiles));
+    // клітинка з декором за хешем
+    let dec: TerrainCell | null = null;
+    for (let y = 0; y < 30 && dec === null; y++)
+      for (let x = 0; x < 30; x++)
+        if (decorCol(x, y) !== null) {
+          dec = { x, y, blocked: false, visible: true };
+          break;
+        }
+    const draws = (cs: TerrainCell[]): number => {
+      const s = seqCtx();
+      drawNightTerrain(s.ctx, 48 * 30, 48 * 30, cs, 48);
+      return s.ops.filter((o) => 'm' in o && o.m === 'drawImage' && o.args[0] === tiles).length;
+    };
+    expect(draws([dec!])).toBe(1);
+    expect(draws([{ ...dec!, low: true }])).toBe(0);
+    const s = seqCtx();
+    drawNightTerrain(s.ctx, 48 * 30, 48 * 30, [{ ...dec!, low: true }], 48);
+    expect(crate(s.ops)).toEqual([[dec!.x * 48 + 9, dec!.y * 48 + 9, 30, 30]]);
   });
 });

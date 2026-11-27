@@ -17,7 +17,7 @@ import {
   hasLineOfSight,
   seenEnemies,
   sightBlockers,
-  isBlocked,
+  isImpassable,
   isInside,
   makeUnit,
   moveUnit,
@@ -64,6 +64,8 @@ const arenaArb = fc.record({
   walls: fc.array(fc.nat(80), { maxLength: 24 }),
   spots: fc.array(fc.nat(80), { minLength: 4, maxLength: 6 }),
   seed: fc.nat(),
+  // п20.2 (ADR-0166): низькі перешкоди — клітинки поза юнітами і стінами; укриття — у половині арен (сід парний)
+  low: fc.array(fc.nat(80), { maxLength: 8 }),
 });
 type Arena = typeof arenaArb extends fc.Arbitrary<infer T> ? T : never;
 // п17.2: стартові позиції юнітів бою (ключ — масив юнітів з build) — відтворення позицій за журналом
@@ -96,8 +98,16 @@ function build(a: Arena): GameState {
       .filter((c) => !taken.has(c))
       .map((c) => key(at(c)))
   );
+  const low = new Set(
+    a.low
+      .map((c) => c % n)
+      .filter((c) => !taken.has(c))
+      .map((c) => key(at(c)))
+      .filter((k) => !blocked.has(k))
+  );
   const state = createGame({
-    map: { width: a.w, height: a.h, blocked },
+    map: { width: a.w, height: a.h, blocked, low },
+    cover: a.seed % 2 === 0,
     units,
     rng: mulberry32(a.seed),
     // п18.6 (кандидат 185 а): «Пробивний заряд» у кожного — подія charge і шкода без броні в генераторі
@@ -128,7 +138,7 @@ type Act = typeof actArb extends fc.Arbitrary<infer T> ? T : never;
 function bfs(s: GameState, start: Vec2, goal: Vec2, known: (u: Unit) => boolean = () => true): number | null {
   const free = (p: Vec2): boolean => {
     const u = unitAt(s, p);
-    return isInside(s.map, p) && !isBlocked(s.map, p) && !(u !== undefined && known(u));
+    return isInside(s.map, p) && !isImpassable(s.map, p) && !(u !== undefined && known(u));
   };
   if (key(start) === key(goal)) return 0;
   if (!free(goal)) return null;
@@ -155,7 +165,7 @@ function broken(s: GameState, ids: string): string[] {
   const bad: string[] = [];
   const cells = new Set<string>();
   for (const u of s.units) {
-    if (!isInside(s.map, u.pos) || isBlocked(s.map, u.pos)) bad.push(u.id + ': поза полем або в стіні');
+    if (!isInside(s.map, u.pos) || isImpassable(s.map, u.pos)) bad.push(u.id + ': поза полем, у стіні чи низькій перешкоді'); // п20.2
     if (u.hp < 0 || u.hp > u.maxHp || u.alive !== u.hp > 0) bad.push(u.id + ': hp ' + u.hp + ', alive ' + u.alive);
     // п16.3: «Ривок» дає AP понад максимум — лише штурмовикові і лише в хід ривка
     // (подія dash цього юніта після початку останнього ходу його сторони: AP відновлює
@@ -321,7 +331,7 @@ describe('property: бій на випадковому бойовищі', () => 
         let prev = start;
         for (const step of path ?? []) {
           expect(Math.abs(step.x - prev.x) + Math.abs(step.y - prev.y)).toBe(1);
-          expect(isInside(s.map, step) && !isBlocked(s.map, step)).toBe(true);
+          expect(isInside(s.map, step) && !isImpassable(s.map, step)).toBe(true);
           prev = step;
         }
         if (path && path.length > 0) expect(prev).toEqual(goal);
@@ -348,6 +358,8 @@ describe('property: бій на випадковому бойовищі', () => 
         const wider = computeVisibleCells(opened, from, s.units[0].side);
         const base = computeVisibleCells(alone, from, s.units[0].side);
         expect([...base].filter((c) => !wider.has(c))).toEqual([]);
+        // п20.2 (ADR-0165 п. 3): низькі перешкоди огляду не закривають — без них видно те саме
+        expect(computeVisibleCells({ ...alone, map: { ...s.map, low: undefined } }, from, s.units[0].side)).toEqual(base);
         // Т.18 (ADR-0087): хто бачить клітинку, того з неї видно — для кожної пари клітинок поля
         const cells: Vec2[] = [];
         for (let x = 0; x < s.map.width; x++) for (let y = 0; y < s.map.height; y++) cells.push({ x, y });
@@ -390,7 +402,7 @@ describe('property: бій на випадковому бойовищі', () => 
   // через стіну (1,0), лінія (0,1)→(2,0) — повз неї. Лінія вогню чиста, якщо чиста
   // хоч в один бік, тож стріляють обидва.
   it('лінія вогню чиста, якщо чиста хоч в один бік: оперативник і демон стріляють одне в одного', () => {
-    const s = build({ w: 5, h: 5, walls: [1], spots: [2, 5], seed: 0 }); // стіна (1,0), p0 у (2,0), a1 у (0,1)
+    const s = build({ w: 5, h: 5, walls: [1], spots: [2, 5], seed: 0, low: [] }); // стіна (1,0), p0 у (2,0), a1 у (0,1)
     expect(hasLineOfSight(s, s.units[1].pos, s.units[0].pos, 'alien')).toBe(true);
     expect(hasLineOfSight(s, s.units[0].pos, s.units[1].pos, 'player')).toBe(true);
     expect(resolveAttack(s, 'p0', 'a1', 'snap').shots).toHaveLength(1);

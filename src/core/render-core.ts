@@ -105,6 +105,7 @@ export interface TerrainCell {
   y: number;
   blocked: boolean;
   visible: boolean;
+  low?: boolean; // п20.2 (ADR-0166): низька перешкода — тимчасовий ящик кодом до тайла п20.5
 }
 
 // Детермінований хеш від координат (П6.13, без RNG — ADR-0003): той самий

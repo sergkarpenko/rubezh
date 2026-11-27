@@ -31,6 +31,7 @@
 import {
   RIFLE,
   createGame,
+  isImpassable,
   isInside,
   makeUnit,
   mulberry32,
@@ -91,7 +92,7 @@ function reachable(map: GameMap, from: Vec2, targets: Vec2[]): boolean {
     ] as const) {
       const n = { x: p.x + dx, y: p.y + dy };
       const k2 = n.x + ',' + n.y;
-      if (!isInside(map, n) || map.blocked.has(k2) || seen.has(k2)) continue;
+      if (!isInside(map, n) || isImpassable(map, n) || seen.has(k2)) continue;
       seen.add(k2);
       queue.push(n);
     }
@@ -100,6 +101,40 @@ function reachable(map: GameMap, from: Vec2, targets: Vec2[]): boolean {
 }
 
 const MAP_SEED_ATTEMPTS = 50;
+
+// п20.2 (ADR-0165 п. 3, 11; ADR-0166): низькі перешкоди мапи місії — другий прохід RNG
+// після стін (окремий генератор від сіду мапи, стіни не зсуваються): клітинка поруч зі
+// стіною (8 сусідів) — з імовірністю LOW_NEAR_WALL, решта — LOW_FAR (разом ≈ 5 % клітинок).
+// Чисті зони висадки, НЛО, турелей і clear, клітинки зони ворогів — без перешкод.
+export const LOW_NEAR_WALL = 0.08;
+export const LOW_FAR = 0.04;
+const LOW_SALT = 0x5eed_10a7;
+const LOW_ATTEMPTS = 8;
+
+function lowObstacles(map: GameMap, seed: number, keep: ReadonlySet<string>): Set<string> {
+  const rng = mulberry32((seed ^ LOW_SALT) >>> 0);
+  const low = new Set<string>();
+  for (let y = 0; y < map.height; y++) {
+    for (let x = 0; x < map.width; x++) {
+      const k2 = x + ',' + y;
+      let nearWall = false;
+      for (let dy = -1; dy <= 1 && !nearWall; dy++)
+        for (let dx = -1; dx <= 1; dx++) if ((dx !== 0 || dy !== 0) && map.blocked.has(x + dx + ',' + (y + dy))) nearWall = true;
+      const roll = rng(); // один кидок на клітинку — споживання RNG не залежить від мапи
+      if (map.blocked.has(k2) || keep.has(k2)) continue;
+      if (roll < (nearWall ? LOW_NEAR_WALL : LOW_FAR)) low.add(k2);
+    }
+  }
+  return low;
+}
+
+// Клітинки без низьких перешкод: 3 × 3 навколо кожного центру і клітинки зони ворогів.
+function keepClear(centers: readonly Vec2[], zone: readonly Vec2[]): Set<string> {
+  const keep = new Set<string>();
+  for (const c of centers) for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) keep.add(c.x + dx + ',' + (c.y + dy));
+  for (const c of zone) keep.add(c.x + ',' + c.y);
+  return keep;
+}
 
 // Бойовище місії: makeTestMap зі зв'язністю — усі точки висадки і НЛО
 // досяжні з першої точки висадки (інакше місію неможливо виграти).
@@ -119,7 +154,15 @@ export function connectedMap(
       for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) blocked.delete(clear.x + dx + ',' + (clear.y + dy));
       map = { ...map, blocked };
     }
-    if (reachable(map, SQUAD_SPAWN[0], [...SQUAD_SPAWN.slice(1), ...enemyZone])) return map;
+    const targets = [...SQUAD_SPAWN.slice(1), ...enemyZone];
+    if (!reachable(map, SQUAD_SPAWN[0], targets)) continue;
+    // п20.2: низькі перешкоди не мають розривати зв'язність — інакше інший набір, потім без них
+    const keep = keepClear([{ x: 2, y: 2 }, { x: 17, y: 2 }, ...(clear ? [clear] : [])], enemyZone);
+    for (let j = 0; j < LOW_ATTEMPTS; j++) {
+      const withLow: GameMap = { ...map, low: lowObstacles(map, seed + i + j * 0x9e37, keep) };
+      if (reachable(withLow, SQUAD_SPAWN[0], targets)) return withLow;
+    }
+    return map;
   }
   throw new Error('Не вдалося згенерувати зв’язне бойовище для місії');
 }
@@ -185,7 +228,15 @@ export function createMission(geo: GeoState, ufoId: string, opts: CreateMissionO
   const n = ALIENS_PER_KIND[ufo.kind];
   const aliens: Unit[] = makeEnemies(enemyMix(kindsForThreat(opts.threat ?? 0), n, seed), ALIEN_SPAWN);
 
-  const state = createGame({ map, units: [...squad, ...aliens], rng, items: opts.items, evacZone: SQUAD_SPAWN, roles: opts.roles });
+  const state = createGame({
+    map,
+    units: [...squad, ...aliens],
+    rng,
+    items: opts.items,
+    evacZone: SQUAD_SPAWN,
+    roles: opts.roles,
+    cover: true, // п20.2 (ADR-0165 п. 10): укриття в шансі — бої місій
+  });
   return { briefing: { ufoId: ufo.id, kind: ufo.kind, aliens: n, minute: geo.minute }, state };
 }
 
