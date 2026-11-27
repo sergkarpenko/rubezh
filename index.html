@@ -1399,9 +1399,8 @@
       }
 
       /* П12.2/П14.7 (ADR-0065/0072): стартовий екран — вільна повноекранна
-         компоновка без панелі-коробки; фон — обраний власником кадр Б1
-         «Лінія оборони» (assets/start-bg.webp, ставить screens.ts з
-         vite-імпорту), cover + center; фолбек без ассета (headless/офлайн)
+         компоновка без панелі-коробки; фон — assets/start-bg.webp (з Т.221, ADR-0177 — «Б. Портал над
+         затокою», до того — кадр Б1 «Лінія оборони»; ставить screens.ts з vite-імпорту), cover + center; фолбек без ассета (headless/офлайн)
          — суцільний колір #060a14, той самий вигляд без зображення */
       #start-screen {
         position: fixed;
@@ -1593,7 +1592,8 @@
       }
       /* П14.7: ассет лого з м'яким фейдером країв (альфа → 0 по периметру,
          рампа 96 px, sstep) — прямокутні рамки розчиняються у темному
-         просвіті кільця; border-radius не потрібен */
+         просвіті кільця; border-radius не потрібен. Т.221 (ADR-0177): новий логотип — RGBA, тло сирця
+         прозоре за яскравістю, рампа по краю вставки (scripts/assets/convert_start_t221.py) */
       .start-logo-img {
         display: block;
         width: 100%;
@@ -2008,6 +2008,125 @@
         border-radius: 6px;
         padding: 4px 8px;
         font: inherit;
+      }
+      /* Т.221 (п21.3, ADR-0177; рішення власника п21.1 «А. Нічний мегаполіс і Розрив» — кнопки й картки
+         «Нової партії» в тому ж стилі): вікно — темне скло зі скошеними кутами і неоновою рамкою всередині,
+         картки складності й кнопки — як меню стартового екрана (скошені кути, бірюзова риска, великі літери),
+         «Стартувати» — бурштинова головна дія, як «Нова партія». На main вікно без тла (div.panel не має
+         стилю панелі) — тепер своє тло і поле 12 / 18 px; картки й кнопки — тих самих розмірів; id і
+         поведінка — без змін */
+      #new-game-dialog {
+        background: rgba(6, 6, 14, 0.78);
+        align-items: flex-start; /* низьке вікно (568 × 320): від верху з прокруткою, а не обрізано згори — як Т.218 */
+      }
+      #new-game-dialog .screen-dialog {
+        /* поле всередині ширини: вміст — 380 px, як на main (на вузькому вікні — не ширше за вікно);
+           поле 12 px згори й знизу — на 667 × 375 вікно вміщується без прокрутки, як на main */
+        box-sizing: border-box;
+        max-width: 416px;
+        margin: auto;
+        padding: 12px 18px;
+        background:
+          linear-gradient(160deg, rgba(0, 229, 255, 0.1), transparent 40%, transparent 65%, rgba(255, 46, 136, 0.12)), rgba(8, 9, 18, 0.95);
+        clip-path: polygon(18px 0, 100% 0, 100% calc(100% - 18px), calc(100% - 18px) 100%, 0 100%, 0 18px);
+        box-shadow:
+          inset 0 0 0 1px rgba(0, 229, 255, 0.55),
+          inset 0 0 28px rgba(0, 229, 255, 0.12),
+          inset 0 -1px 0 rgba(255, 46, 136, 0.6);
+      }
+      #new-game-dialog h2 {
+        color: #7df3ff;
+        letter-spacing: 0.18em;
+        text-shadow: 0 0 10px rgba(0, 229, 255, 0.6);
+      }
+      #new-game-dialog .preset-card {
+        position: relative;
+        border: none;
+        border-radius: 0;
+        background:
+          linear-gradient(90deg, rgba(0, 229, 255, 0.14), rgba(6, 14, 26, 0.9) 30%, rgba(6, 14, 26, 0.9) 75%, rgba(255, 46, 136, 0.12)),
+          rgba(6, 10, 20, 0.8);
+        clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
+        box-shadow: inset 0 0 0 1px rgba(0, 229, 255, 0.3);
+      }
+      #new-game-dialog .preset-card:has(input:checked) {
+        box-shadow:
+          inset 0 0 0 1px #7df3ff,
+          inset 0 0 18px rgba(0, 229, 255, 0.35);
+      }
+      #new-game-dialog .preset-card:has(input:checked)::before {
+        content: '';
+        position: absolute;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        width: 4px;
+        background: #00e5ff;
+        box-shadow: 0 0 12px #00e5ff;
+      }
+      #new-game-dialog .preset-card:has(input:focus-visible) {
+        box-shadow:
+          inset 0 0 0 2px #ffffff,
+          inset 0 0 18px rgba(0, 229, 255, 0.35);
+      }
+      #new-game-dialog .preset-name {
+        color: #dff9ff;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+      }
+      #new-game-dialog .preset-desc {
+        color: #a9bdd2;
+      }
+      #new-game-dialog .dialog-more summary {
+        color: #7fdcff;
+      }
+      #new-game-dialog .dialog-actions button {
+        position: relative;
+        border-color: transparent;
+        border-radius: 0;
+        color: #dff9ff;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        background:
+          linear-gradient(90deg, rgba(0, 229, 255, 0.24), rgba(6, 14, 26, 0.84) 35%, rgba(6, 14, 26, 0.84) 70%, rgba(255, 46, 136, 0.2)),
+          rgba(6, 10, 20, 0.7);
+        clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
+        box-shadow: inset 0 0 0 1px rgba(0, 229, 255, 0.6);
+      }
+      #new-game-dialog .dialog-actions #btn-new-game-start {
+        background: linear-gradient(90deg, #ffe0a6, #ffc76b 35%, #e08a1a);
+        color: #1a1204;
+        box-shadow:
+          inset 0 1px 0 rgba(255, 255, 255, 0.45),
+          inset 0 0 14px rgba(255, 243, 214, 0.35);
+      }
+      @media (hover: hover) {
+        #new-game-dialog .dialog-actions button:hover {
+          color: #fff;
+          box-shadow:
+            inset 0 0 0 1px #7df3ff,
+            inset 0 0 22px rgba(0, 229, 255, 0.45);
+        }
+        #new-game-dialog .dialog-actions #btn-new-game-start:hover {
+          color: #1a1204;
+          filter: brightness(1.08);
+          box-shadow:
+            inset 0 1px 0 rgba(255, 255, 255, 0.55),
+            inset 0 0 18px rgba(255, 243, 214, 0.5);
+        }
+      }
+      #new-game-dialog .dialog-actions button:focus-visible {
+        outline: none;
+        box-shadow:
+          inset 0 0 0 2px #ffffff,
+          inset 0 0 18px rgba(0, 229, 255, 0.4);
+      }
+      /* аудит PR #540: правило бурштинової кнопки (#id) сильніше за :focus-visible вище — своє біле кільце;
+         обидва правила фокусу — після наведення: миша над кнопкою не ховає кільце фокусу з клавіатури */
+      #new-game-dialog .dialog-actions #btn-new-game-start:focus-visible {
+        box-shadow:
+          inset 0 0 0 2px #ffffff,
+          inset 0 0 14px rgba(255, 243, 214, 0.35);
       }
       /* Т.218: «Сценарії для перевірки» — посилання в рядку версії і список віх */
       .start-link {

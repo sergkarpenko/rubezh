@@ -88,11 +88,11 @@ function startScreenHtml(version: string): string {
 function newGameDialogHtml(): string {
   // Т.218 (відгук власника 27.11.2026: «сід та дропдаун, не зручно, не зрозуміло»; рішення —
   // картки складності): радіогрупа карток з описом, що змінює пресет (числа — DIFFICULTY_MULTIPLIERS);
-  // сід — у «Додатково» з кнопкою «Випадковий». Перемальовування екрана — Фаза 21.
+  // сід — у «Додатково» з кнопкою «Випадковий». Т.221 (ADR-0177): вигляд — у стилі старту (index.html).
   const card = (value: DifficultyPreset, name: string, desc: string): string =>
     '<label class="preset-card">' +
     `<input type="radio" name="new-game-preset" value="${value}"${value === 'норма' ? ' checked' : ''} />` +
-    `<span class="preset-name">${name}</span><span class="preset-desc">${desc}</span></label>`;
+    `<span class="preset-name">${name}</span><span class="preset-desc">${keepMultiplier(desc)}</span></label>`;
   return (
     '<div class="panel screen-dialog">' +
     '<h2>Нова партія</h2>' +
@@ -112,6 +112,10 @@ function newGameDialogHtml(): string {
     '</div>'
   );
 }
+
+// Т.221 (кандидат 209 (ж)): множник «×1,2» / «×0,9» не переноситься окремим рядком на телефоні —
+// нерозривний пробіл перед «×» (текст власника той самий, змінюється лише перенос).
+export const keepMultiplier = (text: string): string => text.replace(/ ×/g, '\u00a0×');
 
 // Т.218: описи карток складності (тексти власника дослівно).
 export const PRESET_TEXT: Readonly<Record<DifficultyPreset, string>> = {
@@ -184,10 +188,9 @@ export function createScreens(deps: ScreensDeps): Screens {
   const topbar = el('topbar');
   const layout = el('layout');
   startScreen.innerHTML = startScreenHtml(deps.version);
-  // П14.7 (ADR-0072/0071): фон стартового екрана — обраний власником кадр
-  // Б1 «Лінія оборони» (assets/start-bg.webp; конвертація з JPG власника —
-  // один цикл стиснення WebP q92, PSNR 46.5 дБ проти оригіналу, розмір
-  // 1376×768 без звуження). URL — з vite-імпорту (base-аварійний); це
+  // П14.7 (ADR-0072/0071): фон стартового екрана — assets/start-bg.webp; з Т.221 (ADR-0177) — картина
+  // Gemini «Б. Портал над затокою» (scripts/assets/convert_start_t221.py, WebP q82, 1376×768), до того —
+  // кадр Б1 «Лінія оборони». URL — з vite-імпорту (base-аварійний); це
   // CSS-фон, не Image-завантаження (прецедент П13.4): headless/офлайн/без
   // файла бачать суцільний колір #060a14 з CSS (фолбек — той самий вигляд
   // без зображення, тести від ассета не залежать).

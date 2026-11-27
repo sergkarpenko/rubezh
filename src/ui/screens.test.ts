@@ -5,7 +5,7 @@
 // rAF-анімацій (idle → 0 перерисовок, ADR-0029). Повний флоу із сейвами —
 // у src/main.ui.test.ts (там живе панель збереження).
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { CONTINUE_FAILED_TEXT, PRESET_TEXT, SCENARIO_FAILED_TEXT, createScreens, type ScreensDeps } from './screens';
+import { CONTINUE_FAILED_TEXT, PRESET_TEXT, SCENARIO_FAILED_TEXT, createScreens, keepMultiplier, type ScreensDeps } from './screens';
 
 // Т.218: складність у «Новій партії» — радіогрупа карток (обрана / вибрати)
 function presetOf(): string | undefined {
@@ -146,11 +146,15 @@ describe('П12.2: діалог «Нова партія» — сід і скла�
     btn('btn-start-new').click();
     const cards = [...document.querySelectorAll<HTMLElement>('#new-game-preset .preset-card')];
     expect(cards.map((c) => c.querySelector('.preset-name')?.textContent)).toEqual(['Легкий', 'Норма', 'Складний']);
-    expect(cards.map((c) => c.querySelector('.preset-desc')?.textContent)).toEqual([
+    // тексти власника (Т.218); Т.221 — нерозривний пробіл перед «×» (кандидат 209 (ж))
+    expect(cards.map((c) => c.querySelector('.preset-desc')?.textContent?.replace(/\u00a0/g, ' '))).toEqual([
       'Зондів менше (×0,7), бійці міцніші (HP ×1,2), наука вдвічі дешевша, дотація, премії й найм ×1,2',
       'Базові числа гри',
       'Бійці слабші (HP ×0,9), дотація, премії й найм ×0,9',
-    ]); // тексти власника (Т.218)
+    ]);
+    // аудит PR #540: явно — нерозривний пробіл перед множником у «Легкому» і «Складному», у «Нормі» множника немає
+    expect(cards.map((c) => /\u00a0×/.test(c.querySelector('.preset-desc')?.textContent ?? ''))).toEqual([true, false, true]);
+    expect(cards.map((c) => / ×/.test(c.querySelector('.preset-desc')?.textContent ?? ''))).toEqual([false, false, false]);
     expect(PRESET_TEXT['норма']).toBe('Базові числа гри');
     expect($('new-game-seed').closest('details')?.querySelector('summary')?.textContent).toBe('Додатково');
     const rnd = vi.spyOn(Math, 'random').mockReturnValue(0.5);
@@ -160,6 +164,13 @@ describe('П12.2: діалог «Нова партія» — сід і скла�
       rnd.mockRestore();
     }
     expect(($('new-game-seed') as HTMLInputElement).value).toBe('500000');
+  });
+
+  it('Т.221: keepMultiplier — нерозривний пробіл перед кожним «×», решта тексту без змін', () => {
+    expect(keepMultiplier('премії й найм ×1,2')).toBe('премії й найм\u00a0×1,2');
+    expect(keepMultiplier('(HP ×0,9), найм ×0,9')).toBe('(HP\u00a0×0,9), найм\u00a0×0,9');
+    expect(keepMultiplier('Базові числа гри')).toBe('Базові числа гри');
+    expect(keepMultiplier('×2 на початку')).toBe('×2 на початку'); // без пробілу перед — без змін
   });
 
   it('після старту партії діалоги приховані (глибина навігації — один діалог, ADR-0065)', () => {

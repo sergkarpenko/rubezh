@@ -1745,6 +1745,67 @@ test('Т.61: екран перемоги і рядок-пояснення ста
     await page.setViewportSize({ width: 1440, height: 900 });
   });
 
+  await test.step('Т.221 (ADR-0177): «Нова партія» в стилі старту; множник не переноситься окремим рядком; вікно — у межах', async () => {
+    const look = (): Promise<Record<string, unknown>> =>
+      page.evaluate(() => {
+        const panel = getComputedStyle(document.querySelector('#new-game-dialog .screen-dialog')!);
+        const card = getComputedStyle(document.querySelector('#new-game-preset .preset-card')!);
+        const start = getComputedStyle(document.getElementById('btn-new-game-start')!);
+        const cancel = getComputedStyle(document.getElementById('btn-new-game-cancel')!);
+        return {
+          panel: [panel.clipPath.startsWith('polygon'), panel.backgroundColor !== 'rgba(0, 0, 0, 0)'],
+          card: [card.clipPath.startsWith('polygon'), card.borderRadius],
+          start: [start.backgroundImage.includes('linear-gradient'), start.color, start.textTransform],
+          cancel: [cancel.clipPath.startsWith('polygon'), cancel.textTransform],
+          nbsp: [...document.querySelectorAll('#new-game-preset .preset-desc')].map((d) => /\u00a0×/.test(d.textContent ?? '')),
+        };
+      });
+    // аудит PR #540: і низ вікна досяжний прокруткою — «Стартувати» видно повністю після прокрутки до кінця
+    const fits = (): Promise<[boolean, boolean, boolean]> =>
+      page.evaluate(() => {
+        const o = document.getElementById('new-game-dialog')!;
+        const d = document.querySelector('#new-game-dialog .screen-dialog')!.getBoundingClientRect();
+        const top = [d.top >= 0 && d.left >= 0 && d.right <= innerWidth, o.scrollWidth <= innerWidth];
+        o.scrollTop = o.scrollHeight;
+        const b = document.getElementById('btn-new-game-start')!.getBoundingClientRect();
+        const bottom = b.top >= 0 && b.bottom <= innerHeight;
+        o.scrollTop = 0;
+        return [top[0], top[1], bottom];
+      });
+    await page.setViewportSize({ width: 1366, height: 768 });
+    await page.locator('#btn-start-new').click();
+    expect(await look()).toEqual({
+      panel: [true, true],
+      card: [true, '0px'],
+      start: [true, 'rgb(26, 18, 4)', 'uppercase'],
+      cancel: [true, 'uppercase'],
+      nbsp: [true, false, true], // «Норма» — без множника
+    });
+    // вимір Т.221: вікно в межах і без прокрутки вбік, на 568 × 320 — від верху (на main верх обрізався б на -11 px
+    // з полем панелі); телефон портрет і альбом — як на main
+    for (const size of [
+      { width: 1366, height: 768 },
+      { width: 320, height: 480 },
+      { width: 568, height: 320 },
+      { width: 667, height: 375 },
+    ]) {
+      await page.setViewportSize(size);
+      expect(await fits(), `«Нова партія» ${size.width} × ${size.height}`).toEqual([true, true, true]);
+    }
+    // аудит PR #540: фокус з клавіатури на «Стартувати» — біле кільце всередині (правило #id не перекриває його)
+    await page.setViewportSize({ width: 1366, height: 768 });
+    await page.locator('#btn-new-game-start').focus();
+    await page.keyboard.press('Shift+Tab');
+    await page.keyboard.press('Tab');
+    // перехід box-shadow набору Т.124 — чекати кінцевого стану (expect.poll)
+    await expect
+      .poll(() => page.locator('#btn-new-game-start').evaluate((b) => getComputedStyle(b).boxShadow))
+      .toContain('rgb(255, 255, 255) 0px 0px 0px 2px inset');
+    await page.locator('#btn-new-game-cancel').click();
+    await expect(page.locator('#new-game-dialog')).toBeHidden();
+    await page.setViewportSize({ width: 1440, height: 900 });
+  });
+
   await test.step('Т.94: малі й низькі вікна без банера — нічого не накрито, усе у вікні, без прокрутки', async () => {
     // вище за 760 px — розкладка П14.7 без змін: меню на 48 px над низом екрана з відступом 16 px
     await page.setViewportSize({ width: 1366, height: 768 });
