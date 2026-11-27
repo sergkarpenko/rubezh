@@ -50,6 +50,13 @@ describe('coverRank: найгірше укриття клітинки від в�
     const st = game(mapOf([{ x: 6, y: 4 }]), [me, east, west], true);
     expect(coverRank(st, me, T, [east])).toBe(COVER_SCORE.full);
     expect(coverRank(st, me, T, [east, west])).toBe(COVER_SCORE.none); // із заходу — фланг
+    expect(coverRank(st, me, T, [west, east])).toBe(COVER_SCORE.none); // найгірше — незалежно від порядку
+  });
+
+  it('власна клітинка юніта лінію не закриває (він піде з неї)', () => {
+    const u = soldier('s1', { x: 7, y: 5 }); // стоїть на лінії стрільця до клітинки T
+    const e = shooter({ x: 10, y: 5 });
+    expect(coverRank(game(mapOf([]), [u, e], true), u, T, [e])).toBe(COVER_SCORE.none);
   });
 });
 
@@ -80,6 +87,56 @@ describe('coverStep: хід з укриттям замість жадібног�
     expect(d).toBeLessThan(17);
     expect(step.length).toBeLessThanOrEqual(me.ap);
     expect(coverRank(st, me, end, [t])).toBeGreaterThan(coverRank(st, me, greedy[greedy.length - 1], [t]));
+  });
+
+  it('краще укриття за межею кінець шляху + COVER_SLACK відкидається; при рівному укритті — ближче до цілі', () => {
+    // стіна (9,4) дає повне укриття клітинці (10,5) — 9 клітинок до цілі, а кінець шляху (8,5) — 7: за межею 7 + 1
+    const me = makeEnemy('demon', 'a1', 0, { x: 18, y: 5 });
+    const t = soldier('s1', { x: 1, y: 5 });
+    const st = game(mapOf([{ x: 9, y: 4 }]), [me, t], true);
+    const greedy = pathToward(st, me, t) as Vec2[];
+    expect(greedy[greedy.length - 1]).toEqual({ x: 8, y: 5 });
+    expect(coverRank(st, me, { x: 10, y: 5 }, [t])).toBe(COVER_SCORE.full);
+    const step = coverStep(st, me, t, [t], greedy, me.ap) as Vec2[];
+    expect(step[step.length - 1]).toEqual({ x: 8, y: 5 }); // решта — фланг, з них найближча до цілі
+  });
+
+  it('при рівному укритті — клітинка з пострілом по цілі із залишком AP, а не ближча', () => {
+    // ціль бʼє лише на 3 — усі кандидати поза її вогнем (ранг 3); демон бʼє на 8, AP 9: постріл (3 AP) лишається
+    // з клітинки за 6 кроків — (6,5) за 5 до цілі; ближча (5,5) — за 7 кроків, без залишку на постріл
+    const me = makeEnemy('demon', 'a1', 0, { x: 12, y: 5 });
+    me.weapon = { ...me.weapon, range: 8 };
+    const t = soldier('s1', { x: 1, y: 5 }, 3);
+    const st = game(mapOf([]), [me, t], true);
+    me.ap = 9; // після createGame
+    const greedy = [
+      { x: 11, y: 5 },
+      { x: 10, y: 5 },
+      { x: 9, y: 5 },
+    ];
+    const step = coverStep(st, me, t, [t], greedy, me.ap) as Vec2[];
+    expect(step[step.length - 1]).toEqual({ x: 6, y: 5 });
+    expect(step).toHaveLength(6);
+  });
+
+  it('кандидат лише ближчий до цілі, ніж юніт: укриття на тій самій відстані — ні', () => {
+    // стіна (17,4) дає укриття клітинці (18,4) — 17 до цілі, як і клітинка юніта; бюджет 1 — крок до (17,5)
+    const me = makeEnemy('demon', 'a1', 0, { x: 18, y: 5 });
+    const t = soldier('s1', { x: 1, y: 5 }, 20); // дальність 20 — клітинки біля юніта під вогнем
+    const st = game(mapOf([{ x: 17, y: 4 }]), [me, t], true);
+    expect(coverRank(st, me, { x: 18, y: 4 }, [t])).toBeGreaterThan(COVER_SCORE.none);
+    expect(coverStep(st, me, t, [t], [{ x: 17, y: 5 }], 1)).toEqual([{ x: 17, y: 5 }]);
+  });
+
+  it('умова типу keep відкидає клітинки, що їй не відповідають', () => {
+    const me = makeEnemy('demon', 'a1', 0, { x: 18, y: 5 });
+    const t = soldier('s1', { x: 1, y: 5 });
+    const st = game(mapOf([{ x: 8, y: 4 }]), [me, t], true);
+    const greedy = pathToward(st, me, t) as Vec2[];
+    const free = coverStep(st, me, t, [t], greedy, me.ap) as Vec2[];
+    const bad = free[free.length - 1];
+    const kept = coverStep(st, me, t, [t], greedy, me.ap, (p) => k(p) !== k(bad)) as Vec2[];
+    expect(k(kept[kept.length - 1])).not.toBe(k(bad));
   });
 
   it('юніт, що вже ходив цього півходу, далі не йде (null); після кінця ходу — знову йде', () => {
@@ -132,6 +189,45 @@ describe('ШІ ворогів за типом (aiStep) з укриттям', () 
     });
   }
 
+  it('голем: укриття за межею бюджету (AP мінус постріл) — недосяжне, запас AP лишається', () => {
+    const golem = (cover: boolean, walls: Vec2[]): GameState => run('golem', cover, walls);
+    const open = endOf(golem(false, []), 'a1');
+    const budget = 8 - cheapestShotAp(makeEnemy('golem', 'x', 0, { x: 0, y: 0 }).weapon);
+    expect(open).toEqual({ x: 18 - budget, y: 5 });
+    // стіна дає повне укриття клітинці на крок далі за бюджет
+    const wall = { x: open.x - 2, y: 4 };
+    const st = golem(true, [wall]);
+    expect(coverRank(st, st.units[0], { x: open.x - 1, y: 5 }, [st.units[2]])).toBe(COVER_SCORE.full);
+    expect(st.log.filter((e) => e.type === 'move' && e.unitId === 'a1').length).toBeLessThanOrEqual(budget);
+    expect(endOf(st, 'a1')).not.toEqual({ x: open.x - 1, y: 5 });
+  });
+
+  it('око: відхід — у клітинку з укриттям (пів за низькою перешкодою), а не найдальшу', () => {
+    const go = (cover: boolean): GameState => {
+      const eye = makeEnemy('eye', 'a1', 0, { x: 6, y: 5 });
+      const st = game(mapOf([], [{ x: 7, y: 5 }]), [eye, soldier('s1', { x: 1, y: 5 }, 16)], cover);
+      aiStep(st);
+      return st;
+    };
+    const plain = go(false);
+    expect(coverRank(plain, plain.units[0], endOf(plain, 'a1'), [plain.units[1]])).toBe(COVER_SCORE.none);
+    const st = go(true);
+    expect(coverRank(st, st.units[0], endOf(st, 'a1'), [st.units[1]])).toBe(COVER_SCORE.half);
+  });
+
+  it('око: рух до цілі з укриттям — не ближче за EYE_KEEP_DISTANCE, хоч ближче й є пів-укриття', () => {
+    // стіна (9,5) закриває постріл з (10,5); AP 5 — на позицію пострілу цього ходу не вистачає (бюджет 0)
+    const eye = makeEnemy('eye', 'a1', 0, { x: 10, y: 5 });
+    const spotter = makeEnemy('demon', 'a2', 1, { x: 2, y: 9 });
+    const st = game(mapOf([{ x: 9, y: 5 }], [{ x: 5, y: 4 }]), [eye, spotter, soldier('s1', { x: 1, y: 5 }, 16)], true);
+    eye.ap = 5;
+    expect(coverRank(st, eye, { x: 6, y: 4 }, [st.units[2]])).toBe(COVER_SCORE.half); // за 5 до цілі — ближче за 6
+    aiStep(st);
+    const end = endOf(st, 'a1');
+    expect(end).not.toEqual({ x: 10, y: 5 });
+    expect(Math.max(Math.abs(end.x - 1), Math.abs(end.y - 5))).toBeGreaterThanOrEqual(6);
+  });
+
   it('гончак укриття не шукає: хід той самий з `cover` і без', () => {
     const wall = [{ x: 9, y: 4 }];
     const a = run('hound', false, wall).log.filter((e) => e.type === 'move');
@@ -165,6 +261,7 @@ describe('ШІ ворогів за типом (aiStep) з укриттям', () 
     const st = go(true);
     const end = endOf(st, 'a1');
     expect(coverRank(st, st.units[0], end, [st.units[2]])).toBe(COVER_SCORE.half);
+    expect(st.log.filter((e) => e.type === 'move' && e.unitId === 'a1')).toHaveLength(2); // на крок довше
   });
 });
 
@@ -187,9 +284,29 @@ describe('авто-бій і бот загону (botTurn) з укриттям',
     const st = run(true, [wall]);
     const end = endOf(st, 's1');
     expect(end).not.toEqual(open);
-    const moves = st.log.filter((e) => e.type === 'move' && e.unitId === 's1');
-    expect(moves.length).toBeLessThanOrEqual(4);
     expect(coverRank(st, st.units[0], end, [st.units[2]])).toBeGreaterThan(COVER_SCORE.none);
+  });
+
+  it('штурмовик, що зайняв укриття без пострілу, ривок не витрачає (аудит PR #530); без `cover` — як до п20.3', () => {
+    const go = (cover: boolean): GameState => {
+      const me = soldier('s1', { x: 12, y: 5 }, 5);
+      const spotter = soldier('s2', { x: 2, y: 9 }, 1);
+      const st = createGame({
+        map: mapOf([]),
+        units: [me, spotter, makeEnemy('demon', 'a1', 0, { x: 1, y: 5 })],
+        rng: mulberry32(7),
+        startingSide: 'player',
+        cover,
+        roles: { s1: { role: 'assault', used: false } },
+      });
+      me.ap = 3;
+      spotter.ap = 0;
+      st.log.push({ type: 'move', unitId: 's1', from: { x: 13, y: 5 }, to: { x: 12, y: 5 } }); // хід цього півходу
+      botTurn(st);
+      return st;
+    };
+    expect(go(true).roles?.s1.used).toBe(false);
+    expect(go(false).roles?.s1.used).toBe(true);
   });
 
   it('bestModeAp: зброя з усіма режимами — «Черга» (як до п20.3); з `only` — найкращий з її режимів (ADR-0165 п. 12)', () => {

@@ -46,7 +46,7 @@ import {
   type Weapon,
 } from './combat';
 import { findPath, visibleEnemies } from './map';
-import { MODE_PRIORITY, bestPathToNeighbors, bestShootMode, coverStep, nearestEnemy, pathToward } from './ai-utils';
+import { MODE_PRIORITY, bestPathToNeighbors, bestShootMode, coverStep, movedThisTurn, nearestEnemy, pathToward } from './ai-utils';
 import { aiStep } from './ai';
 import { ALIEN_SPAWN, SQUAD_SPAWN, missionOutcome } from './mission';
 
@@ -159,7 +159,13 @@ function soldierStep(state: GameState, u: Unit, evac?: EvacPolicy, hold = false)
   // Ривок: ворога видно, а на чергу AP бракує — +4 AP, далі звичайний вибір
   // п20.3 (ADR-0165 п. 12, ADR-0167 п. 6): «черга» — найкращий режим самої зброї (зброя з `only`
   // без черги — її найкращий режим); зброя з усіма трьома — auto, як до п20.3.
-  if (u.ap < bestModeAp(u.weapon) && roleActionBlock(state, u.id, 'assault') === null) {
+  // Аудит PR #530: з укриттям солдат, що вже ходив цього півходу, далі не йде (coverStep → null) —
+  // ривок без пострілу був би даремний; без `cover` — як до п20.3.
+  if (
+    u.ap < bestModeAp(u.weapon) &&
+    roleActionBlock(state, u.id, 'assault') === null &&
+    !(state.cover && !mode && movedThisTurn(state, u))
+  ) {
     useDash(state, u.id);
     return true;
   }
