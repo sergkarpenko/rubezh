@@ -88,25 +88,25 @@ describe('п19.2: geoEventText — довіра і вихід регіону', (
   it.each([
     [
       { type: 'region_trust', region: 'north', delta: -30, trust: 70, reason: 'probe_left', minute: 0 },
-      '▼ Довіра «Північ» −30 → 70: зонд відлетів без бою',
+      '▼ Довіра «Шпилі» −30 → 70: зонд відлетів без бою',
       'lose',
     ],
     [
       { type: 'region_trust', region: 'south', delta: -15, trust: 0, reason: 'probe_left', minute: 0 },
-      '▼ Довіра «Південь» −15 → 0: зонд відлетів без бою',
+      '▼ Довіра «Нетрі» −15 → 0: зонд відлетів без бою',
       'lose',
     ],
     [
       { type: 'region_trust', region: 'east', delta: 10, trust: 80, reason: 'mission_won', minute: 0 },
-      '▲ Довіра «Схід» +10 → 80: місію зачищено',
+      '▲ Довіра «Промзона» +10 → 80: місію зачищено',
       'win',
     ],
     [
       { type: 'region_trust', region: 'west', delta: 5, trust: 100, reason: 'mission_won', minute: 0 },
-      '▲ Довіра «Захід» +5 → 100: місію зачищено',
+      '▲ Довіра «Порт» +5 → 100: місію зачищено',
       'win',
     ],
-    [{ type: 'region_out', region: 'north', minute: 0 }, '✗ Регіон «Північ» вийшов — його частки дотації більше немає', 'lose'],
+    [{ type: 'region_out', region: 'north', minute: 0 }, '✗ Район «Шпилі» вийшов — його частки дотації більше немає', 'lose'],
   ] as const)('%o', (e, text, cls) => {
     expect(geoEventText(evGeo(e), none)).toEqual({ text, cls });
   });
@@ -120,7 +120,7 @@ describe('п19.3: geoEventText і workshopEventText — кілька перех�
   it.each([
     [
       { type: 'intercept_start', probeId: 'probe7', ...p, fighter: 2, region: 'east' },
-      '✦ Перехоплювач 2 піднявся з ангара «Схід» на зонд Розриву №7',
+      '✦ Перехоплювач 2 піднявся з ангара «Промзона» на зонд Розриву №7',
       '',
     ],
     [{ type: 'intercept_start', probeId: 'probe7', ...p }, '✦ Перехоплення: перехоплювач піднявся на зонд Розриву №7', ''],
@@ -156,25 +156,25 @@ describe('п19.3: geoEventText і workshopEventText — кілька перех�
       '✦ Зонд Розриву №7 зник з трекінгу — перехоплення перервано',
       '',
     ],
-    [{ type: 'fighter_returned', ...p, fighter: 2, region: 'east' }, '✦ Перехоплювач 2 повернувся в ангар «Схід»', ''],
-    [{ type: 'fighter_returned', ...p, fighter: 1, region: 'north' }, '✦ Перехоплювач 1 повернувся в ангар «Північ»', ''],
+    [{ type: 'fighter_returned', ...p, fighter: 2, region: 'east' }, '✦ Перехоплювач 2 повернувся в ангар «Промзона»', ''],
+    [{ type: 'fighter_returned', ...p, fighter: 1, region: 'north' }, '✦ Перехоплювач 1 повернувся в ангар «Шпилі»', ''],
     [{ type: 'fighter_returned', ...p }, '✦ Перехоплювач повернувся у вузол «Рубіж»', ''],
     [{ type: 'fighter_repair_start', minute: 0, fighter: 2 }, '✦ Ремонт перехоплювача 2 оплачено (−50)', 'lose'],
     [{ type: 'fighter_repair_done', minute: 0, fighter: 2 }, '✦ Ремонт перехоплювача 2 завершено — знову боєготовий', 'win'],
     [{ type: 'fighter_repair_done', minute: 0 }, '✦ Ремонт перехоплювача завершено — знову боєготовий', 'win'],
     [
       { type: 'fighter_assigned', from: 'east', to: 'south', minute: 0, fighter: 2 },
-      '✦ Перехоплювач 2 перебазовано: ангар «Схід» → «Південь»',
+      '✦ Перехоплювач 2 перебазовано: ангар «Промзона» → «Нетрі»',
       '',
     ],
-    [{ type: 'fighter_assigned', from: 'north', to: 'west', minute: 0 }, '✦ Перехоплювач перебазовано: ангар «Північ» → «Захід»', ''],
+    [{ type: 'fighter_assigned', from: 'north', to: 'west', minute: 0 }, '✦ Перехоплювач перебазовано: ангар «Шпилі» → «Порт»', ''],
   ] as const)('%o', (e, text, cls) => {
     expect(geoEventText(evGeo(e), none)).toEqual({ text, cls });
   });
 
   it.each([
-    [{ type: 'interceptor_order', region: 'east', ticks: 48 }, '⚑ Кузня: замовлено «Перехоплювач» для ангара «Схід» — 48 тіків', ''],
-    [{ type: 'interceptor_produced', fighter: 2, region: 'east' }, '⚑ Кузня: перехоплювач 2 виготовлено → ангар «Схід» ✓', 'win'],
+    [{ type: 'interceptor_order', region: 'east', ticks: 48 }, '⚑ Кузня: замовлено «Перехоплювач» для ангара «Промзона» — 48 тіків', ''],
+    [{ type: 'interceptor_produced', fighter: 2, region: 'east' }, '⚑ Кузня: перехоплювач 2 виготовлено → ангар «Промзона» ✓', 'win'],
     [{ type: 'gun_module_installed', fighter: 2 }, '⚑ Кузня: гарматний модуль встановлено на перехоплювач 2', ''],
     [{ type: 'gun_module_removed', fighter: 3 }, '⚑ Кузня: гарматний модуль знято з перехоплювача 3 → склад', ''],
   ] as const)('%o', (e, text, cls) => {

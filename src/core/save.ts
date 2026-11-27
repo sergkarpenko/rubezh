@@ -236,7 +236,7 @@ interface EconSave {
 // П7.4 (ADR-0032): стан перехоплення в сейві; відсутнє поле (старі сейви) =
 // «боєготовий на базі» — версія формату не зростає.
 // п19.3 (ADR-0161): сейв v4 пише перелік `fighters`; `fighter` — один перехоплювач сейвів v1–v3
-// і v4 до п19.3 (без id і регіону): мігрує в перелік з одного (id 1, регіон «Північ»).
+// і v4 до п19.3 (без id і регіону): мігрує в перелік з одного (id 1, регіон north — «Шпилі»).
 interface InterceptSave {
   rngState: number;
   fighter?: Omit<Fighter, 'id' | 'region'> & Partial<Pick<Fighter, 'id' | 'region'>>;
@@ -616,7 +616,7 @@ function parseSave(json: string): SaveData {
       (ccsv.trustCursor as number) < 0 ||
       (ccsv.trustCursor as number) > st.geo.log.length)
   ) {
-    fail('Пошкоджені дані збереження: регіони');
+    fail('Пошкоджені дані збереження: райони');
   }
   // П9.2: поле hints опційне (старі сейви) — але якщо є, має бути об'єктом.
   if (data.state.hints !== undefined && (typeof data.state.hints !== 'object' || data.state.hints === null)) {
@@ -720,7 +720,7 @@ export function deserializeParty(json: string): Party {
   const sv = data.state.intercept;
   const ic = sv !== undefined ? createIntercept({ rng: mulberry32(sv.rngState) }) : createIntercept(data.seed);
   if (sv !== undefined) {
-    // п19.3 (ADR-0161): v4 — перелік; один перехоплювач старих сейвів — id 1, регіон «Північ» (вузол)
+    // п19.3 (ADR-0161): v4 — перелік; один перехоплювач старих сейвів — id 1, регіон north — «Шпилі» (вузол)
     // (у v1–v3 переліку не буває: поле не читається, крім першого запису за відсутності fighter — урок Т.205)
     if (sv.fighters && data.version === SAVE_VERSION) {
       ic.fighters = sv.fighters.map((f) => ({ ...f, pos: { ...f.pos } }));

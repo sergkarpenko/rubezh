@@ -90,13 +90,13 @@ beforeEach(() => {
 });
 
 describe('п19.4: «Перехоплювачі» — картки', () => {
-  it('один перехоплювач: картка без номера, ангар «Північ», id кнопок без суфікса', () => {
+  it('один перехоплювач: картка без номера, ангар «Шпилі», id кнопок без суфікса', () => {
     const { party, probe } = flyingParty();
     const f = makeFixture(party);
     f.panels.renderFighter();
     const cards = document.querySelectorAll('#fighter .fighter-card');
     expect(cards).toHaveLength(1);
-    expect(cards[0]!.querySelector('.fc-title')!.textContent).toBe('ангар «Північ»');
+    expect(cards[0]!.querySelector('.fc-title')!.textContent).toBe('ангар «Шпилі»');
     expect($text()).toContain('Статус: боєготовий');
     expect(btn('btn-chase-1-' + probe.id).textContent).toBe('✦ Погоня: ' + probe.kind + ' №' + probe.id.replace('probe', ''));
     expect(btn('btn-assign-1').getAttribute('aria-expanded')).toBe('false');
@@ -110,7 +110,7 @@ describe('п19.4: «Перехоплювачі» — картки', () => {
     const f = makeFixture(party);
     f.panels.renderFighter();
     const titles = [...document.querySelectorAll('#fighter .fc-title')].map((e) => e.textContent);
-    expect(titles).toEqual(['Перехоплювач 1 · ангар «Північ»', 'Перехоплювач 2 · ангар «Схід»']);
+    expect(titles).toEqual(['Перехоплювач 1 · ангар «Шпилі»', 'Перехоплювач 2 · ангар «Промзона»']);
     btn('btn-chase-2-' + probe.id).click();
     expect(party.intercept.fighters[1]!.status).toBe('погоня');
     expect(party.intercept.fighters[1]!.targetId).toBe(probe.id);
@@ -182,12 +182,12 @@ describe('п19.4: «Перехоплювачі» — картки', () => {
     f.panels.renderFighter();
     expect(btn('btn-assign-2').getAttribute('aria-expanded')).toBe('true');
     const opts = [...document.querySelectorAll('#fighter-card-2 .assign-row button')].map((b) => b.textContent);
-    expect(opts).toEqual(['→ Захід (вийшов)', '→ Північ', '→ Південь']);
+    expect(opts).toEqual(['→ Порт (район вийшов)', '→ Шпилі', '→ Нетрі']);
     btn('btn-assign-2-south').click();
     expect(party.intercept.fighters[1]!.region).toBe('south');
     f.panels.renderFighter();
     expect(document.querySelector('#fighter-card-2 .assign-row')).toBeNull();
-    expect(document.querySelector('#fighter-card-2 .fc-title')!.textContent).toBe('Перехоплювач 2 · ангар «Південь»');
+    expect(document.querySelector('#fighter-card-2 .fc-title')!.textContent).toBe('Перехоплювач 2 · ангар «Нетрі»');
   });
 
   it('у погоні «Призначити» немає; у тактичному бою кнопки вимкнені', () => {
@@ -249,7 +249,7 @@ describe('аудит PR #523: стан панелі і прокрутка до �
   it('аудит PR #524: зонд, що сів на клітинку ангара, малюється поверх ангара', () => {
     const { party, probe } = flyingParty();
     addFighter(party.intercept, party.geo, 'south');
-    probe.pos = { x: 8, y: 7 }; // клітинка ангара «Південь»
+    probe.pos = { x: 8, y: 7 }; // клітинка ангара «Нетрі»
     probe.status = 'приземлився';
     const f = makeFixture(party);
     f.panels.renderGeo();
@@ -263,7 +263,7 @@ describe('аудит PR #523: стан панелі і прокрутка до �
     expect(probeOp).toBeGreaterThan(hangar);
   });
 
-  it('маркер мапи — і в погоні другого (крило в клітинці погоні; ангар «Південь» лишається)', () => {
+  it('маркер мапи — і в погоні другого (крило в клітинці погоні; ангар «Нетрі» лишається)', () => {
     const { party, probe } = flyingParty();
     const f = makeFixture(party);
     const wings = (): string[] => {
@@ -276,7 +276,7 @@ describe('аудит PR #523: стан панелі і прокрутка до �
     const base = wings().length;
     addFighter(party.intercept, party.geo, 'south');
     expect(wings().length).toBe(base); // п19.5: на базі — «в ангарі», крила немає
-    expect(hangars()).toEqual(['arc(408,368,15,' + Math.PI + ',0)']); // ангар «Південь» (8, 7)
+    expect(hangars()).toEqual(['arc(408,368,15,' + Math.PI + ',0)']); // ангар «Нетрі» (8, 7)
     startIntercept(party.intercept, party.geo, probe.id, 2);
     party.intercept.fighters[1]!.pos = { x: 3, y: 3 };
     const chase = wings();
@@ -287,7 +287,7 @@ describe('аудит PR #523: стан панелі і прокрутка до �
 });
 
 describe('п19.4: «Перехопити» в «Сенсорній сітці» — найближчий боєготовий', () => {
-  // аудит PR #523: зонд ставимо явно ближче до ангара «Захід» (2, 4), ніж до вузла (8, 4) — інакше нічия
+  // аудит PR #523: зонд ставимо явно ближче до ангара «Порт» (2, 4), ніж до вузла (8, 4) — інакше нічия
   it('ангар, ближчий до зонда, піднімається; за рівної відстані — менший id', () => {
     const { party, probe } = flyingParty();
     addFighter(party.intercept, party.geo, 'west');
@@ -372,17 +372,17 @@ describe('п19.4: «Регіони» і шар мапи', () => {
     drawRegionsLayer(recCtx, party, 48);
     expect(ops).toContain('setLineDash(6,5)');
     expect(ops.filter((o) => o.startsWith('fillText('))).toEqual([
-      'fillText(Захід 30,6,6)',
-      'fillText(Північ 100,246,6)',
-      'fillText(Схід ✗,582,6)',
-      'fillText(Південь 100,246,246)',
+      'fillText(Порт 30,6,6)',
+      'fillText(Шпилі 100,246,6)',
+      'fillText(Промзона ✗,582,6)',
+      'fillText(Нетрі 100,246,246)',
     ]);
-    expect(ops).toContain('fillRect(576,0,192,432)'); // «Схід» вийшов — затемнено
+    expect(ops).toContain('fillRect(576,0,192,432)'); // «Промзона» вийшов — затемнено
     // межа Захід | Північ — вертикаль x = 5 × 48 на кожному рядку
     for (let y = 0; y < 9; y++) expect(ops).toContain('moveTo(240,' + y * 48 + ')');
   });
 
-  it('renderGeo (п19.5): перехоплювач в ангарі не «Північ» — значок ангара на його клітинці, крила немає; у вузлі — ні того, ні того', () => {
+  it('renderGeo (п19.5): перехоплювач в ангарі не «Шпилі» — значок ангара на його клітинці, крила немає; у вузлі — ні того, ні того', () => {
     const party = createParty(42);
     const f = makeFixture(party);
     const draws = (): { images: number; hangars: string[] } => {
@@ -394,7 +394,7 @@ describe('п19.4: «Регіони» і шар мапи', () => {
     const one = draws();
     expect(one.hangars).toEqual([]);
     addFighter(party.intercept, party.geo, 'east');
-    expect(draws()).toEqual({ images: one.images, hangars: ['arc(648,224,15,' + Math.PI + ',0)'] }); // ангар «Схід» (13, 4)
+    expect(draws()).toEqual({ images: one.images, hangars: ['arc(648,224,15,' + Math.PI + ',0)'] }); // ангар «Промзона» (13, 4)
     party.intercept.fighters[1]!.status = 'ремонт';
     party.intercept.fighters[1]!.repairTicksLeft = 4;
     expect(draws()).toEqual({ images: one.images, hangars: ['arc(648,224,15,' + Math.PI + ',0)'] }); // у ремонті — теж «в ангарі», без крила
@@ -437,7 +437,7 @@ describe('п19.4: «Кузня» — купівля перехоплювача �
     render(party);
     expect(btn('btn-order-interceptor-north').disabled).toBe(true);
     expect(document.querySelector('#interceptor-order .btn-why')!.textContent).toBe('Недостатньо кредитів (ціна 200)');
-    expect(btn('btn-order-interceptor-west').textContent).toBe('Захід ✗');
+    expect(btn('btn-order-interceptor-west').textContent).toBe('Порт ✗');
     party.econ.money = 1000;
     addFighter(party.intercept, party.geo, 'east');
     party.workshop.queue.push({ id: 'interceptor', ticksLeft: 48, region: 'south' });
@@ -476,5 +476,5 @@ function $text(): string {
   return document.getElementById('fighter')!.textContent ?? '';
 }
 function nameOf(r: RegionId): string {
-  return { west: 'Захід', north: 'Північ', east: 'Схід', south: 'Південь' }[r];
+  return { west: 'Порт', north: 'Шпилі', east: 'Промзона', south: 'Нетрі' }[r];
 }

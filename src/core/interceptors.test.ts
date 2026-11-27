@@ -57,7 +57,7 @@ function twoFighters(geo: GeoState, region: 'west' | 'north' | 'east' | 'south' 
 }
 
 describe('п19.3: ангари і перший перехоплювач', () => {
-  it('ангар «Північ» — вузол «Рубіж»; решта — окремі клітинки (ADR-0159 п. 13)', () => {
+  it('ангар «Шпилі» — вузол «Рубіж»; решта — окремі клітинки (ADR-0159 п. 13)', () => {
     const geo = createGeoGame({ seed: 1 });
     expect(HANGARS.north).toEqual(geo.base);
     expect(hangarPos('north', geo)).toEqual(geo.base);
@@ -68,7 +68,7 @@ describe('п19.3: ангари і перший перехоплювач', () => 
     ]);
   });
 
-  it('перший перехоплювач — id 1, регіон «Північ»; MAX_FIGHTERS = 3', () => {
+  it('перший перехоплювач — id 1, регіон «Шпилі»; MAX_FIGHTERS = 3', () => {
     const ic = createIntercept();
     expect(ic.fighters).toHaveLength(1);
     expect(ic.fighters[0]).toMatchObject({ id: 1, region: 'north', hp: FIGHTER_MAX_HP, status: 'на базі' });
@@ -232,7 +232,7 @@ describe('п19.3: погоня обраним перехоплювачем (EARS
     ic.rng = () => 0; // влучають обидва, урон — мінімальний
     startIntercept(ic, geo, 'u1', 2);
     interceptTick(ic, geo);
-    expect(() => installGunModule(w, ic, 2)).toThrow('лише в ангарі «Схід»: перехоплювач у польоті'); // аудит PR #522
+    expect(() => installGunModule(w, ic, 2)).toThrow('лише в ангарі «Промзона»: перехоплювач у польоті'); // аудит PR #522
     interceptRound(ic, geo, 'впритул');
     const round = ic.log.find((e) => e.type === 'intercept_round');
     expect(round).toMatchObject({ fighterDamage: 4, probeDamage: 1, fighter: 2 }); // 2 + модуль 2
@@ -290,13 +290,13 @@ describe('п19.3: перепризначення (EARS 6)', () => {
     expect(ic.log.at(-1)).toMatchObject({ type: 'intercept_start' });
     expect(ic.fighters[0].pos).toEqual(HANGARS.south);
     expect(() => assignFighter(ic, geo, 1, 'east')).toThrow('лише перехоплювач на базі');
-    expect(() => startIntercept(ic, geo, 'u1')).toThrow('не в ангарі «Південь»'); // аудит PR #522
-    expect(() => startRepair(ic, geo, createEconomy())).toThrow('лише в ангарі «Південь»');
+    expect(() => startIntercept(ic, geo, 'u1')).toThrow('не в ангарі «Нетрі»'); // аудит PR #522
+    expect(() => startRepair(ic, geo, createEconomy())).toThrow('лише в ангарі «Нетрі»');
     ic.fighters[0].status = 'ремонт';
     expect(() => assignFighter(ic, geo, 1, 'east')).toThrow('лише перехоплювач на базі');
   });
 
-  it('кілька в одному ангарі; з двома — подія з номером; повернення в «Північ» — у вузол', () => {
+  it('кілька в одному ангарі; з двома — подія з номером; повернення в «Шпилі» — у вузол', () => {
     const geo = createGeoGame({ seed: 1, spawnChance: 0 });
     const ic = twoFighters(geo, 'east');
     assignFighter(ic, geo, 1, 'east');
@@ -337,7 +337,7 @@ describe('п19.3: сейв v4 з переліком перехоплювачів
     ]);
   });
 
-  it('один перехоплювач старого вигляду (v1–v3, v4 до п19.3) — id 1, «Північ», чинний стан', () => {
+  it('один перехоплювач старого вигляду (v1–v3, v4 до п19.3) — id 1, «Шпилі», чинний стан', () => {
     const p = createParty(42);
     p.intercept.fighters[0].hp = 2;
     p.intercept.fighters[0].gunModule = true;

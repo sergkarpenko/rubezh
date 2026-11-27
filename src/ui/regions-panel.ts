@@ -53,7 +53,7 @@ export function renderRegions(party: Party): void {
       (r.out ? 'вийшов' : regionShare(party, id) + '/добу') +
       '</span>';
     row.title = r.out
-      ? REGION_NAMES[id] + ': регіон вийшов — дотації немає'
+      ? REGION_NAMES[id] + ': район вийшов — дотації немає'
       : REGION_NAMES[id] + ': довіра ' + trust + ' з 100 · частка дотації ' + regionShare(party, id) + '/добу';
     box.appendChild(row);
   }

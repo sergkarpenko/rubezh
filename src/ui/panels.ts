@@ -243,7 +243,7 @@ export function createPanels(deps: PanelsDeps): Panels {
 
     // П7.5 (ADR-0032): маркер винищувача на геосцені — лише поза базою (на базі він у
     // спрайті бази; погоня/бій — дельта-крило поруч із позначкою НЛО).
-    // п19.5 (ADR-0163): ангар регіону з перехоплювачем (крім «Півночі» — там ангар у вузлі) — значок
+    // п19.5 (ADR-0163): ангар регіону з перехоплювачем (крім north — «Шпилі», там ангар у вузлі) — значок
     // на клітинці ангара; перехоплювач на базі чи в ремонті — «в ангарі» (як у вузлі), крило — лише в погоні й бою
     // (позиція бою — pos; ангар — з hangarPos, а не pos: до першого вильоту pos може бути (0, 0), кандидат 196 г);
     // ангари — до зондів: зонд, що сів на клітинку ангара (ціль посадки — будь-яка клітинка), видно поверх (аудит PR #524).
@@ -700,7 +700,7 @@ export function createPanels(deps: PanelsDeps): Panels {
     b.textContent = '⇄ Призначити';
     b.setAttribute('aria-expanded', String(open));
     b.disabled = deps.inBattle() || deps.isGameOver();
-    b.title = 'Перебазувати перехоплювач' + (many ? ' ' + f.id : '') + ' в ангар іншого регіону — одразу і безкоштовно';
+    b.title = 'Перебазувати перехоплювач' + (many ? ' ' + f.id : '') + ' в ангар іншого району — одразу і безкоштовно';
     b.onclick = () => {
       if (open) assignOpen.delete(f.id);
       else assignOpen.add(f.id);
@@ -714,7 +714,7 @@ export function createPanels(deps: PanelsDeps): Panels {
       if (r === f.region) continue;
       const rb = document.createElement('button');
       rb.id = 'btn-assign-' + f.id + '-' + r;
-      rb.textContent = '→ ' + REGION_NAMES[r] + (party.campaign.regions[r].out ? ' (вийшов)' : '');
+      rb.textContent = '→ ' + REGION_NAMES[r] + (party.campaign.regions[r].out ? ' (район вийшов)' : '');
       rb.onclick = () => {
         try {
           assignFighter(party.intercept, party.geo, f.id, r);

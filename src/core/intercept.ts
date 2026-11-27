@@ -64,13 +64,13 @@ export const HANGARS: Record<RegionId, Vec2> = {
   south: { x: 8, y: 7 },
 };
 
-// п19.3 (аудит PR #522): де стоїть перехоплювач — для текстів відмов: «Північ» — «у вузлі «Рубіж»»
-// (як до п19.3), решта — «в ангарі «Схід»».
+// п19.3 (аудит PR #522): де стоїть перехоплювач — для текстів відмов: north («Шпилі», п21.2) —
+// «у вузлі «Рубіж»» (як до п19.3), решта — «в ангарі «Промзона»» тощо (REGION_NAMES).
 export function baseWhere(f: Pick<Fighter, 'region'>): string {
   return f.region === 'north' ? 'у вузлі «Рубіж»' : 'в ангарі «' + REGION_NAMES[f.region] + '»';
 }
 
-// Клітинка ангара регіону: «Північ» — вузол «Рубіж» (geo.base), решта — HANGARS.
+// Клітинка ангара регіону: north («Шпилі») — вузол «Рубіж» (geo.base), решта — HANGARS.
 export function hangarPos(region: RegionId, geo: GeoState): Vec2 {
   return region === 'north' ? { ...geo.base } : { ...HANGARS[region] };
 }
