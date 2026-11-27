@@ -12,9 +12,11 @@
 Масштаб — висота фігури «стій» стовпця 0 чинного атласа (рядки з альфою > 128) до висоти «стій» аркуша;
 ступні (feet_x) — у колонці ступнів чинного «стій», низ — BOTTOM. Кадр, що не вміщується в 96 × 96 (ствол
 угору над головою), зменшено окремо (поле scale кадру у звіті). Дуло — найдальший у напрямку пострілу
-непрозорий піксель (проєкція на вектор під 55° від горизонталі в бік погляду), середнє чотирьох найдальших.
+непрозорий піксель (проєкція на вектор під 55° від горизонталі в бік погляду), середнє чотирьох найдальших;
+ступні (FEET_BAND рядків над BOTTOM) — лише за переднім краєм «стій» (аудит PR #543: носок чобота).
+Вигляд без сирця переносить свої стовпці 5–6 з чинного атласа, якщо той уже 672 завширшки (аудит PR #543).
 Перевірки (код 1): зелений відблиск, незмінність стовпців 0–4, ствол кадру «угору» вище плечей «стій»,
-«униз» — нижче. Запуск з кореня репозиторію: python3 scripts/assets/convert_aim_t224.py [тека сирців]
+«униз» — нижче, дуло — за переднім краєм «стій» у бік погляду. Запуск з кореня репозиторію: python3 scripts/assets/convert_aim_t224.py [тека сирців]
 """
 
 from pathlib import Path
@@ -39,6 +41,7 @@ COLS = 7  # 0–4 — idle, walk1, walk2, fire, death; 5 — постріл уг
 AIM_COL = {'up': 5, 'down': 6}
 GREEN_MAX = 24  # як convert_portraits_t222.py: зелений над max(r, b) на непрозорих пікселях
 ANGLE = math.radians(55)
+FEET_BAND = 8  # рядки ступнів над BOTTOM
 
 
 def opaque_box(fr):
@@ -46,8 +49,13 @@ def opaque_box(fr):
     return [int(xs.min()), int(ys.min()), int(xs.max()) + 1, int(ys.max()) + 1]
 
 
-def muzzle(fr, facing, aim):
+def muzzle(fr, facing, aim, ib):
     ys, xs = np.where(fr[..., 3] > 128)
+    # ступні під корпусом «стій» не дуло (аудит PR #543: носок чобота оперативника в кадрі «униз»
+    # висунувся далі за ствол під 55°): смуга FEET_BAND над BOTTOM — лише за переднім краєм «стій»
+    front = ib[2] if facing > 0 else ib[0]
+    keep = (ys < BOTTOM - FEET_BAND) | (facing * xs > facing * front)
+    ys, xs = ys[keep], xs[keep]
     vy = -1 if aim == 'up' else 1
     proj = facing * xs * math.cos(ANGLE) + vy * ys * math.sin(ANGLE)
     top = np.argsort(proj)[-4:]
@@ -82,7 +90,10 @@ def build(name, old):
         green = int(g[fr[..., 3] > 0].max())
         if green > GREEN_MAX:
             raise SystemExit(f'{name} {aim}: зелений відблиск {green} > {GREEN_MAX}')
-        m = muzzle(fr, facing, aim)
+        m = muzzle(fr, facing, aim, ib)
+        front = ib[2] if facing > 0 else ib[0]
+        if facing * m['x'] <= facing * front:
+            raise SystemExit(f'{name} {aim}: дуло {m} не за переднім краєм «стій» (x {front}) — ступня чи корпус, не ствол')
         shoulder = ib[1] + (ib[3] - ib[1]) // 3  # плечі «стій» — третина висоти від маківки
         if (aim == 'up' and m['y'] >= shoulder) or (aim == 'down' and m['y'] <= shoulder):
             raise SystemExit(f'{name} {aim}: дуло {m} не {"вище" if aim == "up" else "нижче"} плечей (рядок {shoulder})')
@@ -95,10 +106,15 @@ def main():
     old = np.asarray(Image.open(UNITS).convert('RGBA'))
     atlas = np.zeros((old.shape[0], FR * COLS, 4), np.uint8)
     atlas[:, : FR * 5] = old[:, : FR * 5]
+    prev = json.loads(REPORT.read_text()) if REPORT.exists() and old.shape[1] == FR * COLS else {}
     report = {}
     for name, (row, _) in KINDS.items():
         if not (SRC / f't224-{name}.jpg').exists():
-            report[name] = None  # сирця ще немає — клітинки порожні
+            # сирця немає: готові кадри чинного атласа лишаються (наступний PR — голем і око без сирців
+            # оперативника й демона), інакше — порожньо
+            if prev.get(name) is not None:
+                atlas[row * FR : (row + 1) * FR, FR * 5 :] = old[row * FR : (row + 1) * FR, FR * 5 :]
+            report[name] = prev.get(name)
             continue
         frames, report[name] = build(name, old)
         for aim, fr in frames.items():

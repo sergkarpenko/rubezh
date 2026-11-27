@@ -937,6 +937,34 @@ describe('Фікс П14.8 (фідбек валідації): смерть у ч�
       // якір голема (10, 52; п21.5 — латунний голем): (264 − 34) + round(10 · 68 / 96) = 237, (264 − 47) + round(52 · 68 / 96) = 254
       expect(ops2).toContain('moveTo(237,254)');
     });
+
+    // п21.6 (ADR-0180; аудит PR #543: передачу aim зі сторінки бою ніщо не перевіряло) — стрілець на
+    // крутому куті малюється кадром «угору» (стовпець 5), голем — бічним кадром «вогонь» (стовпець 3)
+    it('п21.6: оперативник стріляє круто вгору — кадр стовпця 5; голем круто вниз — бічний кадр 3', () => {
+      const f = makeFixture();
+      f.battle.launch(firstTarget(f));
+      const golem = makeEnemy('golem', 'a1', 0, { x: 2, y: 2 });
+      f.ui.mission!.state = createGame({
+        map: { width: 20, height: 20, blocked: new Set<string>() },
+        units: [makeUnit({ id: 's1', side: 'player', name: 'Гарт', pos: { x: 2, y: 6 }, hp: 10, maxHp: 10 }), golem],
+      });
+      const sx = (o: string): number => Number(o.split(',')[1]);
+      const up = makeTracerAnim('player', { x: 2, y: 6 }, { x: 2, y: 2 }, false);
+      up.start = 0;
+      f.deps.anim.active = () => up;
+      f.deps.anim.queued = () => [up];
+      const ops = atlasOps(withRecCtx(() => f.battle.renderBattle()));
+      expect(sx(ops.find((o) => sy(o) === 0)!)).toBe(5 * 96);
+      const down = makeTracerAnim('alien', { x: 2, y: 2 }, { x: 2, y: 6 }, false);
+      down.enemyKind = 'golem';
+      down.start = 0;
+      f.deps.anim.active = () => down;
+      f.deps.anim.queued = () => [down];
+      const ops2 = atlasOps(withRecCtx(() => f.battle.renderBattle()));
+      restore();
+      expect(sx(ops2.find((o) => sy(o) === 288)!)).toBe(3 * 96);
+      expect(sx(ops2.find((o) => sy(o) === 0)!)).toBe(0); // оперативник — «стій»
+    });
   });
 
   it('трасер з туману: юніт у клітинці from — не стрілець, старт від центру', () => {

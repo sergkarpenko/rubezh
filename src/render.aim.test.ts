@@ -87,6 +87,11 @@ describe('п21.6: напрям кадру пострілу і вигляди з 
     expect(MUZZLE_AIM.alien).toEqual({ up: report.demon!.up.muzzle, down: report.demon!.down.muzzle });
     expect(report.golem).toBeNull();
     expect(report.eye).toBeNull();
+    // дуло — за переднім краєм «стій» у бік погляду (аудит PR #543: якір на носку чобота лежав під корпусом)
+    expect(MUZZLE_AIM.player!.down.x).toBeGreaterThan(report.soldier!.idleBox[2]!);
+    expect(MUZZLE_AIM.player!.up.x).toBeGreaterThan(report.soldier!.idleBox[2]!);
+    expect(MUZZLE_AIM.alien!.down.x).toBeLessThan(report.demon!.idleBox[0]!);
+    expect(MUZZLE_AIM.alien!.up.x).toBeLessThan(report.demon!.idleBox[0]!);
     // ствол угору — вище, униз — нижче за бічний якір того самого вигляду
     for (const k of ['player', 'alien'] as const) {
       expect(MUZZLE_AIM[k]!.up.y).toBeLessThan(MUZZLE_ANCHOR[k].y);
@@ -145,8 +150,8 @@ describe('п21.6: точка дула і трасер на крутому кут
     expect(muzzlePoint('player', false, 120, 120, 3, undefined, 'up').y).toBe(o.y + sc(up.y) + 3);
     const dn = MUZZLE_AIM.alien!.down;
     expect(muzzlePoint('alien', false, 120, 120, 3, 'demon', 'down')).toEqual({ x: o.x + sc(dn.x), y: o.y + sc(dn.y) - 3 });
-    // голем без кадрів — бічний якір, як без aim
-    expect(muzzlePoint('alien', false, 120, 120, 0, 'golem', 'up')).toEqual(muzzlePoint('alien', false, 120, 120, 0, 'golem'));
+    // голем без кадрів — бічний якір і бічна віддача, як без aim (аудит PR #543: з віддачею 3 px)
+    expect(muzzlePoint('alien', false, 120, 120, 3, 'golem', 'up')).toEqual(muzzlePoint('alien', false, 120, 120, 3, 'golem'));
   });
   it('оперативник стріляє круто вгору — промінь з дула кадру «угору» і зі спалахом (не з центру)', () => {
     const a = makeTracerAnim('player', { x: 2, y: 5 }, { x: 2, y: 1 }, false);

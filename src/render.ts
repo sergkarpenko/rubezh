@@ -160,7 +160,8 @@ function drawPixelSprite(ctx: CanvasRenderingContext2D, def: PixelSprite, cx: nu
 }
 
 // --- П14.2/П14.3 (ADR-0072): атлас спрайтів юнітів бою — згенеровані кадри ---
-// Джерело — assets/units-atlas.png: з п17.5 (ADR-0152) 480 × 480 — сітка 5 × 5 кадрів 96 × 96
+// Джерело — assets/units-atlas.png: з п17.5 (ADR-0152) 480 × 480 — сітка 5 × 5 кадрів 96 × 96, з п21.6
+// (ADR-0180) 672 × 480 — ще два стовпці пострілу вгору / вниз (ATLAS_AIM_COL)
 // (до п17.5 — 480 × 192, 5 × 2), порядок колонок idle → walk1 → walk2 → fire → death; ряди —
 // оперативник, демон, гончак, голем, око (ATLAS_ROW). П14.3: walk2 — окремий кадр (фідбек П14.2, константи кадрів
 // 0/1/2/3/4); план — джерело правди чисел (style-references.md, Фаза 14).
@@ -170,7 +171,7 @@ function drawPixelSprite(ctx: CanvasRenderingContext2D, def: PixelSprite, cx: nu
 // ноги — на UNIT_FEET_DY нижче центру клітинки, фігура росте вгору в межах клітинки
 // (було 44 × 44 nearest-neighbor, ADR-0068); геометрія — UNIT_DRAW і unitFrameOrigin у ядрі.
 export const ATLAS_FRAME = 96; // кадр атласу, px
-export const ATLAS_COLS = 5; // idle, walk1, walk2, fire, death (кадри пози; п21.6 — ще два стовпці пострілу)
+export const ATLAS_COLS = 5; // кадри пози: idle, walk1, walk2, fire, death (п21.6: атлас — 7 стовпців, ATLAS_AIM_COL)
 export const ATLAS_UNIT = UNIT_DRAW; // сторона кадру на полі (Т.132: 68)
 
 export type UnitPose = 'idle' | 'walk' | 'fire' | 'death';
@@ -213,7 +214,7 @@ export const MUZZLE_ANCHOR: Readonly<Record<'player' | 'alien' | Exclude<EnemyKi
 // п21.6 (ADR-0180): якір дула кадрів «угору» / «униз» у НАТИВНІЙ орієнтації (поле muzzle звіту
 // `scripts/assets/aim-t224-report.json`); вигляд без запису — кадрів немає.
 export const MUZZLE_AIM: Readonly<Partial<Record<keyof typeof MUZZLE_ANCHOR, Readonly<Record<ShotAim, { x: number; y: number }>>>>> = {
-  player: { up: { x: 74, y: 30 }, down: { x: 62, y: 90 } }, // кінчик бластера «Гарт» — угору-праворуч / униз-праворуч
+  player: { up: { x: 74, y: 30 }, down: { x: 74, y: 76 } }, // кінчик бластера «Гарт» — угору-праворуч / униз-праворуч
   alien: { up: { x: 18, y: 14 }, down: { x: 20, y: 89 } }, // дуло гармати демона — угору-ліворуч / униз-ліворуч
 };
 

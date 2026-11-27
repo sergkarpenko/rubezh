@@ -1,5 +1,5 @@
 {
- "soldier": {"row": 0, "scale": 0.1204, "anchorX": 48.2, "idleBox": [39, 34, 67, 93], "up": {"scale": 0.1204, "bbox": [36, 28, 76, 93], "muzzle": {"x": 74, "y": 30}, "greenMax": 0}, "down": {"scale": 0.1204, "bbox": [35, 35, 77, 93], "muzzle": {"x": 62, "y": 90}, "greenMax": 0}},
+ "soldier": {"row": 0, "scale": 0.1204, "anchorX": 48.2, "idleBox": [39, 34, 67, 93], "up": {"scale": 0.1204, "bbox": [36, 28, 76, 93], "muzzle": {"x": 74, "y": 30}, "greenMax": 0}, "down": {"scale": 0.1204, "bbox": [35, 35, 77, 93], "muzzle": {"x": 74, "y": 76}, "greenMax": 0}},
  "demon": {"row": 1, "scale": 0.1735, "anchorX": 55.4, "idleBox": [27, 34, 71, 93], "up": {"scale": 0.1735, "bbox": [16, 12, 78, 93], "muzzle": {"x": 18, "y": 14}, "greenMax": 0}, "down": {"scale": 0.1735, "bbox": [19, 34, 81, 93], "muzzle": {"x": 20, "y": 89}, "greenMax": 0}},
  "golem": null,
  "eye": null
