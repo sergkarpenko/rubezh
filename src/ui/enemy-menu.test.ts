@@ -52,7 +52,7 @@ describe('п17.2: меню на ворогові — типи ворогів (р
         expect(enemyPortraitCell(kind, name)).toEqual({ col: i % ENEMY_FACES, row });
         const st = enemyFaceStyle(kind, name);
         expect(st).toMatch(/^background-image:url\([^)]*enemy-portraits[^)]*\),url\([^)]*units-atlas/);
-        expect(st).toContain('background-size:160px 160px,320px 320px;');
+        expect(st).toContain('background-size:160px 160px,448px 320px;');
         expect(st).toContain('background-position:' + -(i % 4) * ENEMY_PORTRAIT_SIZE + 'px ' + -row * ENEMY_PORTRAIT_SIZE + 'px,');
       });
       expect(enemyPortraitCell(kind, ENEMY_KINDS[kind].name + ' Хтось')).toEqual({ col: 0, row }); // поза пулом

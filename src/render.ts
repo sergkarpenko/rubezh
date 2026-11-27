@@ -160,7 +160,8 @@ function drawPixelSprite(ctx: CanvasRenderingContext2D, def: PixelSprite, cx: nu
 }
 
 // --- П14.2/П14.3 (ADR-0072): атлас спрайтів юнітів бою — згенеровані кадри ---
-// Джерело — assets/units-atlas.png: з п17.5 (ADR-0152) 480 × 480 — сітка 5 × 5 кадрів 96 × 96
+// Джерело — assets/units-atlas.png: з п17.5 (ADR-0152) 480 × 480 — сітка 5 × 5 кадрів 96 × 96, з п21.6
+// (ADR-0180) 672 × 480 — ще два стовпці пострілу вгору / вниз (ATLAS_AIM_COL)
 // (до п17.5 — 480 × 192, 5 × 2), порядок колонок idle → walk1 → walk2 → fire → death; ряди —
 // оперативник, демон, гончак, голем, око (ATLAS_ROW). П14.3: walk2 — окремий кадр (фідбек П14.2, константи кадрів
 // 0/1/2/3/4); план — джерело правди чисел (style-references.md, Фаза 14).
@@ -170,7 +171,7 @@ function drawPixelSprite(ctx: CanvasRenderingContext2D, def: PixelSprite, cx: nu
 // ноги — на UNIT_FEET_DY нижче центру клітинки, фігура росте вгору в межах клітинки
 // (було 44 × 44 nearest-neighbor, ADR-0068); геометрія — UNIT_DRAW і unitFrameOrigin у ядрі.
 export const ATLAS_FRAME = 96; // кадр атласу, px
-export const ATLAS_COLS = 5; // idle, walk1, walk2, fire, death
+export const ATLAS_COLS = 5; // кадри пози: idle, walk1, walk2, fire, death (п21.6: атлас — 7 стовпців, ATLAS_AIM_COL)
 export const ATLAS_UNIT = UNIT_DRAW; // сторона кадру на полі (Т.132: 68)
 
 export type UnitPose = 'idle' | 'walk' | 'fire' | 'death';
@@ -184,6 +185,14 @@ export const ATLAS_POSE_COL: Readonly<Record<UnitPose, number>> = {
   death: 4,
 };
 export const ATLAS_WALK2_COL = 2;
+
+// п21.6 (ADR-0180; Supersedes ADR-0171 — промінь з центру на крутих): атлас 672 × 480 — стовпці 5 і 6:
+// «постріл угору» і «постріл униз» (аркуші Gemini, `scripts/assets/convert_aim_t224.py`). Кадр бере
+// стрілець, чия ціль круто вгорі / внизу (steepShot); вигляди без кадрів (гончак — удар упритул,
+// турель — силует кодом; голем і око — до своїх аркушів, рішення власника «Два зараз, два пізніше»)
+// лишають бічний кадр і промінь з центру бійця (ADR-0171).
+export type ShotAim = 'up' | 'down';
+export const ATLAS_AIM_COL: Readonly<Record<ShotAim, number>> = { up: 5, down: 6 };
 
 // Фідбек власника 2026-10-22 (юніт-атласи Gemini, PR #241): трасер бою стартує з ДУЛА
 // стрільця, а не з центру клітинки. Т.132 (ADR-0121): якір — координати дулового спалаху
@@ -202,11 +211,37 @@ export const MUZZLE_ANCHOR: Readonly<Record<'player' | 'alien' | Exclude<EnemyKi
   eye: { x: 26, y: 64 }, // кінець променя зі зіниці
 };
 
+// п21.6 (ADR-0180): якір дула кадрів «угору» / «униз» у НАТИВНІЙ орієнтації (поле muzzle звіту
+// `scripts/assets/aim-t224-report.json`); вигляд без запису — кадрів немає.
+export const MUZZLE_AIM: Readonly<Partial<Record<keyof typeof MUZZLE_ANCHOR, Readonly<Record<ShotAim, { x: number; y: number }>>>>> = {
+  player: { up: { x: 74, y: 30 }, down: { x: 74, y: 76 } }, // кінчик бластера «Гарт» — угору-праворуч / униз-праворуч
+  alien: { up: { x: 18, y: 14 }, down: { x: 20, y: 89 } }, // дуло гармати демона — угору-ліворуч / униз-ліворуч
+};
+
 // п17.5: ряд атласа за типом ворога (ряд 0 — оперативник); без типу — демон.
 export const ATLAS_ROW: Readonly<Record<EnemyKind, number>> = { demon: 1, hound: 2, golem: 3, eye: 4 };
 
 function muzzleKey(side: 'player' | 'alien', kind?: EnemyKind): keyof typeof MUZZLE_ANCHOR {
   return side === 'player' || kind === undefined || kind === 'demon' ? side : kind;
+}
+
+// п21.6: чи має вигляд кадри «угору» / «униз» (без них — бічний кадр, промінь з центру).
+export function hasAimFrames(side: 'player' | 'alien', kind?: EnemyKind): boolean {
+  return MUZZLE_AIM[muzzleKey(side, kind)] !== undefined;
+}
+
+// п21.6: напрям кадру пострілу — ціль круто вгорі (менший y) чи внизу; не крутий постріл — бічний кадр.
+export function shotAim(from: { x: number; y: number }, to: { x: number; y: number }): ShotAim | undefined {
+  if (!steepShot(from, to)) return undefined;
+  return to.y < from.y ? 'up' : 'down';
+}
+
+// п21.6: віддача кадру «угору» / «униз» — уздовж кадру вниз / вгору (фігура осідає від пострілу),
+// бічного — назад від погляду. Повертає зсув { x, y } у просторі екрана (до дзеркала — dx у нативі).
+function recoilShift(side: 'player' | 'alien', flip: boolean, recoil: number, aim?: ShotAim): { dx: number; dy: number } {
+  if (aim === 'up') return { dx: 0, dy: recoil };
+  if (aim === 'down') return { dx: 0, dy: -recoil };
+  return { dx: -recoil * facingSign(side, flip), dy: 0 };
 }
 
 // Точка дула на полі для центру клітинки стрільця (cx, cy); recoil — віддача, px (назад);
@@ -217,13 +252,16 @@ export function muzzlePoint(
   cx: number,
   cy: number,
   recoil = 0,
-  kind?: EnemyKind
+  kind?: EnemyKind,
+  aim?: ShotAim // п21.6: кадр «угору» / «униз»; вигляд без таких кадрів — бічний якір
 ): { x: number; y: number } {
-  const m = MUZZLE_ANCHOR[muzzleKey(side, kind)];
+  const key = muzzleKey(side, kind);
+  const framed = aim === undefined ? undefined : MUZZLE_AIM[key];
+  const m = framed === undefined ? MUZZLE_ANCHOR[key] : framed[aim!];
   const o = unitFrameOrigin(cx, cy);
-  const back = recoil * facingSign(side, flip);
+  const r = recoilShift(side, flip, recoil, framed === undefined ? undefined : aim);
   const mx = flip ? ATLAS_FRAME - m.x : m.x;
-  return { x: o.x + Math.round((mx * UNIT_DRAW) / ATLAS_FRAME) - back, y: o.y + Math.round((m.y * UNIT_DRAW) / ATLAS_FRAME) };
+  return { x: o.x + Math.round((mx * UNIT_DRAW) / ATLAS_FRAME) + r.dx, y: o.y + Math.round((m.y * UNIT_DRAW) / ATLAS_FRAME) + r.dy };
 }
 
 // Т.218: постріл «крутий» — кут до горизонталі понад 60° (dy² > 3 · dx², цілочисельно; ціль у тій
@@ -246,6 +284,7 @@ function facingSign(side: 'player' | 'alien', flip: boolean): 1 | -1 {
 // за напрямком (детерміновано у battle.ts, без RNG; ядро не зачіпається).
 export interface UnitSpriteView extends UnitSprite {
   pose?: 'fire' | 'death';
+  aim?: ShotAim; // п21.6 (ADR-0180): поза «вогонь» — кадр «угору» / «униз» (вигляд без них — бічний)
   step?: 1 | 2;
   flip?: boolean;
   maxHp: number; // П14.4: показник життя — частка hp/maxHp у смузі HP
@@ -456,11 +495,16 @@ function drawGeoIcon(ctx: CanvasRenderingContext2D, icon: GeoIcon, cx: number, c
 // Т.132: віддача (recoil) — зсув назад від погляду; дихання (breath) — лише в позі «стій».
 function drawAtlasUnit(ctx: CanvasRenderingContext2D, u: UnitSpriteView, row: number, img: CanvasImageSource): void {
   const pose = unitPose(u);
-  const col = pose === 'walk' && u.step === 2 ? ATLAS_WALK2_COL : ATLAS_POSE_COL[pose];
+  // п21.6: кадр «угору» / «униз» — лише в позі «вогонь» і лише у вигляду з такими кадрами
+  const aim = pose === 'fire' && u.aim !== undefined && hasAimFrames(u.side, u.kind) ? u.aim : undefined;
+  const col = aim !== undefined ? ATLAS_AIM_COL[aim] : pose === 'walk' && u.step === 2 ? ATLAS_WALK2_COL : ATLAS_POSE_COL[pose];
   const o = unitFrameOrigin(u.cx, u.cy);
   // віддача — назад від РІДНОГО напрямку кадру: зсув рахується до дзеркала, і scale(-1,1)
-  // сам перевертає його на екрані (аудит PR #445: зі знаком погляду дзеркальний боєць сіпався вперед)
-  const x = o.x - (u.recoil ?? 0) * facingSign(u.side, false);
+  // сам перевертає його на екрані (аудит PR #445: зі знаком погляду дзеркальний боєць сіпався вперед);
+  // п21.6: у кадрі «угору» / «униз» — уздовж кадру (вертикально, дзеркало не чіпає)
+  const r = recoilShift(u.side, false, u.recoil ?? 0, aim);
+  const x = o.x + r.dx;
+  const y = o.y + r.dy;
   const breath = pose === 'idle' ? (u.breath ?? 0) : 0;
   ctx.save();
   ctx.imageSmoothingEnabled = true;
@@ -476,7 +520,7 @@ function drawAtlasUnit(ctx: CanvasRenderingContext2D, u: UnitSpriteView, row: nu
     ctx.scale(1, 1 - BREATH_SCALE * breath);
     ctx.translate(0, -feet);
   }
-  ctx.drawImage(img, col * ATLAS_FRAME, row * ATLAS_FRAME, ATLAS_FRAME, ATLAS_FRAME, x, o.y, UNIT_DRAW, UNIT_DRAW);
+  ctx.drawImage(img, col * ATLAS_FRAME, row * ATLAS_FRAME, ATLAS_FRAME, ATLAS_FRAME, x, y, UNIT_DRAW, UNIT_DRAW);
   ctx.restore();
 }
 
@@ -1498,15 +1542,17 @@ export function drawAnimFrame(
       drawClawSlash(ctx, x1, y1, calm ? 1 : Math.min(1, t / share), fade * (a.hit ? 1 : 0.45));
       return;
     }
-    // Т.218 (відгук власника 27.11.2026; рішення «Центр корпусу на крутих»): атлас має лише бокові
-    // кадри пострілу — ціль круто вгорі / внизу (понад 60° від горизонталі) дає промінь
-    // перпендикулярно стволу; до кадрів угору / вниз (п21.6) такий промінь іде з центру бійця.
-    const fromCentre = muzzle !== undefined && muzzle.turret !== true && steepShot(a.from, a.to);
+    // Т.218 (відгук власника 27.11.2026; рішення «Центр корпусу на крутих»): бічний кадр пострілу на
+    // цілі круто вгорі / внизу (понад 60° від горизонталі) дав би промінь перпендикулярно стволу — з
+    // центру бійця. п21.6 (ADR-0180): вигляд з кадрами «угору» / «униз» стріляє з дула свого кадру;
+    // з центру — лише вигляди без них (голем і око до своїх аркушів).
+    const aim = shotAim(a.from, a.to);
+    const fromCentre = muzzle !== undefined && muzzle.turret !== true && aim !== undefined && !hasAimFrames(muzzle.side, muzzle.kind);
     if (muzzle !== undefined && !fromCentre) {
       const m =
         muzzle.turret === true
           ? turretMuzzle(muzzle.flip, x0, y0, calm ? 0 : recoilPx(t, share))
-          : muzzlePoint(muzzle.side, muzzle.flip, x0, y0, calm ? 0 : recoilPx(t, share), muzzle.kind);
+          : muzzlePoint(muzzle.side, muzzle.flip, x0, y0, calm ? 0 : recoilPx(t, share), muzzle.kind, aim);
       x0 = m.x;
       y0 = m.y;
     }

@@ -147,7 +147,8 @@ function button(action: string, label: string, ap: number, chance: string, block
 }
 
 // п17.5 (ADR-0152; рішення власника «А. Мініатюра типу»): кадр «стій» свого ряду атласа бійців —
-// фігура (x 8–88, y 33–93 кадру 96) у 2/3 масштабу: 53 × 40 px; атлас 480 × 480 → 320 × 320.
+// фігура (x 8–88, y 33–93 кадру 96) у 2/3 масштабу: 53 × 40 px; атлас 480 × 480 → 320 × 320
+// (п21.6, ADR-0180: атлас 672 × 480 зі стовпцями пострілу вгору / вниз → 448 × 320).
 // п21.5 (ADR-0179): це запасний шар під бюстом — видно, якщо атлас бюстів не завантажився;
 // у колі 40 px фігуру зсунуто на FACE_SHIFT, щоб тулуб був по центру.
 export const FACE_SCALE = 2 / 3;
@@ -175,7 +176,7 @@ export function enemyFaceStyle(kind: EnemyKind, name: string): string {
     atlas +
     'px ' +
     atlas +
-    'px,320px 320px;background-position:' +
+    'px,448px 320px;background-position:' +
     -c.col * ENEMY_PORTRAIT_SIZE +
     'px ' +
     -c.row * ENEMY_PORTRAIT_SIZE +

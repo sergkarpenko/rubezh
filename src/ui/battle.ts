@@ -45,6 +45,7 @@ import {
   drawReachZone,
   drawTargetFrame,
   drawUnitSprite,
+  shotAim,
   unitRing,
 } from '../render';
 import {
@@ -637,6 +638,7 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
         selected: u.id === ui.selectedId,
         overwatch: u.overwatch,
         pose: u.id === firingId ? 'fire' : undefined, // П14.2 (ADR-0072)
+        aim: u.id === firingId && activeAnim?.kind === 'tracer' ? shotAim(activeAnim.from, activeAnim.to) : undefined, // п21.6: кадр угору / вниз
         recoil: u.id === firingId ? recoil : 0, // Т.132: віддача пострілу
         breath: u.id === firingId ? 0 : (deps.ambient.breath?.(at) ?? 0), // Т.132: дихання у спокої
         ring: unitRing(u.side, u.id, u.kind), // Т.129: кільце кольору бійця; п17.2: ворог — колір типу
