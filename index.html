@@ -1457,13 +1457,13 @@
         overflow: auto;
         isolation: isolate;
       }
-      /* Т.126 (ADR-0116, рішення власника «Як на відео»): постійна анімація стартового екрана —
-         іскри (16 с), «дихання» кільця (6 с) і відблиск по ньому (9 с). Лише CSS: іскри й кільце —
-         transform і opacity (композитор, без перемальовки сторінки), відблиск — кут градієнта
-         (перемальовка лише свого шару); на прихованому екрані (display: none) не йде. Вимикають
-         тумблер «Анімація» (клас anim-off, src/main.ts) і системне «менше руху». Іскри — шар
-         position: fixed на все вікно (не додає прокрутки), вищий за вікно на період візерунка:
-         зсув на період дає безшовний цикл */
+      /* Т.126 (ADR-0116, рішення власника «Як на відео»): постійна анімація стартового екрана — іскри
+         (16 с), лише CSS: transform і opacity (композитор, без перемальовки сторінки); на прихованому
+         екрані (display: none) не йде. Вимикають тумблер «Анімація» (клас anim-off, src/main.ts) і
+         системне «менше руху». Іскри — шар position: fixed на все вікно (не додає прокрутки), вищий
+         за вікно на період візерунка: зсув на період дає безшовний цикл. п21.7 (ADR-0181, рішення
+         власника «Прибрати CSS-кільце над порталом»): кільце й відблиск Т.126 навколо логотипа
+         прибрано — тло ADR-0177 має свій намальований портал Розриву */
       #start-screen::before {
         content: '';
         position: fixed;
@@ -1500,84 +1500,19 @@
           transform: translateY(-1320px);
         }
       }
-      /* Т.126: кільце навколо логотипа — світла рамка (::before) і відблиск, що біжить по ній (::after);
-         позиція — від героя, розміри від вікна: на макеті не впливають */
-      .start-hero {
-        isolation: isolate;
-      }
-      .start-hero::before,
-      .start-hero::after {
-        content: '';
-        position: absolute;
-        left: 50%;
-        top: 42%;
-        width: min(420px, 86vw, 62vh);
-        aspect-ratio: 1;
-        z-index: -1;
-        pointer-events: none;
-        border-radius: 50%;
-        transform: translate(-50%, -50%);
-      }
-      .start-hero::before {
-        border: 2px solid rgba(0, 229, 255, 0.55);
-        box-shadow:
-          0 0 28px rgba(0, 229, 255, 0.45),
-          inset 0 0 36px rgba(0, 229, 255, 0.3),
-          0 0 80px rgba(255, 46, 136, 0.18);
-        animation: start-ring 6s ease-in-out infinite;
-      }
-      .start-hero::after {
-        background: conic-gradient(from var(--start-sweep), transparent 0 80%, rgba(125, 243, 255, 0.85) 99%, transparent 100%);
-        -webkit-mask: radial-gradient(closest-side, transparent 84%, #000 86%, #000 90%, transparent 92%);
-        mask: radial-gradient(closest-side, transparent 84%, #000 86%, #000 90%, transparent 92%);
-        animation: start-sweep 9s linear infinite;
-      }
-      @keyframes start-ring {
-        0%,
-        100% {
-          opacity: 0.55;
-          transform: translate(-50%, -50%) scale(0.985);
-        }
-        50% {
-          opacity: 1;
-          transform: translate(-50%, -50%) scale(1.015);
-        }
-      }
-      /* відблиск обертається кутом градієнта, а не transform: повернутий квадрат шару виходив би
-         діагоналлю за вікно і давав прокрутку вбік на вузьких вікнах (e2e Т.126, 320 × 512) */
-      @property --start-sweep {
-        syntax: '<angle>';
-        inherits: false;
-        initial-value: 0deg;
-      }
-      @keyframes start-sweep {
-        to {
-          --start-sweep: 360deg;
-        }
-      }
-      /* вимкнено — кадр спокою: іскри на місці, кільце світиться рівно, відблиску немає */
-      #start-screen.anim-off::before,
-      #start-screen.anim-off .start-hero::before {
+      /* вимкнено — кадр спокою: іскри на місці */
+      #start-screen.anim-off::before {
         animation: none;
-      }
-      #start-screen.anim-off .start-hero::after {
-        animation: none;
-        display: none;
       }
       @media (prefers-reduced-motion: reduce) {
-        #start-screen::before,
-        #start-screen .start-hero::before {
+        #start-screen::before {
           animation: none;
-        }
-        #start-screen .start-hero::after {
-          animation: none;
-          display: none;
         }
       }
       /* П14.7: .start-box — не панель, а координатна сітка на весь екран:
-         лого+tagline у центрі (темний просвіт кільця кадру Б1), меню —
+         лого+tagline у центрі, меню —
          вертикальний стек у lower-center, версія внизу. Позиціонування
-         абсолютне; анімація — лише шари вище (Т.126, ADR-0116). Клас .start-menu також у
+         абсолютне; анімація — лише іскри вище (Т.126, ADR-0116). Клас .start-menu також у
          діалозі «Меню» гри — скоуп позиціонування тільки через .start-box */
       .start-box {
         position: relative;
@@ -1638,7 +1573,7 @@
         margin: 0 auto;
       }
       /* Т.126 (ADR-0116): логотип без прямокутника — маска-еліпс розчиняє темне тло ассета у фоні
-         (змішування screen не діяло б: герой ізольований для шарів кільця — аудит PR #440);
+         (маска, а не змішування screen — аудит PR #440);
          збільшення лише відображення (transform — макет без змін; прозорі краї маски можуть
          заходити на підпис) */
       .start-box .start-logo-img {
@@ -1778,7 +1713,7 @@
         bottom: 12px;
         margin: 0;
         font-size: 11px;
-        color: #c6d4e8; /* Т.126: на світлому кільці #6d7d92 майже не читався */
+        color: #c6d4e8; /* Т.126: на світлому тлі #6d7d92 майже не читався */
         text-shadow:
           0 0 3px #060a14,
           0 1px 6px rgba(6, 10, 20, 0.9);
@@ -1815,7 +1750,6 @@
         .start-box .start-version {
           margin-top: auto;
         }
-        /* Т.126: кільце героя (::before / ::after) — від героя, а не від .start-box */
         .start-box .start-hero {
           position: relative;
           top: auto;

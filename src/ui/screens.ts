@@ -65,7 +65,8 @@ function startScreenHtml(version: string): string {
     '<p class="start-note hidden" id="start-note" role="status"></p>' +
     '<div class="start-hero">' +
     '<h1 class="start-logo" id="start-logo"><span class="start-logo-text">РУБІЖ</span></h1>' +
-    '<p class="start-tagline">Остання лінія оборони людства проти Аномалії «Розрив»</p>' +
+    // п21.7 (рішення власника «…міста проти Розриву»): слова словника сетингу, дія — в одному місті
+    '<p class="start-tagline">Остання лінія оборони міста проти Розриву</p>' +
     '</div>' +
     '<div class="start-menu">' +
     '<button id="btn-start-new">Нова партія</button>' +

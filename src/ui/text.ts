@@ -17,14 +17,22 @@ export function ticksText(n: number): string {
 // Рід за іменем: перше слово на «-а»/«-я» — жіночий («Олена», «Марія 2»).
 // Правило точне для пулу імен ядра (SOLDIER_NAMES, squad.ts) — розбиття пулу
 // зафіксовано тестом text.test.ts: нове ім'я змушує звірити правило.
-// Решта назв юнітів («Демон Карх», п21.5: перше слово — тип) — чоловічий рід; п18.4 (аудит PR #515): «Турель N» — жіночий.
+// Решта назв юнітів («Демон Карх», п21.5: перше слово — тип) — чоловічий рід; п18.4 (аудит PR #515): «Турель N» — жіночий;
+// «Око <ім'я>» — середній (isNeuterName нижче, п21.7).
 export function isFeminineName(name: string): boolean {
   const first = name.split(' ')[0];
   return first.endsWith('а') || first.endsWith('я') || first === 'Турель';
 }
 
+// п21.7 (кандидат 213 а, рішення власника «Рід «Око»»): «Око <ім'я>» — середній рід.
+export function isNeuterName(name: string): boolean {
+  return name.split(' ')[0] === 'Око';
+}
+
 // Форма слова за родом імені: byGender('Олена', 'загинув', 'загинула').
-export function byGender(name: string, masc: string, fem: string): string {
+// Середній рід (neut) — лише там, де його передано; без нього — чоловічий, як до п21.7.
+export function byGender(name: string, masc: string, fem: string, neut: string = masc): string {
+  if (isNeuterName(name)) return neut;
   return isFeminineName(name) ? fem : masc;
 }
 

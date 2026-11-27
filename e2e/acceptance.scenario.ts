@@ -1751,15 +1751,17 @@ test('Т.61: екран перемоги і рядок-пояснення ста
         const help = getComputedStyle(document.getElementById('btn-start-help')!);
         return {
           sparks: getComputedStyle(sc, '::before').animationName,
-          ring: getComputedStyle(hero, '::before').animationName,
-          sweep: [getComputedStyle(hero, '::after').display, getComputedStyle(hero, '::after').animationName],
+          // п21.7: шарів кільця (::before) і відблиску (::after) немає — content none
+          ring: getComputedStyle(hero, '::before').content,
+          sweep: getComputedStyle(hero, '::after').content,
           mask: logo !== null && getComputedStyle(logo).maskImage.startsWith('radial-gradient'), // ассет є у збірці
           main: [nb.backgroundImage.includes('linear-gradient'), nb.color],
           menu: [help.clipPath.startsWith('polygon'), help.textTransform],
         };
       });
-    const on = { sparks: 'start-sparks', ring: 'start-ring', sweep: ['block', 'start-sweep'], mask: true };
-    const still = { sparks: 'none', ring: 'none', sweep: ['none', 'none'], mask: true };
+    // п21.7 (кандидат 211 а): кільця й відблиску немає — на тлі свій намальований портал; іскри — як Т.126
+    const on = { sparks: 'start-sparks', ring: 'none', sweep: 'none', mask: true };
+    const still = { sparks: 'none', ring: 'none', sweep: 'none', mask: true };
     const kit = { main: [true, 'rgb(26, 18, 4)'], menu: [true, 'uppercase'] };
     expect(await look()).toEqual({ ...on, ...kit });
     await page.locator('#btn-start-settings').click();

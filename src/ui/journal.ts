@@ -238,7 +238,7 @@ export function battleEventText(
   }
   if (e.type === 'death') {
     const dead = name(e.unitId);
-    return { text: '✝ ' + dead + ' ' + byGender(dead, 'загинув', 'загинула'), cls: 'lose' };
+    return { text: '✝ ' + dead + ' ' + byGender(dead, 'загинув', 'загинула', 'загинуло'), cls: 'lose' };
   }
   // П11.4 (ADR-0058): події нових бойових дій з витратниками
   if (e.type === 'heal') {
