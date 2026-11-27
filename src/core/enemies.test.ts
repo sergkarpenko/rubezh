@@ -29,8 +29,11 @@ import {
   EYE_BEAM,
   GOLEM_CANNON,
   HOUND_CLAWS,
+  ENEMY_NAMES,
   enemyKind,
   enemyMix,
+  enemyName,
+  enemyNameStart,
   kindsForThreat,
   makeEnemies,
   makeEnemy,
@@ -88,12 +91,12 @@ describe('п17.2: довідник типів (ADR-0149 п. 2)', () => {
     expect('kind' in d).toBe(false);
     expect('armor' in d).toBe(false);
     expect(d).toEqual(
-      makeUnit({ id: 'a1', side: 'alien', name: 'Демон 1', pos: { x: 1, y: 1 }, firingAccuracy: 0.5, weapon: ALIEN_CUTTER })
+      makeUnit({ id: 'a1', side: 'alien', name: enemyName('demon', 0, 0), pos: { x: 1, y: 1 }, firingAccuracy: 0.5, weapon: ALIEN_CUTTER })
     );
     expect(enemyKind(d)).toBe('demon');
     const h = makeEnemy('hound', 'a2', 0, { x: 2, y: 1 });
     expect(h).toMatchObject({
-      name: 'Гончак 1',
+      name: enemyName('hound', 0, 0),
       kind: 'hound',
       hp: 7,
       maxHp: 7,
@@ -104,16 +107,21 @@ describe('п17.2: довідник типів (ADR-0149 п. 2)', () => {
     });
     expect('armor' in h).toBe(false);
     const g = makeEnemy('golem', 'a3', 0, { x: 3, y: 1 });
-    expect(g).toMatchObject({ name: 'Голем 1', kind: 'golem', hp: 16, ap: 8, armor: 2, firingAccuracy: 0.4 });
+    expect(g).toMatchObject({ name: enemyName('golem', 0, 0), kind: 'golem', hp: 16, ap: 8, armor: 2, firingAccuracy: 0.4 });
     const e = makeEnemy('eye', 'a4', 1, { x: 4, y: 1 });
-    expect(e).toMatchObject({ name: 'Око 2', kind: 'eye', hp: 8, ap: 10, firingAccuracy: 0.65 });
+    expect(e).toMatchObject({ name: enemyName('eye', 1, 0), kind: 'eye', hp: 8, ap: 10, firingAccuracy: 0.65 });
     expect(enemyKind(e)).toBe('eye');
   });
 
   it('makeEnemies: id за порядком, ім’я і точність — за порядком серед свого типу', () => {
     const us = makeEnemies(['demon', 'hound', 'demon', 'hound'], [...ALIEN_SPAWN, { x: 15, y: 2 }]);
     expect(us.map((u) => u.id)).toEqual(['a1', 'a2', 'a3', 'a4']);
-    expect(us.map((u) => u.name)).toEqual(['Демон 1', 'Гончак 1', 'Демон 2', 'Гончак 2']);
+    expect(us.map((u) => u.name)).toEqual([
+      enemyName('demon', 0, 0),
+      enemyName('hound', 0, 0),
+      enemyName('demon', 1, 0),
+      enemyName('hound', 1, 0),
+    ]);
     expect(us.map((u) => u.firingAccuracy)).toEqual([0.5, 0.85, 0.45, 0.85]);
     expect(us[3].pos).toEqual({ x: 15, y: 2 });
   });
@@ -175,13 +183,15 @@ function geoOnDay(day: number, kind: 'розвідник' | 'збирач' = 'з
 
 describe('п18.3: createMission за загрозою (EARS 5)', () => {
   it('загроза < 8 (і без поля threat): лише демони, як до фази 17 (поля, імена, точність) — доба не важить', () => {
-    for (const m of [
-      createMission(geoOnDay(5), 'u1'),
-      createMission(geoOnDay(25), 'u1'),
-      createMission(geoOnDay(25), 'u1', { threat: 7 }),
-    ]) {
+    for (const [g, threat] of [
+      [geoOnDay(5), undefined],
+      [geoOnDay(25), undefined],
+      [geoOnDay(25), 7],
+    ] as const) {
+      const m = createMission(g, 'u1', threat === undefined ? undefined : { threat });
       const aliens = m.state.units.filter((u) => u.side === 'alien');
-      expect(aliens.map((u) => u.name)).toEqual(['Демон 1', 'Демон 2', 'Демон 3']);
+      // п21.5: ім'я — з пулу за сідом місії (ADR-0179); тип — перше слово, як і раніше
+      expect(aliens.map((u) => u.name)).toEqual([0, 1, 2].map((i) => enemyName('demon', i, missionSeed(g, 'u1'))));
       expect(aliens.map((u) => u.firingAccuracy)).toEqual([0.5, 0.45, 0.4]);
       expect(aliens.every((u) => !('kind' in u) && !('armor' in u) && u.weapon === ALIEN_CUTTER)).toBe(true);
       expect(m.briefing.aliens).toBe(3);
@@ -199,14 +209,68 @@ describe('п18.3: createMission за загрозою (EARS 5)', () => {
     }
   });
 
-  it('на загрозі 8+ трапляються нові типи; ім’я — «<назва> <N>»', () => {
+  it('на загрозі 8+ трапляються нові типи; ім’я — «<назва> <ім’я з пулу>» (п21.5)', () => {
     const names = new Set<string>();
     for (let d = 1; d <= 25; d++) {
       for (const u of createMission(geoOnDay(d), 'u1', { threat: 30 }).state.units) if (u.side === 'alien') names.add(u.name);
     }
-    expect(names.has('Гончак 1')).toBe(true);
-    expect([...names].some((n) => n.startsWith('Голем'))).toBe(true);
-    expect(names.has('Голем 2')).toBe(false);
+    const kinds = new Set([...names].map((n) => n.split(' ')[0]));
+    expect([...kinds].sort()).toEqual(['Голем', 'Гончак', 'Демон', 'Око']);
+    for (const n of names) {
+      const [type, name, round] = n.split(' ');
+      const kind = ENEMY_ORDER.find((k) => ENEMY_KINDS[k].name === type)!;
+      expect(ENEMY_NAMES[kind]).toContain(name);
+      expect(round).toBeUndefined(); // у місії ≤ 3 ворогів — пул не вичерпується
+    }
+  });
+});
+
+describe('п21.5: імена ворогів з пулу (ADR-0179)', () => {
+  it('пул — по 8 різних імен на тип, рішення власника «А. Як запропоновано»; жодне не на «-а»/«-я»', () => {
+    expect(ENEMY_NAMES).toEqual({
+      demon: ['Вирг', 'Хрозз', 'Карх', 'Грумх', 'Тракз', 'Мохр', 'Згарр', 'Кхаш'],
+      hound: ['Скрегіт', 'Рик', 'Хрип', 'Шкряб', 'Гарк', 'Клац', 'Вереск', 'Хрусь'],
+      golem: ['Клепач', 'Поршень', 'Болт', 'Шатун', 'Клапан', 'Котел', 'Гвинт', 'Брязк'],
+      eye: ['Зір', 'Відблиск', 'Спалах', 'Мерех', 'Блиск', 'Жар', 'Сяйв', 'Полиск'],
+    });
+    const all = Object.values(ENEMY_NAMES).flat();
+    expect(new Set(all).size).toBe(all.length);
+    expect(all.filter((n) => /[ая]$/.test(n))).toEqual([]);
+  });
+
+  it('enemyName: «<Тип> <ім’я>», за сідом — зсув пулу, за індексом — по колу без повторів, далі — номер кола', () => {
+    for (const kind of ENEMY_ORDER) {
+      for (const seed of [0, 1, 7, 123456, -5, 0xffffffff]) {
+        const start = enemyNameStart(kind, seed);
+        expect(start).toBeGreaterThanOrEqual(0);
+        expect(start).toBeLessThan(8);
+        const first = [...Array(8).keys()].map((i) => enemyName(kind, i, seed));
+        expect(new Set(first).size).toBe(8);
+        expect(first[0]).toBe(ENEMY_KINDS[kind].name + ' ' + ENEMY_NAMES[kind][start]);
+        expect(enemyName(kind, 8, seed)).toBe(first[0] + ' 2');
+        expect(enemyName(kind, 17, seed)).toBe(first[1] + ' 3');
+      }
+    }
+    // той самий сід — те саме ім'я; сіди місій розводять імена (не завжди перше з пулу)
+    expect(enemyName('demon', 0, 42)).toBe(enemyName('demon', 0, 42));
+    const starts = new Set([...Array(64).keys()].map((s) => enemyNameStart('demon', s)));
+    expect(starts.size).toBe(8);
+    // типи зсуваються незалежно: на одному сіді не всі з одного місця пулу
+    expect(new Set(ENEMY_ORDER.map((k) => enemyNameStart(k, 3))).size).toBeGreaterThan(1);
+  });
+
+  it('у бою без повторів: місії на різних загрозах і шість демонів поспіль — імена різні; бойовий RNG місії не зсунуто (штурм і Брама — assault.test.ts)', () => {
+    for (let d = 1; d <= 30; d++) {
+      for (const threat of [0, 30, 90]) {
+        const g = geoOnDay(d);
+        const m = createMission(g, 'u1', { threat });
+        const names = m.state.units.filter((u) => u.side === 'alien').map((u) => u.name);
+        expect(new Set(names).size).toBe(names.length);
+        expect(m.state.rng()).toBe(mulberry32(missionSeed(g, 'u1'))());
+      }
+    }
+    const six = makeEnemies(['demon', 'demon', 'demon', 'demon', 'demon', 'demon'], [...ALIEN_SPAWN, ...ALIEN_SPAWN], 99);
+    expect(new Set(six.map((u) => u.name)).size).toBe(6);
   });
 });
 

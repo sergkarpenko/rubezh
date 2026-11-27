@@ -1,14 +1,24 @@
 // Т.131 (ADR-0120): меню на ворогові — дані картки, HTML і місце біля клітинки демона.
 import { describe, expect, it } from 'vitest';
 import { GRENADE_AP_COST, GRENADE_RANGE, calculateHitChance, createGame, makeUnit, type GameState, type Unit } from '../core/combat';
-import { FACE_SCALE, MENU_SHOTS, enemyFaceStyle, enemyMenuHtml, enemyMenuPlace, enemyMenuView } from './enemy-menu';
-import { makeEnemy } from '../core/enemies';
+import {
+  ENEMY_FACES,
+  ENEMY_PORTRAIT_SIZE,
+  FACE_SCALE,
+  MENU_SHOTS,
+  enemyFaceStyle,
+  enemyPortraitCell,
+  enemyMenuHtml,
+  enemyMenuPlace,
+  enemyMenuView,
+} from './enemy-menu';
+import { ENEMY_KINDS, ENEMY_NAMES, ENEMY_ORDER, makeEnemy } from '../core/enemies';
 import { MACHINE_GUN, SHOTGUN } from '../core/weapons';
 
 function game(shooterAt: { x: number; y: number }, alienAt: { x: number; y: number }, blocked: string[] = []): GameState {
   const map = { width: 20, height: 20, blocked: new Set(blocked) };
   const s = makeUnit({ id: 's1', name: 'Олена', side: 'player', pos: shooterAt, firingAccuracy: 0.65 });
-  const a = makeUnit({ id: 'a1', name: 'Демон 1', side: 'alien', pos: alienAt, hp: 4 });
+  const a = makeUnit({ id: 'a1', name: 'Демон Карх', side: 'alien', pos: alienAt, hp: 4 });
   return createGame({ map, units: [s, a], items: { s1: { medkit: false, grenade: true } } });
 }
 const unit = (st: GameState, id: string): Unit => st.units.find((u) => u.id === id)!;
@@ -30,9 +40,25 @@ describe('п17.2: меню на ворогові — типи ворогів (р
       const h = view(kind);
       expect(h).toContain('<span class="em-face" data-kind="' + kind + '"');
       const y = -Math.round((row * 96 + 33) * FACE_SCALE);
-      expect(enemyFaceStyle(kind)).toContain('background-position:-5px ' + y + 'px');
+      // п21.5: мініатюра — другий (запасний) шар під бюстом, зсунута в колі 40 px
+      expect(enemyFaceStyle(kind, 'X')).toContain(',-11px ' + y + 'px');
       expect(h.indexOf('em-face')).toBeLessThan(h.indexOf('em-name')); // мініатюра — перед назвою
     }
+    // п21.5 (ADR-0179): бюст — перший шар; ряд — тип, стовпець — місце імені в пулі по колу
+    for (const kind of ENEMY_ORDER) {
+      const row = ENEMY_ORDER.indexOf(kind);
+      ENEMY_NAMES[kind].forEach((n, i) => {
+        const name = ENEMY_KINDS[kind].name + ' ' + n;
+        expect(enemyPortraitCell(kind, name)).toEqual({ col: i % ENEMY_FACES, row });
+        const st = enemyFaceStyle(kind, name);
+        expect(st).toMatch(/^background-image:url\([^)]*enemy-portraits[^)]*\),url\([^)]*units-atlas/);
+        expect(st).toContain('background-size:160px 160px,320px 320px;');
+        expect(st).toContain('background-position:' + -(i % 4) * ENEMY_PORTRAIT_SIZE + 'px ' + -row * ENEMY_PORTRAIT_SIZE + 'px,');
+      });
+      expect(enemyPortraitCell(kind, ENEMY_KINDS[kind].name + ' Хтось')).toEqual({ col: 0, row }); // поза пулом
+      expect(enemyPortraitCell(kind, ENEMY_KINDS[kind].name + ' ' + ENEMY_NAMES[kind][5] + ' 2').col).toBe(1); // ім'я + коло
+    }
+    expect(view('golem')).toMatch(/data-kind="golem" data-face="\d"/);
     // ворог без поля `kind` (демон ядра) — ряд демона
     const st = game({ x: 2, y: 2 }, { x: 5, y: 2 });
     expect(enemyMenuView(st, unit(st, 'a1'), undefined).kind).toBe('demon');
@@ -50,7 +76,7 @@ describe('п17.2: меню на ворогові — типи ворогів (р
   });
   it('гончак — «впритул» замість дальності', () => {
     const h = view('hound');
-    expect(h).toContain('Гончак 1');
+    expect(h).toContain('>Гончак '); // п21.5: «Гончак <ім'я>» (ADR-0179)
     expect(h).toContain('>Шкода 3–6 · впритул</div>');
     expect(h).not.toContain('Лише');
   });
@@ -72,7 +98,7 @@ describe('enemyMenuView', () => {
     const st = game({ x: 2, y: 2 }, { x: 5, y: 2 });
     const a = unit(st, 'a1');
     const v = enemyMenuView(st, a, undefined);
-    expect(v).toMatchObject({ id: 'a1', name: 'Демон 1', hp: 4, maxHp: 10, weapon: a.weapon.name, weaponRange: a.weapon.range });
+    expect(v).toMatchObject({ id: 'a1', name: 'Демон Карх', hp: 4, maxHp: 10, weapon: a.weapon.name, weaponRange: a.weapon.range });
     expect(v.shooter).toBeNull();
     expect(enemyMenuHtml(v)).toContain('Виберіть бійця');
     expect(enemyMenuHtml(v)).not.toContain('<button');

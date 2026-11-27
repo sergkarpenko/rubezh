@@ -934,8 +934,8 @@ describe('Фікс П14.8 (фідбек валідації): смерть у ч�
       f.deps.anim.queued = () => [shot];
       const ops2 = withRecCtx(() => f.battle.renderBattle());
       restore();
-      // якір голема (7, 46): (264 − 34) + round(7 · 68 / 96) = 235, (264 − 47) + round(46 · 68 / 96) = 250
-      expect(ops2).toContain('moveTo(235,250)');
+      // якір голема (10, 52; п21.5 — латунний голем): (264 − 34) + round(10 · 68 / 96) = 237, (264 − 47) + round(52 · 68 / 96) = 254
+      expect(ops2).toContain('moveTo(237,254)');
     });
   });
 

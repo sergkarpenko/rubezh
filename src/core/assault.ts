@@ -90,7 +90,7 @@ export function createAssault(party: Party, opts: CampaignBattleOptions): Missio
   const map = connectedMap(seed, undefined, undefined, ASSAULT_SPAWN);
   placeSquad(opts.squad);
   const turrets = gateKeyDone(party) ? TURRET_SPAWN.map((_, i) => makeTurret(i)) : [];
-  const aliens = makeEnemies(enemyMix(kindsForThreat(party.campaign.threat), ASSAULT_ENEMIES, seed), ASSAULT_SPAWN);
+  const aliens = makeEnemies(enemyMix(kindsForThreat(party.campaign.threat), ASSAULT_ENEMIES, seed), ASSAULT_SPAWN, seed);
   const state = createGame({
     map,
     units: [...opts.squad, ...turrets, ...aliens],
@@ -151,7 +151,7 @@ export function createGateMission(party: Party, opts: CampaignBattleOptions): Mi
   const seed = textSeed('брама:' + party.geo.minute);
   const map = connectedMap(seed, GATE_MAP, GATE_MAP, GATE_SPAWN, GATE_ZONE_CENTER);
   placeSquad(opts.squad);
-  const aliens = makeEnemies(gateMix(kindsForThreat(party.campaign.threat), seed), GATE_SPAWN);
+  const aliens = makeEnemies(gateMix(kindsForThreat(party.campaign.threat), seed), GATE_SPAWN, seed);
   const state = createGame({
     map,
     units: [...opts.squad, ...aliens],

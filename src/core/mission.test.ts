@@ -4,6 +4,7 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { RIFLE, isBlocked, evacuate, makeUnit, type GameMap } from './combat';
+import { enemyName } from './enemies';
 import { advanceTime, createGeoGame, missionTargets, type GeoState, type Probe } from './geo';
 import {
   ALIEN_SPAWN,
@@ -96,8 +97,9 @@ describe('mission: структура', () => {
     expect(aliens.length).toBe(3);
     expect(aliens.every((u) => u.weapon.name === 'Фазовий різак')).toBe(true);
     expect(aliens.map((u) => u.firingAccuracy)).toEqual([0.5, 0.45, 0.4]);
-    // Т.7 (ADR-0064): у журналі бою — «Демон N», як «демони Розриву» в решті текстів
-    expect(aliens.map((u) => u.name)).toEqual(['Демон 1', 'Демон 2', 'Демон 3']);
+    // Т.7 (ADR-0064): у журналі бою — «Демон …», як «демони Розриву» в решті текстів;
+    // п21.5 (ADR-0179): після типу — ім'я з пулу за сідом місії
+    expect(aliens.map((u) => u.name)).toEqual([0, 1, 2].map((i) => enemyName('demon', i, missionSeed(g, 'uB'))));
   });
 
   it('усі позиції унікальні, без перешкод, мапа 20×20', () => {
@@ -384,7 +386,7 @@ describe('mission: Т.14 — сід, склад бою, причини відм�
 
   it('типовий загін і демони: id та імена; стандартний солдат', () => {
     const m = createMission(mkGeo('uA'), 'uA');
-    expect(m.state.units.map((u) => u.id + ' ' + u.name)).toEqual(['s1 Іван', 's2 Олена', 's3 Тарас', 'a1 Демон 1', 'a2 Демон 2']);
+    expect(m.state.units.map((u) => u.id + ' ' + u.name)).toEqual(['s1 Іван', 's2 Олена', 's3 Тарас', 'a1 Демон Карх', 'a2 Демон Грумх']);
     expect(makeSoldier('n1', 'Ніна')).toMatchObject({ id: 'n1', side: 'player', pos: { x: 0, y: 0 }, firingAccuracy: 0.6, weapon: RIFLE });
   });
 

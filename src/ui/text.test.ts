@@ -39,7 +39,7 @@ describe('рід за іменем: пул імен ядра (SOLDIER_NAMES)', (
   it('друге коло найму («Олена 2») — рід за першим словом; демон — чоловічий', () => {
     expect(isFeminineName('Олена 2')).toBe(true);
     expect(isFeminineName('Іван 2')).toBe(false);
-    expect(isFeminineName('Демон 1')).toBe(false);
+    expect(isFeminineName('Демон Карх')).toBe(false);
   });
 
   it('byGender обирає форму слова', () => {

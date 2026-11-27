@@ -13,6 +13,7 @@
 // прев'ю (ADR-0063): `npm test` і `npm run test:smoke` цей файл не тягнуть.
 
 import { expect, test, type Page } from '@playwright/test';
+import { ENEMY_KINDS, ENEMY_NAMES, ENEMY_ORDER } from '../src/core/enemies';
 import { TICK_MINUTES } from '../src/core/geo';
 import { MISSION_MAP_H, MISSION_MAP_W } from '../src/core/mission';
 import { type Vec2 } from '../src/core/combat';
@@ -313,6 +314,30 @@ async function expectEnemyMenu(page: Page, mirror: CoreMirror, shot: NonNullable
   await expect(menu).toBeVisible();
   await expect(menu.locator('.em-name')).toHaveText(shot.target.name);
   await expect(menu.locator('.em-hpn')).toHaveText('HP ' + shot.target.hp + '/' + shot.target.maxHp);
+  // п21.5 (ADR-0179): «<Тип> <ім'я з пулу>» і мальований бюст 40 px — атлас бюстів 384 × 384 завантажено,
+  // клітинка — ряд типу, стовпець — обличчя за місцем імені в пулі (дзеркало ядра)
+  const [kindName, own] = shot.target.name.split(' ');
+  const kind = ENEMY_ORDER.find((k) => ENEMY_KINDS[k].name === kindName)!;
+  expect(ENEMY_NAMES[kind], "ім'я ворога — з пулу свого типу").toContain(own);
+  const face = menu.locator('.em-face');
+  await expect(face).toHaveAttribute('data-face', String(ENEMY_NAMES[kind].indexOf(own) % 4));
+  const bust = await face.evaluate(async (el) => {
+    const url = /url\("?([^")]+)"?\)/.exec(getComputedStyle(el).backgroundImage)![1]!;
+    const img = new Image();
+    img.src = url;
+    await img.decode();
+    const b = el.getBoundingClientRect();
+    return {
+      url,
+      w: img.naturalWidth,
+      h: img.naturalHeight,
+      size: [b.width, b.height],
+      pos: getComputedStyle(el).backgroundPosition.split(',')[0],
+    };
+  });
+  expect(bust.url).toContain('enemy-portraits');
+  expect(bust).toMatchObject({ w: 384, h: 384, size: [40, 40] });
+  expect(bust.pos).toBe(-(ENEMY_NAMES[kind].indexOf(own) % 4) * 40 + 'px ' + -ENEMY_ORDER.indexOf(kind) * 40 + 'px');
   await expect(menu.locator('[data-act="snap"] .em-meta')).toHaveText(
     shot.shooter.weapon.modes.snap.apCost + ' AP · ~' + mirror.shotOption('snap')!.chancePct + '%'
   );

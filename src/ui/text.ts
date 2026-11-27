@@ -17,7 +17,7 @@ export function ticksText(n: number): string {
 // Рід за іменем: перше слово на «-а»/«-я» — жіночий («Олена», «Марія 2»).
 // Правило точне для пулу імен ядра (SOLDIER_NAMES, squad.ts) — розбиття пулу
 // зафіксовано тестом text.test.ts: нове ім'я змушує звірити правило.
-// Решта назв юнітів («Демон 1») — чоловічий рід; п18.4 (аудит PR #515): «Турель N» — жіночий.
+// Решта назв юнітів («Демон Карх», п21.5: перше слово — тип) — чоловічий рід; п18.4 (аудит PR #515): «Турель N» — жіночий.
 export function isFeminineName(name: string): boolean {
   const first = name.split(' ')[0];
   return first.endsWith('а') || first.endsWith('я') || first === 'Турель';
