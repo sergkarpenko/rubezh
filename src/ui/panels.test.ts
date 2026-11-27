@@ -361,6 +361,15 @@ describe('renderFinances: чип балансу і кнопка найму', () 
     expect(document.getElementById('btn-hire')!.textContent).toBe('Вербувати оперативника (120)');
   });
 
+  // п20.3: гейт аудиту PR #521 (ставка — з поточної Σ довір) раніше тримав флоу економіки `main.ui.test.ts`
+  // на сіді 42; на сіді 7 у добу 1 довіра повна — неповну довіру ставимо тут напряму.
+  it('п19.2: ставка дотації — з поточної Σ довір регіонів (370 з 400 — 69/добу)', () => {
+    const f = makeFixture();
+    f.party.campaign.regions.east.trust = 70;
+    f.panels.renderFinances();
+    expect(document.getElementById('econ-rates')!.textContent).toBe('· дотація 69/добу · премії за місію 110/170');
+  });
+
   it('мало грошей — найм вимкнений з причиною; банкрутство — БАНКРУТ', () => {
     const f = makeFixture({ isGameOver: () => true });
     f.party.econ.money = 50;

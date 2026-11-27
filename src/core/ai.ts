@@ -22,23 +22,35 @@
 // удар впритул, дозору не тримає; голем — як демон, але рух лишає AP на постріл;
 // око — відхід, якщо найближчий видимий ближче за EYE_KEEP_DISTANCE, прицільний
 // постріл до 16, інакше рух на позицію пострілу. Цілі — лише видимі стороні (туман).
+//
+// п20.3 (ADR-0167; EARS 5 Фази 20): у бою з `state.cover` демон, голем і око обирають клітинку
+// ходу з укриттям від видимих оперативників (`coverStep`, `coverRank` в ai-utils.ts), далі —
+// правила типу; гончак і патруль — без змін; без `cover` — байт-у-байт як до п20.3.
 
 import {
   OVERWATCH_AP_COST,
   distance,
   hasLineOfSight,
-  isImpassable,
-  isInside,
   moveUnit,
   resolveAttack,
   setOverwatch,
-  unitAt,
   type GameState,
   type Unit,
   type Vec2,
 } from './combat';
 import { findPath, visibleEnemies } from './map';
-import { bestPathToNeighbors, bestShootMode, nearestEnemy, pathToward } from './ai-utils';
+import {
+  bestPathToNeighbors,
+  bestShootMode,
+  better,
+  cheapestShotAp,
+  coverRank,
+  coverStep,
+  nearestEnemy,
+  pathToward,
+  reachable,
+  type Reach,
+} from './ai-utils';
 
 // Око тримається щонайменше на цій відстані (Чебишев) від найближчого видимого оперативника (ADR-0149 п. 6).
 export const EYE_KEEP_DISTANCE = 6;
@@ -103,8 +115,8 @@ function demonStep(state: GameState, u: Unit, enemies: Unit[], patrol?: Vec2[]):
     return true;
   }
 
-  // 2) рух у бік цілі.
-  const step = pathToward(state, u, target);
+  // 2) рух у бік цілі; п20.3 — з укриттям (coverStep; без `cover` — жадібний шлях).
+  const step = coverStep(state, u, target, enemies, pathToward(state, u, target), u.ap);
   if (step) {
     moveUnit(state, u.id, step);
     return true; // наступний aiStep спробує вистрілити з нової позиції
@@ -112,12 +124,6 @@ function demonStep(state: GameState, u: Unit, enemies: Unit[], patrol?: Vec2[]):
 
   // 3) ні руху, ні пострілу — дозор як останній варіант.
   return watchStep(state, u);
-}
-
-// Найдешевший постріл зброї юніта (AP) серед доступних режимів.
-function cheapestShotAp(u: Unit): number {
-  const modes = u.weapon.only ?? (['snap', 'aimed', 'auto'] as const);
-  return Math.min(...modes.map((m) => u.weapon.modes[m].apCost));
 }
 
 // Гончак (ADR-0149 п. 13): ціль — найменше HP серед видимих, рівність — найближчий
@@ -164,47 +170,13 @@ function golemStep(state: GameState, u: Unit, enemies: Unit[], patrol?: Vec2[]):
     resolveAttack(state, u.id, target.id, mode);
     return true;
   }
-  const step = bestPathToNeighbors(state, u, [target.pos], u.ap - cheapestShotAp(u));
+  const budget = u.ap - cheapestShotAp(u.weapon);
+  const step = coverStep(state, u, target, enemies, bestPathToNeighbors(state, u, [target.pos], budget), budget);
   if (step) {
     moveUnit(state, u.id, step);
     return true;
   }
   return watchStep(state, u);
-}
-
-// Клітинка, до якої юніт дійде за steps кроків (обхід у ширину), і шлях до неї.
-interface Reach {
-  pos: Vec2;
-  path: Vec2[];
-}
-
-// Обхід у ширину по 4 напрямках (+x, -x, +y, -y), прохідність — як у findPath
-// (перешкоди і живі юніти непрохідні); старт не входить. Порядок — детермінований.
-function reachable(state: GameState, start: Vec2, steps: number): Reach[] {
-  const out: Reach[] = [];
-  const seen = new Set<string>([start.x + ',' + start.y]);
-  let frontier: Reach[] = [{ pos: start, path: [] }];
-  for (let d = 1; d <= steps && frontier.length > 0; d++) {
-    const next: Reach[] = [];
-    for (const cur of frontier) {
-      for (const n of [
-        { x: cur.pos.x + 1, y: cur.pos.y },
-        { x: cur.pos.x - 1, y: cur.pos.y },
-        { x: cur.pos.x, y: cur.pos.y + 1 },
-        { x: cur.pos.x, y: cur.pos.y - 1 },
-      ]) {
-        const k = n.x + ',' + n.y;
-        if (seen.has(k)) continue;
-        seen.add(k);
-        if (!isInside(state.map, n) || isImpassable(state.map, n) || unitAt(state, n) !== undefined) continue;
-        const r = { pos: n, path: [...cur.path, n] };
-        out.push(r);
-        next.push(r);
-      }
-    }
-    frontier = next;
-  }
-  return out;
 }
 
 // Відстань від pos до найближчого з видимих ворогів (Чебишев).
@@ -224,9 +196,10 @@ function canShootFrom(state: GameState, u: Unit, pos: Vec2, enemies: Unit[]): bo
 // а якщо такої цього ходу немає — до цілі, зупиняючись перед EYE_KEEP_DISTANCE.
 function eyeStep(state: GameState, u: Unit, enemies: Unit[], patrol?: Vec2[]): boolean {
   if (enemies.length === 0) return patrolStep(state, u, patrol, true);
-  const shot = cheapestShotAp(u);
+  const shot = cheapestShotAp(u.weapon);
   const here = minDistance(u.pos, enemies);
   const keep = (d: number): number => Math.min(d, EYE_KEEP_DISTANCE);
+  const cov = (p: Vec2): number[] => (state.cover ? [coverRank(state, u, p, enemies)] : []);
 
   // 1) відхід: більша відстань до найближчого (до EYE_KEEP_DISTANCE), далі — позиція
   // з пострілом, далі — ще більша відстань, далі — коротший шлях.
@@ -236,7 +209,8 @@ function eyeStep(state: GameState, u: Unit, enemies: Unit[], patrol?: Vec2[]): b
     for (const r of reachable(state, u.pos, u.ap - shot)) {
       const d = minDistance(r.pos, enemies);
       if (d <= here) continue;
-      const k = [keep(d), canShootFrom(state, u, r.pos, enemies) ? 1 : 0, d, -r.path.length];
+      // п20.3 (ADR-0167 п. 4): з укриттям — ранг укриття першим ключем.
+      const k = [...cov(r.pos), keep(d), canShootFrom(state, u, r.pos, enemies) ? 1 : 0, d, -r.path.length];
       if (best === null || better(k, bestKey)) {
         best = r;
         bestKey = k;
@@ -258,13 +232,17 @@ function eyeStep(state: GameState, u: Unit, enemies: Unit[], patrol?: Vec2[]): b
     }
   }
 
-  // 3) позиція пострілу цього ходу: найкоротший шлях, далі — більша відстань.
+  // 3) позиція пострілу цього ходу: (п20.3 — краще укриття,) найкоротший шлях, далі — більша відстань.
   let pos: Reach | null = null;
+  let posKey: number[] = [];
   for (const r of reachable(state, u.pos, u.ap - shot)) {
     const d = minDistance(r.pos, enemies);
     if (d < EYE_KEEP_DISTANCE || !canShootFrom(state, u, r.pos, enemies)) continue;
-    if (pos === null || r.path.length < pos.path.length || (r.path.length === pos.path.length && d > minDistance(pos.pos, enemies)))
+    const k = [...cov(r.pos), -r.path.length, d];
+    if (pos === null || better(k, posKey)) {
       pos = r;
+      posKey = k;
+    }
   }
   if (pos !== null) {
     moveUnit(state, u.id, pos.path);
@@ -275,18 +253,15 @@ function eyeStep(state: GameState, u: Unit, enemies: Unit[], patrol?: Vec2[]): b
   if (here >= EYE_KEEP_DISTANCE && canShootFrom(state, u, u.pos, enemies)) return watchStep(state, u);
 
   // 4) рух до найближчої цілі на всі AP, але не ближче за EYE_KEEP_DISTANCE.
-  const toward = pathToward(state, u, nearestEnemy(u, enemies)) ?? [];
+  const nearest = nearestEnemy(u, enemies);
+  const toward = pathToward(state, u, nearest) ?? [];
   const cut = toward.findIndex((p) => minDistance(p, enemies) < EYE_KEEP_DISTANCE);
-  const step = cut < 0 ? toward : toward.slice(0, cut);
+  const greedy = cut < 0 ? toward : toward.slice(0, cut);
+  // п20.3: з укриттям — та сама межа EYE_KEEP_DISTANCE як умова типу.
+  const step = coverStep(state, u, nearest, enemies, greedy, u.ap, (p) => minDistance(p, enemies) >= EYE_KEEP_DISTANCE) ?? [];
   if (step.length > 0) {
     moveUnit(state, u.id, step);
     return true;
   }
   return watchStep(state, u);
-}
-
-// Лексикографічне порівняння ключів однакової довжини: a краще за b.
-function better(a: number[], b: number[]): boolean {
-  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return a[i] > b[i];
-  return false;
 }

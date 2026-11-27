@@ -235,8 +235,9 @@ describe('Т.76: бот партії з політикою евакуації', 
   it('евакуйованих солдатів рахує поштучно, і в місіях-перемогах (сід 55, «норма», 6 діб, поранений ≤ 50 %)', () => {
     const r = simulateParty(55, 'норма', { maxDays: 6, policy: { ...DEFAULT_PARTY_POLICY, evac: { woundedAtOrBelow: 0.5 } } });
     // зафіксовані значення: 2 місії «евакуйовано», 3 евакуйовані — не 3 на місію
-    expect(r.missionsEvacuated).toBe(2);
-    expect(r.soldiersEvacuated).toBe(3);
+    // (п20.3, ШІ ворогів і бот з укриттям, ADR-0167: 3 місії, 4 евакуйовані)
+    expect(r.missionsEvacuated).toBe(3);
+    expect(r.soldiersEvacuated).toBe(4);
   });
 });
 
