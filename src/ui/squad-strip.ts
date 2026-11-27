@@ -9,6 +9,8 @@ import { fighterLook } from '../core/render-core';
 import { helmetSvg } from './avatar';
 import { ROLE_INFO, chevronHtml } from './roles';
 import { byGender } from './text';
+import { weaponIconHtml, weaponIdOf } from './weapon-icon';
+import type { WeaponId } from '../core/weapons';
 
 export type SquadCardStatus = 'ready' | 'down' | 'evac';
 
@@ -25,10 +27,14 @@ export interface SquadCardView {
   callsign?: string;
   rank?: number;
   roleGlyph?: string;
+  // п20.5 (ADR-0169; EARS 9): зброя бійця — мальована іконка в рядку імені; поза каталогом — без іконки
+  weapon?: WeaponId;
 }
 
 // Префікс id кліпа аватара в смузі: той самий боєць є й у ростері (`av-cp-<id>`).
 export const SQUAD_CLIP_PREFIX = 'sq-cp-';
+// п20.5: ширина іконки зброї на картці, CSS px (42 × 14)
+export const SQUAD_WEAPON_W = 42;
 
 // Порядок карток — порядок висадки (перші id оперативників у стані бою);
 // загиблий лишається в units, евакуйований переходить у evacuated — картка
@@ -53,9 +59,11 @@ export function squadCards(
     const { u, status } = byId.get(id)!;
     const c = careers[id];
     const role = state.roles?.[id]?.role;
+    const weapon = weaponIdOf(u.weapon);
     return {
       ...(c ? { callsign: c.callsign, rank: rankOf(c.xp) } : {}),
       ...(role ? { roleGlyph: ROLE_INFO[role].glyph } : {}),
+      ...(weapon !== null ? { weapon } : {}),
       id,
       name: u.name,
       hp: status === 'down' ? 0 : u.hp,
@@ -128,7 +136,9 @@ function cardHtml(c: SquadCardView): string {
     '<span class="sq-body"><span class="sq-head"><span class="sq-name">' +
     (c.roleGlyph !== undefined ? '<span class="sq-role">' + c.roleGlyph + '</span>' : '') +
     (c.callsign ?? c.name) +
-    '</span><span class="sq-hpn">' +
+    '</span>' +
+    (c.weapon !== undefined ? weaponIconHtml(c.weapon, SQUAD_WEAPON_W, 'wpn-icon sq-wpn') : '') +
+    '<span class="sq-hpn">' +
     (c.status === 'ready' ? c.hp + '/' + c.maxHp : '') +
     '</span></span><span class="sq-hp"><i style="width:' +
     pct +

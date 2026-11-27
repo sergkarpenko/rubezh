@@ -586,10 +586,8 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
     if (ui.itemMode === 'precise') ui.itemMode = null; // п16.4: звичайний режим замість «Точного пострілу»
     ui.tapCell = null; // П6.14: нове зведення — ціль обираємо заново (тап-тап з нуля)
     ui.aimCell = null;
-    const chance = Math.round(calculateHitChance(sel, mode) * 100);
-    battle.binfo(
-      MODE_LABEL[mode] + ' постріл: ' + cost + ' AP · ~' + chance + '% · тапніть обведену ціль — шанс, повторний тап — постріл.'
-    );
+    // п20.5 (кандидат 202 а; рішення власника «А. Прибрати шанс»): шанс без цілі — без укриття, тож у рядку його немає
+    battle.binfo(MODE_LABEL[mode] + ' постріл: ' + cost + ' AP · тапніть обведену ціль — шанс з укриттям, повторний тап — постріл.');
     battle.renderBattle();
   }
 
@@ -634,10 +632,8 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
     if (role === 'sniper') {
       ui.fireMode = 'aimed';
       ui.itemMode = 'precise';
-      const chance = Math.round(calculateHitChance(sel, 'aimed') * 100);
-      battle.binfo(
-        '«Точний постріл»: ' + ROLE_INFO.sniper.desc + ' · ~' + chance + '% · тапніть обведену ціль — шанс, повторний тап — постріл.'
-      );
+      // п20.5: як рядок зведення режиму (рішення власника «А. Прибрати шанс») — шанс лише біля цілі, з укриттям
+      battle.binfo('«Точний постріл»: ' + ROLE_INFO.sniper.desc + ' · тапніть обведену ціль — шанс з укриттям, повторний тап — постріл.');
     } else {
       ui.fireMode = null;
       ui.itemMode = 'aid';

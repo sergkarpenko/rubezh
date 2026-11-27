@@ -10,6 +10,7 @@ import { FORGE_WEAPONS, WEAPONS, type WeaponId } from '../core/weapons';
 import type { Party } from '../core/save';
 import { weaponEffect } from './effects';
 import { EQUIP_ITEMS } from './panels';
+import { weaponIconHtml } from './weapon-icon';
 
 const esc = (t: string): string => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
 
@@ -19,9 +20,12 @@ export function weaponChoices(party: Party, soldier: Unit): WeaponId[] {
   return ['rifle', ...FORGE_WEAPONS.filter((id) => id === held || party.workshop.store[id] > 0)];
 }
 
-function button(id: string, text: string, title: string, extra = ''): string {
-  return '<button type="button" id="' + id + '" title="' + esc(title) + '"' + extra + '>' + esc(text) + '</button>';
+function button(id: string, text: string, title: string, extra = '', icon = ''): string {
+  return '<button type="button" id="' + id + '" title="' + esc(title) + '"' + extra + '>' + icon + esc(text) + '</button>';
 }
+
+// п20.5: ширина іконки зброї на кнопці вікна, CSS px (48 × 16)
+export const LOADOUT_WEAPON_W = 48;
 
 // Вміст вікна для загону squad (ті самі бійці, що підуть у бій, — missionSquad).
 export function loadoutHtml(party: Party, squad: readonly Unit[]): string {
@@ -36,7 +40,8 @@ export function loadoutHtml(party: Party, squad: readonly Unit[]): string {
           'btn-lo-w-' + s.id + '-' + w,
           WEAPONS[w].name,
           weaponEffect(w) + store,
-          ' class="lo-weapon" aria-pressed="' + (w === held) + '"'
+          ' class="lo-weapon" aria-pressed="' + (w === held) + '"',
+          weaponIconHtml(w, LOADOUT_WEAPON_W, 'wpn-icon', true) // п20.5: іконка зброї перед назвою (ADR-0169)
         );
       })
       .join('');

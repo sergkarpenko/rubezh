@@ -42,6 +42,13 @@ import {
   LOW_CRATE_EDGE,
   LOW_CRATE_FILL,
   LOW_CRATE_FOG_ALPHA,
+  LOW_COVER_KINDS,
+  COVER_SHIELD_COLOR,
+  COVER_SHIELD_H,
+  drawCoverShield,
+  initLowCover,
+  isLowCoverReady,
+  lowCoverCol,
   drawPathPreview,
   drawReachZone,
   drawSoldierSprite,
@@ -195,6 +202,7 @@ beforeEach(() => {
   initUnitAtlas(() => {});
   initMetroMap(() => {}); // позафазна лінія «Мегаполіс»: фон і тайли — фолбек за замовчуванням
   initMetroTiles(() => {});
+  initLowCover(() => {}); // п20.5: тайли низьких перешкод — фолбек (ящик кодом) за замовчуванням
   initGeoMap(() => {}); // позафазна лінія: карта світу і спрайт радара — фолбек за замовчуванням
   initGeoTower(() => {});
 });
@@ -1687,5 +1695,100 @@ describe('п20.2: низька перешкода — тимчасовий ящ�
     const s = seqCtx();
     drawNightTerrain(s.ctx, 48 * 30, 48 * 30, [{ ...dec!, low: true }], 48);
     expect(crate(s.ops)).toEqual([[dec!.x * 48 + 9, dec!.y * 48 + 9, 30, 30]]);
+  });
+});
+
+// п20.5 (ADR-0169; EARS 9, рішення власника «А. Три види»): мальований тайл низької перешкоди з аркуша.
+describe('п20.5: тайл низької перешкоди з аркуша (assets/low-cover.png)', () => {
+  const low = { width: 144, height: 48 } as unknown as CanvasImageSource;
+  const lowDraws = (ops: Op[]): unknown[][] => ops.flatMap((o) => ('m' in o && o.m === 'drawImage' && o.args[0] === low ? [o.args] : []));
+
+  it('вид — за хешем координат: 0…2, стабільно, трапляються всі три', () => {
+    const seen = new Set<number>();
+    for (let y = 0; y < 20; y++)
+      for (let x = 0; x < 20; x++) {
+        const c = lowCoverCol(x, y);
+        expect(c).toBe(lowCoverCol(x, y));
+        expect(c >= 0 && c < LOW_COVER_KINDS).toBe(true);
+        seen.add(c);
+      }
+    expect([...seen].sort()).toEqual([0, 1, 2]);
+    // розклад — саме хеш координат (не смуги x + y): кілька клітинок зафіксовано
+    expect([lowCoverCol(0, 0), lowCoverCol(1, 0), lowCoverCol(0, 1), lowCoverCol(5, 7), lowCoverCol(12, 3)]).toEqual([0, 1, 2, 0, 2]);
+  });
+
+  it('аркуш завантажено — тайл 48 × 48 свого виду на всю клітинку замість ящика (з ассетами і у фолбеку); без аркуша — ящик', () => {
+    // ассети терену — у самому тесті (порядок блоків під --sequence.shuffle довільний)
+    initMetroMap((_url, onLoad) => onLoad({ width: 1024, height: 1024 } as unknown as CanvasImageSource));
+    initMetroTiles((_url, onLoad) => onLoad({ width: 192, height: 48 } as unknown as CanvasImageSource));
+    initLowCover((_url, onLoad) => onLoad(low));
+    expect(isLowCoverReady()).toBe(true);
+    const cell: TerrainCell = { x: 3, y: 2, blocked: false, visible: true, low: true };
+    const a = seqCtx();
+    drawNightTerrain(a.ctx, 48 * 5, 48 * 5, [cell], 48);
+    expect(lowDraws(a.ops)).toEqual([[low, lowCoverCol(3, 2) * 48, 0, 48, 48, 144, 96, 48, 48]]);
+    expect(a.ops.some((o) => 'set' in o && o.set === 'fillStyle' && o.v === LOW_CRATE_FILL)).toBe(false);
+    initMetroMap(() => {}); // фолбек терену
+    const b = seqCtx();
+    drawNightTerrain(b.ctx, 48 * 5, 48 * 5, [{ ...cell, visible: false }], 48);
+    expect(lowDraws(b.ops)).toHaveLength(1);
+    // у фолбеку туман «запечено» в заливку — тайл у тумані напівпрозорий, як ящик
+    const i = b.ops.findIndex((o) => 'm' in o && o.m === 'drawImage');
+    const alpha = b.ops.slice(0, i).filter((o) => 'set' in o && o.set === 'globalAlpha');
+    expect(alpha[alpha.length - 1]).toEqual({ set: 'globalAlpha', v: LOW_CRATE_FOG_ALPHA });
+    initLowCover(() => {}); // аркуш не завантажено
+    expect(isLowCoverReady()).toBe(false);
+    const c = seqCtx();
+    drawNightTerrain(c.ctx, 48 * 5, 48 * 5, [cell], 48);
+    expect(lowDraws(c.ops)).toEqual([]);
+    expect(c.ops.some((o) => 'set' in o && o.set === 'fillStyle' && o.v === LOW_CRATE_FILL)).toBe(true);
+  });
+});
+
+// п20.5 (ADR-0169; EARS 4, рішення власника «А. Найслабше»): щиток укриття на місці кола цілі ходу.
+describe("п20.5: щиток укриття в прев'ю ходу", () => {
+  const calls = (ops: Op[], m: string): unknown[][] => ops.flatMap((o) => ('m' in o && o.m === m ? [o.args] : []));
+  const base = { from: { x: 5, y: 5 }, path: [{ x: 5, y: 4 }], ap: 2, affordable: true, cell: 48, cw: 960 };
+
+  it('з укриттям — щиток замість кола цілі; без поля чи null — коло, як до п20.5', () => {
+    const plain = seqCtx();
+    drawPathPreview(plain.ctx, base);
+    const nul = seqCtx();
+    drawPathPreview(nul.ctx, { ...base, cover: null });
+    expect(nul.ops).toEqual(plain.ops);
+    const full = seqCtx();
+    drawPathPreview(full.ctx, { ...base, cover: 'full' });
+    expect(calls(full.ops, 'arc')).toEqual([]);
+    expect(full.ops.some((o) => 'set' in o && o.set === 'fillStyle' && o.v === COVER_SHIELD_COLOR)).toBe(true);
+    // щиток — у центрі клітинки цілі (5,4): верх на cy − H/2, вістря на cy + H/2
+    const moves = calls(full.ops, 'moveTo');
+    expect(moves).toContainEqual([264 - (COVER_SHIELD_H * 0.8) / 2, 216 - COVER_SHIELD_H / 2]);
+    // плашка ціни лишається
+    expect(calls(full.ops, 'fillText')).toEqual([['2 AP', 313, 217]]);
+  });
+
+  it('повне — заливка всього щитка, пів — лише лівої половини (обрізання), контур — в обох', () => {
+    const shield = (level: 'half' | 'full'): Op[] => {
+      const s = seqCtx();
+      drawCoverShield(s.ctx, 100, 100, level);
+      return s.ops;
+    };
+    const full = shield('full');
+    const half = shield('half');
+    expect(calls(full, 'clip')).toEqual([]);
+    const r = calls(half, 'rect') as number[][];
+    expect(r).toHaveLength(1);
+    [89.4, 87, 10.6, 26].forEach((v, i) => expect(r[0]![i]).toBeCloseTo(v, 6)); // ліва половина 24 × 0,8 і запас 1 px
+    expect(calls(half, 'clip')).toHaveLength(1);
+    for (const ops of [full, half]) {
+      expect(calls(ops, 'fill')).toHaveLength(2); // темна основа і колір щитка
+      expect(calls(ops, 'stroke')).toHaveLength(1);
+      expect(ops[0]).toEqual({ m: 'save', args: [] });
+      expect(ops[ops.length - 1]).toEqual({ m: 'restore', args: [] });
+    }
+    // масштаб k (зменшена канва) — щиток більший
+    const s = seqCtx();
+    drawCoverShield(s.ctx, 100, 100, 'full', 2);
+    expect(calls(s.ops, 'moveTo')[0]).toEqual([100 - COVER_SHIELD_H * 0.8, 100 - COVER_SHIELD_H]);
   });
 });

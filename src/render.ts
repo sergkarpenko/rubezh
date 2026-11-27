@@ -90,6 +90,7 @@ import metroTilesUrl from '../assets/metro-tiles.png';
 import geoMapUrl from '../assets/geo-map.webp';
 import radarTowerUrl from '../assets/radar-tower.png';
 import geoIconsUrl from '../assets/geo-icons.png';
+import lowCoverUrl from '../assets/low-cover.png';
 
 const SELECT_RING = '#9adfff'; // П12.7: рамка вибору — гама ціану «Рубіжу» (ADR-0064)
 const UFO_SOFT_ALPHA = 0.85;
@@ -340,6 +341,24 @@ export function initMetroTiles(load: LoadMetroAsset): void {
   load(metroTilesUrl, (img) => {
     metroTilesImg = img;
   });
+}
+
+// п20.5 (ADR-0169; EARS 9): тайли низьких перешкод (assets/low-cover.png, 144 × 48 — ящики,
+// відбійник, уламки; конвертер scripts/assets/convert_t216.py) — ліниве завантаження, як тайли терену;
+// вид — за хешем координат (без RNG, стабільно між кадрами); без аркуша — ящик кодом (п20.2).
+export const LOW_COVER_KINDS = 3;
+let lowCoverImg: CanvasImageSource | null = null;
+export function initLowCover(load: LoadMetroAsset): void {
+  lowCoverImg = null;
+  load(lowCoverUrl, (img) => {
+    lowCoverImg = img;
+  });
+}
+export function isLowCoverReady(): boolean {
+  return lowCoverImg !== null;
+}
+export function lowCoverCol(x: number, y: number): number {
+  return cellHash(x, y) % LOW_COVER_KINDS;
 }
 
 // Прапорець готовності терену «Мегаполіс» (фолбек — !isMetroTerrainReady).
@@ -780,7 +799,7 @@ export function drawHangarSprite(ctx: CanvasRenderingContext2D, h: { cx: number;
 // кадр після clearRect (урок П6.6) — кадр еквівалентний малюванню з
 // нуля. w/h — розмір buffer'а канви в пікселях, cell — BCELL.
 // п20.2 (ADR-0166, рішення власника «А. Тимчасово кодом»): низька перешкода — темний ящик
-// з рамкою і двома планками; мальований тайл замінить його в п20.5. З ассетами малюється до
+// з рамкою і двома планками; з п20.5 — мальований тайл з аркуша (lowCoverImg), ящик — фолбек. З ассетами малюється до
 // накладок туману — у тумані ящик приглушено, як стіну (рельєф видно, ADR-0006); у фолбеку туман
 // «запечено» в заливку клітинки (terrainShade), тож ящик у тумані — з прозорістю LOW_CRATE_FOG_ALPHA
 // (vibe-audit PR #529).
@@ -795,9 +814,14 @@ function drawLowCrates(ctx: CanvasRenderingContext2D, cells: readonly TerrainCel
   ctx.lineWidth = Math.max(1, Math.round(cell / 22));
   for (const c of cells) {
     if (c.low !== true) continue;
+    ctx.globalAlpha = dimFog && !c.visible ? LOW_CRATE_FOG_ALPHA : 1;
+    // п20.5: мальований тайл (клітинка 1:1, як стіна); туман накладе гілка терену поверх
+    if (lowCoverImg !== null) {
+      ctx.drawImage(lowCoverImg, lowCoverCol(c.x, c.y) * METRO_TILE, 0, METRO_TILE, METRO_TILE, c.x * cell, c.y * cell, cell, cell);
+      continue;
+    }
     const x0 = c.x * cell + inset;
     const y0 = c.y * cell + inset;
-    ctx.globalAlpha = dimFog && !c.visible ? LOW_CRATE_FOG_ALPHA : 1;
     ctx.fillStyle = LOW_CRATE_FILL;
     ctx.fillRect(x0, y0, size, size);
     ctx.strokeStyle = LOW_CRATE_EDGE;
@@ -1037,6 +1061,7 @@ export interface PathPreview {
   cell: number;
   cw: number; // ширина buffer'а канви, px
   px?: number; // px buffer'а на CSS px (> 1 — канву показано зменшеною); 1 — без масштабу
+  cover?: 'half' | 'full' | null; // п20.5: щиток укриття на клітинці цілі (previewCover); без поля — без щитка
 }
 export function drawPathPreview(ctx: CanvasRenderingContext2D, p: PathPreview): void {
   const goal = p.path[p.path.length - 1];
@@ -1057,10 +1082,14 @@ export function drawPathPreview(ctx: CanvasRenderingContext2D, p: PathPreview): 
   for (const c of p.path) ctx.lineTo(...mid(c));
   ctx.stroke();
   const [gx, gy] = mid(goal);
-  ctx.fillStyle = color;
-  ctx.beginPath();
-  ctx.arc(gx, gy, Math.max(PATH_END_R, 3.5 * px), 0, Math.PI * 2);
-  ctx.fill();
+  // п20.5: укриття на цілі — щиток замість кола (колір шляху лишається на лінії й плашці)
+  if (p.cover) drawCoverShield(ctx, gx, gy, p.cover, Math.max(1, (3.5 * px) / PATH_END_R));
+  else {
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(gx, gy, Math.max(PATH_END_R, 3.5 * px), 0, Math.PI * 2);
+    ctx.fill();
+  }
   const text = p.ap + ' AP';
   const prev = p.path.length > 1 ? p.path[p.path.length - 2]! : p.from; // клітинка перед ціллю
   const box = pathLabelBox(goal, p.cell, text.length * PATH_LABEL_CHAR_W * k, p.cw, k, prev.x > goal.x);
@@ -1073,6 +1102,45 @@ export function drawPathPreview(ctx: CanvasRenderingContext2D, p: PathPreview): 
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillText(text, box.x + box.w / 2, box.y + box.h / 2 + 0.5);
+  ctx.restore();
+}
+
+// п20.5 (ADR-0169; рішення власника п20.1 «А. Щиток у прев'ю ходу»): щиток на місці кола цілі ходу —
+// повне укриття — залитий, пів — залита ліва половина, порожня — темна; контур кольору щитка.
+// k — масштаб, як у кола цілі: на зменшеній канві (телефон) щиток не дрібніший за 3,5 CSS px радіуса кола.
+export const COVER_SHIELD_COLOR = '#7fd8ff';
+export const COVER_SHIELD_H = 24;
+export function drawCoverShield(ctx: CanvasRenderingContext2D, cx: number, cy: number, level: 'half' | 'full', k = 1): void {
+  const h = COVER_SHIELD_H * k;
+  const w = h * 0.8;
+  const top = cy - h / 2;
+  const shield = (): void => {
+    ctx.beginPath();
+    ctx.moveTo(cx - w / 2, top);
+    ctx.lineTo(cx + w / 2, top);
+    ctx.lineTo(cx + w / 2, top + h * 0.45);
+    ctx.quadraticCurveTo(cx + w / 2, top + h * 0.85, cx, top + h);
+    ctx.quadraticCurveTo(cx - w / 2, top + h * 0.85, cx - w / 2, top + h * 0.45);
+    ctx.closePath();
+  };
+  ctx.save();
+  shield();
+  ctx.fillStyle = PATH_LABEL_BG;
+  ctx.fill();
+  ctx.save();
+  if (level === 'half') {
+    ctx.beginPath();
+    ctx.rect(cx - w / 2 - 1, top - 1, w / 2 + 1, h + 2);
+    ctx.clip();
+  }
+  shield();
+  ctx.fillStyle = COVER_SHIELD_COLOR;
+  ctx.fill();
+  ctx.restore();
+  shield();
+  ctx.lineWidth = Math.max(1.5, 1.5 * k);
+  ctx.strokeStyle = COVER_SHIELD_COLOR;
+  ctx.stroke();
   ctx.restore();
 }
 

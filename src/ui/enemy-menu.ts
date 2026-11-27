@@ -2,7 +2,7 @@
 // Тап по видимому демону без зведеного режиму — картка біля нього: назва, HP
 // числом і смугою, відстань, зброя демона; кнопки пострілів з AP і шансом
 // (стріляють одразу) і «Граната» (зводить гранату з епіцентром на демоні).
-// Укриття в грі немає: шанс — лише від стрільця і режиму (ADR-0004).
+// п20.2–п20.5: шанс кнопок — з укриттям цілі від стрільця (ADR-0166), рядок укриття — під відстанню (ADR-0169).
 // Чисті функції: стан бою → дані картки → HTML і місце; DOM чіпає src/ui/battle.ts.
 // п17.2 (ADR-0149 п. 15; рішення власника «А. Окремий рядок»): ближній бій — «впритул»
 // замість дальності; зброя з одним режимом — рядок «Лише …»; броня — рядок «Броня N: −N
@@ -16,12 +16,14 @@ import {
   hasLineOfSight,
   hasTerrainLine,
   weaponHasMode,
+  type CoverLevel,
   type GameState,
   type ShotMode,
   type Unit,
 } from '../core/combat';
 import { enemyKind, type EnemyKind } from '../core/enemies';
 import { ATLAS_ROW } from '../render';
+import { coverMenuLine } from './cover-ui';
 import unitAtlasUrl from '../../assets/units-atlas.png';
 
 // Чому дія недоступна — ті самі перевірки, що й assertCanFire / throwGrenade ядра
@@ -49,7 +51,8 @@ export interface EnemyMenuView {
   only: ShotMode | null; // п17.2: єдиний режим зброї ворога (око — прицільний), інакше null
   armor: number; // п17.2: броня (голем — 2), 0 — без броні
   // null — бійця не вибрано: картка лише з інформацією
-  shooter: { dist: number; shots: EnemyMenuShot[]; grenade: MenuBlock } | null;
+  // п20.5: cover — укриття цілі від стрільця (undefined — укриття не діє: бій без `cover`, удар впритул)
+  shooter: { dist: number; cover: CoverLevel | undefined; shots: EnemyMenuShot[]; grenade: MenuBlock } | null;
 }
 
 // Порядок кнопок — як плитки й клавіші 1–3
@@ -81,6 +84,7 @@ export function enemyMenuView(state: GameState, target: Unit, shooter: Unit | un
   if (shooter === undefined) return view;
   const dist = distance(shooter.pos, target.pos);
   const los = hasLineOfSight(state, shooter.pos, target.pos, shooter.side);
+  const cover = shotCover(state, shooter, target);
   const shots = MENU_SHOTS.map((mode): EnemyMenuShot => {
     const p = shooter.weapon.modes[mode];
     // порядок причин — як у assertCanFire: режим зброї (п20.4), дальність, лінія, AP
@@ -97,7 +101,7 @@ export function enemyMenuView(state: GameState, target: Unit, shooter: Unit | un
       mode,
       label: SHOT_LABEL[mode],
       ap: p.apCost,
-      chancePct: Math.round(calculateHitChance(shooter, mode, shotCover(state, shooter, target)) * 100), // п20.2: з укриттям цілі
+      chancePct: Math.round(calculateHitChance(shooter, mode, cover) * 100), // п20.2: з укриттям цілі
       shots: p.shots,
       block,
     };
@@ -112,7 +116,7 @@ export function enemyMenuView(state: GameState, target: Unit, shooter: Unit | un
         : !hasTerrainLine(state, shooter.pos, target.pos) // п17.4: лінія кидка — лише рельєф
           ? 'los'
           : null;
-  view.shooter = { dist, shots, grenade };
+  view.shooter = { dist, cover, shots, grenade };
   return view;
 }
 
@@ -182,7 +186,11 @@ export function enemyMenuHtml(v: EnemyMenuView): string {
   if (v.armor > 0) html += '<div class="em-line">Броня ' + v.armor + ': −' + v.armor + ' від влучання</div>';
   const s = v.shooter;
   if (s === null) return html + '<div class="em-line em-hint">Виберіть бійця — тоді постріли.</div>';
-  html += '<div class="em-line">Відстань ' + s.dist + '</div><div class="em-acts">';
+  html += '<div class="em-line">Відстань ' + s.dist + '</div>';
+  // п20.5 (рішення власника «А. З множником»): рядок укриття цілі від обраного бійця
+  const coverLine = coverMenuLine(s.cover);
+  if (coverLine !== null) html += '<div class="em-line em-cover" data-cover="' + s.cover + '">' + coverLine + '</div>';
+  html += '<div class="em-acts">';
   for (const shot of s.shots) {
     html += button(shot.mode, shot.label, shot.ap, (shot.shots > 1 ? shot.shots + '×' : '') + '~' + shot.chancePct + '%', shot.block);
   }

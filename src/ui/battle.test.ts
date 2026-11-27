@@ -10,7 +10,7 @@ import { enemyKind, enemyMix, kindsForThreat, makeEnemy } from '../core/enemies'
 import { missionSeed } from '../core/mission';
 import { createParty, type Party } from '../core/save';
 import { campaignTick } from '../core/campaign';
-import { initPixelSprites, initUnitAtlas } from '../render';
+import { COVER_SHIELD_COLOR, initPixelSprites, initUnitAtlas } from '../render';
 import { ALIEN_RING, RING_DY, RING_RX, fighterLook, makeDeathAnim, makeMoveAnim, makeTracerAnim } from '../core/render-core';
 import { createBattleUI, validFireTargets, validHealTargets, type BattleDeps, type BattleUIState } from './battle';
 import { createToolbar } from './toolbar';
@@ -548,13 +548,13 @@ describe('battle: флоу місії (запуск/закриття/завер�
     expect([cap('btn-role').textContent, tile('btn-role').disabled]).toEqual(['Точний', false]);
     // аудит PR #531: ціна в кутку і тултіп — за зброєю вибраного
     const ap = (id: string): string => document.querySelector('#' + id + ' .tb-ap')!.textContent!;
-    expect([ap('btn-aimed'), tile('btn-aimed').title]).toEqual(['6 AP', '6 AP · ×1.3 · 1 куля · клавіша 2']);
+    expect([ap('btn-aimed'), tile('btn-aimed').title]).toEqual(['6 AP', '6 AP · ×1,3 · 1 куля · клавіша 2']);
     sel.weapon = MACHINE_GUN;
     f.battle.renderBattle();
-    expect([ap('btn-auto'), tile('btn-auto').title]).toEqual(['5 AP', '5 AP · ×0.45 · 4 кулі · клавіша 3']);
+    expect([ap('btn-auto'), tile('btn-auto').title]).toEqual(['5 AP', '5 AP · ×0,45 · 4 кулі · клавіша 3']);
     f.ui.selectedId = null; // без вибору — числа «Гарта»
     f.battle.renderBattle();
-    expect([ap('btn-aimed'), ap('btn-auto'), tile('btn-auto').title]).toEqual(['5 AP', '4 AP', '4 AP · ×0.5 · 3 кулі · клавіша 3']);
+    expect([ap('btn-aimed'), ap('btn-auto'), tile('btn-auto').title]).toEqual(['5 AP', '4 AP', '4 AP · ×0,5 · 3 кулі · клавіша 3']);
   });
 
   it('п16.4: плитка «Роль» — підпис, іконка й ціна за роллю вибраного, причина з ядра (EARS 6)', () => {
@@ -1009,6 +1009,36 @@ describe('Т.44: зона ходу вибраного оперативника �
     none((_f, g) => (g.activeSide = 'alien'));
     none((f) => (f.ui.battleResult = 'перемога'));
     none(() => {}, 0);
+  });
+
+  // п20.5 (ADR-0169; EARS 4, рішення власника «А. Найслабше»): щиток на клітинці цілі ходу — той самий previewCover
+  it('п20.5: прев\u2019ю ходу на клітинку з укриттям від видимого демона — щиток замість кола; без cover, у фланг — коло', () => {
+    const run = (cover: boolean, wall: string, goal = { x: 5, y: 4 }): string[] => {
+      const f = makeFixture();
+      f.battle.launch(firstTarget(f));
+      f.ui.mission!.state = createGame({
+        map: { width: 20, height: 20, blocked: new Set([wall]) },
+        units: [
+          makeUnit({ id: 's1', side: 'player', name: 'Гарт', pos: { x: 5, y: 5 }, ap: 2, maxAp: 2 }),
+          makeUnit({ id: 'a1', side: 'alien', name: 'Морок', pos: { x: 10, y: 4 } }),
+        ],
+        cover,
+      });
+      f.ui.selectedId = 's1';
+      f.ui.hoverPath = [goal];
+      f.ui.hoverAp = 1;
+      return render(f);
+    };
+    const shield = (ops: string[]): boolean => ops.includes('set:fillStyle=' + COVER_SHIELD_COLOR);
+    const goalDot = (ops: string[]): boolean => ops.some((o) => o.startsWith('arc(264,216,7,'));
+    // стіна (6,3) — на діагоналі клітинки (5,4) з боку демона (10,4), кут рівно 45° — повне укриття
+    expect(shield(run(true, '6,3'))).toBe(true);
+    expect(goalDot(run(true, '6,3'))).toBe(false);
+    expect(shield(run(false, '6,3'))).toBe(false); // бій без опції cover
+    expect(goalDot(run(false, '6,3'))).toBe(true);
+    expect(shield(run(true, '6,7'))).toBe(false); // стіна не з боку демона — фланг
+    // щиток рахується для клітинки цілі, а не для клітинки бійця: (5,5) біля стіни (6,5) — у повному, (5,3) — фланг
+    expect(shield(run(true, '6,5', { x: 5, y: 3 }))).toBe(false);
   });
 
   it('шар зони — після синіх квадратів висадки, до лінії шляху і під юнітами', () => {

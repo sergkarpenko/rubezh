@@ -1,0 +1,111 @@
+{
+ "low": [
+  {
+   "name": "crates",
+   "srcWH": [
+    279,
+    219
+   ],
+   "bbox": [
+    3,
+    13,
+    45,
+    46
+   ],
+   "opaque": 0.519,
+   "greenMax": 0
+  },
+  {
+   "name": "barrier",
+   "srcWH": [
+    276,
+    200
+   ],
+   "bbox": [
+    3,
+    16,
+    45,
+    46
+   ],
+   "opaque": 0.323,
+   "greenMax": 0
+  },
+  {
+   "name": "debris",
+   "srcWH": [
+    287,
+    216
+   ],
+   "bbox": [
+    3,
+    14,
+    45,
+    46
+   ],
+   "opaque": 0.423,
+   "greenMax": 0
+  }
+ ],
+ "weapons": [
+  {
+   "name": "rifle",
+   "srcWH": [
+    329,
+    144
+   ],
+   "bbox": [
+    16,
+    2,
+    80,
+    30
+   ],
+   "opaque": 0.204,
+   "greenMax": 0
+  },
+  {
+   "name": "shotgun",
+   "srcWH": [
+    237,
+    115
+   ],
+   "bbox": [
+    19,
+    2,
+    77,
+    30
+   ],
+   "opaque": 0.283,
+   "greenMax": 0
+  },
+  {
+   "name": "sniper",
+   "srcWH": [
+    347,
+    99
+   ],
+   "bbox": [
+    2,
+    3,
+    94,
+    29
+   ],
+   "opaque": 0.292,
+   "greenMax": 0
+  },
+  {
+   "name": "mg",
+   "srcWH": [
+    308,
+    141
+   ],
+   "bbox": [
+    17,
+    2,
+    78,
+    30
+   ],
+   "opaque": 0.269,
+   "greenMax": 0
+  }
+ ]
+}

@@ -12,7 +12,8 @@ import { ARMOR_MAX_HP_BONUS, OPTICS_ACCURACY_BONUS } from '../core/workshop';
 import { GRENADE_DAMAGE, GRENADE_RANGE, HEAL_AMOUNT, HIT_CHANCE_CAP } from '../core/combat';
 import { initPixelSprites } from '../render';
 import { fighterLook } from '../core/render-core';
-import { createPanels, gateCell, gunModuleReady, hpColor, inAirCombat, readyToIssue, type PanelsDeps } from './panels';
+import { ROSTER_WEAPON_W, createPanels, gateCell, gunModuleReady, hpColor, inAirCombat, readyToIssue, type PanelsDeps } from './panels';
+import { SNIPER_RIFLE } from '../core/weapons';
 
 // Піксельний рушій (ADR-0031): тестовий мок фабрики offscreen-канвасів —
 // той самий патерн, що й у main.ui.test.ts (jsdom без пакета canvas).
@@ -584,6 +585,20 @@ describe('renderRoster: ростер і чип боєготових (ADR-0027)',
     const clips = [...document.querySelectorAll('#roster clipPath')].map((c) => c.id);
     expect(new Set(clips).size).toBe(clips.length);
     expect(svgs[0]!.querySelector('g')!.getAttribute('clip-path')).toBe('url(#' + clips[0] + ')');
+  });
+
+  it('п20.5 (ADR-0169; рішення власника «Б. + ростер «Загін»»): у третьому рядку — іконка зброї бійця', () => {
+    const f = makeFixture();
+    f.party.roster.soldiers[0]!.weapon = SNIPER_RIFLE;
+    f.panels.renderRoster();
+    const icons = [...document.querySelectorAll<HTMLElement>('#roster .soldier .s-wpn')];
+    expect(icons.map((i) => i.dataset.weapon)).toEqual(f.party.roster.soldiers.map((_, i) => (i === 0 ? 'sniper' : 'rifle')));
+    expect(icons[0]!.title).toBe('Гвинтівка «Голка»');
+    expect(icons[0]!.style.width).toBe(ROSTER_WEAPON_W + 'px');
+    // зброя поза каталогом (не мала б траплятись) — «Гарт»
+    f.party.roster.soldiers[1]!.weapon = { ...SNIPER_RIFLE, name: 'Інша' };
+    f.panels.renderRoster();
+    expect(document.querySelectorAll<HTMLElement>('#roster .soldier .s-wpn')[1]!.dataset.weapon).toBe('rifle');
   });
 
   it('порожній ростер — «Загін втрачено» і підказка щодо найму', () => {

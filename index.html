@@ -491,6 +491,10 @@
       #benemy .em-line {
         color: #b8c6e0;
       }
+      /* п20.5: рядок укриття цілі — колір щитка прев'ю ходу (COVER_SHIELD_COLOR) */
+      #benemy .em-cover {
+        color: #7fd8ff;
+      }
       #benemy .em-hint {
         margin-top: 4px;
         color: #e6f0ff;
@@ -940,6 +944,22 @@
       }
       .lo-row button {
         margin: 2px 4px 2px 0;
+      }
+      /* п20.5 (ADR-0169): мальована іконка зброї — спрайт аркуша, розмір і зсув задає weaponIconHtml */
+      .wpn-icon {
+        display: inline-block;
+        flex: none;
+        background-repeat: no-repeat;
+        vertical-align: middle;
+      }
+      .lo-weapon .wpn-icon {
+        margin-right: 6px;
+      }
+      /* у ряду над полем (телефон, вужче за 900 px) картка вузька — іконка забирала б місце позивного;
+         зброю там видно в ростері й вікні спорядження (e2e: ім'я на картці не обрізане) */
+      #bsquad .sq-wpn {
+        display: none;
+        margin-left: auto;
       }
       .lo-weapon[aria-pressed='true'] {
         border-color: #ffb454;
@@ -2222,6 +2242,9 @@
         }
         #layout.in-battle #bsquad .sq-hpn {
           display: block;
+        }
+        #layout.in-battle #bsquad .sq-wpn {
+          display: inline-block; /* п20.5: у стовпчику сітки бою — іконка зброї перед числом HP */
         }
         #layout.in-battle #bresult {
           grid-column: 2;

@@ -39,7 +39,17 @@ export interface ToolbarAction {
 // п20.4 (аудит PR #531): числа — зброї вибраного бійця (battle.ts); без вибору — «Гарт».
 export function fireModeHint(mode: 'snap' | 'aimed' | 'auto', key: string, w: Weapon = RIFLE): string {
   const m = w.modes[mode];
-  return m.apCost + ' AP · ×' + m.accuracyMod + ' · ' + m.shots + (m.shots === 1 ? ' куля' : ' кулі') + ' · клавіша ' + key;
+  // п20.5 (кандидат 205 д; рішення власника «Так, кома»): множник з комою, як у «Дослідженні» й меню
+  return (
+    m.apCost +
+    ' AP · ×' +
+    String(m.accuracyMod).replace('.', ',') +
+    ' · ' +
+    m.shots +
+    (m.shots === 1 ? ' куля' : ' кулі') +
+    ' · клавіша ' +
+    key
+  );
 }
 
 // Перелік дій — за чинними діями бою (src/ui/battle.ts): режими пострілу,
