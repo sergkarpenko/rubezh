@@ -57,9 +57,6 @@ import { el, setWhy } from './dom';
 import { setIconText } from './icons';
 import { helmetSvg } from './avatar';
 import { weaponIconHtml, weaponIdOf } from './weapon-icon';
-
-// п20.5: ширина іконки зброї в ростері, CSS px (42 × 14)
-export const ROSTER_WEAPON_W = 42;
 import { RANK_NAMES, rankOf } from '../core/career';
 import { chevronHtml, roleLabel, xpLine } from './roles';
 import { GCELL } from './grid';
@@ -67,6 +64,9 @@ import { geoEventText, type LogCat } from './journal';
 import { renderEndScreens, renderGoalPanel, renderThreatChip } from './campaign-panel';
 import { ticksText } from './text';
 import type { AmbientGeoScene } from './ambient';
+
+// п20.5: ширина іконки зброї в ростері, CSS px (42 × 14)
+export const ROSTER_WEAPON_W = 42;
 
 // П7: колір HP (чиста функція): повне — зелений, понад половину — жовтий, інакше — червоний.
 export function hpColor(hp: number, maxHp: number): string {

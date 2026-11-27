@@ -1343,7 +1343,7 @@ test('сценарій приймання ADR-0030: партія → місія 
     await page.locator('#btn-snap').click();
     // п20.5 (кандидат 202 а; рішення власника «А. Прибрати шанс»): рядок зведення — без шансу; перший тап по цілі —
     // шанс з укриттям (дзеркало)
-    await expect(info).toContainText('3 AP · тапніть обведену ціль — шанс з укриттям');
+    await expect(info).toContainText(shot.shooter.weapon.modes.snap.apCost + ' AP · тапніть обведену ціль — шанс з укриттям');
     await tap(page, shot.target.pos); // перший тап — шанс влучання
     await expect(info).toContainText('~' + shot.chancePct + '% · повторний тап у цю саму ціль — постріл');
     await tap(page, shot.target.pos); // повторний тап — постріл

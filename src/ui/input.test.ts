@@ -1380,6 +1380,9 @@ describe('п16.4: дія ролі (плитка «Роль», клавіша R)'
     expect(f.ui.itemMode).toBe('precise');
     expect(f.ui.fireMode).toBe('aimed');
     expect(f.binfo()).toContain('«Точний постріл»');
+    // п20.5 (рішення власника «А. Прибрати шанс»): у рядку зведення шансу без цілі немає
+    expect(f.binfo()).toContain(' · тапніть обведену ціль — шанс з укриттям, повторний тап — постріл.');
+    expect(f.binfo()).not.toContain('%');
     clickAt(f, a.pos.x, a.pos.y); // шанс
     expect(f.binfo()).toContain('повторний тап');
     clickAt(f, a.pos.x, a.pos.y); // постріл
