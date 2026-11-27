@@ -88,11 +88,11 @@ function startScreenHtml(version: string): string {
 function newGameDialogHtml(): string {
   // Т.218 (відгук власника 27.11.2026: «сід та дропдаун, не зручно, не зрозуміло»; рішення —
   // картки складності): радіогрупа карток з описом, що змінює пресет (числа — DIFFICULTY_MULTIPLIERS);
-  // сід — у «Додатково» з кнопкою «Випадковий». Перемальовування екрана — Фаза 21.
+  // сід — у «Додатково» з кнопкою «Випадковий». Т.221 (ADR-0177): вигляд — у стилі старту (index.html).
   const card = (value: DifficultyPreset, name: string, desc: string): string =>
     '<label class="preset-card">' +
     `<input type="radio" name="new-game-preset" value="${value}"${value === 'норма' ? ' checked' : ''} />` +
-    `<span class="preset-name">${name}</span><span class="preset-desc">${desc}</span></label>`;
+    `<span class="preset-name">${name}</span><span class="preset-desc">${keepMultiplier(desc)}</span></label>`;
   return (
     '<div class="panel screen-dialog">' +
     '<h2>Нова партія</h2>' +
@@ -112,6 +112,10 @@ function newGameDialogHtml(): string {
     '</div>'
   );
 }
+
+// Т.221 (кандидат 209 (ж)): множник «×1,2» / «×0,9» не переноситься окремим рядком на телефоні —
+// нерозривний пробіл перед «×» (текст власника той самий, змінюється лише перенос).
+export const keepMultiplier = (text: string): string => text.replace(/ ×/g, '\u00a0×');
 
 // Т.218: описи карток складності (тексти власника дослівно).
 export const PRESET_TEXT: Readonly<Record<DifficultyPreset, string>> = {

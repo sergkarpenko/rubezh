@@ -1745,6 +1745,51 @@ test('Т.61: екран перемоги і рядок-пояснення ста
     await page.setViewportSize({ width: 1440, height: 900 });
   });
 
+  await test.step('Т.221 (ADR-0177): «Нова партія» в стилі старту; множник не переноситься окремим рядком; вікно — у межах', async () => {
+    const look = (): Promise<Record<string, unknown>> =>
+      page.evaluate(() => {
+        const panel = getComputedStyle(document.querySelector('#new-game-dialog .screen-dialog')!);
+        const card = getComputedStyle(document.querySelector('#new-game-preset .preset-card')!);
+        const start = getComputedStyle(document.getElementById('btn-new-game-start')!);
+        const cancel = getComputedStyle(document.getElementById('btn-new-game-cancel')!);
+        return {
+          panel: [panel.clipPath.startsWith('polygon'), panel.backgroundColor !== 'rgba(0, 0, 0, 0)'],
+          card: [card.clipPath.startsWith('polygon'), card.borderRadius],
+          start: [start.backgroundImage.includes('linear-gradient'), start.color, start.textTransform],
+          cancel: [cancel.clipPath.startsWith('polygon'), cancel.textTransform],
+          nbsp: [...document.querySelectorAll('#new-game-preset .preset-desc')].map((d) => /\u00a0×/.test(d.textContent ?? '')),
+        };
+      });
+    const fits = (): Promise<[boolean, boolean]> =>
+      page.evaluate(() => {
+        const d = document.querySelector('#new-game-dialog .screen-dialog')!.getBoundingClientRect();
+        return [d.top >= 0 && d.left >= 0 && d.right <= innerWidth, document.getElementById('new-game-dialog')!.scrollWidth <= innerWidth];
+      });
+    await page.setViewportSize({ width: 1366, height: 768 });
+    await page.locator('#btn-start-new').click();
+    expect(await look()).toEqual({
+      panel: [true, true],
+      card: [true, '0px'],
+      start: [true, 'rgb(26, 18, 4)', 'uppercase'],
+      cancel: [true, 'uppercase'],
+      nbsp: [true, false, true], // «Норма» — без множника
+    });
+    // вимір Т.221: вікно в межах і без прокрутки вбік, на 568 × 320 — від верху (на main верх обрізався б на -11 px
+    // з полем панелі); телефон портрет і альбом — як на main
+    for (const size of [
+      { width: 1366, height: 768 },
+      { width: 320, height: 480 },
+      { width: 568, height: 320 },
+      { width: 667, height: 375 },
+    ]) {
+      await page.setViewportSize(size);
+      expect(await fits(), `«Нова партія» ${size.width} × ${size.height}`).toEqual([true, true]);
+    }
+    await page.locator('#btn-new-game-cancel').click();
+    await expect(page.locator('#new-game-dialog')).toBeHidden();
+    await page.setViewportSize({ width: 1440, height: 900 });
+  });
+
   await test.step('Т.94: малі й низькі вікна без банера — нічого не накрито, усе у вікні, без прокрутки', async () => {
     // вище за 760 px — розкладка П14.7 без змін: меню на 48 px над низом екрана з відступом 16 px
     await page.setViewportSize({ width: 1366, height: 768 });
