@@ -1399,9 +1399,8 @@
       }
 
       /* П12.2/П14.7 (ADR-0065/0072): стартовий екран — вільна повноекранна
-         компоновка без панелі-коробки; фон — обраний власником кадр Б1
-         «Лінія оборони» (assets/start-bg.webp, ставить screens.ts з
-         vite-імпорту), cover + center; фолбек без ассета (headless/офлайн)
+         компоновка без панелі-коробки; фон — assets/start-bg.webp (з Т.221, ADR-0177 — «Б. Портал над
+         затокою», до того — кадр Б1 «Лінія оборони»; ставить screens.ts з vite-імпорту), cover + center; фолбек без ассета (headless/офлайн)
          — суцільний колір #060a14, той самий вигляд без зображення */
       #start-screen {
         position: fixed;
@@ -1593,7 +1592,8 @@
       }
       /* П14.7: ассет лого з м'яким фейдером країв (альфа → 0 по периметру,
          рампа 96 px, sstep) — прямокутні рамки розчиняються у темному
-         просвіті кільця; border-radius не потрібен */
+         просвіті кільця; border-radius не потрібен. Т.221 (ADR-0177): новий логотип — RGBA, тло сирця
+         прозоре за яскравістю, рампа по краю вставки (scripts/assets/convert_start_t221.py) */
       .start-logo-img {
         display: block;
         width: 100%;
@@ -2100,12 +2100,6 @@
           inset 0 1px 0 rgba(255, 255, 255, 0.45),
           inset 0 0 14px rgba(255, 243, 214, 0.35);
       }
-      #new-game-dialog .dialog-actions button:focus-visible {
-        outline: none;
-        box-shadow:
-          inset 0 0 0 2px #ffffff,
-          inset 0 0 18px rgba(0, 229, 255, 0.4);
-      }
       @media (hover: hover) {
         #new-game-dialog .dialog-actions button:hover {
           color: #fff;
@@ -2120,6 +2114,19 @@
             inset 0 1px 0 rgba(255, 255, 255, 0.55),
             inset 0 0 18px rgba(255, 243, 214, 0.5);
         }
+      }
+      #new-game-dialog .dialog-actions button:focus-visible {
+        outline: none;
+        box-shadow:
+          inset 0 0 0 2px #ffffff,
+          inset 0 0 18px rgba(0, 229, 255, 0.4);
+      }
+      /* аудит PR #540: правило бурштинової кнопки (#id) сильніше за :focus-visible вище — своє біле кільце;
+         обидва правила фокусу — після наведення: миша над кнопкою не ховає кільце фокусу з клавіатури */
+      #new-game-dialog .dialog-actions #btn-new-game-start:focus-visible {
+        box-shadow:
+          inset 0 0 0 2px #ffffff,
+          inset 0 0 14px rgba(255, 243, 214, 0.35);
       }
       /* Т.218: «Сценарії для перевірки» — посилання в рядку версії і список віх */
       .start-link {

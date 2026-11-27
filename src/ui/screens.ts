@@ -188,10 +188,9 @@ export function createScreens(deps: ScreensDeps): Screens {
   const topbar = el('topbar');
   const layout = el('layout');
   startScreen.innerHTML = startScreenHtml(deps.version);
-  // П14.7 (ADR-0072/0071): фон стартового екрана — обраний власником кадр
-  // Б1 «Лінія оборони» (assets/start-bg.webp; конвертація з JPG власника —
-  // один цикл стиснення WebP q92, PSNR 46.5 дБ проти оригіналу, розмір
-  // 1376×768 без звуження). URL — з vite-імпорту (base-аварійний); це
+  // П14.7 (ADR-0072/0071): фон стартового екрана — assets/start-bg.webp; з Т.221 (ADR-0177) — картина
+  // Gemini «Б. Портал над затокою» (scripts/assets/convert_start_t221.py, WebP q82, 1376×768), до того —
+  // кадр Б1 «Лінія оборони». URL — з vite-імпорту (base-аварійний); це
   // CSS-фон, не Image-завантаження (прецедент П13.4): headless/офлайн/без
   // файла бачать суцільний колір #060a14 з CSS (фолбек — той самий вигляд
   // без зображення, тести від ассета не залежать).

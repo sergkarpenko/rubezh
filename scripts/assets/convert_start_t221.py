@@ -7,7 +7,8 @@
 Другий аргумент (необов'язковий) — тека результату замість assets/ (аркуш варіантів збирає кожен
 варіант у свою теку). Результат — ті самі файли й геометрія, що досі (ADR-0072, ADR-0116):
   start-bg.webp — 1376 × 768 (якість 82);
-  logo.webp     — 1024 × 768: літери ≈ 70 % ширини по центру на тлі сирця, краї — тло;
+  logo.webp     — 1024 × 768 RGBA: літери ≈ 70 % ширини по центру, тло сирця прозоре (альфа за яскравістю,
+                  щілини в літерах закрито), по краю вставки — рампа альфи, по периметру полотна альфа 0;
   scripts/assets/start-t221-report.json — рамка літер у сирці, масштаб, колір тла.
 Рамка літер — стовпчики й рядки, де понад 3 пікселі яскравіші за 120 (сірий). Лапки «» обабіч слова (Gemini додав їх в одному з
 варіантів) прибирає `--drop-side`: крайня група стовпчиків вужча за 110 px з проміжком від слова ≥ 8 px
@@ -29,6 +30,10 @@ ARGS = [a for a in sys.argv[1:] if not a.startswith('--')]
 SRC = Path(ARGS[0]) if ARGS else ROOT / 'assets-src'
 OUT = Path(ARGS[1]) if len(ARGS) > 1 else ROOT / 'assets'
 DROP_SIDE = '--drop-side' in sys.argv
+# аудит PR #540: невідомий прапорець (друкарська помилка) — помилка, а не мовчазний пропуск
+UNKNOWN = [a for a in sys.argv[1:] if a.startswith('--') and a != '--drop-side']
+if UNKNOWN:
+    sys.exit(f'невідомі прапорці: {UNKNOWN}; є лише --drop-side')
 REPORT = Path(__file__).resolve().parent / 'start-t221-report.json'
 BG_SIZE = (1376, 768)
 LOGO_SIZE = (1024, 768)
@@ -69,9 +74,10 @@ def letters_box(gray: np.ndarray) -> tuple[tuple[int, int, int, int], list[tuple
         while len(groups) > 1 and groups[-1][1] - groups[-1][0] < 110 and groups[-1][0] - groups[-2][1] >= 8:
             dropped.append(tuple(groups.pop()))
     x0, x1 = groups[0][0], groups[-1][1]
-    rows = hot[:, x0:x1].sum(1) > 3
+    # рядки літер — понад 3 % ширини слова яскравих пікселів: розлам Розриву крізь слово (на «Б» — 11–17 пікселів
+    # у рядку, аудит PR #540) і тонка тріщина «А» порога не проходять; найдовший відрізок — літери
+    rows = hot[:, x0:x1].sum(1) > 0.03 * (x1 - x0)
     rs = runs(rows)
-    # найдовший відрізок рядків — літери (тріщина Розриву йде крізь увесь кадр тонкою лінією й поріг 3 не проходить)
     y0, y1 = max(rs, key=lambda r: r[1] - r[0])
     return (x0, y0, x1, y1), dropped
 
@@ -90,10 +96,7 @@ def convert_logo() -> dict:
     arr = np.asarray(img).astype(np.float32)
     gray = np.asarray(img.convert('L')).astype(np.int32)
     (x0, y0, x1, y1), dropped = letters_box(gray)
-    # тло полотна — середнє рамки сирця 24 px: вставка з м'яким краєм зливається з ним без смуги
     h, w = gray.shape
-    border = np.concatenate([arr[:24].reshape(-1, 3), arr[-24:].reshape(-1, 3), arr[:, :24].reshape(-1, 3), arr[:, -24:].reshape(-1, 3)])
-    bg = border.mean(axis=0)
     if dropped:
         # заливка рядок за рядком кольором зовнішнього боку смуги (за 12 px від неї, ближче до краю кадру):
         # віньєтка сирця нерівна, одна медіана кутів лишала б темні смуги
@@ -114,20 +117,34 @@ def convert_logo() -> dict:
         arr = arr * (1 - k) + fill * k
     scale = LETTERS_SHARE * LOGO_SIZE[0] / (x1 - x0)
     src = Image.fromarray(arr.clip(0, 255).astype(np.uint8)).resize((round(w * scale), round(h * scale)), Image.LANCZOS)
-    canvas = Image.new('RGB', LOGO_SIZE, tuple(int(c) for c in bg))
+    # аудит PR #540: полотно прозоре (RGBA, як логотип П13.4) — на тлі стартового екрана немає прямокутника вставки
+    canvas = Image.new('RGBA', LOGO_SIZE, (0, 0, 0, 0))
     # центр слова — у центр полотна
     cx, cy = (x0 + x1) / 2 * scale, (y0 + y1) / 2 * scale
     ox, oy = round(LOGO_SIZE[0] / 2 - cx), round(LOGO_SIZE[1] / 2 - cy)
-    # м'який край вставки (96 px) — шов з тлом не видно
-    edge = np.ones((src.size[1], src.size[0]), np.float32)
-    ramp = 96
+    # альфа — за яскравістю (літери, світіння й розлам лишаються, темне тло сирця й проміжки між літерами прозорі),
+    # по краю вставки — рампа до 96 px, що не заходить на рамку літер
+    sw, sh = src.size
+    lum = np.asarray(src.convert('L')).astype(np.float32)
+    # поріг за яскравістю: тло сирця ≈ 5–10, темний метал граней літер — від ≈ 25; закриття маски (максимум, потім
+    # мінімум 9 × 9) затягує дрібні темні щілини всередині літер (руни, заклепки), щоб грані не просвічували
+    alpha = np.clip((lum - 10) / 16, 0, 1)
+    a8 = Image.fromarray((alpha * 255).astype(np.uint8)).filter(ImageFilter.MaxFilter(9)).filter(ImageFilter.MinFilter(9))
+    alpha = np.maximum(alpha, np.asarray(a8).astype(np.float32) / 255)
+    bx0, by0, bx1, by1 = (round(v * scale) for v in (x0, y0, x1, y1))
+    margin = min(bx0, by0, sw - bx1, sh - by1) - 20
+    assert margin > 24, f'рамка літер надто близько до краю сирця: {margin}'
+    edge = np.ones((sh, sw), np.float32)
+    ramp = min(96, margin)
     for i in range(ramp):
         t = (i + 1) / (ramp + 1)
         edge[i, :] = np.minimum(edge[i, :], t)
         edge[-1 - i, :] = np.minimum(edge[-1 - i, :], t)
         edge[:, i] = np.minimum(edge[:, i], t)
         edge[:, -1 - i] = np.minimum(edge[:, -1 - i], t)
-    canvas.paste(src, (ox, oy), Image.fromarray((edge * 255).astype(np.uint8)))
+    canvas.paste(src, (ox, oy), Image.fromarray((edge * alpha * 255).round().astype(np.uint8)))
+    a = np.asarray(canvas)[..., 3]
+    assert a[0].max() == 0 and a[-1].max() == 0 and a[:, 0].max() == 0 and a[:, -1].max() == 0, 'альфа по периметру не 0'
     OUT.mkdir(parents=True, exist_ok=True)
     canvas.save(OUT / 'logo.webp', 'WEBP', quality=88, method=6)
     return {
@@ -137,7 +154,8 @@ def convert_logo() -> dict:
         'dropped': [list(d) for d in dropped],
         'scale': round(scale, 4),
         'offset': [ox, oy],
-        'background': [int(c) for c in bg],
+        'ramp': ramp,
+        'alpha_mean': round(float(a.mean()) / 255, 3),
     }
 
 

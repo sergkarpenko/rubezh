@@ -1760,10 +1760,17 @@ test('Т.61: екран перемоги і рядок-пояснення ста
           nbsp: [...document.querySelectorAll('#new-game-preset .preset-desc')].map((d) => /\u00a0×/.test(d.textContent ?? '')),
         };
       });
-    const fits = (): Promise<[boolean, boolean]> =>
+    // аудит PR #540: і низ вікна досяжний прокруткою — «Стартувати» видно повністю після прокрутки до кінця
+    const fits = (): Promise<[boolean, boolean, boolean]> =>
       page.evaluate(() => {
+        const o = document.getElementById('new-game-dialog')!;
         const d = document.querySelector('#new-game-dialog .screen-dialog')!.getBoundingClientRect();
-        return [d.top >= 0 && d.left >= 0 && d.right <= innerWidth, document.getElementById('new-game-dialog')!.scrollWidth <= innerWidth];
+        const top = [d.top >= 0 && d.left >= 0 && d.right <= innerWidth, o.scrollWidth <= innerWidth];
+        o.scrollTop = o.scrollHeight;
+        const b = document.getElementById('btn-new-game-start')!.getBoundingClientRect();
+        const bottom = b.top >= 0 && b.bottom <= innerHeight;
+        o.scrollTop = 0;
+        return [top[0], top[1], bottom];
       });
     await page.setViewportSize({ width: 1366, height: 768 });
     await page.locator('#btn-start-new').click();
@@ -1783,8 +1790,17 @@ test('Т.61: екран перемоги і рядок-пояснення ста
       { width: 667, height: 375 },
     ]) {
       await page.setViewportSize(size);
-      expect(await fits(), `«Нова партія» ${size.width} × ${size.height}`).toEqual([true, true]);
+      expect(await fits(), `«Нова партія» ${size.width} × ${size.height}`).toEqual([true, true, true]);
     }
+    // аудит PR #540: фокус з клавіатури на «Стартувати» — біле кільце всередині (правило #id не перекриває його)
+    await page.setViewportSize({ width: 1366, height: 768 });
+    await page.locator('#btn-new-game-start').focus();
+    await page.keyboard.press('Shift+Tab');
+    await page.keyboard.press('Tab');
+    // перехід box-shadow набору Т.124 — чекати кінцевого стану (expect.poll)
+    await expect
+      .poll(() => page.locator('#btn-new-game-start').evaluate((b) => getComputedStyle(b).boxShadow))
+      .toContain('rgb(255, 255, 255) 0px 0px 0px 2px inset');
     await page.locator('#btn-new-game-cancel').click();
     await expect(page.locator('#new-game-dialog')).toBeHidden();
     await page.setViewportSize({ width: 1440, height: 900 });

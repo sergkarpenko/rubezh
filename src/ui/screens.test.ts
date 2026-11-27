@@ -152,9 +152,9 @@ describe('П12.2: діалог «Нова партія» — сід і скла�
       'Базові числа гри',
       'Бійці слабші (HP ×0,9), дотація, премії й найм ×0,9',
     ]);
-    expect(cards.map((c) => c.querySelector('.preset-desc')?.textContent)).toEqual(
-      (['легкий', 'норма', 'складний'] as const).map((p) => keepMultiplier(PRESET_TEXT[p]))
-    );
+    // аудит PR #540: явно — нерозривний пробіл перед множником у «Легкому» і «Складному», у «Нормі» множника немає
+    expect(cards.map((c) => /\u00a0×/.test(c.querySelector('.preset-desc')?.textContent ?? ''))).toEqual([true, false, true]);
+    expect(cards.map((c) => / ×/.test(c.querySelector('.preset-desc')?.textContent ?? ''))).toEqual([false, false, false]);
     expect(PRESET_TEXT['норма']).toBe('Базові числа гри');
     expect($('new-game-seed').closest('details')?.querySelector('summary')?.textContent).toBe('Додатково');
     const rnd = vi.spyOn(Math, 'random').mockReturnValue(0.5);
