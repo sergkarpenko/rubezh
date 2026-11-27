@@ -8,6 +8,8 @@
 // п16.3 (ADR-0147 п. 12): дії ролей — допомога медика першою, точний постріл
 // снайпера замість звичайного, ривок штурмовика, коли AP не вистачає на чергу;
 // без ролей (state.roles немає) логіка байт-у-байт незмінна.
+// п20.3 (ADR-0167): у бою з `state.cover` рух солдата до видимої цілі — з укриттям (`coverStep`,
+// як у ШІ ворогів); ривок — за найкращим режимом самої зброї (`bestModeAp`); без `cover` — байт-у-байт.
 //
 // Дзеркало ШІ прибульців 3.5 (src/core/ai.ts): найближча видима ціль → постріл
 // (auto > aimed > snap за очікуваним пошкодженням); не можна — рух у бік цілі;
@@ -37,12 +39,14 @@ import {
   distance,
   grenadeZone,
   hasTerrainLine,
+  weaponHasMode,
   type GameState,
   type Unit,
   type Vec2,
+  type Weapon,
 } from './combat';
 import { findPath, visibleEnemies } from './map';
-import { bestPathToNeighbors, bestShootMode, nearestEnemy, pathToward } from './ai-utils';
+import { MODE_PRIORITY, bestPathToNeighbors, bestShootMode, coverStep, movedThisTurn, nearestEnemy, pathToward } from './ai-utils';
 import { aiStep } from './ai';
 import { ALIEN_SPAWN, SQUAD_SPAWN, missionOutcome } from './mission';
 
@@ -104,6 +108,12 @@ function holdStep(state: GameState, u: Unit): boolean {
   return true;
 }
 
+// AP найкращого режиму зброї за MODE_PRIORITY серед її режимів (ADR-0165 п. 12).
+export function bestModeAp(w: Weapon): number {
+  const mode = MODE_PRIORITY.find((m) => weaponHasMode(w, m)) ?? 'auto';
+  return w.modes[mode].apCost;
+}
+
 function soldierStep(state: GameState, u: Unit, evac?: EvacPolicy, hold = false): boolean {
   if (!u.alive || u.ap <= 0) return false;
   const aid = aidTarget(state, u);
@@ -147,7 +157,15 @@ function soldierStep(state: GameState, u: Unit, evac?: EvacPolicy, hold = false)
     return true;
   }
   // Ривок: ворога видно, а на чергу AP бракує — +4 AP, далі звичайний вибір
-  if (u.ap < u.weapon.modes.auto.apCost && roleActionBlock(state, u.id, 'assault') === null) {
+  // п20.3 (ADR-0165 п. 12, ADR-0167 п. 6): «черга» — найкращий режим самої зброї (зброя з `only`
+  // без черги — її найкращий режим); зброя з усіма трьома — auto, як до п20.3.
+  // Аудит PR #530: з укриттям солдат, що вже ходив цього півходу, далі не йде (coverStep → null) —
+  // ривок без пострілу був би даремний; без `cover` — як до п20.3.
+  if (
+    u.ap < bestModeAp(u.weapon) &&
+    roleActionBlock(state, u.id, 'assault') === null &&
+    !(state.cover && !mode && movedThisTurn(state, u))
+  ) {
     useDash(state, u.id);
     return true;
   }
@@ -157,7 +175,8 @@ function soldierStep(state: GameState, u: Unit, evac?: EvacPolicy, hold = false)
   }
   if (u.turret) return false; // п18.4: турель не підходить до цілі
   if (hold) return holdStep(state, u);
-  const step = pathToward(state, u, target);
+  // п20.3 (ADR-0167 п. 5): авто-бій і бот загону — хід з укриттям, як у ШІ ворогів.
+  const step = coverStep(state, u, target, enemies, pathToward(state, u, target), u.ap);
   if (step) {
     moveUnit(state, u.id, step);
     return true;
