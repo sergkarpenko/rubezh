@@ -448,8 +448,9 @@ test('сценарій приймання ADR-0030: партія → місія 
     const helpClose = page.locator('#btn-help-close'); // перший візит — «Як грати» поверх стартового екрана
     if (await helpClose.isVisible()) await helpClose.click();
     await page.locator('#btn-start-new').click();
+    await page.locator('#new-game-more summary').click(); // Т.218: сід — у «Додатково» (клік, як гравець)
     await page.locator('#new-game-seed').fill(String(SEED));
-    await page.locator('#new-game-preset').selectOption(PRESET);
+    await page.locator(`input[name="new-game-preset"][value="${PRESET}"]`).check(); // Т.218: картки складності
     await page.locator('#btn-new-game-start').click();
     await expect(page.locator('#geo')).toBeVisible();
     await expect(page.locator('#log')).toContainText('Нова партія (сід ' + SEED + ', складність «' + PRESET + '»)');
@@ -1653,8 +1654,9 @@ test('Т.61: екран перемоги і рядок-пояснення ста
   const helpClose = page.locator('#btn-help-close'); // перший візит — «Як грати» поверх стартового екрана
   if (await helpClose.isVisible()) await helpClose.click();
   await page.locator('#btn-start-new').click();
+  await page.locator('#new-game-more').evaluate((d) => ((d as HTMLDetailsElement).open = true)); // Т.218: сід — у «Додатково»
   await page.locator('#new-game-seed').fill(String(SEED));
-  await page.locator('#new-game-preset').selectOption(PRESET);
+  await page.locator(`input[name="new-game-preset"][value="${PRESET}"]`).check(); // Т.218: картки складності
   await page.locator('#btn-new-game-start').click();
   await expect(page.locator('#geo')).toBeVisible();
   await openSave(page); // Т.128: «Збереження» — вікно з «Меню»
@@ -1854,8 +1856,9 @@ test('Т.71: евакуація — плитка, клавіша V і вікно
   const helpClose = page.locator('#btn-help-close'); // перший візит — «Як грати» поверх стартового екрана
   if (await helpClose.isVisible()) await helpClose.click();
   await page.locator('#btn-start-new').click();
+  await page.locator('#new-game-more').evaluate((d) => ((d as HTMLDetailsElement).open = true)); // Т.218: сід — у «Додатково»
   await page.locator('#new-game-seed').fill(String(SEED));
-  await page.locator('#new-game-preset').selectOption(PRESET);
+  await page.locator(`input[name="new-game-preset"][value="${PRESET}"]`).check(); // Т.218: картки складності
   await page.locator('#btn-new-game-start').click();
   await page.locator('#status-tab-base').click();
   const mission = page.locator('#ufos button.mission').first();
@@ -1892,8 +1895,9 @@ test('п16.4: вікно ролі після сейву v1, ростер, кар
   const helpClose = page.locator('#btn-help-close');
   if (await helpClose.isVisible()) await helpClose.click();
   await page.locator('#btn-start-new').click();
+  await page.locator('#new-game-more').evaluate((d) => ((d as HTMLDetailsElement).open = true)); // Т.218: сід — у «Додатково»
   await page.locator('#new-game-seed').fill(String(SEED));
-  await page.locator('#new-game-preset').selectOption(PRESET);
+  await page.locator(`input[name="new-game-preset"][value="${PRESET}"]`).check(); // Т.218: картки складності
   await page.locator('#btn-new-game-start').click();
   await openSave(page);
   await page.locator('#btn-save-1').click();
@@ -1965,8 +1969,9 @@ test('Т.121: тап по порожній клітинці під час ані
   const helpClose = page.locator('#btn-help-close');
   if (await helpClose.isVisible()) await helpClose.click();
   await page.locator('#btn-start-new').click();
+  await page.locator('#new-game-more').evaluate((d) => ((d as HTMLDetailsElement).open = true)); // Т.218: сід — у «Додатково»
   await page.locator('#new-game-seed').fill(String(SEED));
-  await page.locator('#new-game-preset').selectOption(PRESET);
+  await page.locator(`input[name="new-game-preset"][value="${PRESET}"]`).check(); // Т.218: картки складності
   await page.locator('#btn-new-game-start').click();
   await page.locator('#status-tab-base').click();
   const mission = page.locator('#ufos button.mission').first();
@@ -2038,8 +2043,9 @@ test.describe('Т.179: телефон пальцем (hasTouch, isMobile)', () =
     const helpClose = page.locator('#btn-help-close');
     if (await helpClose.isVisible()) await helpClose.tap();
     await page.locator('#btn-start-new').tap();
+    await page.locator('#new-game-more').evaluate((d) => ((d as HTMLDetailsElement).open = true)); // Т.218: сід — у «Додатково»
     await page.locator('#new-game-seed').fill(String(SEED));
-    await page.locator('#new-game-preset').selectOption(PRESET);
+    await page.locator(`input[name="new-game-preset"][value="${PRESET}"]`).check(); // Т.218: картки складності
     await page.locator('#btn-new-game-start').tap();
     for (let i = 0; i < MAX_TICKS_TO_MISSION && mirror.targets().length === 0; i++) {
       await page.locator('#btn-tick').tap();

@@ -226,6 +226,14 @@ export function muzzlePoint(
   return { x: o.x + Math.round((mx * UNIT_DRAW) / ATLAS_FRAME) - back, y: o.y + Math.round((m.y * UNIT_DRAW) / ATLAS_FRAME) };
 }
 
+// Т.218: постріл «крутий» — кут до горизонталі понад 60° (dy² > 3 · dx², цілочисельно; ціль у тій
+// самій клітинці — ні).
+export function steepShot(from: { x: number; y: number }, to: { x: number; y: number }): boolean {
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  return dy !== 0 && dy * dy > 3 * dx * dx;
+}
+
 // Напрям погляду: +1 — праворуч; нативи — солдат праворуч, демон ліворуч.
 function facingSign(side: 'player' | 'alien', flip: boolean): 1 | -1 {
   const native = side === 'player' ? 1 : -1;
@@ -1490,7 +1498,11 @@ export function drawAnimFrame(
       drawClawSlash(ctx, x1, y1, calm ? 1 : Math.min(1, t / share), fade * (a.hit ? 1 : 0.45));
       return;
     }
-    if (muzzle !== undefined) {
+    // Т.218 (відгук власника 27.11.2026; рішення «Центр корпусу на крутих»): атлас має лише бокові
+    // кадри пострілу — ціль круто вгорі / внизу (понад 60° від горизонталі) дає промінь
+    // перпендикулярно стволу; до кадрів угору / вниз (п21.6) такий промінь іде з центру бійця.
+    const fromCentre = muzzle !== undefined && muzzle.turret !== true && steepShot(a.from, a.to);
+    if (muzzle !== undefined && !fromCentre) {
       const m =
         muzzle.turret === true
           ? turretMuzzle(muzzle.flip, x0, y0, calm ? 0 : recoilPx(t, share))
@@ -1524,7 +1536,8 @@ export function drawAnimFrame(
       ctx.stroke();
       // Т.132 (ADR-0121): спалах дула — перша третина польоту кулі, гасне;
       // два кола: світле ядро і ореол кольору сторони
-      if (muzzle !== undefined && f < MUZZLE_FLASH_SHARE) {
+      if (muzzle !== undefined && !fromCentre && f < MUZZLE_FLASH_SHARE) {
+        // Т.218: з центру — без спалаху дула
         const k = 1 - f / MUZZLE_FLASH_SHARE;
         ctx.shadowBlur = IMPACT_GLOW;
         ctx.globalAlpha = 0.55 * k;

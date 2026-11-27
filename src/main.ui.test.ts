@@ -28,6 +28,14 @@ import { GRENADE_DAMAGE, HEAL_AMOUNT, HIT_CHANCE_CAP } from './core/combat';
 import { GUN_MODULE_DAMAGE } from './core/intercept';
 import type { AnimEngine } from './core/render-core';
 
+// Т.218: складність у «Новій партії» — радіогрупа карток (обрана / вибрати)
+function presetOf(): string | undefined {
+  return document.querySelector<HTMLInputElement>('input[name="new-game-preset"]:checked')?.value;
+}
+function pickPreset(v: string): void {
+  for (const r of document.querySelectorAll<HTMLInputElement>('input[name="new-game-preset"]')) r.checked = r.value === v;
+}
+
 const $ = (id: string): HTMLElement => document.getElementById(id) as HTMLElement;
 const btn = (id: string): HTMLButtonElement => $(id) as HTMLButtonElement;
 // п20.4 (ADR-0168): «Запустити місію» і «Атакувати Браму» відкривають вікно спорядження — «Висадити загін»
@@ -86,7 +94,7 @@ function startParty(seed = '42', preset = 'норма'): void {
   if (!$('help-screen').classList.contains('hidden')) btn('btn-help-close').click();
   btn('btn-start-new').click();
   ($('new-game-seed') as HTMLInputElement).value = seed;
-  ($('new-game-preset') as HTMLSelectElement).value = preset;
+  pickPreset(preset);
   btn('btn-new-game-start').click();
 }
 
@@ -343,7 +351,7 @@ describeScenario('П12.2: флоу стартового екрана і наві
     btn('btn-start-new').click();
     expect($('new-game-dialog').classList.contains('hidden')).toBe(false);
     expect(($('new-game-seed') as HTMLInputElement).value).toBe('42'); // дефолти діалогу
-    expect(($('new-game-preset') as HTMLSelectElement).value).toBe('норма');
+    expect(presetOf()).toBe('норма');
     btn('btn-new-game-start').click();
     expect($('new-game-dialog').classList.contains('hidden')).toBe(true);
     expect($('start-screen').classList.contains('hidden')).toBe(true); // ігровий екран
@@ -3173,7 +3181,8 @@ describePage('Т.75: пастка фокусу у вікнах поверх гр
     expect($('new-game-dialog').classList.contains('hidden')).toBe(false);
     (document.activeElement as HTMLElement).blur(); // фокус поза діалогом
     tab();
-    expect(focused()?.id).toBe('new-game-seed');
+    // Т.218: перша зупинка — обрана картка складності; поле сіду в закритому «Додатково» — не зупинка
+    expect((focused() as HTMLInputElement | null)?.value).toBe('норма');
     tab(true);
     const last = [...$('new-game-dialog').querySelectorAll<HTMLElement>('button, input, select')].pop();
     expect(focused()).toBe(last);

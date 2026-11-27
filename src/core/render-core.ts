@@ -291,6 +291,17 @@ export const GEO_TRAIL_POINTS = 8; // останніх позицій польо
 export interface CalmFlag {
   calm?: boolean;
 }
+// Т.218 (відгук власника 27.11.2026: «вбитий демон … сразу світиться 0, а постріли йдуть далі»):
+// зміна HP юніта, яку кадр черги ще має відтворити. Ядро застосовує шкоду миттєво, тож
+// смуга й число HP на полі показують `before`, поки кадр з цією зміною не відіграв.
+export interface HpFx {
+  unitId: string;
+  before: number;
+  after: number;
+}
+export interface HpFxFlag {
+  hpFx?: HpFx[];
+}
 export const CALM_DUR_K = 0.5;
 
 // Один елемент черги анімацій. start — мітка часу початку відтворення
@@ -308,7 +319,7 @@ export interface MoveAnim extends CalmFlag {
   dur: number;
   start: number | null;
 }
-export interface TracerAnim extends CalmFlag {
+export interface TracerAnim extends CalmFlag, HpFxFlag {
   kind: 'tracer';
   side: Side; // сторона стрільця — колір трасера
   from: Vec2;
@@ -358,13 +369,13 @@ export type Anim = MoveAnim | TracerAnim | DeathAnim | OwFlashAnim | GeoPulseAni
 // малює шар відображення — дзеркало прев'ю гранати у battle.ts); DNum —
 // число над ціллю: підйом і згасання за прогресом кадру (пошкодження —
 // бурштин, зцілення — зелений, ADR-0064).
-export interface BoomAnim extends CalmFlag {
+export interface BoomAnim extends CalmFlag, HpFxFlag {
   kind: 'boom';
   at: Vec2; // епіцентр вибуху
   dur: number;
   start: number | null;
 }
-export interface DNumAnim extends CalmFlag {
+export interface DNumAnim extends CalmFlag, HpFxFlag {
   kind: 'dnum';
   at: Vec2; // клітинка цілі
   amount: number; // N пошкодження або зцілення
@@ -646,6 +657,44 @@ export function pendingDeathStarts(queue: readonly Anim[]): Map<string, Vec2> {
   return out;
 }
 
+// Т.218: HP, яке показати на полі, поки черга не відіграла кадр зі зміною: `before` першого
+// кадру черги (зокрема активного) з HpFx юніта. Юніта без такого кадру в мапі немає — стан ядра.
+export function pendingHp(queue: readonly Anim[]): Map<string, number> {
+  const out = new Map<string, number>();
+  for (const a of queue) {
+    if ((a.kind !== 'tracer' && a.kind !== 'boom' && a.kind !== 'dnum') || a.hpFx === undefined) continue;
+    for (const f of a.hpFx) if (!out.has(f.unitId)) out.set(f.unitId, f.before);
+  }
+  return out;
+}
+
+// Т.218: знімок HP юнітів — `hpBefore` наступної пачки.
+export function hpSnapshot(units: readonly Unit[]): Map<string, number> {
+  return new Map(units.map((u) => [u.id, u.hp]));
+}
+
+// Т.218: HP юнітів на початку пачки — назад від стану після пачки (шкода додається, зцілення
+// віднімається, межі 0..maxHp). Це точно для всіх, крім юніта з HP 0: надлишкова шкода
+// смертельного влучання невідома — для нього береться знімок (без знімка — межа maxHp).
+function batchStartHp(events: readonly GameEvent[], units: readonly Unit[], hpBefore?: ReadonlyMap<string, number>): Map<string, number> {
+  const delta = new Map<string, number>();
+  const add = (id: string, d: number): void => {
+    delta.set(id, (delta.get(id) ?? 0) + d);
+  };
+  for (const e of events) {
+    if (e.type === 'shot' && e.hit) add(e.targetId, e.damage);
+    else if (e.type === 'grenade') for (const h of e.hits) add(h.unitId, h.damage);
+    else if (e.type === 'heal' || e.type === 'field_aid') add(e.targetId, -e.healed);
+  }
+  const out = new Map<string, number>();
+  for (const u of units) {
+    const back = Math.max(0, Math.min(u.maxHp, u.hp + (delta.get(u.id) ?? 0)));
+    const known = u.hp === 0 ? hpBefore?.get(u.id) : undefined;
+    out.set(u.id, known !== undefined && known <= back ? known : back);
+  }
+  return out;
+}
+
 // Чистий перетворювач подій логу бою в анімації (П6.8, ADR-0029: анімація —
 // відображення, лог — джерело істини). Лог і юніти тільки ЧИТАЮТЬСЯ:
 // state.log/стан байт-у-байт не змінюються.
@@ -658,10 +707,29 @@ export function pendingDeathStarts(queue: readonly Anim[]): Map<string, Vec2> {
 // П14.4: третій параметр — видимість клітинок (туман, ADR-0006): числа
 // пошкоджень/зцілення породжуються лише для видимих цілей; туман вирішує
 // викликаюч (патерн П14.2), без набору — фільтрації нема (усе видиме).
-export function animsFromEvents(events: readonly GameEvent[], units: readonly Unit[], vis?: ReadonlySet<string>): Anim[] {
+// Т.218: четвертий параметр — HP юнітів до пачки (знімок після попередньої, `hpSnapshot`); без
+// нього (перша пачка бою) — відновлення назад від стану після пачки, межа — maxHp.
+export function animsFromEvents(
+  events: readonly GameEvent[],
+  units: readonly Unit[],
+  vis?: ReadonlySet<string>,
+  hpBefore?: ReadonlyMap<string, number>
+): Anim[] {
   const byId = new Map(units.map((u) => [u.id, u]));
   const seen = (p: Vec2): boolean => vis === undefined || vis.has(p.x + ',' + p.y);
   const anims: Anim[] = [];
+  const cur = batchStartHp(events, units, hpBefore);
+  // Т.218: зміна HP події — на кадр, що її відтворює (трасер, вибух, «+N» зцілення)
+  const fx = (idx: number, unitId: string, delta: number): void => {
+    const u = byId.get(unitId);
+    const a = anims[idx];
+    if (u === undefined) return;
+    const before = cur.get(unitId) ?? u.hp;
+    const after = Math.max(0, Math.min(u.maxHp, before + delta));
+    cur.set(unitId, after);
+    if (a === undefined || (a.kind !== 'tracer' && a.kind !== 'boom' && a.kind !== 'dnum')) return;
+    (a.hpFx ??= []).push({ unitId, before, after });
+  };
   // п17.3 (рішення власника «А. Від краю туману»; аудит PR #508): стрілець у тумані (око з
   // 13–16 клітинок) позиції не видає — трасер стартує з першої видимої клітинки лінії до
   // цілі (видимої немає — лише в клітинці цілі: її, бійця гравця, видно завжди). Пачка
@@ -706,7 +774,7 @@ export function animsFromEvents(events: readonly GameEvent[], units: readonly Un
         j++;
       }
       const u = byId.get(e.unitId);
-      if (u !== undefined) anims.push(makeMoveAnim(u, path, false));
+      if (u !== undefined) anims.push({ ...makeMoveAnim(u, path, false), hp: cur.get(u.id) ?? u.hp }); // Т.218: HP на час ходу
       i = j;
       continue;
     }
@@ -716,7 +784,9 @@ export function animsFromEvents(events: readonly GameEvent[], units: readonly Un
       if (next !== undefined && next.type === 'shot' && next.targetId === e.unitId) {
         const shooter = byId.get(next.shooterId);
         if (shooter !== undefined && victim !== undefined) {
+          const ti = anims.length;
           tracer(shooter, victim.pos, next.hit, i + 1);
+          if (next.hit) fx(ti, victim.id, -next.damage);
           anims.push(makeDeathAnim(victim));
           // П14.4: число фатального пошкодження — після згасання силуета
           if (next.hit && next.damage > 0 && seen(victim.pos)) anims.push(makeDNumAnim(victim.pos, next.damage, false));
@@ -739,7 +809,9 @@ export function animsFromEvents(events: readonly GameEvent[], units: readonly Un
       }
       const gr = events[g];
       if (gr !== undefined && gr.type === 'grenade' && gr.unitId === e.killerId) {
+        const bi = anims.length;
         anims.push(makeBoomAnim(gr.center));
+        for (const h of gr.hits) fx(bi, h.unitId, -h.damage);
         for (const v of series) anims.push(makeDeathAnim(v));
         for (const h of gr.hits) {
           const t = byId.get(h.unitId);
@@ -756,7 +828,9 @@ export function animsFromEvents(events: readonly GameEvent[], units: readonly Un
       const shooter = byId.get(e.shooterId);
       const target = byId.get(e.targetId);
       if (shooter !== undefined && target !== undefined) {
+        const ti = anims.length;
         tracer(shooter, target.pos, e.hit, i);
+        if (e.hit) fx(ti, target.id, -e.damage);
         // П14.4: число пошкодження над ціллю — лише при влучанні з реальною
         // шкодою і лише для видимих цілей (туман не розкривається, ADR-0006)
         if (e.hit && e.damage > 0 && seen(target.pos)) anims.push(makeDNumAnim(target.pos, e.damage, false));
@@ -766,7 +840,9 @@ export function animsFromEvents(events: readonly GameEvent[], units: readonly Un
     }
     if (e.type === 'grenade') {
       // П14.4: вибух без попередніх смертей (уражені вижили або зона порожня)
+      const bi = anims.length;
       anims.push(makeBoomAnim(e.center));
+      for (const h of e.hits) fx(bi, h.unitId, -h.damage);
       for (const h of e.hits) {
         const t = byId.get(h.unitId);
         if (t !== undefined && seen(t.pos)) anims.push(makeDNumAnim(t.pos, h.damage, false));
@@ -774,10 +850,17 @@ export function animsFromEvents(events: readonly GameEvent[], units: readonly Un
       i++;
       continue;
     }
+    if (e.type === 'field_aid') {
+      fx(anims.length, e.targetId, e.healed); // Т.218: «Польова допомога» без кадру — лише рахунок HP пачки
+      i++;
+      continue;
+    }
     if (e.type === 'heal') {
       // П14.4: зцілення — зелене «+N» над ціллю (лише видима ціль)
       const t = byId.get(e.targetId);
+      const hi = anims.length;
       if (t !== undefined && e.healed > 0 && seen(t.pos)) anims.push(makeDNumAnim(t.pos, e.healed, true));
+      fx(hi, e.targetId, e.healed); // кадр — «+N»; без нього (туман) — лише рахунок, не чужий кадр (аудит PR #534)
       i++;
       continue;
     }

@@ -9,6 +9,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   ALIEN_RING,
+  hpSnapshot,
+  pendingHp,
   ENEMY_LOOK,
   FIGHTER_COLORS,
   HELMET_SHAPES,
@@ -1639,5 +1641,67 @@ describe('п17.5: тип ворога в анімаціях, удар гонча
     // боєць гравця — завжди
     const so: GameEvent = { type: 'overwatch', unitId: 's1', armed: true };
     expect(animsFromEvents([so], [s1, a1], new Set()).map((x) => x.kind)).toEqual(['owflash']);
+  });
+});
+
+describe('Т.218: HP за чергою анімацій (відгук власника — «0» у живого демона, а постріли йдуть)', () => {
+  const at = (u: Unit, hp: number, maxHp = 8): Unit => {
+    u.hp = hp;
+    u.maxHp = maxHp;
+    return u;
+  };
+  it('два влучання по одному демону: кадр трасера несе HP до і після; pendingHp — «до» першого невідіграного', () => {
+    const s1 = unit('s1', 'player', 2, 2);
+    const a1 = at(unit('a1', 'alien', 6, 2), 1); // після пачки: 8 − 4 − 3
+    const events: GameEvent[] = [
+      { type: 'shot', shooterId: 's1', targetId: 'a1', mode: 'snap', hit: true, damage: 4 },
+      { type: 'shot', shooterId: 's1', targetId: 'a1', mode: 'snap', hit: false, damage: 0 },
+      { type: 'shot', shooterId: 's1', targetId: 'a1', mode: 'snap', hit: true, damage: 3 },
+    ];
+    const anims = animsFromEvents(events, [s1, a1]);
+    const fx = anims.flatMap((a) => (a.kind === 'tracer' ? [a.hpFx ?? null] : []));
+    expect(fx).toEqual([[{ unitId: 'a1', before: 8, after: 4 }], null, [{ unitId: 'a1', before: 4, after: 1 }]]);
+    expect(pendingHp(anims).get('a1')).toBe(8);
+    expect(pendingHp(anims.slice(2)).get('a1')).toBe(4); // перший трасер і його число відіграли
+    expect(pendingHp([]).has('a1')).toBe(false); // черга порожня — HP ядра
+  });
+
+  it('смертельне влучання із надлишком: «до» — зі знімка попередньої пачки, без знімка — межа maxHp', () => {
+    const s1 = unit('s1', 'player', 2, 2);
+    const a1 = at(unit('a1', 'alien', 6, 2), 0);
+    a1.alive = false;
+    const events: GameEvent[] = [
+      { type: 'death', unitId: 'a1', killerId: 's1' },
+      { type: 'shot', shooterId: 's1', targetId: 'a1', mode: 'snap', hit: true, damage: 6 },
+    ];
+    const tr = (hp?: Map<string, number>) => animsFromEvents(events, [s1, a1], undefined, hp).find((a) => a.kind === 'tracer');
+    expect(tr(new Map([['a1', 2]]))?.hpFx).toEqual([{ unitId: 'a1', before: 2, after: 0 }]);
+    expect(tr()?.hpFx).toEqual([{ unitId: 'a1', before: 6, after: 0 }]); // 0 + 6, у межах maxHp 8
+    expect(tr(new Map([['a1', 99]]))?.hpFx).toEqual([{ unitId: 'a1', before: 6, after: 0 }]); // знімок вище відновленого — хибний
+  });
+
+  it('живий юніт — HP назад від стану (знімок не потрібен): граната, зцілення, «Польова допомога», хід', () => {
+    const s1 = at(unit('s1', 'player', 2, 2), 5);
+    const a1 = at(unit('a1', 'alien', 5, 2), 3);
+    const events: GameEvent[] = [
+      { type: 'grenade', unitId: 's1', center: { x: 5, y: 2 }, hits: [{ unitId: 'a1', damage: 4 }] },
+      { type: 'field_aid', unitId: 's1', targetId: 's1', healed: 1 },
+      { type: 'heal', unitId: 's1', targetId: 's1', healed: 2 },
+      { type: 'move', unitId: 'a1', from: { x: 5, y: 2 }, to: { x: 5, y: 3 } },
+    ];
+    const anims = animsFromEvents(events, [s1, a1], undefined, new Map([['a1', 1]])); // знімок живого не береться
+    const boom = anims.find((a) => a.kind === 'boom');
+    expect(boom?.kind === 'boom' && boom.hpFx).toEqual([{ unitId: 'a1', before: 7, after: 3 }]);
+    const heal = anims.find((a) => a.kind === 'dnum' && a.heal);
+    expect(heal?.kind === 'dnum' && heal.hpFx).toEqual([{ unitId: 's1', before: 3, after: 5 }]); // 2 + 1 допомоги → 3
+    const mv = anims.find((a) => a.kind === 'move');
+    expect(mv?.kind === 'move' && mv.hp).toBe(3);
+  });
+
+  it('hpSnapshot — HP кожного юніта', () => {
+    expect([...hpSnapshot([at(unit('a', 'alien', 0, 0), 2), at(unit('b', 'player', 1, 0), 7)])]).toEqual([
+      ['a', 2],
+      ['b', 7],
+    ]);
   });
 });

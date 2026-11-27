@@ -57,6 +57,7 @@ for (const [w, h] of sizes) {
   const k = w + 'x' + h;
   out[k + ' start'] = { menu: await rects(p, '#start-screen .start-menu button'), page: await pageSize(p) };
   await p.locator('#btn-start-new').click();
+  await p.locator('#new-game-more').evaluate((d) => ((d as HTMLDetailsElement).open = true)); // Т.218: сід — у «Додатково»
   await p.locator('#new-game-seed').fill('42');
   await p.locator('#btn-new-game-start').click();
   await p.locator('#status-tab-base').click();
