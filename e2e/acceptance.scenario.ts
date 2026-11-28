@@ -30,6 +30,7 @@ import {
   pathLabelScale,
   zoneOutlineSegments,
 } from '../src/core/render-core';
+import { type CareerBranch } from '../src/core/career';
 import { CoreMirror, enemyLine, unitLine } from './mirror';
 
 const SEED = 42;
@@ -515,7 +516,7 @@ test('сценарій приймання ADR-0030: партія → місія 
     await expect(avatars).toHaveCount(FIGHTER_COLORS.length);
     expect(await avatars.evaluateAll((a) => a.map((s) => s.getAttribute('data-color')))).toEqual([...FIGHTER_COLORS]);
     // п21.4 (ADR-0178; рішення власника «Б. Більші»): мальований бюст 40 px поверх шолома — атлас завантажено,
-    // бюст ліворуч від трьох рядків (рядок не вищий за 102 px, як на main 9c5fa10), кільце шолома видно довкола
+    // бюст ліворуч від трьох рядків (рядок без смуги шляху п22.3 не вищий за 102 px, як на main 9c5fa10), кільце шолома видно довкола
     const pts = page.locator('#roster .soldier > .pt');
     await expect(pts).toHaveCount(FIGHTER_COLORS.length);
     const look = await pts.first().evaluate(async (pt) => {
@@ -527,7 +528,16 @@ test('сценарій приймання ADR-0030: партія → місія 
       const row = pt.parentElement!.getBoundingClientRect();
       const b = pt.getBoundingClientRect();
       const ib = i.getBoundingClientRect();
-      return { w: img.naturalWidth, h: img.naturalHeight, size: b.width, inner: ib.width, left: b.left - row.left, rowH: row.height };
+      // п22.3 (ADR-0185): смуга шляху — окремий блок під рядком HP; межа 102 px — для рядка без неї
+      const path = pt.parentElement!.querySelector('.s-path')!.getBoundingClientRect().height;
+      return {
+        w: img.naturalWidth,
+        h: img.naturalHeight,
+        size: b.width,
+        inner: ib.width,
+        left: b.left - row.left,
+        rowH: row.height - path,
+      };
     });
     expect(look).toMatchObject({ w: 768, h: 192, size: 40, inner: 36, left: 0 });
     expect(look.rowH).toBeLessThanOrEqual(102);
@@ -1435,11 +1445,19 @@ test('сценарій приймання ADR-0030: партія → місія 
     await page.locator('#btn-close').click();
     await expect(page.locator('#geo-panel')).toBeVisible();
     await expect(page.locator('#battle-panel')).toBeHidden();
-    // п16.4 (EARS 4): підвищені до «Боєць» без ролі — вікно вибору ролі по черзі; сценарій обирає снайпера, дзеркало — теж
-    for (const { id, title } of mirror.awaitingRoleTitles()) {
-      await expect(page.locator('#role-dialog-title')).toHaveText(title);
-      await page.locator('#btn-role-sniper').click();
-      mirror.chooseRole(id, 'sniper');
+    // п16.4 (EARS 4): підвищені до «Боєць» без ролі — вікно вибору ролі по черзі; сценарій обирає снайпера, дзеркало — теж;
+    // п22.3 (ADR-0185): розвилки «Сержанта» й «Ветерана» — те саме вікно, сценарій обирає першу гілку
+    for (let next = mirror.nextPromotion(); next !== null; next = mirror.nextPromotion()) {
+      await expect(page.locator('#role-dialog-title')).toHaveText(next.title);
+      if (next.tier === 'role') {
+        await page.locator('#btn-role-sniper').click();
+        mirror.chooseRole(next.id, 'sniper');
+      } else {
+        const first = page.locator('#role-dialog .role-pick').first();
+        const branch = (await first.getAttribute('data-branch')) as CareerBranch;
+        await first.click();
+        mirror.chooseBranch(next.id, branch);
+      }
     }
     await expect(page.locator('#role-dialog')).toBeHidden();
     // відбиток бою в ростері: хто вижив, HP і вбивства кожного — як у дзеркалі
@@ -2030,6 +2048,15 @@ test('п16.4: вікно ролі після сейву v1, ростер, кар
   await page.locator('#btn-role-assault').click();
   await expect(page.locator('#role-dialog-title')).toHaveText('Підвищення: «Шрам» — Сержант. Оберіть роль');
   await page.locator('#btn-role-medic').click();
+  // п22.3 (ADR-0185): «Сержант» без гілки — одразу вікно спеціалізації ролі (тексти власника «Як на аркуші»)
+  await expect(page.locator('#role-dialog-title')).toHaveText('Підвищення: «Шрам» — Сержант. Оберіть спеціалізацію');
+  await expect(page.locator('#role-dialog .meta').first()).toHaveText('Спеціалізація — назавжди. Підсилює дію ролі «Польова допомога».');
+  await expect(page.locator('#role-dialog .role-pick')).toHaveText([
+    'Хірург«Польова допомога» +5 HP',
+    'Рятівник«Польова допомога» двічі за бій',
+  ]);
+  await expect(page.locator('#role-dialog-title')).toBeFocused();
+  await page.locator('#btn-branch-rescuer').click();
   await expect(dialog).toBeHidden();
   await page.locator('#status-tab-squad').click();
   const first = page.locator('#roster .soldier').first();
@@ -2038,6 +2065,18 @@ test('п16.4: вікно ролі після сейву v1, ростер, кар
   await expect(first).toContainText('Роки в диспетчерській метро');
   await expect(first).toContainText('досвід 2 · до «Сержант» 3');
   await expect(first.locator('.chev i')).toHaveCount(2);
+  // п22.3 (ADR-0185; «А. Сходинки»): смуга шляху — поточне з гілкою і наступна розвилка з ефектом обох гілок
+  await expect(first.locator('.s-path > div')).toHaveText([
+    '● Боєць · » штурмовик',
+    '○ Сержант: Прорив — «Ривок» +6 AP замість +4 · Панцир — броня 1',
+    'досвід 2 · до «Сержант» 3',
+  ]);
+  await expect(page.locator('#roster .soldier').nth(1).locator('.s-path > div')).toHaveText([
+    '✓ Боєць · ✚ медик',
+    '● Сержант · Рятівник',
+    '○ Ветеран: Загартований — +2 HP · Тактик — +1 AP щоходу',
+    'досвід 5 · до «Ветеран» 4',
+  ]);
 
   await page.locator('#status-tab-base').click();
   const mission = page.locator('#probes button.mission').first();

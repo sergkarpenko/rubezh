@@ -15,7 +15,20 @@ import {
 } from '../core/combat';
 import { newCareer, RANK_THRESHOLDS, type SoldierCareer } from '../core/career';
 import { battleEventText } from './journal';
-import { chevronHtml, ROLE_INFO, roleDesc, roleDialogHtml, roleDialogTitle, roleLabel, roleTileView, xpLine } from './roles';
+import {
+  branchDialogHtml,
+  branchDialogNote,
+  branchDialogTitle,
+  careerPathHtml,
+  chevronHtml,
+  ROLE_INFO,
+  roleDesc,
+  roleDialogHtml,
+  roleDialogTitle,
+  roleLabel,
+  roleTileView,
+  xpLine,
+} from './roles';
 import { squadCards, squadStripHtml } from './squad-strip';
 
 const career = (xp: number, role: SoldierCareer['role'] = null, index = 1): SoldierCareer => ({ ...newCareer(index), xp, role });
@@ -147,5 +160,73 @@ describe('п22.2 (ADR-0183): опис дії ролі за спеціаліза�
     });
     expect(roleTileView(g, 's1').hint).toContain('+3 HP собі чи сусідові без гелю — 2 AP · двічі за бій');
     expect(roleTileView(g, 's2').hint).toContain('шкода ×2 — 6 AP · раз за бій');
+  });
+});
+
+// п22.3 (ADR-0185; рішення власника «А. Сходинки», тексти «Як на аркуші»): смуга шляху і вікно вибору гілки.
+describe('п22.3 (ADR-0185): смуга шляху в ростері і вікно гілки', () => {
+  const lines = (c: SoldierCareer): string[] => {
+    document.body.innerHTML = careerPathHtml(c);
+    return [...document.querySelectorAll('.s-path > div')].map((d) => d.textContent ?? '');
+  };
+  const xpOf = (r: number, plus = 0) => RANK_THRESHOLDS[r] + plus;
+
+  it('«Рекрут» — лише наступна розвилка (роль) і досвід', () => {
+    expect(lines(career(0))).toEqual(['○ Боєць: роль — » штурмовик · ◎ снайпер · ✚ медик', 'досвід 0 · до «Боєць» ' + RANK_THRESHOLDS[1]]);
+  });
+
+  it('«Боєць» з роллю — поточне з роллю, далі спеціалізації своєї ролі з ефектом', () => {
+    expect(lines(career(xpOf(1, 1), 'sniper'))).toEqual([
+      '● Боєць · ◎ снайпер',
+      '○ Сержант: Мисливець — «Точний постріл» — шкода ×2 · Вартовий — дозор без штрафу точності',
+      'досвід ' + xpOf(1, 1) + ' · до «Сержант» ' + (RANK_THRESHOLDS[2] - xpOf(1, 1)),
+    ]);
+    expect(lines(career(xpOf(1)))[0]).toBe('● Боєць · чекає вибору'); // роль ще не обрано (вікно відкрите)
+    expect(lines(career(xpOf(1)))[1]).toBe('○ Сержант: спеціалізація ролі');
+  });
+
+  it('«Сержант» — пройдене «✓», поточне з гілкою, далі навички «Ветерана»; без гілки — «чекає вибору»', () => {
+    const c: SoldierCareer = { ...career(xpOf(2), 'medic'), branches: { sergeant: 'surgeon' } };
+    expect(lines(c)).toEqual([
+      '✓ Боєць · ✚ медик',
+      '● Сержант · Хірург',
+      '○ Ветеран: Загартований — +2 HP · Тактик — +1 AP щоходу',
+      'досвід ' + xpOf(2) + ' · до «Ветеран» ' + (RANK_THRESHOLDS[3] - xpOf(2)),
+    ]);
+    expect(lines(career(xpOf(2), 'medic'))[1]).toBe('● Сержант · чекає вибору');
+  });
+
+  it('«Ветеран» — увесь шлях, без наступної розвилки; назви гілок наступної розвилки — <b>', () => {
+    const c: SoldierCareer = { ...career(xpOf(3, 2), 'assault'), branches: { sergeant: 'plating', veteran: 'tactician' } };
+    expect(lines(c)).toEqual([
+      '✓ Боєць · » штурмовик',
+      '✓ Сержант · Панцир',
+      '● Ветеран · Тактик',
+      'досвід ' + xpOf(3, 2) + ' · найвище звання',
+    ]);
+    expect(careerPathHtml(c)).not.toContain('p-next');
+    expect(careerPathHtml(career(0))).not.toContain('<b>'); // ролі — без виділення, як на аркуші
+    expect(careerPathHtml(career(xpOf(1), 'assault'))).toContain('<b>Прорив</b> — «Ривок» +6 AP замість +4');
+  });
+
+  it('вікно «Сержанта»: заголовок, примітка з дією ролі, дві кнопки — назва й ефект з каталогу', () => {
+    const c = career(xpOf(2), 'medic', 4); // позивний «Сокіл»
+    expect(branchDialogTitle(c, 'sergeant')).toBe('Підвищення: «Сокіл» — Сержант. Оберіть спеціалізацію');
+    expect(branchDialogNote(c, 'sergeant')).toBe('Спеціалізація — назавжди. Підсилює дію ролі «Польова допомога».');
+    document.body.innerHTML = branchDialogHtml(c, 'sergeant');
+    expect(document.querySelector('#role-dialog-title')!.textContent).toBe('Підвищення: «Сокіл» — Сержант. Оберіть спеціалізацію');
+    const picks = [...document.querySelectorAll<HTMLButtonElement>('.role-pick')];
+    expect(picks.map((b) => [b.id, b.dataset.branch, b.textContent])).toEqual([
+      ['btn-branch-surgeon', 'surgeon', 'Хірург«Польова допомога» +5 HP'],
+      ['btn-branch-rescuer', 'rescuer', 'Рятівник«Польова допомога» двічі за бій'],
+    ]);
+  });
+
+  it('вікно «Ветерана»: «Оберіть навичку», «Навичка — назавжди. Діє в кожному бою.»', () => {
+    const c: SoldierCareer = { ...career(xpOf(3), 'sniper', 4), branches: { sergeant: 'hunter' } };
+    expect(branchDialogTitle(c, 'veteran')).toBe('Підвищення: «Сокіл» — Ветеран. Оберіть навичку');
+    document.body.innerHTML = branchDialogHtml(c, 'veteran');
+    expect(document.querySelector('p.meta')!.textContent).toBe('Навичка — назавжди. Діє в кожному бою.');
+    expect([...document.querySelectorAll('.role-pick')].map((b) => b.textContent)).toEqual(['Загартований+2 HP', 'Тактик+1 AP щоходу']);
   });
 });

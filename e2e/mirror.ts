@@ -29,22 +29,14 @@ import {
   type Vec2,
 } from '../src/core/combat';
 import { DemoSteps, aliensTurn } from '../src/core/ai-bot';
-import { awaitingRole, newCareer, RANK_NAMES, rankOf, type SoldierRole } from '../src/core/career';
+import { awaitingBranch, awaitingRole, newCareer, RANK_NAMES, rankOf, type CareerBranch, type SoldierRole } from '../src/core/career';
 import { campaignTick, type DifficultyPreset } from '../src/core/campaign';
 import { advanceTime, detectedProbes, geoClock, missionTargets, type Probe } from '../src/core/geo';
 import { findPath, pathApCost, sideVisibleCells } from '../src/core/map';
 import { completeMission, createMission, missionOutcome, type Mission, type MissionOutcome } from '../src/core/mission';
 import { awardTrophies, radarRange } from '../src/core/research';
 import { createParty, type Party } from '../src/core/save';
-import {
-  applyMissionResult,
-  assignBotBranches,
-  chooseRole,
-  deployRoles,
-  hospitalTick,
-  missionSquad,
-  readySoldiers,
-} from '../src/core/squad';
+import { applyMissionResult, chooseBranch, chooseRole, deployRoles, hospitalTick, missionSquad, readySoldiers } from '../src/core/squad';
 import { deployConsumables } from '../src/core/workshop';
 import { TURN_PLATE_DONE } from '../src/ui/battle-feedback';
 import { byGender } from '../src/ui/text';
@@ -178,19 +170,38 @@ export class CoreMirror {
     );
   }
 
-  // п16.4 (EARS 4): заголовки вікон вибору ролі по черзі ростеру (хто чекає ролі)
-  awaitingRoleTitles(): { id: string; title: string }[] {
-    return this.party.roster.soldiers
-      .filter((s) => awaitingRole(this.party.roster.careers[s.id]))
-      .map((s) => {
-        const c = this.party.roster.careers[s.id];
-        return { id: s.id, title: 'Підвищення: «' + c.callsign + '» — ' + RANK_NAMES[rankOf(c.xp)] + '. Оберіть роль' };
-      });
-  }
-
   chooseRole(id: string, role: SoldierRole): void {
     chooseRole(this.party.roster, id, role);
-    assignBotBranches(this.party.roster); // п22.2: як main.ts після вибору ролі
+  }
+
+  // п22.3 (ADR-0185): наступне вікно підвищення, як promptRole у main.ts — перший у ростері, хто чекає
+  // ролі чи гілки; у бійця нижча розвилка перша. null — вікна немає.
+  nextPromotion(): { id: string; title: string; tier: 'role' | 'sergeant' | 'veteran' } | null {
+    for (const s of this.party.roster.soldiers) {
+      const c = this.party.roster.careers[s.id];
+      if (c === undefined) continue;
+      if (awaitingRole(c))
+        return { id: s.id, title: 'Підвищення: «' + c.callsign + '» — ' + RANK_NAMES[rankOf(c.xp)] + '. Оберіть роль', tier: 'role' };
+      const tier = awaitingBranch(c);
+      // заголовок — літералом, а не функцією сторінки (аудит PR #549): дзеркало не звіряє сторінку з її ж кодом
+      if (tier !== null)
+        return {
+          id: s.id,
+          title:
+            'Підвищення: «' +
+            c.callsign +
+            '» — ' +
+            RANK_NAMES[tier === 'veteran' ? 3 : 2] +
+            '. Оберіть ' +
+            (tier === 'veteran' ? 'навичку' : 'спеціалізацію'),
+          tier,
+        };
+    }
+    return null;
+  }
+
+  chooseBranch(id: string, branch: CareerBranch): void {
+    chooseBranch(this.party.roster, id, branch);
   }
 
   // --- бій: ті самі виклики ядра, що в src/ui/battle.ts та src/ui/input.ts ---
@@ -388,7 +399,6 @@ export class CoreMirror {
     const outcome = this.outcome();
     if (mission === null || outcome === 'триває') throw new Error('Дзеркало: бій ще триває');
     const aftermath = applyMissionResult(this.party.roster, mission.state);
-    assignBotBranches(this.party.roster); // п22.2: як battle.ts finish до вікна п22.3
     completeMission(this.party.geo, mission.briefing.probeId, outcome);
     awardTrophies(this.party.research, mission.state, outcome); // п18.2: дзеркало finish у battle.ts
     this.mission = null;

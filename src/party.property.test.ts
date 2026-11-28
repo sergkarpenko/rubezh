@@ -166,7 +166,7 @@ function campaignBattle(p: Party, op: 'штурм' | 'брама', hold = false)
   const outcome = fought === 'триває' ? 'поразка' : fought;
   const aftermath = applyMissionResult(p.roster, m.state);
   assignBotRoles(p.roster);
-  assignBotBranches(p.roster); // п22.2: як бот партії і src/ui/battle.ts
+  assignBotBranches(p.roster); // п22.2: як бот партії (party-bot.ts)
   removeLostEquipment(p.workshop, aftermath.lost);
   settleConsumables(p.workshop, aftermath.survivors, m.state.items);
   if (op === 'штурм') completeAssault(p, outcome === 'перемога' ? 'перемога' : 'поразка');
@@ -204,7 +204,7 @@ function mission(p: Party, i: number): void {
   const outcome = fought === 'триває' ? 'поразка' : fought;
   const aftermath = applyMissionResult(p.roster, m.state);
   assignBotRoles(p.roster);
-  assignBotBranches(p.roster); // п22.2: як бот партії і src/ui/battle.ts
+  assignBotBranches(p.roster); // п22.2: як бот партії (party-bot.ts)
   removeLostEquipment(p.workshop, aftermath.lost);
   settleConsumables(p.workshop, aftermath.survivors, m.state.items);
   completeMission(p.geo, m.briefing.probeId, outcome);

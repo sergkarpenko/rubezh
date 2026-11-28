@@ -12,7 +12,20 @@ import {
   type RoleSpec,
   type GameState,
 } from '../core/combat';
-import { RANK_NAMES, rankOf, xpToNextRank, type SoldierCareer } from '../core/career';
+import {
+  BRANCH_EFFECTS,
+  BRANCH_NAMES,
+  branchOptions,
+  RANK_NAMES,
+  rankOf,
+  ROLE_RANK,
+  SERGEANT_RANK,
+  VETERAN_RANK,
+  xpToNextRank,
+  type BranchTier,
+  type CareerBranch,
+  type SoldierCareer,
+} from '../core/career';
 import type { IconName } from './icons';
 
 export interface RoleInfo {
@@ -85,6 +98,43 @@ export function xpLine(career: SoldierCareer): string {
   return 'досвід ' + career.xp + (left === null ? ' · найвище звання' : ' · до «' + RANK_NAMES[rank + 1] + '» ' + left);
 }
 
+// п22.3 (ADR-0185; рішення власника «А. Сходинки»): смуга шляху в картці ростера — рядок на звання:
+// «✓» пройдені з обраною гілкою, «●» поточне, «○» наступна розвилка з ефектом обох гілок; під ними —
+// рядок досвіду (`xpLine`). «Рекрут» рядка не має — лише наступна розвилка (роль).
+const roleShort = (r: BattleRole): string => ROLE_INFO[r].glyph + ' ' + ROLE_INFO[r].name.toLowerCase();
+
+// Обрана гілка звання (1 — роль, 2 — спеціалізація, 3 — навичка); null — ще не обрано.
+function chosenBranch(career: SoldierCareer, rank: number): string | null {
+  if (rank === ROLE_RANK) return career.role === null ? null : roleShort(career.role);
+  const b = rank === VETERAN_RANK ? career.branches?.veteran : career.branches?.sergeant;
+  return b === undefined ? null : BRANCH_NAMES[b];
+}
+
+// Варіанти розвилки звання з ефектом: «Прорив — «Ривок» +6 AP замість +4 · Панцир — броня 1».
+function forkText(career: SoldierCareer, rank: number): string {
+  if (rank === ROLE_RANK) return 'роль — ' + ROLE_ORDER.map(roleShort).join(' · ');
+  const opts = branchOptions(career, rank === VETERAN_RANK ? 'veteran' : 'sergeant');
+  if (opts.length === 0) return 'спеціалізація ролі';
+  return opts.map((b) => '<b>' + BRANCH_NAMES[b] + '</b> — ' + BRANCH_EFFECTS[b]).join(' · ');
+}
+
+export function careerPathHtml(career: SoldierCareer): string {
+  const rank = rankOf(career.xp);
+  let html = '<div class="s-path">';
+  for (let r = ROLE_RANK; r <= Math.min(VETERAN_RANK, rank + 1); r++) {
+    if (r > rank) html += '<div class="p-next">○ ' + RANK_NAMES[r] + ': ' + forkText(career, r) + '</div>';
+    else
+      html +=
+        '<div class="' +
+        (r === rank ? 'p-cur">● ' : 'p-done">✓ ') +
+        RANK_NAMES[r] +
+        ' · ' +
+        (chosenBranch(career, r) ?? 'чекає вибору') +
+        '</div>';
+  }
+  return html + '<div class="meta">' + xpLine(career) + '</div></div>';
+}
+
 // Роль у ростері: «◎ снайпер»; «Боєць» і вище без ролі — «роль не обрано»; «Рекрут» — нічого.
 export function roleLabel(career: SoldierCareer): string {
   if (career.role !== null) return ROLE_INFO[career.role].glyph + ' ' + ROLE_INFO[career.role].name.toLowerCase();
@@ -118,6 +168,51 @@ export function roleDialogHtml(career: SoldierCareer): string {
         ROLE_INFO[r].desc +
         '</span></button>'
     ).join('') +
+    '</div>'
+  );
+}
+
+// п22.3 (ADR-0185; тексти власника «Як на аркуші»): вікно вибору гілки за зразком вікна ролі.
+// Заголовок: «Підвищення: «Сокіл» — Сержант. Оберіть спеціалізацію» / «… — Ветеран. Оберіть навичку».
+export function branchDialogTitle(career: SoldierCareer, tier: BranchTier): string {
+  return (
+    'Підвищення: «' +
+    career.callsign +
+    '» — ' +
+    RANK_NAMES[tier === 'veteran' ? VETERAN_RANK : SERGEANT_RANK] +
+    '. Оберіть ' +
+    (tier === 'veteran' ? 'навичку' : 'спеціалізацію')
+  );
+}
+
+// Примітка під заголовком: спеціалізація підсилює дію своєї ролі, навичка діє в кожному бою.
+export function branchDialogNote(career: SoldierCareer, tier: BranchTier): string {
+  if (tier === 'veteran' || career.role === null) return 'Навичка — назавжди. Діє в кожному бою.';
+  return 'Спеціалізація — назавжди. Підсилює дію ролі «' + ROLE_INFO[career.role].action + '».';
+}
+
+// Вміст вікна: заголовок, примітка, дві кнопки «Назва» з ефектом гілки (каталог п22.2).
+export function branchDialogHtml(career: SoldierCareer, tier: BranchTier): string {
+  return (
+    '<div class="panel screen-dialog"><h2 id="role-dialog-title" tabindex="-1">' +
+    branchDialogTitle(career, tier) +
+    '</h2><p class="meta">' +
+    branchDialogNote(career, tier) +
+    '</p>' +
+    branchOptions(career, tier)
+      .map(
+        (b: CareerBranch) =>
+          '<button type="button" class="role-pick" data-branch="' +
+          b +
+          '" id="btn-branch-' +
+          b +
+          '"><b>' +
+          BRANCH_NAMES[b] +
+          '</b><span class="meta">' +
+          BRANCH_EFFECTS[b] +
+          '</span></button>'
+      )
+      .join('') +
     '</div>'
   );
 }

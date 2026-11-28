@@ -60,7 +60,7 @@ async function runAutoSteps(): Promise<void> {
   }
 }
 // п16.4 (ADR-0147, EARS 4): «← Повернутись на геосцену»; підвищений до «Боєць» без ролі отримує вікно
-// вибору ролі (Esc і клік поза ним не закривають) — тест обирає першу роль, доки вікно відкривається.
+// вибору ролі (п22.3 — і гілки; Esc і клік поза ним не закривають) — тест обирає першу кнопку, доки вікно відкривається.
 function closeBattle(): void {
   btn('btn-close').click();
   for (let i = 0; i < 12 && !$('role-dialog').classList.contains('hidden'); i++)
@@ -3742,15 +3742,61 @@ describePage('п16.4: вікно вибору ролі і ростер', () => {
     expect(dialog.classList.contains('hidden')).toBe(false); // наступне підвищення — по черзі
     expect($('role-dialog-title').textContent).toBe('Підвищення: «Шрам» — Сержант. Оберіть роль');
     btn('btn-role-medic').click();
+    // п22.3 (ADR-0185): «Сержант» без гілки — далі вікно спеціалізації, фокус знову на заголовку
+    expect(dialog.classList.contains('hidden')).toBe(false);
+    expect($('role-dialog-title').textContent).toBe('Підвищення: «Шрам» — Сержант. Оберіть спеціалізацію');
+    expect(document.activeElement).toBe($('role-dialog-title'));
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    expect(dialog.classList.contains('hidden')).toBe(false); // вибір обов'язковий, як роль
+    btn('btn-branch-surgeon').click();
     expect(dialog.classList.contains('hidden')).toBe(true);
     const rows = [...document.querySelectorAll<HTMLElement>('#roster .soldier')].map((r) => r.textContent);
     expect(rows[0]).toContain('Іван «Крук»Боєць◎ снайпер');
     expect(rows[0]).toContain('досвід 2 · до «Сержант» 3');
     expect(rows[1]).toContain('Олена «Шрам»Сержант✚ медик');
+    expect(rows[1]).toContain('✓ Боєць · ✚ медик● Сержант · Хірург○ Ветеран: Загартований — +2 HP · Тактик — +1 AP щоходу');
     expect(rows[2]).toContain('Тарас «Іскра»Рекрут');
     expect(rows[2]).toContain('Перший рій пережито в підвалі лікарні.');
     expect(rows[2]).toContain('досвід 0 · до «Боєць» 2');
     expect(document.querySelectorAll('#roster .soldier')[1].querySelectorAll('.chev i')).toHaveLength(3);
+  });
+
+  // п22.3 (ADR-0185; рішення власника «Гравець у вікні»): сейв із «Сержантом» і «Ветераном» без гілок
+  // (як v4 до п22.2) — після завантаження вікна гілок по черзі, а не правило бота; прирости — у мить вибору
+  it('сейв із «Сержантом» і «Ветераном» без гілок — вікна спеціалізації й навички, «Тактик» дає +1 AP', () => {
+    startParty('27');
+    btn('btn-save-1').click();
+    type C = { xp: number; role: string | null; branches?: unknown };
+    const data = JSON.parse(localStorage.getItem('rubezh.save.1')!) as {
+      state: { roster: { soldiers: { id: string; maxAp: number }[]; careers: Record<string, C> } };
+    };
+    const [a, b] = data.state.roster.soldiers;
+    const maxAp = b.maxAp;
+    Object.assign(data.state.roster.careers[a.id], { xp: 5, role: 'assault' });
+    Object.assign(data.state.roster.careers[b.id], { xp: 9, role: 'sniper' });
+    delete data.state.roster.careers[a.id].branches;
+    delete data.state.roster.careers[b.id].branches;
+    localStorage.setItem('rubezh.save.1', JSON.stringify(data));
+    btn('btn-load-1').click();
+    expect($('role-dialog-title').textContent).toBe('Підвищення: «Крук» — Сержант. Оберіть спеціалізацію');
+    expect([...document.querySelectorAll('#role-dialog .role-pick')].map((x) => x.id)).toEqual([
+      'btn-branch-breakthrough',
+      'btn-branch-plating',
+    ]);
+    btn('btn-branch-plating').click();
+    expect($('role-dialog-title').textContent).toBe('Підвищення: «Шрам» — Сержант. Оберіть спеціалізацію');
+    btn('btn-branch-sentinel').click();
+    expect($('role-dialog-title').textContent).toBe('Підвищення: «Шрам» — Ветеран. Оберіть навичку');
+    btn('btn-branch-tactician').click();
+    expect($('role-dialog').classList.contains('hidden')).toBe(true);
+    btn('btn-save-1').click();
+    const after = JSON.parse(localStorage.getItem('rubezh.save.1')!) as {
+      state: { roster: { soldiers: { id: string; maxAp: number; armor?: number }[]; careers: Record<string, C> } };
+    };
+    expect(after.state.roster.careers[a.id].branches).toEqual({ sergeant: 'plating' });
+    expect(after.state.roster.careers[b.id].branches).toEqual({ sergeant: 'sentinel', veteran: 'tactician' });
+    expect(after.state.roster.soldiers[0].armor).toBe(1);
+    expect(after.state.roster.soldiers[1].maxAp).toBe(maxAp + 1);
   });
 
   it('«Продовжити» зі стартового екрана із сейвом v1 — вікно ролі на ігровому екрані', () => {
