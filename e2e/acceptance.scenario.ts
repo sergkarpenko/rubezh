@@ -642,7 +642,7 @@ test('сценарій приймання ADR-0030: партія → місія 
   await test.step('T.39: панель «Дослідження», крок «3. Видати», довідка на 1366 × 768', async () => {
     await page.locator('#status-tab-base').click();
     const cards = page.locator('#research .sci-card');
-    await expect(cards).toHaveCount(12); // п18.5 (ADR-0157): + три ключові протоколи; п20.4 — + три протоколи зброї
+    await expect(cards).toHaveCount(14); // п18.5 (ADR-0157): + три ключові протоколи; п20.4 — + три протоколи зброї; п22.4 — + два загону
     const armor = cards.first();
     await expect(armor.locator('.sci-name')).toHaveText('Композитна броня');
     await expect(armor.locator('.sci-badge')).toHaveText('потрібен техномант'); // техномантів 0, кредитів вистачає
@@ -651,7 +651,7 @@ test('сценарій приймання ADR-0030: партія → місія 
     // Т.100: картки з невиконаною передумовою згорнуті до кнопки-назви з плашкою; панель на новій партії
     // вікно сценарію тут 1440 × 900 (колонка тієї ж ширини): локально 1048 px, як на 1366 × 768 (до кроку 1516;
     // docs/reports/t100/measure.mjs); межа з запасом на шрифти CI
-    await expect(page.locator('#research .sci-card.folded')).toHaveCount(7); // п18.5: + три ключові (без трофеїв — згорнуті); п20.4: «Голка», «Град»
+    await expect(page.locator('#research .sci-card.folded')).toHaveCount(8); // п18.5: + три ключові (без трофеїв — згорнуті); п20.4: «Голка», «Град»; п22.4: «Тактична мережа II»
     // у згорнутій картці — лише кнопка-назва; тап показує рядок ефекту
     await expect(page.locator('#research .sci-card.folded button:not(.sci-toggle)')).toHaveCount(0);
     await page.locator('#btn-sci-eff-grenade').click();
@@ -663,15 +663,18 @@ test('сценарій приймання ADR-0030: партія → місія 
     );
     // п18.5 (ADR-0157): блок ключових протоколів (заголовок і три згорнуті картки) міряється окремо —
     // гейт Т.100 стоїть на частині до нього; блок на новій партії — локально ≈ 290 px
-    // п20.4 (ADR-0168): за ним — блок зброї (свій заголовок), міряється окремо
-    const [keyH, weaponH] = await page.evaluate(() => {
+    // п20.4 (ADR-0168): за ним — блок зброї (свій заголовок), міряється окремо; п22.4 (ADR-0186): останній — блок загону
+    const [keyH, weaponH, squadH] = await page.evaluate(() => {
       const heads = [...document.querySelectorAll('#research .sci-key-head')].map((h) => h.getBoundingClientRect().top);
       const bottom = document.getElementById('research')!.closest('section')!.getBoundingClientRect().bottom;
-      return [Math.round(heads[1] - heads[0]), Math.round(bottom - heads[1])];
+      return [Math.round(heads[1] - heads[0]), Math.round(heads[2] - heads[1]), Math.round(bottom - heads[2])];
     });
-    expect(researchH - keyH - weaponH, 'висота панелі «Дослідження» без ключових протоколів і зброї').toBeLessThanOrEqual(1150); // варіант Б без А — 1193
+    expect(researchH - keyH - weaponH - squadH, 'висота панелі «Дослідження» без ключових протоколів, зброї й загону').toBeLessThanOrEqual(
+      1150
+    ); // варіант Б без А — 1193
     expect(keyH, 'висота блоку ключових протоколів').toBeLessThanOrEqual(340);
-    expect(weaponH, 'висота блоку зброї').toBeLessThanOrEqual(420); // локально 371 px на новій партії
+    expect(weaponH, 'висота блоку зброї').toBeLessThanOrEqual(420); // локально 371 px на новій партії (з п22.4 — до блоку загону, 351)
+    expect(squadH, 'висота блоку загону').toBeLessThanOrEqual(330); // локально 282 px на новій партії (з низом панелі)
     await expect(armor.locator('#btn-start-0')).toHaveText('Дослідити — 96 кр.');
     await expect(page.locator('#btn-hire-scientist')).toHaveText('Вербувати техноманта (100)'); // Т.128
     // смуга кроків: три кнопки; «3. Видати» перемикає вкладку на «Загін»

@@ -129,12 +129,15 @@ describe('ResearchPanel: каталог проєктів (картки T.39)', (
     const panel = createResearchPanel(makeDeps());
     panel.render();
     // п20.4 (ADR-0168): і три протоколи зброї — «Шквал» без передумови, «Голка» й «Град» згорнуті
-    expect(document.querySelectorAll('#research .sci-card')).toHaveLength(12);
-    expect(document.querySelectorAll<HTMLButtonElement>('[id^="btn-start-"]')).toHaveLength(5);
-    expect(document.querySelectorAll('#research .sci-card.folded')).toHaveLength(7);
+    // п22.4 (ADR-0186): і два протоколи загону — «Тактична мережа I» з кнопкою, «II» згорнута (передумова)
+    expect(document.querySelectorAll('#research .sci-card')).toHaveLength(14);
+    expect(document.querySelectorAll<HTMLButtonElement>('[id^="btn-start-"]')).toHaveLength(6);
+    expect(document.querySelectorAll('#research .sci-card.folded')).toHaveLength(8);
     expect(el('btn-start-9').textContent).toBe('Дослідити — 80 кр.'); // «Дробовик «Шквал»»
     expect(card('Дробовик «Шквал»').textContent).toContain('Шкода 4–8, дальність 6; лише «Швидкий» — 3 AP, ×1');
     expect(el('research').textContent).toContain('Зброя — виріб у «Кузні»');
+    expect(el('research').textContent).toContain('Загін — більше бійців у місії, на штурмі бази й біля Брами');
+    expect(card('Тактична мережа I').textContent).toContain('Загін — 4 бійці замість 3');
     expect(el('research').textContent).toContain('Композитна броня');
     expect(el('research').textContent).toContain('Імпульсна граната');
     expect(el('research').textContent).toContain('Гарматний модуль перехоплювача');

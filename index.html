@@ -658,12 +658,14 @@
       #bsquad:empty {
         display: none;
       }
+      /* п22.4 (ADR-0186): загін до п'яти — у ряду над полем картка не вужча за 84 px, п'ять карток
+         на телефоні переносяться 3 + 2 (до трьох карток — ширші за 84 px, ряд як до п22.4) */
       #bsquad .sq-card {
         flex: 1 1 0;
         display: flex;
         align-items: center;
         gap: 5px;
-        min-width: 0;
+        min-width: 84px;
         padding: 4px 6px;
         border-radius: 8px;
         border: 1px solid #2f4268;
@@ -996,6 +998,12 @@
       /* п20.4 (ADR-0168): вікно «Спорядження перед вильотом» — картка на бійця, кнопки зброї й предметів */
       #loadout-dialog .screen-dialog {
         max-width: 520px;
+        /* п22.4 (ADR-0186): п'ять карток вищі за низьке вікно — вікно прокручується, заголовок і
+           «Висадити загін» не виходять за край (до п22.4 так обрізалось і три на 568 × 320) */
+        max-height: calc(100vh - 16px);
+        max-height: calc(100dvh - 16px);
+        overflow-y: auto;
+        box-sizing: border-box;
       }
       .lo-card {
         margin: 8px 0;

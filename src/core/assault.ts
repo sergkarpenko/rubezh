@@ -18,7 +18,7 @@
 // через добу (1440 хв).
 
 import { RIFLE, createGame, makeUnit, mulberry32, type Unit, type UnitItems, type UnitRole, type Vec2 } from './combat';
-import { ALIEN_SPAWN, SQUAD_SPAWN, connectedMap, textSeed, type Mission } from './mission';
+import { ALIEN_SPAWN, connectedMap, extraEnemies, placeSquad, squadZone, textSeed, type Mission } from './mission';
 import { ENEMY_MIX_SALT, ENEMY_ORDER, enemyMix, kindsForThreat, makeEnemies, type EnemyKind } from './enemies';
 import { campaignScore } from './campaign';
 import { geoDay } from './geo';
@@ -27,6 +27,12 @@ import type { Party } from './save';
 
 export const ASSAULT_ENEMIES = 4; // ворогів у штурмі (ADR-0153 п. 16)
 export const ASSAULT_SPAWN: Vec2[] = [...ALIEN_SPAWN, { x: 16, y: 3 }]; // четверта — у чистій зоні (17,2)
+// п22.4 (ADR-0186): клітинки надбавки (+1 ворог за бійця понад три) — у тій самій чистій зоні;
+// мапа перевіряє досяжність лише ASSAULT_SPAWN, тож мапи тих самих сідів не міняються.
+export const ASSAULT_EXTRA_CELLS: Vec2[] = [
+  { x: 18, y: 2 },
+  { x: 18, y: 3 },
+];
 export const ASSAULT_MONEY_LOSS = 0.3; // частка кредитів, втрачена в програному штурмі
 // Турелі (кандидати ADR-0156 п. 3): гвинтівка, 12 HP, 10 AP, точність 0,6; біля зони загону.
 export const TURRET_SPAWN: Vec2[] = [
@@ -48,18 +54,16 @@ export const GATE_SPAWN: Vec2[] = [
   { x: 22, y: 21 },
   { x: 21, y: 22 },
 ];
+// п22.4 (ADR-0186): надбавка фіналу — у чистій зоні 3 × 3 навколо GATE_ZONE_CENTER.
+export const GATE_EXTRA_CELLS: Vec2[] = [
+  { x: 22, y: 22 },
+  { x: 22, y: 20 },
+];
 
 export interface CampaignBattleOptions {
-  squad: Unit[]; // боєготові оперативники (до 3)
+  squad: Unit[]; // боєготові оперативники (до 5 — squadSize, п22.4)
   items?: Record<string, UnitItems>;
   roles?: Record<string, UnitRole>;
-}
-
-function placeSquad(squad: Unit[]): void {
-  if (squad.length === 0) throw new Error('Загін не може бути порожнім');
-  if (squad.length > SQUAD_SPAWN.length) throw new Error('Максимум ' + SQUAD_SPAWN.length + ' оперативників у зоні висадки');
-  for (const u of squad) if (u.side !== 'player') throw new Error('У загині можуть бути лише оперативники гравця: ' + u.id);
-  squad.forEach((u, i) => (u.pos = { ...SQUAD_SPAWN[i] }));
 }
 
 // «Ключ брами» завершено — турелі на базі і брама на геосцені.
@@ -90,7 +94,8 @@ export function createAssault(party: Party, opts: CampaignBattleOptions): Missio
   const map = connectedMap(seed, undefined, undefined, ASSAULT_SPAWN);
   placeSquad(opts.squad);
   const turrets = gateKeyDone(party) ? TURRET_SPAWN.map((_, i) => makeTurret(i)) : [];
-  const aliens = makeEnemies(enemyMix(kindsForThreat(party.campaign.threat), ASSAULT_ENEMIES, seed), ASSAULT_SPAWN, seed);
+  const n = ASSAULT_ENEMIES + extraEnemies(opts.squad.length); // п22.4: +1 за бійця понад три
+  const aliens = makeEnemies(enemyMix(kindsForThreat(party.campaign.threat), n, seed), [...ASSAULT_SPAWN, ...ASSAULT_EXTRA_CELLS], seed);
   const state = createGame({
     map,
     units: [...opts.squad, ...turrets, ...aliens],
@@ -134,10 +139,11 @@ export function gateOpen(party: Pick<Party, 'research' | 'campaign' | 'geo'>): b
 }
 
 // Склад фіналу: по одному кожного типу, далі ще два з доступних (голем ≤ 2) — окремий генератор.
-export function gateMix(avail: readonly EnemyKind[], seed: number): EnemyKind[] {
+// п22.4: n — з надбавкою за загін (типово GATE_ENEMIES — склад як до п22.4).
+export function gateMix(avail: readonly EnemyKind[], seed: number, n = GATE_ENEMIES): EnemyKind[] {
   const kinds: EnemyKind[] = [...ENEMY_ORDER];
   const rng = mulberry32((seed ^ ENEMY_MIX_SALT) >>> 0);
-  while (kinds.length < GATE_ENEMIES) {
+  while (kinds.length < n) {
     const golems = kinds.filter((k) => k === 'golem').length;
     const pool = golems >= GATE_GOLEM_LIMIT ? avail.filter((k) => k !== 'golem') : avail;
     kinds.push(pool[Math.floor(rng() * pool.length)]);
@@ -151,14 +157,15 @@ export function createGateMission(party: Party, opts: CampaignBattleOptions): Mi
   const seed = textSeed('брама:' + party.geo.minute);
   const map = connectedMap(seed, GATE_MAP, GATE_MAP, GATE_SPAWN, GATE_ZONE_CENTER);
   placeSquad(opts.squad);
-  const aliens = makeEnemies(gateMix(kindsForThreat(party.campaign.threat), seed), GATE_SPAWN, seed);
+  const n = GATE_ENEMIES + extraEnemies(opts.squad.length); // п22.4: +1 за бійця понад три
+  const aliens = makeEnemies(gateMix(kindsForThreat(party.campaign.threat), seed, n), [...GATE_SPAWN, ...GATE_EXTRA_CELLS], seed);
   const state = createGame({
     map,
     units: [...opts.squad, ...aliens],
     rng: mulberry32(seed),
     items: opts.items,
     roles: opts.roles,
-    evacZone: SQUAD_SPAWN,
+    evacZone: squadZone(opts.squad.length), // п22.4: зона — за розміром загону
     enemyZone: GATE_SPAWN,
     cover: true, // п20.2 (ADR-0165 п. 10)
   });

@@ -65,6 +65,9 @@ import {
   HIRE_SCIENTIST_PRICE,
   awardTrophies,
   PROJECT_CATALOG,
+  BASE_SQUAD_SIZE,
+  MAX_SQUAD_SIZE,
+  squadSize,
   fireScientist,
   hireScientist,
   missingTrophies,
@@ -347,6 +350,16 @@ export function partyBotInterceptStep(party: Party, policy: InterceptPolicy): vo
   }
 }
 
+// п22.4 (ADR-0186, ADR-0182 п. 10): розмір загону бота і ціль найму — від squadSize, а не від
+// MISSION_SQUAD_SIZE: кожен завершений протокол «Тактичної мережі» додає місце до обох чисел
+// політики (до п22.8 бот протоколів не вчить — числа партій бота без змін).
+export function botSquadSize(party: Party, policy: PartyBotPolicy): number {
+  return Math.min(MAX_SQUAD_SIZE, policy.missionSquadSize + squadSize(party.research) - BASE_SQUAD_SIZE);
+}
+export function botHireUpTo(party: Party, policy: PartyBotPolicy): number {
+  return policy.hireUpTo <= 0 ? policy.hireUpTo : policy.hireUpTo + squadSize(party.research) - BASE_SQUAD_SIZE;
+}
+
 // Крок найму: тримати боєготових не менше hireUpTo, лишаючи резерв на ремонт
 // винищувача. Виживання понад резерв: ready = 0 → найм, поки є гроші (інакше
 // партія застрягне без солдатів і без місій). hireUpTo <= 0 — політика
@@ -354,11 +367,12 @@ export function partyBotInterceptStep(party: Party, policy: InterceptPolicy): vo
 // (HP новобранця ×1.2 на «легкому», критерій П8.5.3). Повертає кількість найнятих.
 export function partyBotHireStep(party: Party, policy: PartyBotPolicy): number {
   if (policy.hireUpTo <= 0) return 0;
+  const upTo = botHireUpTo(party, policy); // п22.4
   let hired = 0;
   // П11.8: ціна найму за пресетом (hirePrice, ADR-0058) — «норма» 100 байт-у-байт.
   const cost = hirePrice(party.campaign.preset);
   while (
-    readySoldiers(party.roster).length < policy.hireUpTo &&
+    readySoldiers(party.roster).length < upTo &&
     party.econ.money >= cost &&
     (party.econ.money - cost >= policy.hireReserve || readySoldiers(party.roster).length === 0)
   ) {
@@ -548,7 +562,7 @@ export function partyBotFleetStep(party: Party, policy: PartyBotPolicy): void {
   if (upTo <= 0 || party.workshop.queue.length > 0) return;
   if (interceptorCount(party.workshop, party.intercept) >= upTo) return;
   // резерв найму — повний загін за ціною пресета і залишок на ремонт (купівля не з'їдає найм після розгрому)
-  const reserve = hirePrice(party.campaign.preset) * policy.hireUpTo + policy.hireReserve;
+  const reserve = hirePrice(party.campaign.preset) * botHireUpTo(party, policy) + policy.hireReserve;
   if (party.econ.money - presetPrice(INTERCEPTOR_COST, party.campaign.preset) < reserve) return;
   orderInterceptor(party.econ, party.workshop, party.intercept, weakestRegion(party), party.campaign.preset);
 }
@@ -591,13 +605,14 @@ export function partyBotMissionStep(party: Party, policy: PartyBotPolicy): Missi
   const info: MissionStepInfo = { launched: false, outcome: null, lost: 0, wounded: 0, evacuated: 0 };
   if (!policy.missions) return info;
   if (party.campaign.status !== 'триває') return info; // п18.3: кінець партії — місій немає (gameOver у main.ts)
-  if (readySoldiers(party.roster).length < policy.missionSquadSize) return info;
+  const size = botSquadSize(party, policy); // п22.4: 3–5 за протоколами
+  if (readySoldiers(party.roster).length < size) return info;
   // Т.22 (ADR-0089): запобіжник останнього загону — без грошей на найм
   // останні боєготові в бій не йдуть (розгром був би банкрутством).
-  if (missionRisksBankruptcy(party.econ, party.roster, policy.missionSquadSize, party.campaign.preset)) return info;
+  if (missionRisksBankruptcy(party.econ, party.roster, size, party.campaign.preset)) return info;
   const target = missionTargets(party.geo)[0];
   if (!target) return info;
-  const squad = missionSquad(party.roster, policy.missionSquadSize);
+  const squad = missionSquad(party.roster, size);
   const consumables = deployConsumables(party.workshop, squad);
   const hasItems = Object.keys(consumables).length > 0;
   const roles = deployRoles(party.roster, squad); // п16.3: ролі загону; без ролей — бій як до п16.3
@@ -636,7 +651,7 @@ function botCampaignBattle(
   policy: PartyBotPolicy,
   make: (p: Party, o: { squad: ReturnType<typeof missionSquad> }) => Mission
 ): { mission: Mission; outcome: 'перемога' | 'поразка' | 'евакуйовано'; lost: number; wounded: number } {
-  const squad = missionSquad(party.roster, Math.min(policy.missionSquadSize, readySoldiers(party.roster).length));
+  const squad = missionSquad(party.roster, Math.min(botSquadSize(party, policy), readySoldiers(party.roster).length));
   const consumables = deployConsumables(party.workshop, squad);
   const roles = deployRoles(party.roster, squad);
   const mission = make(party, {
@@ -687,9 +702,10 @@ export function partyBotAssaultStep(party: Party, policy: PartyBotPolicy): Campa
 export function partyBotGateStep(party: Party, policy: PartyBotPolicy): CampaignBattleInfo {
   const info: CampaignBattleInfo = { fought: false, outcome: null, lost: 0, wounded: 0 };
   if (!policy.missions || !gateOpen(party)) return info;
-  if (readySoldiers(party.roster).length < policy.missionSquadSize) return info;
+  const size = botSquadSize(party, policy); // п22.4
+  if (readySoldiers(party.roster).length < size) return info;
   if (policy.gateMinRanked !== undefined) {
-    const squad = missionSquad(party.roster, policy.missionSquadSize);
+    const squad = missionSquad(party.roster, size);
     if (squad.filter((u) => rankOf(party.roster.careers[u.id]?.xp ?? 0) >= 1).length < policy.gateMinRanked) return info;
   }
   const b = botCampaignBattle(party, policy, createGateMission);

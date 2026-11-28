@@ -221,7 +221,7 @@ describe('mission: власний загін', () => {
     expect(() => createMission(mkGeo('uD'), 'uD', { squad: [] })).toThrow();
     expect(() =>
       createMission(mkGeo('uE'), 'uE', {
-        squad: [makeSoldier('a', '1'), makeSoldier('b', '2'), makeSoldier('c', '3'), makeSoldier('d', '4')],
+        squad: ['a', 'b', 'c', 'd', 'e', 'f'].map((id) => makeSoldier(id, id)), // п22.4: межа — 5
       })
     ).toThrow();
     const spy = makeUnit({ id: 'spy', side: 'alien', pos: { x: 0, y: 0 } });
@@ -396,8 +396,8 @@ describe('mission: Т.14 — сід, склад бою, причини відм�
     expect(() => createMission(mkGeo('u1', false), 'u1')).toThrow(noTarget + 'u1');
     expect(() => createMission(mkGeo('u2', true, 'летить'), 'u2')).toThrow(noTarget + 'u2');
     expect(() => createMission(mkGeo('uD'), 'uD', { squad: [] })).toThrow('Загін не може бути порожнім');
-    const four = ['a', 'b', 'c', 'd'].map((id) => makeSoldier(id, id));
-    expect(() => createMission(mkGeo('uE'), 'uE', { squad: four })).toThrow('Максимум 3 оперативників у зоні висадки');
+    const six = ['a', 'b', 'c', 'd', 'e', 'f'].map((id) => makeSoldier(id, id));
+    expect(() => createMission(mkGeo('uE'), 'uE', { squad: six })).toThrow('Максимум 5 оперативників у зоні висадки');
     const spy = makeUnit({ id: 'spy', side: 'alien', pos: { x: 0, y: 0 } });
     expect(() => createMission(mkGeo('uF'), 'uF', { squad: [spy] })).toThrow('лише оперативники гравця: spy');
   });

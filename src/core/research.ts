@@ -29,7 +29,11 @@ export const MAX_LAB_SLOTS = 3; // після проєкту «Розширен�
 // ключі — не відображувані назви; сейви ≤0.3.0 мігруються при завантаженні,
 // save.ts). Відображувані назви — поле name каталогу.
 // п20.4 (ADR-0168): протоколи зброї — ключі зброї «Кузні» (ForgeWeaponId, weapons.ts).
-export type ProjectId = 'armor' | 'optics' | 'medkit' | 'lab-extension' | 'grenade' | 'gun-module' | KeyProjectId | ForgeWeaponId;
+export type ProjectId =
+  'armor' | 'optics' | 'medkit' | 'lab-extension' | 'grenade' | 'gun-module' | KeyProjectId | ForgeWeaponId | SquadProjectId;
+
+// п22.4 (ADR-0186): протоколи розміру загону «Тактична мережа I / II» (ADR-0182 п. 2, 10).
+export type SquadProjectId = 'tac-net-1' | 'tac-net-2';
 
 // п18.2 (ADR-0153 п. 1, 10; ADR-0154): ключові протоколи ланцюжка до фінальної місії.
 export type KeyProjectId = 'rift-anatomy' | 'gate-bearing' | 'gate-key';
@@ -136,8 +140,26 @@ export function awardTrophies(research: ResearchState, battle: Pick<GameState, '
   return gained;
 }
 
+// п22.4 (ADR-0186, рішення власника «Як у кандидатах»): «Тактична мережа I» — загін 4,
+// «II» (після I) — загін 5; ціни й очки — кандидати, переміряє probe п22.8. Окремий масив,
+// як WEAPON_PROJECTS: PROJECTS і його порядок лишаються (бот, скрипти, тести).
+export const SQUAD_PROJECTS: ProjectDef[] = [
+  { id: 'tac-net-1', name: 'Тактична мережа I', cost: 120, points: 24 },
+  { id: 'tac-net-2', name: 'Тактична мережа II', cost: 180, points: 36, prerequisite: 'tac-net-1' },
+];
+
+// Розмір загону без протоколів і найбільший (п'ять клітинок зони висадки, mission.ts).
+export const BASE_SQUAD_SIZE = 3;
+export const MAX_SQUAD_SIZE = BASE_SQUAD_SIZE + SQUAD_PROJECTS.length;
+
+// п22.4 (ADR-0186, EARS 3 Фази 22): скільки бійців іде в бій — 3, з «Тактичною мережею I» 4,
+// з «II» 5 (кожен завершений протокол — +1 місце; II без I не стартує — передумова).
+export function squadSize(research: Pick<ResearchState, 'completed'>): number {
+  return BASE_SQUAD_SIZE + SQUAD_PROJECTS.filter((p) => research.completed.includes(p.id)).length;
+}
+
 export const PROJECT_CATALOG: Record<ProjectId, ProjectDef> = Object.fromEntries(
-  [...PROJECTS, ...KEY_PROJECTS, ...WEAPON_PROJECTS].map((p) => [p.id, p])
+  [...PROJECTS, ...KEY_PROJECTS, ...WEAPON_PROJECTS, ...SQUAD_PROJECTS].map((p) => [p.id, p])
 ) as Record<ProjectId, ProjectDef>;
 
 // Відображувана назва протоколу за ключем (для throw-текстів, журналу і

@@ -20,7 +20,15 @@
 
 import { spend, type EconomyState } from './economy';
 import { type DifficultyPreset, DEFAULT_PRESET, sciencePrice } from './campaign';
-import { missingTrophies, spendTrophies, type KeyProjectId, type ProjectId, type ResearchState, type TrophyCost } from './research';
+import {
+  missingTrophies,
+  spendTrophies,
+  type KeyProjectId,
+  type SquadProjectId,
+  type ProjectId,
+  type ResearchState,
+  type TrophyCost,
+} from './research';
 import { HIT_CHANCE_CAP, type Unit, type UnitItems } from './combat';
 import { addFighter, baseWhere, fighterById, MAX_FIGHTERS, type InterceptState } from './intercept';
 import type { GeoState } from './geo';
@@ -32,7 +40,7 @@ import { isForgeWeapon, WEAPONS, type ForgeWeaponId, type WeaponId } from './wea
 // відображувані назви — поле name каталогу.
 // п18.2 (ADR-0153 п. 10–11): ключові протоколи предмета не виробляють; «Пробивний
 // заряд» має власний id і протокол, що його відкриває (`unlockedBy`).
-export type ItemId = Exclude<ProjectId, 'lab-extension' | KeyProjectId> | 'breach-charge';
+export type ItemId = Exclude<ProjectId, 'lab-extension' | KeyProjectId | SquadProjectId> | 'breach-charge';
 
 export interface WorkshopItemDef {
   name: string; // відображувана назва предмета (ADR-0064 — мапа перейменувань)

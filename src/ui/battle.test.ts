@@ -171,6 +171,22 @@ describe('battle: флоу місії (запуск/закриття/завер�
     expect(f.battle.visibleCells().size).toBe(0);
   });
 
+  it('п22.4 (ADR-0186): з «Тактичною мережею I / II» в бій іде 4 / 5 бійців — смуга загону і зона висадки під розмір', () => {
+    for (const [done, n] of [
+      [['tac-net-1'], 4],
+      [['tac-net-1', 'tac-net-2'], 5],
+    ] as const) {
+      const f = makeFixture();
+      f.party.research.completed.push(...done);
+      f.battle.launch(firstTarget(f));
+      f.battle.renderBattle();
+      const st = f.ui.mission!.state;
+      expect(st.units.filter((u) => u.side === 'player')).toHaveLength(n);
+      expect(st.evacZone).toHaveLength(n);
+      expect(document.querySelectorAll('#bsquad .sq-card')).toHaveLength(n);
+    }
+  });
+
   it('запуск місії: стан скинуто, журнал і підказка, renderAll; повторний launch — no-op', () => {
     const f = makeFixture();
     const probeId = firstTarget(f);
