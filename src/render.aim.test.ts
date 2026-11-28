@@ -88,9 +88,10 @@ describe('п21.6: напрям кадру пострілу і вигляди з 
     expect(MUZZLE_AIM.golem).toEqual({ up: report.golem!.up.muzzle, down: report.golem!.down.muzzle });
     expect(MUZZLE_AIM.eye).toEqual({ up: report.eye!.up.muzzle, down: report.eye!.down.muzzle });
     expect(MUZZLE_AIM.hound).toBeUndefined();
-    // голем у «стій» тримає гармату перед собою — дуло кадру попереду колонки ступнів (Т.226, конвертер)
-    expect(MUZZLE_AIM.golem!.up.x).toBeLessThan(report.golem!.anchorX);
-    expect(MUZZLE_AIM.golem!.down.x).toBeLessThan(report.golem!.anchorX);
+    // голем у «стій» тримає гармату перед собою — дуло кадру попереду колонки ступнів на чверть ширини «стій» (Т.226, FRONT_FROM_FEET конвертера)
+    const golemFront = Math.round(report.golem!.anchorX - (report.golem!.idleBox[2]! - report.golem!.idleBox[0]!) / 4);
+    expect(MUZZLE_AIM.golem!.up.x).toBeLessThan(golemFront);
+    expect(MUZZLE_AIM.golem!.down.x).toBeLessThan(golemFront);
     expect(MUZZLE_AIM.eye!.up.x).toBeLessThan(report.eye!.idleBox[0]!);
     expect(MUZZLE_AIM.eye!.down.x).toBeLessThan(report.eye!.idleBox[0]!);
     // дуло — за переднім краєм «стій» у бік погляду (аудит PR #543: якір на носку чобота лежав під корпусом)
