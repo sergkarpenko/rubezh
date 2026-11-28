@@ -57,7 +57,7 @@ describe('найм і звільнення вчених (ADR-0058)', () => {
     const research = createResearch();
     const s = hireScientist(econ, research);
     expect(econ.money).toBe(5000 - HIRE_SCIENTIST_PRICE);
-    expect(s).toEqual({ id: 'в1', name: 'Зінаїда' });
+    expect(s).toEqual({ id: 'в1', name: 'Зінаїда', spec: 'researcher', done: 0 });
     expect(research.scientists).toEqual([s]);
     expect(research.hired).toBe(1);
     expect(research.log).toEqual([{ type: 'hire', name: 'Зінаїда' }]);
@@ -68,11 +68,11 @@ describe('найм і звільнення вчених (ADR-0058)', () => {
     const econ = richEcon(5000);
     const research = createResearch();
     hireScientist(econ, research);
-    expect(hireScientist(econ, research)).toEqual({ id: 'в2', name: 'Ярослав' });
+    expect(hireScientist(econ, research)).toEqual({ id: 'в2', name: 'Ярослав', spec: 'researcher', done: 0 });
     // 12 імен у пулі: 13-й найм — перше ім’я з суфіксом « 2» (прецедент ростеру)
     const big = createResearch();
     for (let i = 0; i < 13; i++) hireScientist(econ, big);
-    expect(big.scientists[12]).toEqual({ id: 'в13', name: 'Зінаїда 2' });
+    expect(big.scientists[12]).toEqual({ id: 'в13', name: 'Зінаїда 2', spec: 'researcher', done: 0 });
   });
 
   it('недостатньо грошей → throw, штат не змінюється', () => {
@@ -416,7 +416,7 @@ describe('Т.14: каталог, пул імен, звільнення, слот
     const econ = richEcon();
     const research = createResearch();
     for (let i = 0; i < 3; i++) hireScientist(econ, research);
-    expect(fireScientist(research, 'в2')).toEqual({ id: 'в2', name: 'Ярослав' });
+    expect(fireScientist(research, 'в2')).toEqual({ id: 'в2', name: 'Ярослав', spec: 'researcher', done: 0 });
     expect(research.scientists.map((s) => s.id)).toEqual(['в1', 'в3']);
     expect(research.log.at(-1)).toEqual({ type: 'fire', name: 'Ярослав' });
   });

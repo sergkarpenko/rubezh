@@ -30,6 +30,8 @@ import {
   awardTrophies,
   fireScientist,
   hireScientist,
+  scientistLevel,
+  SCIENTIST_SPECS,
   radarRange,
   researchTick,
   squadSize,
@@ -46,6 +48,8 @@ import {
   installGunModule,
   itemUnlocked,
   orderItem,
+  brewItem,
+  BREW_IDS,
   removeGunModule,
   removeLostEquipment,
   interceptorCount,
@@ -75,6 +79,7 @@ import { completeMission, createMission } from './core/mission';
 import { FORGE_WEAPONS, isForgeWeapon, WEAPONS } from './core/weapons';
 import { autoBattle } from './core/ai-bot';
 import { createParty, deserializeParty, serializeParty, type Party } from './core/save';
+import { MODULE_IDS, MODULES, buyModule } from './core/base';
 import {
   awaitingBranch,
   awaitingRole,
@@ -93,7 +98,7 @@ const RUN = { seed: 20261111, numRuns: 100 };
 // п18.2: генератор бере й ключові протоколи та «Пробивний заряд» (у панелях до п18.5 сховані).
 // п20.4 (ADR-0168): і протоколи та виріб зброї; видача зброї — equipItem (делегує equipWeapon)
 const ALL_PROJECTS = [...PROJECTS, ...KEY_PROJECTS, ...WEAPON_PROJECTS, ...SQUAD_PROJECTS]; // п22.4: і «Тактична мережа»
-const ALL_ITEMS: ItemId[] = [...ITEM_IDS, 'breach-charge', ...FORGE_WEAPONS];
+const ALL_ITEMS: ItemId[] = [...ITEM_IDS, 'breach-charge', ...FORGE_WEAPONS, ...BREW_IDS]; // п22.5: і витратники казана
 const CHOICES = ['далека', 'середня', 'впритул', 'відступ'] as const;
 
 // Команда: тип і два «сирі» числа — скільки часу минає або який за порядком об'єкт.
@@ -112,6 +117,8 @@ const WEIGHTS = {
   unequip: 2,
   loot: 2,
   key: 1,
+  module: 1, // п22.5: модуль бази чи наступний рівень
+  brew: 2, // п22.5: варіння в казані
   unlock: 0, // лише в дебюті OPENING_GATE
 } as const;
 // п19.3: buy — замовлення перехоплювача в «Кузні», assign — перепризначення ангара.
@@ -267,17 +274,19 @@ function apply(p: Party, c: Cmd): Party {
     // «+1 доба», доки не завершиться протокол або замовлення цеху (не довше 10 діб)
     wait: () => ticks(480, () => research.completed.length + workshop.queue.length !== finished),
     hire: () => hireSoldier(econ, p.roster, preset),
-    scientist: () => hireScientist(econ, research, preset),
+    scientist: () => hireScientist(econ, research, preset, SCIENTIST_SPECS[c.i % SCIENTIST_SPECS.length]), // п22.5
     dismiss: () => fireScientist(research, pick([], research.scientists)?.id ?? ''),
     project: () => startProject(econ, research, pick(open, ALL_PROJECTS)!.id, preset),
-    order: () => orderItem(econ, workshop, research, item(researched), preset),
+    order: () => orderItem(econ, workshop, research, item(researched), preset, p.modules),
+    module: () => buyModule(econ, research, p.modules, MODULE_IDS[c.n % MODULE_IDS.length], preset),
+    brew: () => brewItem(econ, workshop, research, p.modules, BREW_IDS[c.i % BREW_IDS.length], preset),
     equip: () => fighter && equipItem(workshop, fighter, item(inStore)),
     unequip: () => equipped && unequipItem(workshop, equipped, item(wears)),
     gun: () => {
       const f = pick(intercept.fighters, intercept.fighters, c.n)!; // п19.3: модуль — на обраний перехоплювач
       (f.gunModule ? removeGunModule : installGunModule)(workshop, intercept, f.id);
     },
-    buy: () => orderInterceptor(econ, workshop, intercept, REGION_IDS[c.n % REGION_IDS.length], preset),
+    buy: () => orderInterceptor(econ, workshop, intercept, REGION_IDS[c.n % REGION_IDS.length], preset, research, p.modules),
     assign: () => assignFighter(intercept, geo, pick(intercept.fighters, intercept.fighters, c.n)!.id, REGION_IDS[c.i % REGION_IDS.length]),
     // три рази з чотирьох — «полювання»: «+1 тік», доки радар не покаже зонд у повітрі
     // (не довше двох діб), запуск, погоня до зустрічі і до п'яти раундів бою
@@ -404,7 +413,20 @@ function broken(p: Party): string[] {
   // Наука: слоти, передумови, і жодна наукова точка не зникає й не береться нізвідки.
   const started = [...research.active.map((a) => a.id), ...research.completed];
   must(research.active.length <= research.slots && new Set(started).size === started.length, 'протоколи: слоти або повтор');
-  must(research.slots === (research.completed.includes('lab-extension') ? 3 : 2), 'слоти лабораторії: ' + research.slots);
+  // п22.5 (ADR-0187): +1 протоколом «Розширення», +1 модулем «Стенд техномантів»
+  must(
+    research.slots === 2 + (research.completed.includes('lab-extension') ? 1 : 0) + p.modules.stand,
+    'слоти лабораторії: ' + research.slots
+  );
+  // п22.5: рівень техноманта — з протоколів, завершених у штаті (не більше завершених загалом)
+  must(
+    research.scientists.every((sc) => sc.done >= 0 && sc.done <= research.completed.length && scientistLevel(sc) <= 3),
+    'техномант: протоколів у штаті більше, ніж завершено'
+  );
+  must(
+    MODULE_IDS.every((k) => p.modules[k] >= 0 && p.modules[k] <= MODULES[k].prices.length),
+    'рівень модуля поза межами'
+  );
   for (const id of started) {
     const before = PROJECT_CATALOG[id].prerequisite;
     must(before === undefined || research.completed.includes(before), 'протокол ' + id + ' без передумови');
@@ -424,7 +446,10 @@ function broken(p: Party): string[] {
   // Цех: кожен виготовлений предмет — на складі, на оперативникові, на перехоплювачі
   // або (лише витратник) втрачений із загиблим; витратники ще й витрачаються в бою.
   for (const id of ALL_ITEMS) {
-    const made = workshop.log.filter((e) => e.type === 'produced' && e.id === id).length;
+    // п22.5: витратники казана — події brewed з числом порцій
+    const made =
+      workshop.log.filter((e) => e.type === 'produced' && e.id === id).length +
+      workshop.log.reduce((sum, e) => sum + (e.type === 'brewed' && e.id === id ? e.count : 0), 0);
     const slot = slotOf(id);
     const worn =
       id === 'gun-module'
@@ -436,12 +461,16 @@ function broken(p: Party): string[] {
     // п18.4: програний штурм бази забирає половину складу — подія store_lost
     const raided = workshop.log.reduce((sum, e) => sum + (e.type === 'store_lost' ? (e.lost[id] ?? 0) : 0), 0);
     const kept = workshop.store[id] + worn + lost + raided;
-    const usedUp = id === 'medkit' || id === 'grenade' || id === 'breach-charge';
+    const usedUp = id === 'medkit' || id === 'grenade' || id === 'breach-charge' || id === 'stim' || id === 'shield';
     must(workshop.store[id] >= 0 && (usedUp ? kept <= made : kept === made), id + ': виготовлено ' + made + ', на обліку ' + kept);
   }
   // Т.28 (ADR-0091): броня й око із загиблим не гинуть — у подіях втрати лише витратники.
   must(
-    workshop.log.every((e) => e.type !== 'equipment_lost' || e.items.every((k) => k === 'medkit' || k === 'grenade' || k === 'charge')),
+    workshop.log.every(
+      (e) =>
+        e.type !== 'equipment_lost' ||
+        e.items.every((k) => k === 'medkit' || k === 'grenade' || k === 'charge' || k === 'stim' || k === 'shield')
+    ),
     'броня чи око загинули разом з оперативником'
   );
   must(
@@ -450,7 +479,8 @@ function broken(p: Party): string[] {
   );
   must(
     Object.entries(workshop.equipped).every(
-      ([id, eq]) => ids.has(id) && (eq.armor || eq.optics || eq.medkit || eq.grenade || eq.charge || eq.weapon !== undefined)
+      ([id, eq]) =>
+        ids.has(id) && (eq.armor || eq.optics || eq.medkit || eq.grenade || eq.charge || eq.stim || eq.shield || eq.weapon !== undefined)
     ),
     'екіпірування без власника або порожнє'
   );
@@ -460,7 +490,10 @@ function broken(p: Party): string[] {
   for (const k of ENEMY_ORDER) {
     const gained = research.log.reduce((sum, e) => sum + (e.type === 'trophies' ? (e.gained[k] ?? 0) : 0), 0);
     const spentP = started.reduce((sum, id) => sum + (PROJECT_CATALOG[id].trophies?.[k] ?? 0), 0);
-    const spentW = workshop.log.reduce((sum, e) => sum + (e.type === 'order' ? (WORKSHOP_CATALOG[e.id].trophies?.[k] ?? 0) : 0), 0);
+    const spentW = workshop.log.reduce(
+      (sum, e) => sum + (e.type === 'order' || e.type === 'brew' ? (WORKSHOP_CATALOG[e.id].trophies?.[k] ?? 0) : 0),
+      0
+    );
     must(research.trophies[k] >= 0 && research.trophies[k] === gained - spentP - spentW, 'трофеї ' + k + ': ' + research.trophies[k]);
   }
 

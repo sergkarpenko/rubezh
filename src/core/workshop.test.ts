@@ -531,6 +531,9 @@ describe('цех: Т.12 — зняття саме того предмета, щ�
       shotgun: { name: 'Дробовик «Шквал»', cost: 60, ticks: 16 },
       sniper: { name: 'Гвинтівка «Голка»', cost: 70, ticks: 20 },
       mg: { name: 'Кулемет «Град»', cost: 80, ticks: 24 },
+      // п22.5 (ADR-0187): витратники казана алхіміка
+      stim: { name: 'Стимулятор', cost: 30, ticks: 12, trophies: { demon: 1 }, brewed: true },
+      shield: { name: 'Щит', cost: 40, ticks: 16, trophies: { hound: 1 }, brewed: true },
     });
     expect(itemName('гаубиця' as ItemId)).toBe('гаубиця');
   });

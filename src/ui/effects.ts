@@ -11,6 +11,7 @@ import {
   HEAL_AP_COST,
   HEAL_AMOUNT,
   HIT_CHANCE_CAP,
+  STIM_AP_BONUS,
   type ShotMode,
   type Unit,
 } from '../core/combat';
@@ -145,7 +146,12 @@ function keyProjectEffect(id: KeyProjectId | ForgeWeaponId): string {
 }
 
 // Ефект предмета «Кузні» ДО замовлення (механіка витратників — у підказках).
+// п22.5 (ADR-0187): витратники казана — тексти до UI п22.7 (числа з констант ядра).
+export const STIM_EFFECT = 'Дія без AP: +' + STIM_AP_BONUS + ' AP цього ходу; один на бій';
+export const SHIELD_EFFECT = 'Сам поглинає перше влучання будь-якої шкоди; один на бій';
 export function itemEffect(id: ItemId, soldier?: Unit): string {
+  if (id === 'stim') return STIM_EFFECT;
+  if (id === 'shield') return SHIELD_EFFECT;
   return id === 'breach-charge' ? BREACH_CHARGE_EFFECT : projectEffect(id, soldier);
 }
 

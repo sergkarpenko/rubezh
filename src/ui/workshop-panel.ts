@@ -8,6 +8,7 @@
 // геосцені (прецедент панелі збереження, П5.3): у бою кнопки вимкнені.
 // Детермінізм: панель лише читає стан ядра, жодного RNG.
 
+import { forgeTicks } from '../core/base';
 import { FORGE_WEAPONS } from '../core/weapons';
 import {
   INTERCEPTOR_COST,
@@ -71,7 +72,7 @@ export function orderButtonState(party: Party, id: ItemId, busy: boolean): Order
       ? lack
       : party.econ.money < price
         ? 'Недостатньо кредитів (ціна ' + price + ')'
-        : 'Замовити в «Кузні» (−' + price + ', готовність через ' + ticksText(def.ticks) + ')';
+        : 'Замовити в «Кузні» (−' + price + ', готовність через ' + ticksText(forgeTicks(def.ticks, party.research, party.modules)) + ')';
   const blocked = notResearched || lack !== undefined || party.econ.money < price;
   return { disabled: busy || blocked, title, why: blocked ? title : null };
 }
@@ -119,7 +120,7 @@ export function createWorkshopPanel(deps: WorkshopPanelDeps): WorkshopPanel {
       row.style.marginBottom = '4px';
       const info = document.createElement('span');
       const price = sciencePrice(def.cost, party.campaign.preset);
-      info.textContent = def.name + ' · ' + price + ' · ' + ticksText(def.ticks);
+      info.textContent = def.name + ' · ' + price + ' · ' + ticksText(forgeTicks(def.ticks, party.research, party.modules));
       row.appendChild(info);
       const effect = document.createElement('span');
       effect.className = 'meta';
@@ -135,7 +136,7 @@ export function createWorkshopPanel(deps: WorkshopPanelDeps): WorkshopPanel {
       order.title = ob.title;
       order.onclick = () => {
         try {
-          orderItem(party.econ, party.workshop, party.research, id, party.campaign.preset);
+          orderItem(party.econ, party.workshop, party.research, id, party.campaign.preset, party.modules);
         } catch (e) {
           deps.journal('✗ ' + (e as Error).message, 'lose', 'base');
         }
@@ -168,7 +169,7 @@ export function createWorkshopPanel(deps: WorkshopPanelDeps): WorkshopPanel {
       'Перехоплювач · ' +
       price +
       ' · ' +
-      ticksText(INTERCEPTOR_TICKS) +
+      ticksText(forgeTicks(INTERCEPTOR_TICKS, party.research, party.modules)) +
       '<span class="meta"> · є ' +
       count +
       ' з ' +
@@ -193,10 +194,16 @@ export function createWorkshopPanel(deps: WorkshopPanelDeps): WorkshopPanel {
       b.disabled = busy || why !== null;
       b.title =
         why ??
-        'Замовити перехоплювач в ангар «' + REGION_NAMES[r] + '» (−' + price + ', готовність через ' + ticksText(INTERCEPTOR_TICKS) + ')';
+        'Замовити перехоплювач в ангар «' +
+          REGION_NAMES[r] +
+          '» (−' +
+          price +
+          ', готовність через ' +
+          ticksText(forgeTicks(INTERCEPTOR_TICKS, party.research, party.modules)) +
+          ')';
       b.onclick = () => {
         try {
-          orderInterceptor(party.econ, party.workshop, party.intercept, r, party.campaign.preset);
+          orderInterceptor(party.econ, party.workshop, party.intercept, r, party.campaign.preset, party.research, party.modules);
         } catch (e) {
           deps.journal('✗ ' + (e as Error).message, 'lose', 'base');
         }

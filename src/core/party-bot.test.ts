@@ -554,7 +554,7 @@ describe('п18.6: політика кампанії (CAMPAIGN_POLICY)', () => {
   // сід 17 на 44-й (скан 1–30: поразок 6 — сіди 2, 17, 18, 19, 22, 25).
   // п22.2 (гілки «Сержанта» й «Ветерана» в бота, ADR-0183): сід 7 виграє на 41-й у першому фіналі, загиблих 11 → 6,
   // ланцюжок той самий; поразка сіду 17 — та сама 44-та доба; сіди переміряє п22.8 (ADR-0182 «Наслідки»).
-  it('повна партія, сід 7 «норма»: ланцюжок 19 / 33 / 41-ша доба, зброя до «Пеленгу», перемога на 41-й у першому фіналі; байт-у-байт', () => {
+  it('повна партія, сід 7 «норма»: ланцюжок 15 / 27 / 31-ша доба, зброя до «Пеленгу», перемога на 31-й у першому фіналі; байт-у-байт', () => {
     const days: Record<string, number> = {};
     const r = simulateParty(7, 'норма', {
       policy: CAMPAIGN_POLICY,
@@ -562,15 +562,15 @@ describe('п18.6: політика кампанії (CAMPAIGN_POLICY)', () => {
         for (const id of p.research.completed) days[id] ??= Math.floor(p.geo.minute / 1440) + 1;
       },
     });
-    expect([r.outcome, r.endDay, r.gateAttempts, r.assaults, r.soldiersLost]).toEqual(['перемога', 41, 1, 0, 6]);
+    expect([r.outcome, r.endDay, r.gateAttempts, r.assaults, r.soldiersLost]).toEqual(['перемога', 31, 1, 0, 4]); // п22.5 (ADR-0187): дослідники ростуть рівнем — 41-ша → 31-ша
     expect(r.completedProjects).toEqual(['optics', 'shotgun', 'armor', 'rift-anatomy', 'mg', 'sniper', 'gate-bearing', 'gate-key']);
-    expect([days['rift-anatomy'], days['gate-bearing'], days['gate-key']]).toEqual([19, 33, 41]);
+    expect([days['rift-anatomy'], days['gate-bearing'], days['gate-key']]).toEqual([15, 27, 31]);
     expect(simulateParty(7, 'норма', { policy: CAMPAIGN_POLICY })).toEqual(r);
   }, 30_000);
 
-  it('повна партія, сід 17 «норма»: фінали програно, поразка за загрозою на 44-й добі', () => {
+  it('повна партія, сід 17 «норма»: фінали програно, поразка за загрозою на 38-й добі', () => {
     const r = simulateParty(17, 'норма', { policy: CAMPAIGN_POLICY });
-    expect([r.outcome, r.endDay, r.gateAttempts, r.assaults]).toEqual(['поразка', 44, 2, 3]);
+    expect([r.outcome, r.endDay, r.gateAttempts, r.assaults]).toEqual(['поразка', 38, 5, 3]); // п22.5: до п22.5 — 44-та, 2 спроби Брами
   }, 30_000);
 
   it('onTick: виклик на кожен тік, результат той самий, що без спостерігача', () => {

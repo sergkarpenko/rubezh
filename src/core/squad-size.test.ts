@@ -86,7 +86,11 @@ describe('п22.4: squadSize і протоколи «Тактична мереж�
     const money = econ.money;
     startProject(econ, r, 'tac-net-1');
     expect(econ.money).toBe(money - 120);
-    r.scientists.push({ id: 'sc1', name: 'Зінаїда' }, { id: 'sc2', name: 'Ярослав' }, { id: 'sc3', name: 'Меланія' });
+    r.scientists.push(
+      { id: 'sc1', name: 'Зінаїда', spec: 'researcher', done: 0 },
+      { id: 'sc2', name: 'Ярослав', spec: 'researcher', done: 0 },
+      { id: 'sc3', name: 'Меланія', spec: 'researcher', done: 0 }
+    );
     econ.money = 10_000; // платня штату не обриває протокол
     const geo = createParty(42).geo; // лише годинник доби: 3 техноманти × 8 діб = 24 очки
     for (let i = 0; i < 9 * 24 && !r.completed.includes('tac-net-1'); i++) {

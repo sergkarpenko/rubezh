@@ -91,7 +91,7 @@ describe('ResearchPanel: штат вчених', () => {
     const head = el('research').querySelector('.sci-head')!.textContent!;
     expect(head).toContain('Техномантів: 0');
     expect(head).toContain('утримання ' + SCIENTIST_SALARY + ' кр. за добу');
-    expect(head).toContain('Кожен техномант дає 1 очко потоку за добу');
+    expect(head).toContain('Потік: 0 за добу (кожен техномант — 1, дослідник рівня 2 / 3 — 2 / 3)'); // п22.5 (ADR-0187)
     expect(head).toContain('Протоколів у роботі: 0 з ' + BASE_LAB_SLOTS);
   });
 });
@@ -317,11 +317,22 @@ describe('T.39: формули «Час ≈ …» (K техномантів, P �
     expect(card('Композитна броня').textContent).toContain('6 з 14 очок потоку · ще ≈ 16 діб');
   });
 
+  it('п22.5 (аудит PR #551): час — від потоку штату: дослідник рівня 3 (3 очки) — «Час ≈ 5 діб», у роботі — ⌈(P − X) · A / потік⌉', () => {
+    const panel = createResearchPanel(makeDeps());
+    party.research.scientists.push({ id: 'в1', name: 'Зінаїда', spec: 'researcher', done: 5 });
+    panel.render();
+    expect(el('research').querySelector('.sci-head')!.textContent).toContain('Потік: 3 за добу');
+    expect([...card('Композитна броня').querySelectorAll('.sci-row')].map((r) => r.textContent)).toEqual(['Час ≈ 5 діб']);
+    (el('btn-start-0') as HTMLButtonElement).click();
+    panel.render();
+    expect(card('Композитна броня').textContent).toContain('0 з 14 очок потоку · ще ≈ 5 діб');
+  });
+
   it('у роботі без техномантів: «… очок потоку · зупинено: немає техномантів» (без «ще ≈»)', () => {
     const panel = createResearchPanel(makeDeps());
     panel.render();
     (el('btn-start-0') as HTMLButtonElement).click();
-    party.research.scientists.push({ id: 'в1', name: 'Зінаїда' });
+    party.research.scientists.push({ id: 'в1', name: 'Зінаїда', spec: 'researcher', done: 0 });
     panel.render();
     (el('btn-fire-в1') as HTMLButtonElement).click();
     panel.render();
@@ -451,7 +462,7 @@ describe('T.39: ефекти протоколів простими словам�
 
 describe('ResearchPanel: критерій 1 — лише на геострені (прецедент збереження)', () => {
   it('у бою вимкнені всі кнопки панелі (найм, звільнення, старт), крім кнопок смуги кроків', () => {
-    party.research.scientists.push({ id: 'в1', name: 'Зінаїда' });
+    party.research.scientists.push({ id: 'в1', name: 'Зінаїда', spec: 'researcher', done: 0 });
     const panel = createResearchPanel(makeDeps({ inBattle: () => true }));
     panel.render();
     expect((el('btn-hire-scientist') as HTMLButtonElement).disabled).toBe(true);
@@ -557,7 +568,7 @@ describe('Т.43: причини під неактивними кнопками �
 // п18.5 (ADR-0157): ключові протоколи ланцюжка до Брами — у панелі після звичайних, трофеї на вході.
 describe('п18.5: ключові протоколи в панелі «Дослідження»', () => {
   it('заголовок блоку; без трофеїв «Анатомія Розриву» згорнута — плашка, ефект із ціною в трофеях за кнопкою-назвою', () => {
-    party.research.scientists.push({ id: 'в1', name: 'Зінаїда' });
+    party.research.scientists.push({ id: 'в1', name: 'Зінаїда', spec: 'researcher', done: 0 });
     const panel = createResearchPanel(makeDeps());
     panel.render();
     expect(el('research').textContent).toContain('Ключові протоколи — шлях до Брами Розриву, потрібні трофеї');
@@ -574,7 +585,7 @@ describe('п18.5: ключові протоколи в панелі «Дослі
   });
 
   it('трофеїв частково — картка згорнута; причина старту з ядра (missingTrophies) — і на розгорнутій із трофеями', () => {
-    party.research.scientists.push({ id: 'в1', name: 'Зінаїда' });
+    party.research.scientists.push({ id: 'в1', name: 'Зінаїда', spec: 'researcher', done: 0 });
     party.research.trophies = { demon: 6, hound: 3, golem: 0, eye: 0 };
     createResearchPanel(makeDeps()).render();
     const c = card('Анатомія Розриву');
@@ -584,7 +595,7 @@ describe('п18.5: ключові протоколи в панелі «Дослі
   });
 
   it('трофеїв досить — старт списує кредити й трофеї; завершений ключовий — без кнопки «Кузні»', () => {
-    party.research.scientists.push({ id: 'в1', name: 'Зінаїда' });
+    party.research.scientists.push({ id: 'в1', name: 'Зінаїда', spec: 'researcher', done: 0 });
     party.research.trophies = { demon: 7, hound: 3, golem: 0, eye: 0 };
     const deps = makeDeps();
     createResearchPanel(deps).render();

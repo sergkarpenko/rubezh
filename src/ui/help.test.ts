@@ -96,7 +96,9 @@ describe('П9.1: екран «Як грати» — контент з конст
     expect(text).toContain('Наука і спорядження');
     expect(text).toContain('Техноманти');
     // п19.4 (рішення власника Т.207 «А»): «Техноманти» і «Протокол» — один рядок
-    expect(text).toContain('1 очко потоку і ' + SCIENTIST_SALARY + ' кр. за добу кожен; до ' + BASE_LAB_SLOTS + ' протоколів одночасно');
+    expect(text).toContain(
+      'від 1 очка потоку і ' + SCIENTIST_SALARY + ' кр. за добу кожен; до ' + BASE_LAB_SLOTS + ' протоколів одночасно'
+    );
     expect(text).toContain('«Кузня»');
     expect(text).toContain('Видача');
     // п20.5 (рішення власника «А. Як на аркуші»): видача — у вікні перед вильотом; укриття — числа з COVER_MULT

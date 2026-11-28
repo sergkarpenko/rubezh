@@ -13,6 +13,7 @@ import type { EconomyEvent } from '../core/economy';
 // П11.6 (ADR-0058): події науки і «Кузні» → журнал (категорія «База»).
 import { projectName, type ResearchEvent } from '../core/research';
 import { equipKeyItem, itemName, type WorkshopEvent } from '../core/workshop';
+import { MODULES, moduleMaxLevel } from '../core/base';
 import { EVAC_AP_COST, type GameEvent, type ShotMode } from '../core/combat';
 import { ENEMY_KINDS, ENEMY_ORDER } from '../core/enemies';
 import { claimHint, type Party } from '../core/save';
@@ -232,7 +233,8 @@ export function battleEventText(
   if (e.type === 'shot') {
     const how = melee(e.shooterId) ? 'кігті' : MODE_LABEL[e.mode];
     return {
-      text: name(e.shooterId) + ' → ' + name(e.targetId) + ' (' + how + '): ' + (e.hit ? '−' + e.damage : 'промах'),
+      text:
+        name(e.shooterId) + ' → ' + name(e.targetId) + ' (' + how + '): ' + (e.hit ? (e.damage > 0 ? '−' + e.damage : 'щит') : 'промах'), // п22.5: шкода 0 — лише «Щит»
       cls: '',
     };
   }
@@ -245,13 +247,17 @@ export function battleEventText(
     return { text: '✚ ' + name(e.unitId) + ' лікує ' + name(e.targetId) + ': +' + e.healed + ' HP', cls: 'win' };
   }
   if (e.type === 'grenade') {
-    const hits = e.hits.length > 0 ? e.hits.map((h) => '−' + h.damage + ' ' + name(h.unitId)).join(', ') : 'у зоні нікого';
+    const hits =
+      e.hits.length > 0 ? e.hits.map((h) => (h.damage > 0 ? '−' + h.damage : 'щит') + ' ' + name(h.unitId)).join(', ') : 'у зоні нікого';
     return { text: '✦ ' + name(e.unitId) + ' кидає гранату в (' + e.center.x + ', ' + e.center.y + '): ' + hits, cls: '' };
   }
   // п16.4 (ADR-0147, рішення власника «А»): дії ролей; «Точний постріл» — мітка перед звичайним рядком пострілу
   if (e.type === 'dash') return { text: '» ' + name(e.unitId) + ': «Ривок» +' + e.bonus + ' AP', cls: '' };
   if (e.type === 'precise_shot') return { text: '◎ ' + name(e.shooterId) + ': «Точний постріл»', cls: '' };
   // п18.5 (ADR-0157; кандидат 181 а): витрачений «Пробивний заряд» — мітка перед рядком пострілу
+  // п22.5 (ADR-0187): витратники казана; «Щит» — мітка перед рядком влучання з шкодою 0
+  if (e.type === 'stim') return { text: '» ' + name(e.unitId) + ': «Стимулятор» +' + e.bonus + ' AP', cls: '' };
+  if (e.type === 'shield') return { text: '◈ ' + name(e.unitId) + ': «Щит» поглинув влучання', cls: 'win' };
   if (e.type === 'charge')
     return { text: '⚡ ' + name(e.shooterId) + ': «Пробивний заряд» — броню пробито (' + name(e.targetId) + ')', cls: '' };
   if (e.type === 'field_aid') {
@@ -407,8 +413,15 @@ export function researchEventText(e: ResearchEvent): { text: string; cls: string
       const parts = ENEMY_ORDER.filter((k) => (e.gained[k] ?? 0) > 0).map((k) => ENEMY_KINDS[k].name.toLowerCase() + ' +' + e.gained[k]);
       return { text: '⚑ Трофеї: ' + parts.join(', '), cls: 'win' };
     }
+    case 'module': // п22.5 (ADR-0187): модуль бази; рівень — римською, як «Тактична мережа I / II»
+      return {
+        text: '⚑ Модуль бази: «' + MODULES[e.id].name + '»' + (moduleMaxLevel(e.id) > 1 ? ' ' + ROMAN[e.level] : '') + ' ✓',
+        cls: 'win',
+      };
   }
 }
+
+const ROMAN = ['', 'I', 'II', 'III'];
 
 // П11.6 (ADR-0058): чистий перетворювач події «Кузні» → рядок журналу (для
 // юніт-тестів); null — не для гравця. Оперативник — за id (ростер журналу не
@@ -451,5 +464,13 @@ export function workshopEventText(e: WorkshopEvent): { text: string; cls: string
       return { text: '⚑ Кузня: перехоплювач ' + e.fighter + ' виготовлено → ангар «' + REGION_NAMES[e.region] + '» ✓', cls: 'win' };
     case 'store_lost':
       return null; // п18.4: утрату складу називає рядок штурму (geoEventText, assault_lost)
+    // п22.5 (ADR-0187): казан алхіміка
+    case 'brew':
+      return {
+        text: '⚑ Казан: вариться «' + itemName(e.id) + '»' + (e.count > 1 ? ' ×' + e.count : '') + ' — ' + ticksText(e.ticks),
+        cls: '',
+      };
+    case 'brewed':
+      return { text: '⚑ Казан: зварено «' + itemName(e.id) + '»' + (e.count > 1 ? ' ×' + e.count : '') + ' → склад ✓', cls: 'win' };
   }
 }

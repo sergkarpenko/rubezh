@@ -29,6 +29,7 @@ import {
   PROJECT_CATALOG,
   SCIENTIST_SALARY,
   hireScientist,
+  scientistPoints,
   fireScientist,
   missingTrophies,
   projectName,
@@ -129,6 +130,8 @@ export function createResearchPanel(deps: ResearchPanelDeps): ResearchPanel {
     const hirePrice = sciencePrice(HIRE_SCIENTIST_PRICE, preset);
     const salary = sciencePrice(SCIENTIST_SALARY, preset);
     const scientists = r.scientists.length;
+    // п22.5 (ADR-0187, аудит PR #551): потік за добу — сума очок штату (дослідник — за рівнем), оцінки часу — від нього
+    const flow = r.scientists.reduce((sum, s) => sum + scientistPoints(s), 0);
 
     // T.39: смуга кроків «1. Дослідити → 2. Виготовити → 3. Видати» — навігація;
     // кнопки смуги завжди активні, коли панель видима (стан гри не змінюється)
@@ -161,7 +164,7 @@ export function createResearchPanel(deps: ResearchPanelDeps): ResearchPanel {
     const l1 = document.createElement('div');
     l1.innerHTML = 'Техномантів: <b>' + scientists + '</b> · утримання ' + salary + ' кр. за добу';
     const l2 = document.createElement('div');
-    l2.textContent = 'Кожен техномант дає 1 очко потоку за добу';
+    l2.textContent = 'Потік: ' + flow + ' за добу (кожен техномант — 1, дослідник рівня 2 / 3 — 2 / 3)';
     const l3 = document.createElement('div');
     l3.innerHTML = 'Протоколів у роботі: <b>' + r.active.length + ' з ' + r.slots + '</b>';
     head.append(l1, l2, l3);
@@ -317,7 +320,7 @@ export function createResearchPanel(deps: ResearchPanelDeps): ResearchPanel {
           forge.title = st.title;
           forge.onclick = () => {
             try {
-              orderItem(party.econ, party.workshop, party.research, itemId, preset);
+              orderItem(party.econ, party.workshop, party.research, itemId, preset, party.modules);
             } catch (e) {
               deps.journal('✗ ' + (e as Error).message, 'lose', 'base');
             }
@@ -364,7 +367,7 @@ export function createResearchPanel(deps: ResearchPanelDeps): ResearchPanel {
           row.innerHTML = '<b>' + active.invested + ' з ' + points + '</b> очок потоку · зупинено: немає техномантів';
         } else {
           // D = ⌈(P − X) · A / K⌉ діб, A — протоколів у роботі
-          const d = Math.ceil(((points - active.invested) * r.active.length) / scientists);
+          const d = Math.ceil(((points - active.invested) * r.active.length) / flow);
           row.innerHTML = '<b>' + active.invested + ' з ' + points + '</b> очок потоку · ще ≈ ' + daysText(d);
         }
         card.appendChild(row);
@@ -374,7 +377,7 @@ export function createResearchPanel(deps: ResearchPanelDeps): ResearchPanel {
         const price = sciencePrice(def.cost, preset);
         const tRow = document.createElement('div');
         tRow.className = 'sci-row';
-        tRow.textContent = timeTextNotStarted(def.points, scientists);
+        tRow.textContent = timeTextNotStarted(def.points, flow);
         card.append(tRow);
         if (def.trophies !== undefined) {
           // п18.5: трофеї на вході — «Трофеї: демон 6, гончак 3» (списуються разом із кредитами)

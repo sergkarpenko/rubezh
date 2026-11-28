@@ -448,6 +448,9 @@ function soldierEquipKey(id: BotItemId): 'armor' | 'optics' | 'medkit' | 'grenad
       return 'charge'; // п18.2; замовляє політика кампанії (п18.6, CAMPAIGN_POLICY)
     case 'gun-module':
       throw new Error('Гарматний модуль перехоплювача — озброєння перехоплювача, ключ екіпірування оперативника недосяжний');
+    case 'stim':
+    case 'shield':
+      throw new Error('Витратники казана бот не варить до п22.8 (ADR-0187)'); // п22.5: недосяжно — дефіцит їх не бере
   }
 }
 
@@ -503,7 +506,7 @@ export function partyBotScienceStep(party: Party, policy: PartyBotPolicy): void 
       if (workshopDeficit(party, id) <= 0) continue;
       if (!trophiesAfford(party, policy, WORKSHOP_CATALOG[id].trophies)) continue; // п18.6: трофеї предмета (заряд)
       if (party.econ.money - presetPrice(WORKSHOP_CATALOG[id].cost, preset) < reserve) continue;
-      orderItem(party.econ, party.workshop, party.research, id, preset);
+      orderItem(party.econ, party.workshop, party.research, id, preset, party.modules);
       break;
     }
   }
@@ -512,7 +515,7 @@ export function partyBotScienceStep(party: Party, policy: PartyBotPolicy): void 
     for (const id of FORGE_WEAPONS) {
       if (!itemUnlocked(party.research, id) || weaponDeficit(party, id) <= 0) continue;
       if (party.econ.money - presetPrice(WORKSHOP_CATALOG[id].cost, preset) < reserve) continue;
-      orderItem(party.econ, party.workshop, party.research, id, preset);
+      orderItem(party.econ, party.workshop, party.research, id, preset, party.modules);
       break;
     }
   }
@@ -564,7 +567,7 @@ export function partyBotFleetStep(party: Party, policy: PartyBotPolicy): void {
   // резерв найму — повний загін за ціною пресета і залишок на ремонт (купівля не з'їдає найм після розгрому)
   const reserve = hirePrice(party.campaign.preset) * botHireUpTo(party, policy) + policy.hireReserve;
   if (party.econ.money - presetPrice(INTERCEPTOR_COST, party.campaign.preset) < reserve) return;
-  orderInterceptor(party.econ, party.workshop, party.intercept, weakestRegion(party), party.campaign.preset);
+  orderInterceptor(party.econ, party.workshop, party.intercept, weakestRegion(party), party.campaign.preset, party.research, party.modules);
 }
 
 // п18.6 (ADR-0158): чи вистачає трофеїв на предмет цеху з резервом незапущених ключових

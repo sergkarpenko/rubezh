@@ -12,6 +12,7 @@ import { ENEMY_ORDER, makeEnemy } from './core/enemies';
 import {
   createGame,
   DASH_AP_BONUS,
+  STIM_AP_BONUS,
   endTurn,
   evacuate,
   fieldAid,
@@ -29,6 +30,7 @@ import {
   throwGrenade,
   unitAt,
   useDash,
+  useStim,
   useMedkit,
   weaponHasMode,
   distance,
@@ -114,7 +116,8 @@ function build(a: Arena): GameState {
     units,
     rng: mulberry32(a.seed),
     // п18.6 (кандидат 185 а): «Пробивний заряд» у кожного — подія charge і шкода без броні в генераторі
-    items: Object.fromEntries(units.map((u) => [u.id, { medkit: true, grenade: true, charge: true }])),
+    // п22.5 (ADR-0187): «Стимулятор» у кожного, «Щит» — у кожного другого (поглинуте влучання — шкода 0)
+    items: Object.fromEntries(units.map((u, i) => [u.id, { medkit: true, grenade: true, charge: true, stim: true, shield: i % 2 === 0 }])),
     evacZone: units.filter((u) => u.side === 'player').map((u) => u.pos),
     roles: Object.fromEntries(units.filter((u) => u.side === 'player').map((u, i) => [u.id, { role: ROLES[i % 3], used: false }])),
   });
@@ -126,7 +129,7 @@ function build(a: Arena): GameState {
 // живого юніта сторони, що ходить (ціль — живого ворога), більший — будь-якого,
 // тож серед дій є й недозволені: чужий хід, мертвий, вогонь по своїх, поза полем.
 const actArb = fc.record({
-  t: fc.constantFrom('step', 'go', 'shoot', 'watch', 'grenade', 'heal', 'evac', 'end', 'bot', 'dash', 'precise', 'aid'),
+  t: fc.constantFrom('step', 'go', 'shoot', 'watch', 'grenade', 'heal', 'evac', 'end', 'bot', 'dash', 'precise', 'aid', 'stim'),
   u: fc.nat(5),
   v: fc.nat(5),
   x: fc.integer({ min: -1, max: 9 }),
@@ -176,7 +179,9 @@ function broken(s: GameState, ids: string): string[] {
     const lastTurn = s.log.reduce((last, e, i) => (e.type === 'turn' && e.side === u.side ? i : last), -1);
     // загиблий після ривка зберігає AP, з якими загинув
     const dashed = s.log.some((e, i) => (i > lastTurn || !u.alive) && e.type === 'dash' && e.unitId === u.id);
-    if (u.ap < 0 || u.ap > u.maxAp + (dashed ? DASH_AP_BONUS : 0)) bad.push(u.id + ': ap ' + u.ap);
+    // п22.5: «Стимулятор» — так само, у свій хід
+    const stimmed = s.log.some((e, i) => (i > lastTurn || !u.alive) && e.type === 'stim' && e.unitId === u.id);
+    if (u.ap < 0 || u.ap > u.maxAp + (dashed ? DASH_AP_BONUS : 0) + (stimmed ? STIM_AP_BONUS : 0)) bad.push(u.id + ': ap ' + u.ap);
     if (u.alive && cells.has(key(u.pos))) bad.push('двоє живих у клітинці ' + key(u.pos));
     if (u.alive) cells.add(key(u.pos));
   }
@@ -214,6 +219,20 @@ function broken(s: GameState, ids: string): string[] {
     if (n > 1 || (n === 1) !== (s.items?.[u.id]?.charge === false))
       bad.push(u.id + ': подій charge ' + n + ', заряд ' + s.items?.[u.id]?.charge);
   }
+  // п22.5 (ADR-0187): «Стимулятор» і «Щит» — не більше однієї події на юніта; подія — витратник витрачено;
+  // витрачено — лише з подією («Стимулятор» — у кожного, «Щит» — у парних; у непарних його немає зі старту)
+  const order = [...(startOf.get(s)?.keys() ?? [])]; // порядок юнітів арени: «Щит» — у парних
+  for (const u of all(s)) {
+    for (const k of ['stim', 'shield'] as const) {
+      const n = s.log.filter((e) => e.type === k && e.unitId === u.id).length;
+      if (
+        n > 1 ||
+        (n === 1 && s.items?.[u.id]?.[k] !== false) ||
+        (n === 0 && s.items?.[u.id]?.[k] === false && (k === 'stim' || order.indexOf(u.id) % 2 === 0))
+      )
+        bad.push(u.id + ': подій ' + k + ' ' + n + ', предмет ' + s.items?.[u.id]?.[k]);
+    }
+  }
   for (const [i, e] of s.log.entries()) {
     if (e.type === 'move') pos.set(e.unitId, e.to);
     if (e.type === 'charge') {
@@ -221,7 +240,7 @@ function broken(s: GameState, ids: string): string[] {
       pierce = { shooterId: e.shooterId, targetId: e.targetId };
       continue;
     }
-    if (e.type !== 'shot' && e.type !== 'death') pierce = null;
+    if (e.type !== 'shot' && e.type !== 'death' && e.type !== 'shield') pierce = null;
     if (e.type !== 'shot') continue;
     const sh = byId.get(e.shooterId)!;
     const tg = byId.get(e.targetId)!;
@@ -232,9 +251,19 @@ function broken(s: GameState, ids: string): string[] {
     if (pierce !== null) pierce.left = (pierce.left ?? 0) - 1;
     if (!e.hit) continue;
     // precise_shot стоїть перед shot; при вбивстві між ними — death; п18.6: між ними може бути charge
+    // п22.5: між ними — і «Щит» цілі (тоді шкода 0)
     let j = i - 1;
-    while (s.log[j]?.type === 'death' || s.log[j]?.type === 'charge') j--;
+    let shielded = false;
+    while (s.log[j]?.type === 'death' || s.log[j]?.type === 'charge' || s.log[j]?.type === 'shield') {
+      const x = s.log[j];
+      if (x.type === 'shield' && x.unitId === tg.id) shielded = true;
+      j--;
+    }
     const prev = s.log[j];
+    if (shielded) {
+      if (e.damage !== 0) bad.push(tg.id + ': щит, а шкода ' + e.damage);
+      continue;
+    }
     const m = prev !== undefined && prev.type === 'precise_shot' && prev.shooterId === sh.id ? PRECISE_DAMAGE_MULT : 1;
     const armor = pierced ? 0 : (tg.armor ?? 0);
     const lo = Math.max(1, Math.floor(sh.weapon.damage[0] * m) - armor);
@@ -280,6 +309,8 @@ function act(s: GameState, a: Act, check: boolean): void {
     else if (a.t === 'heal') useMedkit(s, u.id, a.v % 2 === 0 ? u.id : v.id);
     else if (a.t === 'evac') evacuate(s, u.id);
     else if (a.t === 'dash') useDash(s, u.id);
+    else if (a.t === 'stim')
+      useStim(s, u.id); // п22.5
     else if (a.t === 'precise') preciseShot(s, u.id, v.id);
     else if (a.t === 'aid')
       fieldAid(
