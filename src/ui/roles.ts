@@ -2,13 +2,14 @@
 // шеврон звання, значок і описи ролі, рядок ростера, вікно вибору ролі, плитка дії ролі.
 // Чисті функції: дані ядра → рядки й HTML; DOM чіпають panels.ts, battle.ts і main.ts.
 import {
-  DASH_AP_BONUS,
-  FIELD_AID_AMOUNT,
+  aidAmount,
+  dashBonus,
   FIELD_AID_AP_COST,
   PRECISE_AP_COST,
-  PRECISE_DAMAGE_MULT,
+  preciseMult,
   roleActionBlock,
   type BattleRole,
+  type RoleSpec,
   type GameState,
 } from '../core/combat';
 import { RANK_NAMES, rankOf, xpToNextRank, type SoldierCareer } from '../core/career';
@@ -34,7 +35,7 @@ export const ROLE_INFO: Record<BattleRole, RoleInfo> = {
     glyph: '»',
     icon: 'dash',
     ap: 0,
-    desc: '+' + DASH_AP_BONUS + ' AP цього ходу, сама дія — 0 AP',
+    desc: roleDesc('assault'),
   },
   sniper: {
     name: 'Снайпер',
@@ -43,7 +44,7 @@ export const ROLE_INFO: Record<BattleRole, RoleInfo> = {
     glyph: '◎',
     icon: 'precise',
     ap: PRECISE_AP_COST,
-    desc: 'прицільний постріл, шкода ×' + num(PRECISE_DAMAGE_MULT) + ' — ' + PRECISE_AP_COST + ' AP',
+    desc: sniperDesc(),
   },
   medic: {
     name: 'Медик',
@@ -52,9 +53,21 @@ export const ROLE_INFO: Record<BattleRole, RoleInfo> = {
     glyph: '✚',
     icon: 'aid',
     ap: FIELD_AID_AP_COST,
-    desc: '+' + FIELD_AID_AMOUNT + ' HP собі чи сусідові без гелю — ' + FIELD_AID_AP_COST + ' AP',
+    desc: roleDesc('medic'),
   },
 };
+
+// п22.2 (ADR-0183): опис «Точного пострілу» з множником спеціалізації («Мисливець» — ×2).
+// п22.2: опис дії ролі з числом спеціалізації (без спеціалізації — `ROLE_INFO[role].desc`).
+export function roleDesc(role: BattleRole, spec?: RoleSpec): string {
+  if (role === 'assault') return '+' + dashBonus(spec) + ' AP цього ходу, сама дія — 0 AP';
+  if (role === 'sniper') return sniperDesc(spec);
+  return '+' + aidAmount(spec) + ' HP собі чи сусідові без гелю — ' + FIELD_AID_AP_COST + ' AP';
+}
+
+export function sniperDesc(spec?: RoleSpec): string {
+  return 'прицільний постріл, шкода ×' + num(preciseMult(spec)) + ' — ' + PRECISE_AP_COST + ' AP';
+}
 
 export const ROLE_ORDER: readonly BattleRole[] = ['assault', 'sniper', 'medic'];
 
@@ -128,12 +141,25 @@ export interface RoleTileView {
 // Стан плитки дії ролі для вибраного бійця: причина — з roleActionBlock ядра (EARS 6).
 export function roleTileView(state: GameState, selId: string | null): RoleTileView {
   const role = selId === null ? null : (state.roles?.[selId]?.role ?? null);
-  if (selId === null) return { role: null, label: 'Роль', hint: 'Дія ролі — раз за бій · клавіша R', reason: null };
+  if (selId === null) return { role: null, label: 'Роль', hint: 'Дія ролі — раз за бій («Рятівник» — двічі) · клавіша R', reason: null };
   if (role === null) {
-    return { role: null, label: 'Роль', hint: 'Дія ролі — раз за бій · клавіша R — у оперативника немає ролі', reason: 'без ролі' };
+    return {
+      role: null,
+      label: 'Роль',
+      hint: 'Дія ролі — раз за бій («Рятівник» — двічі) · клавіша R — у оперативника немає ролі',
+      reason: 'без ролі',
+    };
   }
   const info = ROLE_INFO[role];
-  const base = info.ap + ' AP · «' + info.action + '»: ' + info.desc + ' · раз за бій · клавіша R';
+  const spec = state.roles?.[selId]?.spec; // п22.2 (ADR-0183): число дії і «двічі» — за спеціалізацією
+  const base =
+    info.ap +
+    ' AP · «' +
+    info.action +
+    '»: ' +
+    roleDesc(role, spec) +
+    (spec === 'rescuer' ? ' · двічі за бій' : ' · раз за бій') +
+    ' · клавіша R';
   const block = roleActionBlock(state, selId, role);
   return { role, label: info.tile, hint: block === null ? base : base + ' — ' + block, reason: block === null ? null : shortReason(block) };
 }

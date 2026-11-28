@@ -15,7 +15,7 @@ import {
 } from '../core/combat';
 import { newCareer, RANK_THRESHOLDS, type SoldierCareer } from '../core/career';
 import { battleEventText } from './journal';
-import { chevronHtml, ROLE_INFO, roleDialogHtml, roleDialogTitle, roleLabel, roleTileView, xpLine } from './roles';
+import { chevronHtml, ROLE_INFO, roleDesc, roleDialogHtml, roleDialogTitle, roleLabel, roleTileView, xpLine } from './roles';
 import { squadCards, squadStripHtml } from './squad-strip';
 
 const career = (xp: number, role: SoldierCareer['role'] = null, index = 1): SoldierCareer => ({ ...newCareer(index), xp, role });
@@ -128,5 +128,24 @@ describe('п16.4: картка смуги загону (EARS 8) і журнал 
       text: '✚ Олена: «Польова допомога» → Іван +3 HP',
       cls: 'win',
     });
+  });
+});
+
+describe('п22.2 (ADR-0183): опис дії ролі за спеціалізацією', () => {
+  it('числа спеціалізацій і «двічі за бій» «Рятівника» в тултіпі плитки', () => {
+    expect([roleDesc('assault'), roleDesc('sniper'), roleDesc('medic')]).toEqual([
+      ROLE_INFO.assault.desc,
+      ROLE_INFO.sniper.desc,
+      ROLE_INFO.medic.desc,
+    ]);
+    expect(roleDesc('assault', 'breakthrough')).toBe('+6 AP цього ходу, сама дія — 0 AP');
+    expect(roleDesc('sniper', 'hunter')).toBe('прицільний постріл, шкода ×2 — 6 AP');
+    expect(roleDesc('medic', 'surgeon')).toBe('+5 HP собі чи сусідові без гелю — 2 AP');
+    const g = game({
+      s1: { role: 'medic', used: false, spec: 'rescuer', extraUses: 1 },
+      s2: { role: 'sniper', used: false, spec: 'hunter' },
+    });
+    expect(roleTileView(g, 's1').hint).toContain('+3 HP собі чи сусідові без гелю — 2 AP · двічі за бій');
+    expect(roleTileView(g, 's2').hint).toContain('шкода ×2 — 6 AP · раз за бій');
   });
 });

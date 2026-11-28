@@ -135,15 +135,17 @@ describe('П8.5: оркестратор — повна партія (фіксо�
     // поранених 24 → 28, залишок 2179, тотал 5595; місії, втрати й штурми ті самі.
     // п20.3 (ADR-0167): ШІ ворогів і бот загону шукають укриття — місій 26 → 27, поразок 4 → 5, втрати 34 → 38,
     // поранених 28 → 24, найм 31 → 36, ветеранів 3 → 4, залишок 1895, тотал 5574; поразка — та сама 36-та доба.
-    expect(r.score).toEqual({ probesShotDown: 16, missionsWon: 22, veteransAlive: 4, moneyLeft: 1895, total: 5574 });
+    // п22.2 (ADR-0183): гілки «Сержанта» й «Ветерана» в бота — місій 27 → 26, поразок 5 → 4, втрати 38 → 36,
+    // найм 36 → 35, ветеранів 4 → 5, залишок 1944, тотал 5636; поразка — та сама 36-та доба.
+    expect(r.score).toEqual({ probesShotDown: 16, missionsWon: 22, veteransAlive: 5, moneyLeft: 1944, total: 5636 });
     expect([r.launches, r.shotDown]).toEqual([19, 16]);
-    expect(r.missionsLaunched).toBe(27);
+    expect(r.missionsLaunched).toBe(26);
     expect(r.missionsWon).toBe(22);
-    expect(r.missionsLost).toBe(5);
-    expect(r.soldiersLost).toBe(38);
+    expect(r.missionsLost).toBe(4);
+    expect(r.soldiersLost).toBe(36);
     expect(r.soldiersWounded).toBe(24);
-    expect(r.hiredTotal).toBe(36);
-    expect(r.hireSpent).toBe(36 * hirePrice('норма')); // П11.8: hirePrice «норми» = 100
+    expect(r.hiredTotal).toBe(35);
+    expect(r.hireSpent).toBe(35 * hirePrice('норма')); // П11.8: hirePrice «норми» = 100
     expect(r.assaults).toBe(3);
     expect(r.assaultsLost).toBe(2);
     expect(r.gateAttempts).toBe(0); // DEFAULT «Ключа брами» не досліджує (CAMPAIGN_POLICY — п18.6)
@@ -169,9 +171,10 @@ describe('П8.5: оркестратор — повна партія (фіксо�
     // програно штурмів 2 → 1.
     // п20.3 (ШІ ворогів і бот загону з укриттям, ADR-0167): поразка на 55-й, 81 → 79 місій, перемог 74 → 69, загиблих 54 → 69,
     // програно штурмів 1 → 2.
-    expect(r.missionsLaunched).toBe(79);
+    // п22.2 (гілки «Сержанта» й «Ветерана» в бота, ADR-0183): 79 → 70 місій, перемог 69, загиблих 69 → 35.
+    expect(r.missionsLaunched).toBe(70);
     expect(r.missionsWon).toBe(69);
-    expect(r.soldiersLost).toBe(69);
+    expect(r.soldiersLost).toBe(35);
     expect(r.assaults).toBe(3);
     expect(r.assaultsLost).toBe(2);
   }, 30_000); // issue #377: явний тайм-аут замість дефолтних 5000 мс (під покриттям повільніше)
@@ -346,26 +349,26 @@ describe('П11.8: політика науки — повний флоу (фік�
     const a = simulateParty(49, 'норма', { policy: SCIENCE_POLICY });
     const b = simulateParty(49, 'норма', { policy: SCIENCE_POLICY });
     expect(JSON.stringify(b)).toBe(JSON.stringify(a));
-    expect(a.outcome).toBe('поразка'); // п18.3: до поразки за загрозою — 72-га доба; п20.3 (ШІ з укриттям) — 58-ма
-    expect(a.endDay).toBe(58);
+    expect(a.outcome).toBe('поразка'); // п18.3: до поразки за загрозою — 72-га доба; п20.3 (ШІ з укриттям) — 58-ма; п22.2 (гілки) — 63-тя
+    expect(a.endDay).toBe(63);
     expect(a.scientistsHired).toBe(2);
     expect(a.completedProjects).toEqual(['armor']);
-    expect(a.workshopProduced).toBe(10); // п17.4: 7 → 8; п18.3: 7; п20.3: 10
+    expect(a.workshopProduced).toBe(9); // п17.4: 7 → 8; п18.3: 7; п20.3: 10; п22.2: 9
     // броня загиблих повертається на склад і йде наступним; п16.2 (ADR-0147): менше загиблих — 41 → 32; п16.3 (ролі) — 28;
     // п17.2 (ADR-0149): нові типи ворогів — більше загиблих, броня йде наступним частіше — 50; п17.3 (ШІ за типом) — 57;
     // п17.4 (туман із блокуванням, ADR-0151) — менше загиблих — 26; п18.3 (72 доби, склад за загрозою) — 70;
     // п18.4 (штурми бази, усі три відбито) — 68; п19.6 (бій перехоплювача до кінця) — 63; п20.2 (укриття) — 44;
-    // п20.3 (ШІ ворогів і бот загону з укриттям, ADR-0167) — 64
-    expect(a.equippedItems).toBe(64);
+    // п20.3 (ШІ ворогів і бот загону з укриттям, ADR-0167) — 64; п22.2 (гілки «Сержанта» й «Ветерана», ADR-0183) — 35
+    expect(a.equippedItems).toBe(35);
     expect(a.salarySpent).toBe(140); // 2 × 10 × 7 діб (14 очок, 2 очки на добу)
     expect(a.projectSpent).toBe(96);
-    expect(a.workshopSpent).toBe(600); // п18.3: 7 предметів; п20.3: 10
+    expect(a.workshopSpent).toBe(540); // п18.3: 7 предметів; п20.3: 10; п22.2: 9
     expect(a.scientistsFired).toBe(0); // лічильник — лише авто-звільнення за невиплату
     expect(Math.max(...a.scientistsByDay)).toBe(2);
     expect(a.scientistsByDay[a.scientistsByDay.length - 1]).toBe(0); // штат звільнено після протоколу
-    expect(a.missionsLaunched).toBe(79); // п16.2: 45 → 44; п16.3: 43; п17.2: 49; п17.3: 50; п17.4: 41; п18.3: 98; п18.4: 95; п19.6: 94; п20.2: 91; п20.3: 79
-    expect(a.missionsWon).toBe(68);
-    expect([a.assaults, a.assaultsLost]).toEqual([3, 2]);
+    expect(a.missionsLaunched).toBe(79); // п16.2: 45 → 44; п16.3: 43; п17.2: 49; п17.3: 50; п17.4: 41; п18.3: 98; п18.4: 95; п19.6: 94; п20.2: 91; п20.3: 79; п22.2: 79
+    expect(a.missionsWon).toBe(75); // п20.3: 68; п22.2: 75
+    expect([a.assaults, a.assaultsLost]).toEqual([3, 1]); // п20.3: програно 2; п22.2: 1
   }, 30_000); // дві повні партії з наукою: під інструментуванням покриття в CI не вкладається в 5 с
 
   it('спіраль зарплата→звільнення (урок П11.2): бідна партія звільняє вчених з кінця штату', () => {
@@ -383,6 +386,8 @@ describe('П11.8: політика науки — повний флоу (фік�
     // штат 8 і два і більше звільнень — 42, 50, 52, 55, 63, 72): програний штурм, три дні невиплати, чотири звільнення, на кінці 4.
     // п20.3 (ШІ ворогів і бот загону з укриттям, ADR-0167): сід 52 не банкрутує — сід 82 (скан 40–140: банкрутують 42 сіди,
     // з них штат 8 і два і більше звільнень — 22): програний штурм, два дні невиплати, чотири звільнення, на кінці 4.
+    // п22.2 (гілки «Сержанта» й «Ветерана» в бота, ADR-0183): сід 82 не банкрутує — сід 72 (скан 40–140: штат 8 і два і
+    // більше звільнень — 21 сід): програний штурм, два дні невиплати, чотири звільнення, на кінці 5.
     const heavy: PartyBotPolicy = {
       ...SCIENCE_POLICY,
       name: 'sci-heavy',
@@ -390,14 +395,14 @@ describe('П11.8: політика науки — повний флоу (фік�
       projects: ['medkit', 'optics', 'armor', 'gun-module', 'grenade', 'lab-extension'],
       fireScientistsWhenDone: false,
     };
-    const r = simulateParty(82, 'норма', { policy: heavy });
+    const r = simulateParty(72, 'норма', { policy: heavy });
     expect(r.outcome).toBe('банкрутство');
     expect(r.assaultsLost).toBe(1);
     expect(r.salaryShortfallDays).toBe(2);
     expect(r.scientistsFired).toBe(4);
     // штат 8, звільнених наймають знову — метрики бачать спіраль (і звільнення, і повний штат)
     expect(Math.max(...r.scientistsByDay)).toBe(8);
-    expect(r.scientistsByDay[r.scientistsByDay.length - 1]).toBe(4);
+    expect(r.scientistsByDay[r.scientistsByDay.length - 1]).toBe(5);
   });
 });
 
@@ -547,7 +552,9 @@ describe('п18.6: політика кампанії (CAMPAIGN_POLICY)', () => {
   // п20.6 (бот зі зброєю за роллю, п'ять техномантів, дозор з укриттям, «Град» ×0,6; ADR-0170): сід 7 виграє на 42-й
   // у другому фіналі, ланцюжок 19 / 33 / 41-ша, зброю досліджено у вільному слоті до «Пеленгу брами»; поразка —
   // сід 17 на 44-й (скан 1–30: поразок 6 — сіди 2, 17, 18, 19, 22, 25).
-  it('повна партія, сід 7 «норма»: ланцюжок 19 / 33 / 41-ша доба, зброя до «Пеленгу», перемога на 42-й у другому фіналі; байт-у-байт', () => {
+  // п22.2 (гілки «Сержанта» й «Ветерана» в бота, ADR-0183): сід 7 виграє на 41-й у першому фіналі, загиблих 11 → 6,
+  // ланцюжок той самий; поразка сіду 17 — та сама 44-та доба; сіди переміряє п22.8 (ADR-0182 «Наслідки»).
+  it('повна партія, сід 7 «норма»: ланцюжок 19 / 33 / 41-ша доба, зброя до «Пеленгу», перемога на 41-й у першому фіналі; байт-у-байт', () => {
     const days: Record<string, number> = {};
     const r = simulateParty(7, 'норма', {
       policy: CAMPAIGN_POLICY,
@@ -555,7 +562,7 @@ describe('п18.6: політика кампанії (CAMPAIGN_POLICY)', () => {
         for (const id of p.research.completed) days[id] ??= Math.floor(p.geo.minute / 1440) + 1;
       },
     });
-    expect([r.outcome, r.endDay, r.gateAttempts, r.assaults, r.soldiersLost]).toEqual(['перемога', 42, 2, 0, 11]);
+    expect([r.outcome, r.endDay, r.gateAttempts, r.assaults, r.soldiersLost]).toEqual(['перемога', 41, 1, 0, 6]);
     expect(r.completedProjects).toEqual(['optics', 'shotgun', 'armor', 'rift-anatomy', 'mg', 'sniper', 'gate-bearing', 'gate-key']);
     expect([days['rift-anatomy'], days['gate-bearing'], days['gate-key']]).toEqual([19, 33, 41]);
     expect(simulateParty(7, 'норма', { policy: CAMPAIGN_POLICY })).toEqual(r);

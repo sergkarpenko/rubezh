@@ -21,12 +21,17 @@
 // «поранений» (ростер.hospital[id] = тики одужання), не потрапляє в missionSquad;
 // відлік веде hospitalTick(roster) — 1 тік геосцени, HEAL_TICKS_PER_HP тиків на HP.
 
-import type { GameState, Unit, UnitRole } from './combat';
+import { RESCUER_EXTRA_USES, type GameState, type Unit, type UnitRole } from './combat';
 import { hirePrice, spend, type EconomyState } from './economy';
 import { type DifficultyPreset, DEFAULT_PRESET, DIFFICULTY_MULTIPLIERS } from './campaign';
 import { makeSoldier, SQUAD_SPAWN } from './mission';
 import {
+  applyBranchBonus,
+  awaitingBranch,
   awaitingRole,
+  branchOptions,
+  type BranchTier,
+  type CareerBranch,
   lossLine,
   newCareer,
   rankOf,
@@ -250,8 +255,13 @@ export function applyMissionResult(roster: Roster, state: GameState): MissionAft
 export function deployRoles(roster: Roster, squad: Unit[]): Record<string, UnitRole> | null {
   const roles: Record<string, UnitRole> = {};
   for (const u of squad) {
-    const role = roster.careers[u.id]?.role;
-    if (role) roles[u.id] = { role, used: false };
+    const career = roster.careers[u.id];
+    const role = career?.role;
+    if (!role) continue;
+    // п22.2: спеціалізація «Сержанта» — лише за наявності (без неї запис як до п22.2)
+    const spec = career.branches?.sergeant;
+    roles[u.id] = spec === undefined ? { role, used: false } : { role, used: false, spec };
+    if (spec === 'rescuer') roles[u.id].extraUses = RESCUER_EXTRA_USES;
   }
   return Object.keys(roles).length > 0 ? roles : null;
 }
@@ -290,6 +300,47 @@ export function assignBotRoles(roster: Roster): string[] {
     if (!c || !awaitingRole(c)) continue;
     chooseRole(roster, s.id, botRole(roster));
     assigned.push(s.id);
+  }
+  return assigned;
+}
+
+// --- п22.2 (ADR-0182 п. 1, 7; ADR-0183): гілки «Сержанта» і «Ветерана» ---
+
+// Вибір гілки: лише розвилка, що чекає (`awaitingBranch`), і лише її варіант;
+// гілка назавжди, прирости — у запис юніта ростеру (`applyBranchBonus`).
+export function chooseBranch(roster: Roster, id: string, branch: CareerBranch): void {
+  const career = roster.careers[id];
+  const soldier = roster.soldiers.find((s) => s.id === id);
+  if (!career || !soldier) throw new Error('Оперативника немає в ростері: ' + id);
+  const tier = awaitingBranch(career);
+  if (tier === null) throw new Error('Розвилки, що чекає вибору, немає: ' + id);
+  if (!branchOptions(career, tier).includes(branch)) throw new Error('Гілка не з цієї розвилки: ' + String(branch));
+  career.branches = { ...career.branches, [tier]: branch };
+  applyBranchBonus(soldier, branch);
+}
+
+// Гілка для бота партії (ADR-0182 п. 7, за правилом ролей ADR-0147 п. 12): з
+// варіантів розвилки — якої найменше в ростері (зокрема в лікарні); рівність —
+// порядок каталогу `CAREER_TREE`. Без RNG (ADR-0003).
+export function botBranch(roster: Roster, career: SoldierCareer, tier: BranchTier): CareerBranch {
+  const options = branchOptions(career, tier);
+  const count = (b: CareerBranch) => roster.soldiers.filter((s) => roster.careers[s.id]?.branches?.[tier] === b).length;
+  let best = options[0];
+  for (const b of options) if (count(b) < count(best)) best = b;
+  return best;
+}
+
+// Бот партії після місії (після `assignBotRoles`): кожна розвилка, що чекає, — за
+// botBranch, по черзі ростеру; перескочив два звання — обидві. Повертає id з новою гілкою.
+export function assignBotBranches(roster: Roster): string[] {
+  const assigned: string[] = [];
+  for (const s of roster.soldiers) {
+    const c = roster.careers[s.id];
+    if (!c) continue;
+    for (let tier = awaitingBranch(c); tier !== null; tier = awaitingBranch(c)) {
+      chooseBranch(roster, s.id, botBranch(roster, c, tier));
+      if (!assigned.includes(s.id)) assigned.push(s.id);
+    }
   }
   return assigned;
 }

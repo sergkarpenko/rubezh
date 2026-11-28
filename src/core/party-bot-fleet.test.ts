@@ -300,14 +300,15 @@ describe('п19.6: повні партії політики кампанії з �
   // п20.2 (укриття і низькі перешкоди, ADR-0166): сід 6 — 24 погоні з 56, перемога на 43-й (було 22 з 53, 41-ша)
   // п20.3 (ШІ ворогів з укриттям, ADR-0167; бот кампанії в дозорі, з місця не йде): 21 погоня з 50, перемога на 38-й у другому фіналі
   // п20.6 (бот зі зброєю, ADR-0170): сід 6 купує в «Промзона» — сід 10: «Порт», 13 погонь з 50, перемога на 42-й у першому фіналі
-  it('сід 10 «норма»: другий перехоплювач в ангарі «Порт», 13 погонь з 50; перемога на 42-й', () => {
+  // п22.2 (гілки «Сержанта» й «Ветерана» в бота, ADR-0183): 12 погонь з 49, перемога — та сама 42-га
+  it('сід 10 «норма»: другий перехоплювач в ангарі «Порт», 12 погонь з 49; перемога на 42-й', () => {
     let last: Readonly<Party> | null = null;
     const r = simulateParty(10, 'норма', { policy: CAMPAIGN_POLICY, onTick: (p) => (last = p) });
-    expect([r.outcome, r.endDay, r.gateAttempts, r.launches, r.shotDown]).toEqual(['перемога', 42, 1, 50, 36]);
+    expect([r.outcome, r.endDay, r.gateAttempts, r.launches, r.shotDown]).toEqual(['перемога', 42, 1, 49, 36]);
     const fin = last as unknown as Party;
     expect(fin.intercept.fighters.map((f) => f.id + ':' + f.region)).toEqual(['1:north', '2:west']);
     const starts = fin.intercept.log.filter((e) => e.type === 'intercept_start').map((e) => e.fighter ?? 1);
-    expect([starts.length, starts.filter((id) => id === 2).length]).toEqual([50, 13]);
+    expect([starts.length, starts.filter((id) => id === 2).length]).toEqual([49, 12]);
     expect(fin.intercept.fighters.every((f) => f.status !== 'бій')).toBe(true); // бій не переживає тік
   }, 30_000);
 

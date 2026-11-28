@@ -36,7 +36,15 @@ import { findPath, pathApCost, sideVisibleCells } from '../src/core/map';
 import { completeMission, createMission, missionOutcome, type Mission, type MissionOutcome } from '../src/core/mission';
 import { awardTrophies, radarRange } from '../src/core/research';
 import { createParty, type Party } from '../src/core/save';
-import { applyMissionResult, chooseRole, deployRoles, hospitalTick, missionSquad, readySoldiers } from '../src/core/squad';
+import {
+  applyMissionResult,
+  assignBotBranches,
+  chooseRole,
+  deployRoles,
+  hospitalTick,
+  missionSquad,
+  readySoldiers,
+} from '../src/core/squad';
 import { deployConsumables } from '../src/core/workshop';
 import { TURN_PLATE_DONE } from '../src/ui/battle-feedback';
 import { byGender } from '../src/ui/text';
@@ -182,6 +190,7 @@ export class CoreMirror {
 
   chooseRole(id: string, role: SoldierRole): void {
     chooseRole(this.party.roster, id, role);
+    assignBotBranches(this.party.roster); // п22.2: як main.ts після вибору ролі
   }
 
   // --- бій: ті самі виклики ядра, що в src/ui/battle.ts та src/ui/input.ts ---
@@ -379,6 +388,7 @@ export class CoreMirror {
     const outcome = this.outcome();
     if (mission === null || outcome === 'триває') throw new Error('Дзеркало: бій ще триває');
     const aftermath = applyMissionResult(this.party.roster, mission.state);
+    assignBotBranches(this.party.roster); // п22.2: як battle.ts finish до вікна п22.3
     completeMission(this.party.geo, mission.briefing.probeId, outcome);
     awardTrophies(this.party.research, mission.state, outcome); // п18.2: дзеркало finish у battle.ts
     this.mission = null;
