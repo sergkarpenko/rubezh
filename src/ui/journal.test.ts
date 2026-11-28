@@ -331,6 +331,50 @@ describe('battleEventText: події бою → журнал', () => {
   });
 });
 
+describe('п22.5 (ADR-0187): рядки модулів бази, казана, «Стимулятора» і «Щита»', () => {
+  const nm = (id: string): string => ({ s1: 'Вовк', a1: 'Демон Сажа' })[id] ?? id;
+  it('модуль бази: рівень римською лише в модулів з кількома рівнями', () => {
+    expect(researchEventText(evResearch({ type: 'module', id: 'boiler', level: 2 }))).toEqual({
+      text: '⚑ Модуль бази: «Паровий котел» II ✓',
+      cls: 'win',
+    });
+    expect(researchEventText(evResearch({ type: 'module', id: 'stand', level: 1 }))?.text).toBe('⚑ Модуль бази: «Стенд техномантів» ✓');
+  });
+  it('казан: варіння і готове, ×2 — лише з двома порціями', () => {
+    expect(workshopEventText(evWorkshop({ type: 'brew', id: 'shield', ticks: 16, count: 2 }))?.text).toMatch(
+      /^⚑ Казан: вариться «Щит» ×2 — /
+    );
+    expect(workshopEventText(evWorkshop({ type: 'brew', id: 'stim', ticks: 12, count: 1 }))?.text).toMatch(
+      /^⚑ Казан: вариться «Стимулятор» — /
+    );
+    expect(workshopEventText(evWorkshop({ type: 'brewed', id: 'stim', count: 1 }))).toEqual({
+      text: '⚑ Казан: зварено «Стимулятор» → склад ✓',
+      cls: 'win',
+    });
+    expect(workshopEventText(evWorkshop({ type: 'brewed', id: 'shield', count: 2 }))?.text).toBe('⚑ Казан: зварено «Щит» ×2 → склад ✓');
+  });
+  it('бій: «Стимулятор», «Щит», поглинуте влучання і граната — «щит» замість «−0»', () => {
+    expect(battleEventText(evBattle({ type: 'stim', unitId: 's1', bonus: 3 }), nm)?.text).toBe('» Вовк: «Стимулятор» +3 AP');
+    expect(battleEventText(evBattle({ type: 'shield', unitId: 's1' }), nm)).toEqual({
+      text: '◈ Вовк: «Щит» поглинув влучання',
+      cls: 'win',
+    });
+    expect(battleEventText(evBattle({ type: 'shot', shooterId: 'a1', targetId: 's1', mode: 'snap', hit: true, damage: 0 }), nm)?.text).toBe(
+      'Демон Сажа → Вовк (швидкий): щит'
+    );
+    const g = evBattle({
+      type: 'grenade',
+      unitId: 's1',
+      center: { x: 1, y: 1 },
+      hits: [
+        { unitId: 'a1', damage: 4 },
+        { unitId: 's1', damage: 0 },
+      ],
+    });
+    expect(battleEventText(g, nm)?.text).toBe('✦ Вовк кидає гранату в (1, 1): −4 Демон Сажа, щит Вовк');
+  });
+});
+
 describe('economyEventText: події економіки → журнал (П4.5, ADR-0021)', () => {
   it('дотація, премія і витрати — рядки з класами кольорів журналу', () => {
     expect(economyEventText({ type: 'allowance', day: 3, amount: 100 } as EconomyEvent)).toEqual({

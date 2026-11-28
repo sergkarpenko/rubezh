@@ -13,6 +13,7 @@ import {
   HIT_CHANCE_CAP,
   makeUnit,
   type Unit,
+  STIM_AP_BONUS,
 } from '../core/combat';
 import { BASE_LAB_SLOTS, MAX_LAB_SLOTS, PROJECTS } from '../core/research';
 import { ITEM_IDS, ARMOR_MAX_HP_BONUS, OPTICS_ACCURACY_BONUS } from '../core/workshop';
@@ -147,5 +148,12 @@ describe('п18.2 (ADR-0154, рішення власника «А. Повні»):
       expect(plainProjectEffect(id)).toBe(text);
     }
     expect(itemEffect('breach-charge')).toBe('Атака по броньованій цілі — без броні (один раз)');
+  });
+});
+
+describe('п22.5 (ADR-0187): ефекти витратників казана', () => {
+  it('«Стимулятор» і «Щит» — тексти з констант ядра', () => {
+    expect(itemEffect('stim')).toBe('Дія без AP: +' + STIM_AP_BONUS + ' AP цього ходу; один на бій');
+    expect(itemEffect('shield')).toBe('Сам поглинає перше влучання будь-якої шкоди; один на бій');
   });
 });
