@@ -233,7 +233,8 @@ export function battleEventText(
   if (e.type === 'shot') {
     const how = melee(e.shooterId) ? 'кігті' : MODE_LABEL[e.mode];
     return {
-      text: name(e.shooterId) + ' → ' + name(e.targetId) + ' (' + how + '): ' + (e.hit ? '−' + e.damage : 'промах'),
+      text:
+        name(e.shooterId) + ' → ' + name(e.targetId) + ' (' + how + '): ' + (e.hit ? (e.damage > 0 ? '−' + e.damage : 'щит') : 'промах'), // п22.5: шкода 0 — лише «Щит»
       cls: '',
     };
   }
@@ -246,7 +247,8 @@ export function battleEventText(
     return { text: '✚ ' + name(e.unitId) + ' лікує ' + name(e.targetId) + ': +' + e.healed + ' HP', cls: 'win' };
   }
   if (e.type === 'grenade') {
-    const hits = e.hits.length > 0 ? e.hits.map((h) => '−' + h.damage + ' ' + name(h.unitId)).join(', ') : 'у зоні нікого';
+    const hits =
+      e.hits.length > 0 ? e.hits.map((h) => (h.damage > 0 ? '−' + h.damage : 'щит') + ' ' + name(h.unitId)).join(', ') : 'у зоні нікого';
     return { text: '✦ ' + name(e.unitId) + ' кидає гранату в (' + e.center.x + ', ' + e.center.y + '): ' + hits, cls: '' };
   }
   // п16.4 (ADR-0147, рішення власника «А»): дії ролей; «Точний постріл» — мітка перед звичайним рядком пострілу

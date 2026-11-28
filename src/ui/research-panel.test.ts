@@ -91,7 +91,7 @@ describe('ResearchPanel: штат вчених', () => {
     const head = el('research').querySelector('.sci-head')!.textContent!;
     expect(head).toContain('Техномантів: 0');
     expect(head).toContain('утримання ' + SCIENTIST_SALARY + ' кр. за добу');
-    expect(head).toContain('Кожен техномант дає 1 очко потоку за добу');
+    expect(head).toContain('Потік: 0 за добу (кожен техномант — 1, дослідник рівня 2 / 3 — 2 / 3)'); // п22.5 (ADR-0187)
     expect(head).toContain('Протоколів у роботі: 0 з ' + BASE_LAB_SLOTS);
   });
 });
@@ -315,6 +315,17 @@ describe('T.39: формули «Час ≈ …» (K техномантів, P �
     party.research.active.find((p) => p.id === 'armor')!.invested = 6; // X = 6
     panel.render();
     expect(card('Композитна броня').textContent).toContain('6 з 14 очок потоку · ще ≈ 16 діб');
+  });
+
+  it('п22.5 (аудит PR #551): час — від потоку штату: дослідник рівня 3 (3 очки) — «Час ≈ 5 діб», у роботі — ⌈(P − X) · A / потік⌉', () => {
+    const panel = createResearchPanel(makeDeps());
+    party.research.scientists.push({ id: 'в1', name: 'Зінаїда', spec: 'researcher', done: 5 });
+    panel.render();
+    expect(el('research').querySelector('.sci-head')!.textContent).toContain('Потік: 3 за добу');
+    expect([...card('Композитна броня').querySelectorAll('.sci-row')].map((r) => r.textContent)).toEqual(['Час ≈ 5 діб']);
+    (el('btn-start-0') as HTMLButtonElement).click();
+    panel.render();
+    expect(card('Композитна броня').textContent).toContain('0 з 14 очок потоку · ще ≈ 5 діб');
   });
 
   it('у роботі без техномантів: «… очок потоку · зупинено: немає техномантів» (без «ще ≈»)', () => {

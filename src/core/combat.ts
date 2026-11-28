@@ -798,8 +798,10 @@ export function throwGrenade(state: GameState, throwerId: string, center: Vec2):
   const dmax = GRENADE_DAMAGE[1];
   const damage = dmin + Math.floor(state.rng() * (dmax - dmin + 1));
   const hits: { unitId: string; damage: number }[] = [];
+  // п22.5: «Щит» поглинає й гранату (свою теж); події щитів — до смертей (серія смертей рендера не рветься, аудит PR #551)
+  const shielded = new Set(affected.filter((t) => useShield(state, t)).map((t) => t.id));
   for (const t of affected) {
-    const taken = useShield(state, t) ? 0 : damage; // п22.5: «Щит» поглинає й гранату (свою теж)
+    const taken = shielded.has(t.id) ? 0 : damage;
     t.hp -= taken;
     if (t.hp <= 0) {
       t.hp = 0;

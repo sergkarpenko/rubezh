@@ -52,6 +52,7 @@ import {
   type Scientist,
   type TrophyStore,
   SCIENTIST_SPECS,
+  BASE_LAB_SLOTS,
 } from './research';
 import { createModules, moduleMaxLevel, MODULE_IDS, type BaseModules } from './base';
 import {
@@ -688,6 +689,9 @@ function parseSave(json: string): SaveData {
   }
   // п22.5: модулі бази — необов'язкові; якщо є — рівні 0..найвищий
   if (st.modules !== undefined && !validModules(st.modules)) fail('Пошкоджені дані збереження: модулі бази');
+  // аудит PR #551: «Стенд» — слот понад «Розширення лабораторії»: слотів не менше 3 + стенд
+  if (st.modules?.stand && (rsv === undefined || rsv.slots < BASE_LAB_SLOTS + 1 + st.modules.stand))
+    fail('Пошкоджені дані збереження: модулі бази');
   // П11.3: поле workshop опційне (сейви до П11.3) — але якщо є, має бути коректним.
   const wsv = st.workshop;
   if (
@@ -753,7 +757,7 @@ function validScientist(s: unknown): boolean {
 }
 
 function validModules(m: unknown): boolean {
-  if (m === null || typeof m !== 'object') return false;
+  if (m === null || typeof m !== 'object' || Array.isArray(m)) return false;
   const r = m as Record<string, unknown>;
   return (
     Object.keys(r).every((k) => MODULE_IDS.includes(k as never)) &&

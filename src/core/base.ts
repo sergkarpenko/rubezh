@@ -9,7 +9,7 @@
 
 import { spend, type EconomyState } from './economy';
 import { type DifficultyPreset, DEFAULT_PRESET, sciencePrice } from './campaign';
-import { bestLevel, type ResearchState } from './research';
+import { LAB_EXTENSION_PROJECT, bestLevel, type ResearchState } from './research';
 
 export type ModuleId = 'stand' | 'boiler' | 'cauldron';
 export const MODULE_IDS: readonly ModuleId[] = ['stand', 'boiler', 'cauldron'];
@@ -57,6 +57,9 @@ export function buyModule(
   if (!Object.prototype.hasOwnProperty.call(MODULES, id)) throw new Error('Невідомий модуль бази: ' + String(id));
   const price = modulePrice(modules, id, preset);
   if (price === undefined) throw new Error('Модуль уже на найвищому рівні: ' + MODULES[id].name);
+  // рішення власника: «Стенд» — 4-й слот, тобто після протоколу «Розширення лабораторії» (аудит PR #551)
+  if (id === 'stand' && !research.completed.includes(LAB_EXTENSION_PROJECT))
+    throw new Error('«Стенд техномантів» — четвертий слот: спершу протокол «Розширення лабораторії»');
   spend(econ, price);
   modules[id] += 1;
   if (id === 'stand') research.slots += 1;

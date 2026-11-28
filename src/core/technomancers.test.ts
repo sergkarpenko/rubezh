@@ -147,13 +147,16 @@ describe('п22.5: модулі бази (EARS 5; рішення власника
     expect(econ.money).toBe(50);
   });
 
-  it('«Стенд» і «Розширення лабораторії» — по слоту в будь-якому порядку (2 → 4)', () => {
+  it('«Стенд» — четвертий слот: лише після «Розширення лабораторії» (2 → 3 → 4)', () => {
     const econ = rich();
     const r = createResearch();
-    buyModule(econ, r, createModules(), 'stand');
-    expect(r.slots).toBe(BASE_LAB_SLOTS + 1);
+    const m = createModules();
+    expect(() => buyModule(econ, r, m, 'stand')).toThrow('спершу протокол «Розширення лабораторії»');
+    expect([m.stand, econ.money]).toEqual([0, 10_000]);
     r.pool = 33;
     startProject(econ, r, 'lab-extension');
+    expect(r.slots).toBe(BASE_LAB_SLOTS + 1);
+    buyModule(econ, r, m, 'stand');
     expect(r.slots).toBe(BASE_LAB_SLOTS + 2);
   });
 
@@ -319,6 +322,22 @@ describe('п22.5: «Стимулятор» і «Щит» у бою (рішенн
     expect(g.log.at(-1)).toMatchObject({ type: 'grenade', hits: [{ unitId: 's1', damage: 0 }] });
     expect(g.items?.s1.shield).toBe(false);
   });
+
+  it('граната: події щитів — до смертей (серія смертей і вибух рендера не рвуться, аудит PR #551)', () => {
+    const g = createGame({
+      map: openMap(),
+      units: [
+        makeUnit({ id: 's1', side: 'player', pos: { x: 1, y: 1 } }),
+        makeUnit({ id: 'a1', side: 'alien', pos: { x: 4, y: 4 }, hp: 1, maxHp: 1 }),
+        makeUnit({ id: 's2', side: 'player', pos: { x: 4, y: 5 } }),
+      ],
+      rng: seq(0.5),
+      items: { s1: { medkit: false, grenade: true }, s2: { medkit: false, grenade: false, shield: true } },
+    });
+    throwGrenade(g, 's1', { x: 4, y: 4 });
+    expect(g.log.map((e) => e.type)).toEqual(['shield', 'death', 'grenade']);
+    expect(g.log.at(-1)).toMatchObject({ hits: [{ unitId: 'a1' }, { unitId: 's2', damage: 0 }] });
+  });
 });
 
 describe('п22.5: сейв v5 — техноманти, модулі, казан (EARS 7)', () => {
@@ -366,6 +385,8 @@ describe('п22.5: сейв v5 — техноманти, модулі, казан
     bad((d) => (d.state.research.scientists = [{ id: 'в1', name: 'А', done: -1 }]), 'наука');
     bad((d) => (d.state.modules = { boiler: 3 }), 'модулі бази');
     bad((d) => (d.state.modules = { lab: 1 }), 'модулі бази');
+    bad((d) => (d.state.modules = []), 'модулі бази');
+    bad((d) => (d.state.modules = { stand: 1 }), 'модулі бази'); // «Стенд» без третього слота — слотів 2
     bad((d) => (d.state.workshop.brew = [{ id: 'medkit', ticksLeft: 3 }]), 'Кузня');
   });
 });

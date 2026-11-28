@@ -220,11 +220,16 @@ function broken(s: GameState, ids: string): string[] {
       bad.push(u.id + ': подій charge ' + n + ', заряд ' + s.items?.[u.id]?.charge);
   }
   // п22.5 (ADR-0187): «Стимулятор» і «Щит» — не більше однієї події на юніта; подія — витратник витрачено;
-  // «Стимулятор» (є в кожного) витрачено — лише з подією («Щит» у непарних немає зі старту)
+  // витрачено — лише з подією («Стимулятор» — у кожного, «Щит» — у парних; у непарних його немає зі старту)
+  const order = [...(startOf.get(s)?.keys() ?? [])]; // порядок юнітів арени: «Щит» — у парних
   for (const u of all(s)) {
     for (const k of ['stim', 'shield'] as const) {
       const n = s.log.filter((e) => e.type === k && e.unitId === u.id).length;
-      if (n > 1 || (n === 1 && s.items?.[u.id]?.[k] !== false) || (n === 0 && s.items?.[u.id]?.[k] === false && k === 'stim'))
+      if (
+        n > 1 ||
+        (n === 1 && s.items?.[u.id]?.[k] !== false) ||
+        (n === 0 && s.items?.[u.id]?.[k] === false && (k === 'stim' || order.indexOf(u.id) % 2 === 0))
+      )
         bad.push(u.id + ': подій ' + k + ' ' + n + ', предмет ' + s.items?.[u.id]?.[k]);
     }
   }
