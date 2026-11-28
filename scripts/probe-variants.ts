@@ -38,6 +38,7 @@ export function parseVariant(spec: string, base: PartyBotPolicy = CAMPAIGN_POLIC
   const name = i < 0 ? spec : spec.slice(0, i);
   if (!/^[A-Za-z0-9_-]+$/.test(name)) throw new Error(`варіант «${spec}»: ім'я — латиниця, цифри, «-», «_»`);
   if (i < 0) throw new Error(`варіант «${spec}»: потрібно <ім'я>=<JSON>`);
+  if (name === 'base') throw new Error("варіант «base» — сама CAMPAIGN_POLICY, іде завжди; латці — інше ім'я");
   const patch: unknown = JSON.parse(spec.slice(i + 1));
   if (typeof patch !== 'object' || patch === null || Array.isArray(patch)) throw new Error(`варіант «${name}»: JSON — об'єкт`);
   // необов'язкові поля PartyBotPolicy, яких немає в CAMPAIGN_POLICY, теж законні — лише попередження (друкарська помилка)
@@ -101,7 +102,7 @@ function selfTest(): number {
       return true;
     }
   };
-  check("помилки: без «=», ім'я кирилицею, масив, не JSON", ['abc', 'варіант={}', 'a=[1]', 'a={brew}'].every(throws));
+  check("помилки: без «=», ім'я кирилицею, масив, не JSON, ім'я base", ['abc', 'варіант={}', 'a=[1]', 'a={brew}', 'base={}'].every(throws));
   check('медіана: непарна, парна, порожня', median([5, 1, 3]) === 3 && median([4, 1, 3, 2]) === 2.5 && median([]) === null);
   const s = summarize('base', 'норма', [
     { outcome: 'перемога', endDay: 30, soldiersLost: 8 },

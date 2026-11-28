@@ -10,7 +10,7 @@
 // Відповідь без блоку JSON — один повтор у тій самій сесії (`--resume <session_id>` з export.json, ADR-0105):
 // «поверни лише блок JSON» з короткими межами RETRY; і після повтору без JSON — «Аудиту не було».
 // Тимчасовий збій API (429, 5xx, обрив мережі) на першому прогоні — пауза RERUN.pauseMs і один повторний прогін
-// з нуля в теці rerun/ (кандидат процесу 176, ADR-0191); 401–403 і білінг не повторюються.
+// з нуля в теці rerun/, якщо перший тривав ≤ RERUN.maxFirstSeconds (кандидат процесу 176, ADR-0191); 401–403 і білінг не повторюються.
 // Збій, 402 чи відповідь без JSON — коментар «Аудиту не було» з причиною і код 0: чек мерж не блокує.
 // Знахідку, цитати якої немає ні у файлі на голові PR, ні в дифі, скрипт відкидає і називає в коментарі.
 // Vibe 3.1.3: `--disabled-tools write_file/edit` діє лише разом з `--auto-approve`, а `bash` (потрібен для пошуку
@@ -36,9 +36,10 @@ export const LIMITS = { turns: 60, price: 2, seconds: 1500 };
 export const RETRY = { turns: 2, price: 0.5, seconds: 300 };
 /**
  * Повторний прогін після тимчасового збою API (ADR-0191): пауза перед ним і найдовший перший прогін, після якого
- * повтор ще вкладається в тайм-аут джоби (45 хв: перший ≤ 10 хв + другий ≤ LIMITS.seconds + 2 хв).
+ * повтор ще вкладається в тайм-аут джоби (45 хв: перший ≤ 5 хв + пауза 1 хв + другий ≤ LIMITS.seconds + 2 хв +
+ * повтор «лише блок JSON» ≤ RETRY.seconds + 2 хв = 40 хв).
  */
-export const RERUN = { pauseMs: 60000, maxFirstSeconds: 600 };
+export const RERUN = { pauseMs: 60000, maxFirstSeconds: 300 };
 
 /** Тимчасовий збій API Mistral за текстом помилки: 429, 5xx, обрив мережі; 401–403 і білінг — ні (ADR-0191). */
 export function isTransient(text) {
@@ -627,7 +628,12 @@ async function selfTest() {
       !['402 billing_wallet_depleted', '401 Unauthorized', 'rate limit: 402 billing', 'код 1', ''].some(isTransient)
   );
   const err429 = '{"outcome":"infrastructure_failure","error":{"message":"429 Too Many Requests"}}';
-  r = await pass({ stdout: '', status: 2, exportJson: err429, rerun: { stdout: good, exportJson: '{"outcome":"finished","usage":{}}' } });
+  r = await pass({
+    stdout: '',
+    status: 2,
+    exportJson: err429,
+    rerun: { stdout: good, exportJson: '{"outcome":"finished","usage":{},"cost_usd":0.25}' },
+  });
   const rr = r.calls[1] ?? [];
   check(
     'повторний прогін: 429 — пауза 60 с, другий прогін з нуля в rerun/ (без --resume), знахідки з нього',
@@ -637,6 +643,10 @@ async function selfTest() {
       r.waits.includes(RERUN.pauseMs) &&
       r[0].includes('answer = 42') &&
       r[0].includes('повторний прогін')
+  );
+  check(
+    'повторний прогін: рядок прогону — з export.json повторного прогону (rerun/)',
+    r[0].includes('$0.2500') && r.logs.some((l) => l.includes('повторний прогін — vibe') && l.includes('$0.2500'))
   );
   check('повторний прогін: export.json першого прогону лишився у своїй теці', readFileSync(join(outDir, 'export.json'), 'utf8') === err429);
   r = await pass({
@@ -653,11 +663,19 @@ async function selfTest() {
     stdout: '',
     status: 2,
     stderr: '429 Too Many Requests',
+    clock: [0, RERUN.maxFirstSeconds * 1000],
+    rerun: { stdout: good },
+  });
+  check('повторний прогін: перший рівно 5 хв — повтор ще є', r.calls.length === 2 && r[0].includes('answer = 42'));
+  r = await pass({
+    stdout: '',
+    status: 2,
+    stderr: '429 Too Many Requests',
     clock: [0, (RERUN.maxFirstSeconds + 1) * 1000],
     rerun: { stdout: good },
   });
   check(
-    'повторний прогін: перший прогін довший за 10 хв — повтору немає (тайм-аут джоби)',
+    'повторний прогін: перший прогін довший за 5 хв — повтору немає (тайм-аут джоби)',
     r.calls.length === 1 && r[0].includes('Аудиту не було')
   );
   r = await pass({ stdout: 'Stopped: turn_limit', status: 3, exportJson: '{"stop_reason":"turn_limit"' });
