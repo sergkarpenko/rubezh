@@ -209,8 +209,12 @@ describe('п22.4: бот партії — розмір загону й найм 
     const { party } = withTarget();
     party.research.completed.push('tac-net-1', 'tac-net-2');
     party.econ.money = 10_000;
+    const before = new Map(readySoldiers(party.roster).map((u) => [u.id, party.roster.careers[u.id].missions]));
     const info = partyBotMissionStep(party, DEFAULT_PARTY_POLICY);
     expect(info.launched).toBe(true);
+    // у бою були п'ятеро: місія зарахована п'ятьом (уцілілим) чи вони в рядку втрат
+    const fought = [...before.keys()].filter((id) => (party.roster.careers[id]?.missions ?? Infinity) !== before.get(id));
+    expect(fought).toHaveLength(5);
     const p2 = createParty(42);
     p2.research.completed.push('tac-net-1', 'tac-net-2');
     p2.roster.soldiers.splice(2); // лишилось двоє

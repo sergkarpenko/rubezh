@@ -91,7 +91,7 @@ export function placeSquad(squad: Unit[]): void {
   if (squad.length === 0) throw new Error('Загін не може бути порожнім');
   if (squad.length > SPAWN_CELLS.length) throw new Error('Максимум ' + SPAWN_CELLS.length + ' оперативників у зоні висадки');
   for (const u of squad) {
-    if (u.side !== 'player') throw new Error('У загині можуть бути лише оперативники гравця: ' + u.id);
+    if (u.side !== 'player') throw new Error('У загоні можуть бути лише оперативники гравця: ' + u.id);
   }
   squad.forEach((u, i) => {
     u.pos = { ...SPAWN_CELLS[i] };
