@@ -45,13 +45,14 @@ import { forgeTicks, type BaseModules } from './base';
 export type ItemId = Exclude<ProjectId, 'lab-extension' | KeyProjectId | SquadProjectId> | 'breach-charge' | BrewItemId;
 
 // п22.5 (ADR-0182 п. 13; ADR-0187): витратники алхіміка — варить «Казан алхіміка», не «Кузня».
-export type BrewItemId = 'stim' | 'shield';
-export const BREW_IDS: readonly BrewItemId[] = ['stim', 'shield'];
+// п22.7 (ADR-0189, рішення власника «А. «Еліксир чемпіона»»): третій рецепт — «Стимулятор» і «Щит» в одному.
+export type BrewItemId = 'stim' | 'shield' | 'elixir';
+export const BREW_IDS: readonly BrewItemId[] = ['stim', 'shield', 'elixir'];
 export function isBrewItem(id: string): id is BrewItemId {
-  return id === 'stim' || id === 'shield';
+  return id === 'stim' || id === 'shield' || id === 'elixir';
 }
 // Рівень найкращого алхіміка в штаті, з якого рецепт доступний (рішення власника «А. Свій ефект + очко»).
-export const BREW_LEVEL: Record<BrewItemId, number> = { stim: 1, shield: 2 };
+export const BREW_LEVEL: Record<BrewItemId, number> = { stim: 1, shield: 2, elixir: 3 };
 export const FAST_BREW_LEVEL = 3; // алхімік рівня 3 варить удвічі швидше
 export const CAULDRON_DOUBLE_LEVEL = 2; // «Казан алхіміка» II — дві порції за раз
 
@@ -80,6 +81,8 @@ export const WORKSHOP_CATALOG: Record<ItemId, WorkshopItemDef> = {
   // п22.5 (рішення власника «А. Дія + пасивний щит»; числа — кандидати, probe п22.8)
   stim: { name: 'Стимулятор', cost: 30, ticks: 12, trophies: { demon: 1 }, brewed: true },
   shield: { name: 'Щит', cost: 40, ticks: 16, trophies: { hound: 1 }, brewed: true },
+  // п22.7 (рішення власника «А. «Еліксир чемпіона»»: 1 трофей «чемпіон» + 60 кр., алхімік рівня 3; числа — probe п22.8)
+  elixir: { name: 'Еліксир чемпіона', cost: 60, ticks: 16, trophies: { champion: 1 }, brewed: true },
 };
 
 // Предмети, які показують панелі «Кузні» і порада «Наступний крок». п18.2: «Пробивний
@@ -158,6 +161,7 @@ export interface SoldierEquipment {
   charge?: boolean; // п18.2: «Пробивний заряд» (витратник; поле лише за наявності — сейви без нього байт-у-байт)
   stim?: boolean; // п22.5: «Стимулятор» (витратник; поле лише за наявності)
   shield?: boolean; // п22.5: «Щит» (витратник; поле лише за наявності)
+  elixir?: boolean; // п22.7: «Еліксир чемпіона» — у бою «Стимулятор» і «Щит» разом (поле лише за наявності)
   // п20.4 (ADR-0165 п. 13, ADR-0168): зброя з «Кузні»; без поля — «Гарт» (у кожного, на складі не рахується)
   weapon?: ForgeWeaponId;
 }
@@ -192,6 +196,7 @@ export function emptyStore(): Record<ItemId, number> {
     mg: 0,
     stim: 0,
     shield: 0,
+    elixir: 0,
   };
 }
 
@@ -357,6 +362,9 @@ export function equipItem(workshop: WorkshopState, soldier: Unit, id: ItemId): v
   if (eq[soldierId]) {
     throw new Error('Предмет уже при оперативникові: ' + itemName(id));
   }
+  // п22.7 (ADR-0189): еліксир уже містить стимулятор і щит — разом з ними не видається
+  if ((soldierId === 'elixir' && (eq.stim || eq.shield)) || ((soldierId === 'stim' || soldierId === 'shield') && eq.elixir))
+    throw new Error('«Еліксир чемпіона» вже містить «Стимулятор» і «Щит» — разом їх не видати');
   eq[soldierId] = true;
   workshop.store[id] -= 1;
   if (soldierId === 'armor') {
@@ -388,7 +396,7 @@ export function unequipItem(workshop: WorkshopState, soldier: Unit, id: ItemId):
   if (!eq || !eq[soldierId]) {
     throw new Error('Предмета немає на оперативникові: ' + itemName(id));
   }
-  if (soldierId === 'charge' || soldierId === 'stim' || soldierId === 'shield')
+  if (soldierId === 'charge' || soldierId === 'stim' || soldierId === 'shield' || soldierId === 'elixir')
     delete eq[soldierId]; // п18.2, п22.5: поле витратника — лише за наявності (аудит PR #513)
   else eq[soldierId] = false;
   workshop.store[id] += 1;
@@ -443,7 +451,9 @@ export function removeLostEquipment(workshop: WorkshopState, lost: Unit[]): void
     const items = (Object.keys(eq) as (keyof SoldierEquipment)[]).filter((k): k is ItemSlot => k !== 'weapon' && eq[k] === true);
     const returned: ('armor' | 'optics' | ForgeWeaponId)[] = items.filter((k): k is 'armor' | 'optics' => k === 'armor' || k === 'optics');
     if (eq.weapon !== undefined) returned.push(eq.weapon); // п20.4: зброя загиблого — на склад, як броня
-    const gone = items.filter((k) => k === 'medkit' || k === 'grenade' || k === 'charge' || k === 'stim' || k === 'shield');
+    const gone = items.filter(
+      (k) => k === 'medkit' || k === 'grenade' || k === 'charge' || k === 'stim' || k === 'shield' || k === 'elixir'
+    );
     delete workshop.equipped[soldier.id];
     for (const k of returned) workshop.store[k] += 1;
     if (returned.length > 0) workshop.log.push({ type: 'equipment_returned', soldierId: soldier.id, items: returned });
@@ -453,7 +463,9 @@ export function removeLostEquipment(workshop: WorkshopState, lost: Unit[]): void
 
 // Порожній запис екіпірування (не тримаємо в сейві).
 function isEmptyEquipment(eq: SoldierEquipment): boolean {
-  return !eq.armor && !eq.optics && !eq.medkit && !eq.grenade && !eq.charge && !eq.stim && !eq.shield && eq.weapon === undefined;
+  return (
+    !eq.armor && !eq.optics && !eq.medkit && !eq.grenade && !eq.charge && !eq.stim && !eq.shield && !eq.elixir && eq.weapon === undefined
+  );
 }
 
 // Запис екіпірування солдата (створюється порожнім при першому зверненні).
@@ -508,11 +520,12 @@ export function deployConsumables(workshop: WorkshopState, squad: Unit[]): Recor
   const items: Record<string, UnitItems> = {};
   for (const soldier of squad) {
     const eq = workshop.equipped[soldier.id];
-    if (eq?.medkit || eq?.grenade || eq?.charge || eq?.stim || eq?.shield) {
+    if (eq?.medkit || eq?.grenade || eq?.charge || eq?.stim || eq?.shield || eq?.elixir) {
       items[soldier.id] = { medkit: eq.medkit, grenade: eq.grenade };
       if (eq.charge) items[soldier.id].charge = true; // п18.2: поле лише за наявності заряду
-      if (eq.stim) items[soldier.id].stim = true; // п22.5
-      if (eq.shield) items[soldier.id].shield = true; // п22.5
+      if (eq.stim || eq.elixir) items[soldier.id].stim = true; // п22.5; п22.7: еліксир — і стимулятор
+      if (eq.shield || eq.elixir) items[soldier.id].shield = true; // п22.5; п22.7: еліксир — і щит
+      if (eq.elixir) items[soldier.id].elixir = true; // п22.7: позначка — розрахунок після бою
     }
   }
   return items;
@@ -532,10 +545,16 @@ export function settleConsumables(workshop: WorkshopState, survivors: Unit[], it
     if (items?.[soldier.id]?.charge) eq.charge = true;
     else delete eq.charge; // п18.2: витрачений заряд зникає
     // п22.5: використаний стимулятор / щит зникає, невикористаний лишається, як граната
-    if (items?.[soldier.id]?.stim) eq.stim = true;
-    else delete eq.stim;
-    if (items?.[soldier.id]?.shield) eq.shield = true;
-    else delete eq.shield;
+    const it = items?.[soldier.id];
+    if (eq.elixir) {
+      // п22.7 (ADR-0189): еліксир лишається, лише коли обидві його частини не витрачено
+      if (!(it?.elixir && it.stim && it.shield)) delete eq.elixir;
+    } else {
+      if (it?.stim) eq.stim = true;
+      else delete eq.stim;
+      if (it?.shield) eq.shield = true;
+      else delete eq.shield;
+    }
     if (isEmptyEquipment(eq)) delete workshop.equipped[soldier.id];
   }
 }
@@ -558,5 +577,7 @@ export function SoldierItemIdOf(id: SoldierItemId): ItemSlot {
       return 'stim';
     case 'shield':
       return 'shield';
+    case 'elixir':
+      return 'elixir';
   }
 }

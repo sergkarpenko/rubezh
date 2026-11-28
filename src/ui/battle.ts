@@ -28,6 +28,7 @@ import {
   grenadeZone,
   hasLineOfSight,
   weaponHasMode,
+  stimBlock,
   RIFLE,
   type GameState,
   type ShotMode,
@@ -765,6 +766,17 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
       tileReason(b, noItem ? (mode === 'medkit' ? 'без гелю' : 'без гранат') : noAp ? 'мало AP' : null);
       b.classList.toggle('armed', ui.itemMode === mode);
     }
+
+    // п22.7 (ADR-0189, рішення власника «А. Плитка «Стимул»»): плитка видна, коли стимулятор узяв у бій хоч хтось;
+    // недоступна — причина з stimBlock ядра (у підказці), коротко під плиткою
+    const sb = el<HTMLButtonElement>('btn-stim');
+    sb.hidden = !Object.values(st.items ?? {}).some((it) => it.stim !== undefined);
+    const stimWhy = sel === undefined ? null : (stimBlock(st, sel.id) ?? null);
+    sb.disabled = busy || sel === undefined || stimWhy !== null;
+    const sbHint = sb.dataset.hint || sb.title;
+    sb.dataset.hint = sbHint;
+    sb.title = stimWhy === null ? sbHint : sbHint + ' — ' + stimWhy.toLowerCase();
+    tileReason(sb, stimWhy === null ? null : st.items?.[sel?.id ?? '']?.stim === false ? 'витрачено' : 'немає');
 
     // п16.4 (ADR-0147, рішення власника «А»): одна плитка дії ролі — підпис, іконка й ціна за роллю
     // вибраного; причина — з roleActionBlock ядра (EARS 6), коротко під плиткою, повністю в підказці.

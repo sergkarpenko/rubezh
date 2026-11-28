@@ -1520,7 +1520,7 @@ export function drawAnimFrame(
   // мок-контексти jsdom його не реалізують), клімп правого краю як
   // drawChanceLabel; текст у межах канви.
   if (a.kind === 'dnum') {
-    const text = (a.heal ? '+' : '-') + a.amount;
+    const text = !a.heal && a.amount === 0 ? 'щит' : (a.heal ? '+' : '-') + a.amount; // п22.7: 0 — поглинув «Щит»
     const w = text.length * 6 + 4;
     const h = 13;
     let x = a.at.x * cell + (cell - w) / 2;

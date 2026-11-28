@@ -7,7 +7,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { EYE_BEAM, GOLEM_CANNON, HOUND_CLAWS } from '../core/enemies';
 import { advanceTime, missionTargets } from '../core/geo';
-import { distance, hasLineOfSight, hasTerrainLine, type Unit } from '../core/combat';
+import { STIM_AP_BONUS, distance, hasLineOfSight, hasTerrainLine, type Unit } from '../core/combat';
 import { findPath } from '../core/map';
 import { SHOTGUN } from '../core/weapons';
 import { makeMoveAnim, type Anim } from '../core/render-core';
@@ -51,6 +51,7 @@ function setupDom(): void {
       <button id="btn-ow">Дозор</button>
       <button id="btn-medkit">Лікування</button>
       <button id="btn-grenade">Граната</button>
+      <button id="btn-stim">Стимул</button>
       <button id="btn-role">Роль</button>
       <button id="btn-evac">Евакуація</button>
       <button id="btn-end">Кінець ходу</button>
@@ -1457,5 +1458,33 @@ describe('п16.4: дія ролі (плитка «Роль», клавіша R)'
     clickAt(f, s.pos.x, s.pos.y);
     expect(f.binfo()).toBe('Ціль не поранена — дію не витрачено.');
     expect(f.ui.mission!.state.roles![s.id].used).toBe(false);
+  });
+});
+
+// п22.7 (ADR-0189, рішення власника «А. Плитка «Стимул»»): плитка «Стимул» і клавіша S — «Стимулятор» вибраного одразу.
+describe('п22.7: «Стимулятор» (плитка «Стимул», клавіша S)', () => {
+  it('без вибору — підказка; без стимулятора — причина ядра; зі стимулятором — +AP, журнал, плитка видна і «витрачено»', () => {
+    const f = makeFixture();
+    launchMission(f);
+    const st = f.ui.mission!.state;
+    f.input.useStimSelected();
+    expect(f.binfo()).toContain('Спершу');
+    const s = st.units.find((u) => u.side === 'player')!;
+    clickAt(f, s.pos.x, s.pos.y);
+    f.battle.renderBattle();
+    expect((document.getElementById('btn-stim') as HTMLButtonElement).hidden).toBe(true); // ні в кого немає — плитки не видно
+    f.input.onKeyDown({ code: 'KeyS' } as KeyboardEvent);
+    expect(f.binfo()).toBe('✗ Стимулятора немає у юніта');
+    st.items = { [s.id]: { medkit: false, grenade: false, stim: true } };
+    f.input.onKeyDown({ code: 'KeyS', repeat: true } as KeyboardEvent); // утримана S — нічого
+    expect(s.ap).toBe(s.maxAp);
+    f.input.onKeyDown({ code: 'KeyS' } as KeyboardEvent);
+    expect(s.ap).toBe(s.maxAp + STIM_AP_BONUS);
+    expect(st.log.at(-1)).toEqual({ type: 'stim', unitId: s.id, bonus: STIM_AP_BONUS });
+    expect(f.binfo()).toContain('«Стимулятор» — AP');
+    f.battle.renderBattle();
+    const tile = document.getElementById('btn-stim') as HTMLButtonElement;
+    expect([tile.hidden, tile.disabled]).toEqual([false, true]);
+    expect(tile.title).toContain('стимулятора немає у юніта');
   });
 });

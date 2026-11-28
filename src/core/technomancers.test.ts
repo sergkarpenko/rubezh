@@ -194,7 +194,7 @@ describe('п22.5: казан алхіміка — «Стимулятор» і «
   };
 
   it('каталог: ціна, тики, трофеї; «Кузня» їх не замовляє', () => {
-    expect(BREW_IDS).toEqual(['stim', 'shield']);
+    expect(BREW_IDS).toEqual(['stim', 'shield', 'elixir']); // п22.7: + «Еліксир чемпіона»
     expect(WORKSHOP_CATALOG.stim).toMatchObject({ name: 'Стимулятор', cost: 30, ticks: 12, trophies: { demon: 1 } });
     expect(WORKSHOP_CATALOG.shield).toMatchObject({ name: 'Щит', cost: 40, ticks: 16, trophies: { hound: 1 } });
     expect(() => orderItem(rich(), createWorkshop(), createResearch(), 'stim')).toThrow(

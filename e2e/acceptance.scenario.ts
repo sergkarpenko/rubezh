@@ -669,14 +669,22 @@ test('сценарій приймання ADR-0030: партія → місія 
       const bottom = document.getElementById('research')!.closest('section')!.getBoundingClientRect().bottom;
       return [Math.round(heads[1] - heads[0]), Math.round(heads[2] - heads[1]), Math.round(bottom - heads[2])];
     });
-    expect(researchH - keyH - weaponH - squadH, 'висота панелі «Дослідження» без ключових протоколів, зброї й загону').toBeLessThanOrEqual(
-      1150
-    ); // варіант Б без А — 1193
+    // п22.7 (ADR-0189): блок «Модулі бази» під штатом і три кнопки найму — міряються окремо (гейт Т.100 — на решті)
+    const [modulesH, hireH] = await page.evaluate(() => [
+      Math.round(document.getElementById('base-modules')!.getBoundingClientRect().height),
+      Math.round(document.querySelector('#research .sci-hire')!.getBoundingClientRect().height),
+    ]);
+    expect(modulesH, 'висота блоку «Модулі бази»').toBeLessThanOrEqual(380); // локально 339 px на новій партії
+    expect(hireH, 'висота рядка найму техномантів').toBeLessThanOrEqual(160); // локально 138 px (три кнопки — у три рядки)
+    expect(
+      researchH - keyH - weaponH - squadH - modulesH - hireH,
+      'висота панелі «Дослідження» без ключових протоколів, зброї, загону, модулів і найму'
+    ).toBeLessThanOrEqual(1150); // варіант Б без А — 1193
     expect(keyH, 'висота блоку ключових протоколів').toBeLessThanOrEqual(340);
     expect(weaponH, 'висота блоку зброї').toBeLessThanOrEqual(420); // локально 371 px на новій партії (з п22.4 — до блоку загону, 351)
     expect(squadH, 'висота блоку загону').toBeLessThanOrEqual(330); // локально 282 px на новій партії (з низом панелі)
     await expect(armor.locator('#btn-start-0')).toHaveText('Дослідити — 96 кр.');
-    await expect(page.locator('#btn-hire-scientist')).toHaveText('Вербувати техноманта (100)'); // Т.128
+    await expect(page.locator('#btn-hire-scientist')).toHaveText('Дослідник (100)'); // Т.128; п22.7 — кнопка на спеціалізацію
     // смуга кроків: три кнопки; «3. Видати» перемикає вкладку на «Загін»
     await expect(page.locator('#btn-sci-step-1')).toBeEnabled();
     await expect(page.locator('#btn-sci-step-2')).toBeEnabled();
@@ -763,6 +771,14 @@ test('сценарій приймання ADR-0030: партія → місія 
     });
     expect(helpSmall.h, 'екран «Як грати» вищий за вікно на 1024×768').toBeLessThanOrEqual(helpSmall.win - 32);
     expect(helpSmall.page, 'сторінка з довідкою довша за вікно на 1024×768').toBeLessThanOrEqual(helpSmall.win);
+    // п22.7 (ADR-0189, рішення власника «А. Вкладки»): вкладка «Розвиток» теж вміщується без прокрутки
+    await page.locator('#btn-help-tab-growth').click();
+    await expect(page.locator('#help-growth')).toContainText('Чемпіони');
+    const helpGrowth = await page.evaluate(() => ({
+      h: Math.round(document.querySelector<HTMLElement>('#help-screen .help-box')!.getBoundingClientRect().height),
+      win: window.innerHeight,
+    }));
+    expect(helpGrowth.h, 'вкладка «Розвиток» вища за вікно на 1024×768').toBeLessThanOrEqual(helpGrowth.win - 32);
     await page.locator('#btn-help-close').click();
     // Т.43: з третьою кнопкою часу шапка на 1024 × 768 лишається в один рядок
     // (кнопки часу на одній висоті з чипами), сторінка — у вікні
@@ -959,9 +975,18 @@ test('сценарій приймання ADR-0030: партія → місія 
     // Т.33: ціна в AP і клавіша — у кутках плиток дій
     // Т.71: плитка «Евакуація» — 2 AP, клавіша V
     // п16.4 (ADR-0147): плитка «Роль» — клавіша R, ціна за роллю вибраного (у новобранців ролі немає — порожньо)
-    await expect(page.locator('#btoolbar .tb-key')).toHaveText(['1', '2', '3', 'O', 'M', 'G', 'R', 'V', 'E']);
-    await expect(page.locator('#btoolbar .tb-ap')).toHaveText(['3 AP', '5 AP', '4 AP', '3 AP', '4 AP', '4 AP', '', '2 AP']); // snap, aimed, auto, дозор, гель, граната, роль, евакуація
-    await expectIcons(page, '#btoolbar button svg.tb-icon', 36, 10); // Т.123: іконки плиток дій
+    await expect(page.locator('#btoolbar button:not([hidden]) .tb-key')).toHaveText(['1', '2', '3', 'O', 'M', 'G', 'R', 'V', 'E']);
+    await expect(page.locator('#btoolbar button:not([hidden]) .tb-ap')).toHaveText([
+      '3 AP',
+      '5 AP',
+      '4 AP',
+      '3 AP',
+      '4 AP',
+      '4 AP',
+      '',
+      '2 AP',
+    ]); // snap, aimed, auto, дозор, гель, граната, роль, евакуація
+    await expectIcons(page, '#btoolbar button:not([hidden]) svg.tb-icon', 36, 10); // Т.123: іконки плиток дій; п22.7 — «Стимул» без стимуляторів сховано
     // Т.44: туман знебарвлено — у клітинках туману (без стіни, декору, юніта і м'якого краю) середній розкид
     // каналів max(R,G,B) − min(R,G,B) у центральній ділянці 24 × 24 px не більший за 9 (до Т.44 — 13,6–18,3);
     // видимі клітинки кольорові. Пікселі канви від шрифту машини не залежать.

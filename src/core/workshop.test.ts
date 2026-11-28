@@ -534,6 +534,8 @@ describe('цех: Т.12 — зняття саме того предмета, щ�
       // п22.5 (ADR-0187): витратники казана алхіміка
       stim: { name: 'Стимулятор', cost: 30, ticks: 12, trophies: { demon: 1 }, brewed: true },
       shield: { name: 'Щит', cost: 40, ticks: 16, trophies: { hound: 1 }, brewed: true },
+      // п22.7 (ADR-0189): рецепт із трофеєм чемпіона
+      elixir: { name: 'Еліксир чемпіона', cost: 60, ticks: 16, trophies: { champion: 1 }, brewed: true },
     });
     expect(itemName('гаубиця' as ItemId)).toBe('гаубиця');
   });

@@ -450,6 +450,7 @@ function soldierEquipKey(id: BotItemId): 'armor' | 'optics' | 'medkit' | 'grenad
       throw new Error('Гарматний модуль перехоплювача — озброєння перехоплювача, ключ екіпірування оперативника недосяжний');
     case 'stim':
     case 'shield':
+    case 'elixir':
       throw new Error('Витратники казана бот не варить до п22.8 (ADR-0187)'); // п22.5: недосяжно — дефіцит їх не бере
   }
 }

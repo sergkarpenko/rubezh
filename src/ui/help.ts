@@ -8,10 +8,10 @@
 // змінюється (ADR-0002) — модуль лише імпортує його константи.
 
 import { DAILY_ALLOWANCE, HIRE_PRICE, MISSION_BONUS } from '../core/economy';
-import { COVER_MULT, EVAC_AP_COST } from '../core/combat';
+import { COVER_MULT, EVAC_AP_COST, STIM_AP_BONUS } from '../core/combat';
 import { FIGHTER_REPAIR_COST, MAX_FIGHTERS } from '../core/intercept';
 import { TRUST_MISSION_WON, TRUST_PROBE_LEFT_DETECTED, TRUST_PROBE_LEFT_UNDETECTED } from '../core/regions';
-import { INTERCEPTOR_COST } from '../core/workshop';
+import { INTERCEPTOR_COST, WORKSHOP_CATALOG } from '../core/workshop';
 import {
   ASSAULT_THRESHOLDS,
   SCORE_PER_MISSION_WON,
@@ -24,8 +24,20 @@ import {
   THREAT_PROBE_LEFT_DETECTED,
   THREAT_PROBE_LEFT_UNDETECTED,
 } from '../core/campaign';
-import { BASE_LAB_SLOTS, KEY_PROJECTS, SCIENTIST_SALARY } from '../core/research';
+import {
+  BASE_LAB_SLOTS,
+  BASE_SQUAD_SIZE,
+  CHAMPION_TROPHY_NAME,
+  KEY_PROJECTS,
+  LEVEL_THRESHOLDS,
+  MAX_SQUAD_SIZE,
+  SCIENTIST_SALARY,
+  SQUAD_PROJECTS,
+} from '../core/research';
 import { ENEMY_KINDS } from '../core/enemies';
+import { RANK_NAMES } from '../core/career';
+import { BOILER_TICKS_CUT, MECHANIC_TICKS_CUT, MODULES } from '../core/base';
+import { CHAMPION_BROOD_MULT, CHAMPION_HP_MULT, CHAMPION_THREAT, ENEMY_BROODS } from '../core/broods';
 import { el } from './dom';
 
 // Залежності від шару застосунку (main.ts): стан слотів і сховища від панелі
@@ -58,8 +70,13 @@ function helpHtml(): string {
   const bonusHarvester = MISSION_BONUS['збирач'];
   return (
     '<div class="panel help-box">' +
-    '<h2>Як грати</h2>' +
-    '<div class="help-cols">' +
+    // п22.7 (ADR-0189, рішення власника «А. Вкладки»): вкладки «Основи» / «Розвиток» — у рядку заголовка
+    // (висота «Основ» — як до п22.7, гейт 736 px на 1366 × 768)
+    '<div class="help-head"><h2>Як грати</h2><div class="help-tabs" role="tablist">' +
+    '<button type="button" id="btn-help-tab-basics" role="tab" aria-selected="true" aria-controls="help-basics">Основи</button>' +
+    '<button type="button" id="btn-help-tab-growth" role="tab" aria-selected="false" aria-controls="help-growth">Розвиток</button>' +
+    '</div></div>' +
+    '<div class="help-cols" id="help-basics" role="tabpanel">' +
     '<div><h3>Легенда</h3><ul>' +
     '<li><b>Вузол «Рубіж»</b> — ваш штаб: загін і перший перехоплювач живуть у ньому.</li>' +
     // п19.4: «зона виявлення» прибрано — місце для рядка «Регіони» (гейт висоти 736 px)
@@ -172,6 +189,7 @@ function helpHtml(): string {
     '.</li>' +
     '</ul></div>' +
     '</div>' +
+    growthHtml() +
     // П10.2: версія гри — константа __APP_VERSION__ зі зборки (vite define з
     // package.json, vite.config.ts); число не дублюється у тексті (урок П9.1).
     '<p class="help-version">Версія ' +
@@ -182,11 +200,88 @@ function helpHtml(): string {
   );
 }
 
+// п22.7 (ADR-0189): вкладка «Розвиток» — рядки Фази 22 (дерево, загін, техноманти, модулі, казан, виводки,
+// чемпіони); числа й назви — з констант ядра (урок П9.1).
+const pctText = (k: number): string => Math.round(k * 100) + ' %';
+function growthHtml(): string {
+  const brood = (id: 'ash' | 'rust' | 'shadow'): string => '«' + ENEMY_BROODS[id].name + '»';
+  return (
+    '<div class="help-cols hidden" id="help-growth" role="tabpanel">' +
+    '<div><h3>Загін</h3><ul>' +
+    '<li><b>Шлях бійця</b>: ' +
+    RANK_NAMES.map((r) => '«' + r + '»').join(' → ') +
+    '. Із «Бійця» — роль, із «Сержанта» — одна з двох спеціалізацій ролі, із «Ветерана» — одна з двох навичок; вибір — у вікні після місії, смуга шляху — у картці ростера.</li>' +
+    '<li><b>Розмір загону</b>: ' +
+    BASE_SQUAD_SIZE +
+    ' бійці, протоколи ' +
+    SQUAD_PROJECTS.map((p) => '«' + p.name + '»').join(' і ') +
+    ' — до ' +
+    MAX_SQUAD_SIZE +
+    '; за кожного бійця понад ' +
+    BASE_SQUAD_SIZE +
+    ' — ще один ворог у бою.</li>' +
+    '</ul></div>' +
+    '<div><h3>Лабораторія</h3><ul>' +
+    '<li><b>Техноманти</b>: дослідник — очки потоку за рівнем, алхімік — варить у казані, механік — «Кузня» −' +
+    pctText(MECHANIC_TICKS_CUT) +
+    ' часу за рівень. Рівні ' +
+    LEVEL_THRESHOLDS.slice(1)
+      .map((_, i) => i + 2)
+      .join(' і ') +
+    ' — після ' +
+    LEVEL_THRESHOLDS.slice(1).join(' і ') +
+    ' протоколів у штаті.</li>' +
+    '<li><b>Модулі бази</b>: «' +
+    MODULES.stand.name +
+    '» — четвертий слот після «Розширення лабораторії», «' +
+    MODULES.boiler.name +
+    '» — «Кузня» −' +
+    pctText(BOILER_TICKS_CUT) +
+    ' часу за рівень, «' +
+    MODULES.cauldron.name +
+    '» II — дві порції за раз.</li>' +
+    '<li><b>Казан</b>: «Стимулятор» (+' +
+    STIM_AP_BONUS +
+    ' AP за 0 AP, клавіша S), «Щит» (поглинає перше влучання), «' +
+    WORKSHOP_CATALOG.elixir.name +
+    '» (обидва); кредити й трофеї, видача — у вікні перед вильотом.</li>' +
+    '</ul></div>' +
+    '<div><h3>Розрив</h3><ul>' +
+    '<li><b>Виводки</b>: ' +
+    brood('ash') +
+    ' +' +
+    ENEMY_BROODS.ash.damage +
+    ' шкоди, ' +
+    brood('rust') +
+    ' +' +
+    ENEMY_BROODS.rust.armor +
+    ' броні, ' +
+    brood('shadow') +
+    ' — шанс по ній ' +
+    mult(ENEMY_BROODS.shadow.evade) +
+    '; виводок — за районом посадки, на штурмі — один, у Брамі — усі три.</li>' +
+    '<li><b>Чемпіони</b>: із загрози ' +
+    CHAMPION_THREAT +
+    ' — іменний ворог із вінцем ♛, HP ' +
+    mult(CHAMPION_HP_MULT) +
+    ', особливість виводку ' +
+    mult(CHAMPION_BROOD_MULT) +
+    '; убитий дає трофей «' +
+    CHAMPION_TROPHY_NAME +
+    '» для «' +
+    WORKSHOP_CATALOG.elixir.name +
+    '».</li>' +
+    '</ul></div>' +
+    '</div>'
+  );
+}
+
 export function createHelp(deps: HelpDeps): Help {
   const screen = el('help-screen');
   screen.innerHTML = helpHtml();
 
   function open(): void {
+    showTab('btn-help-tab-basics'); // кожне відкриття — з «Основ»
     screen.classList.remove('hidden');
     el<HTMLButtonElement>('btn-help-close').focus(); // Т.73: фокус на кнопку «Грати»
   }
@@ -196,6 +291,18 @@ export function createHelp(deps: HelpDeps): Help {
   // Кнопка «Грати» — створюється контентом вище, зв'язує її сам модуль
   // (патерн динамічних кнопок панелей); статичну «?» у топбарі зв'язує main.ts.
   el('btn-help-close').onclick = close;
+  // п22.7: перемикання вкладок — лише вигляд (стан гри не змінюється)
+  const tabs: [string, string][] = [
+    ['btn-help-tab-basics', 'help-basics'],
+    ['btn-help-tab-growth', 'help-growth'],
+  ];
+  function showTab(id: string): void {
+    for (const [btn, pane] of tabs) {
+      el(btn).setAttribute('aria-selected', String(btn === id));
+      el(pane).classList.toggle('hidden', btn !== id);
+    }
+  }
+  for (const [btn] of tabs) el(btn).onclick = () => showTab(btn);
 
   return {
     open,

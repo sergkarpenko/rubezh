@@ -384,7 +384,7 @@ export interface BoomAnim extends CalmFlag, HpFxFlag {
 export interface DNumAnim extends CalmFlag, HpFxFlag {
   kind: 'dnum';
   at: Vec2; // клітинка цілі
-  amount: number; // N пошкодження або зцілення
+  amount: number; // N пошкодження або зцілення; п22.7: пошкодження 0 — напис «щит» (поглинув «Щит»)
   heal: boolean; // true — «+N» зцілення, false — «-N» пошкодження
   dur: number;
   start: number | null;
@@ -839,7 +839,8 @@ export function animsFromEvents(
         if (e.hit) fx(ti, target.id, -e.damage);
         // П14.4: число пошкодження над ціллю — лише при влучанні з реальною
         // шкодою і лише для видимих цілей (туман не розкривається, ADR-0006)
-        if (e.hit && e.damage > 0 && seen(target.pos)) anims.push(makeDNumAnim(target.pos, e.damage, false));
+        // п22.7 (ADR-0189): влучання з шкодою 0 — лише «Щит» (броня лишає ≥ 1) — число «щит» замість «−0»
+        if (e.hit && seen(target.pos)) anims.push(makeDNumAnim(target.pos, e.damage, false));
       }
       i++;
       continue;

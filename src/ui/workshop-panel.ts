@@ -26,7 +26,10 @@ import {
 import { MAX_FIGHTERS } from '../core/intercept';
 import { REGION_IDS, REGION_NAMES } from '../core/regions';
 import { sciencePrice } from '../core/campaign';
-import { missingTrophies } from '../core/research';
+import { CHAMPION_TROPHY_NAME, bestLevel, missingTrophies, type TrophyCost } from '../core/research';
+import { BREW_IDS, BREW_LEVEL, FAST_BREW_LEVEL, CAULDRON_DOUBLE_LEVEL, brewItem, type BrewItemId } from '../core/workshop';
+import { ENEMY_KINDS, ENEMY_ORDER } from '../core/enemies';
+import type { WorkshopOrder } from '../core/workshop';
 
 // п18.5 (ADR-0157): «Пробивний заряд» (після «Анатомії Розриву») — у панелі поруч із чинними предметами
 // (ITEM_IDS ядра лишається п'ятьма предметами: на нього спираються бот і скрипти вимірів).
@@ -37,6 +40,35 @@ import { itemEffect } from './effects';
 import { el, setWhy } from './dom';
 import type { LogCat } from './journal';
 import { ticksText } from './text';
+
+// п18.5, п22.7 (ADR-0189): ціна в трофеях — «демон 6, гончак 3», трофей «чемпіон» — останнім.
+export function trophyListText(cost: TrophyCost | undefined): string {
+  const parts = ENEMY_ORDER.filter((k) => (cost?.[k] ?? 0) > 0).map((k) => ENEMY_KINDS[k].name.toLowerCase() + ' ' + cost?.[k]);
+  if ((cost?.champion ?? 0) > 0) parts.push(CHAMPION_TROPHY_NAME + ' ' + cost?.champion);
+  return parts.join(', ');
+}
+
+// п22.7 (ADR-0189): причина, з якої рецепт зараз не зварити (порядок перевірок — як у brewItem ядра), або null.
+export function brewBlockReason(party: Party, id: BrewItemId): string | null {
+  const def = WORKSHOP_CATALOG[id];
+  if (party.modules.cauldron < 1) return 'Немає модуля «Казан алхіміка» — купіть у «Модулях бази»';
+  const level = bestLevel(party.research, 'alchemist');
+  if (level === 0) return 'Немає алхіміка в штаті';
+  if (level < BREW_LEVEL[id]) return '«' + def.name + '» варить алхімік рівня ' + BREW_LEVEL[id];
+  const lack = missingTrophies(party.research.trophies, def.trophies);
+  if (lack !== undefined) return lack;
+  const price = sciencePrice(def.cost, party.campaign.preset);
+  if (party.econ.money < price) return 'Недостатньо кредитів (ціна ' + price + ')';
+  return null;
+}
+
+// Тики варіння з найкращим алхіміком штату (рівень 3 — удвічі менше, вгору; як brewItem).
+function brewTicks(party: Party, id: BrewItemId): number {
+  const t = WORKSHOP_CATALOG[id].ticks;
+  return bestLevel(party.research, 'alchemist') >= FAST_BREW_LEVEL ? Math.ceil(t / 2) : t;
+}
+
+const portion = (o: WorkshopOrder): string => ((o.count ?? 1) > 1 ? ' ×' + o.count : '');
 
 // Залежності від шару застосунку (main.ts): читання стану і дії панелі.
 export interface WorkshopPanelDeps {
@@ -153,6 +185,88 @@ export function createWorkshopPanel(deps: WorkshopPanelDeps): WorkshopPanel {
     }
     box.appendChild(catalog);
     box.appendChild(interceptorRow(party, busy));
+    box.appendChild(cauldronBlock(party, busy));
+  }
+
+  // п22.7 (ADR-0189, рішення власника «А. У чинних панелях»): «Казан алхіміка» — під замовленнями «Кузні»:
+  // стан варіння і черга, склад витратників, рецепт на рядок з кнопкою «Зварити» (джерело правди — brewItem).
+  function cauldronBlock(party: Party, busy: boolean): HTMLElement {
+    const w = party.workshop;
+    const wrap = document.createElement('div');
+    wrap.id = 'cauldron';
+    wrap.className = 'cauldron';
+    const level = party.modules.cauldron;
+    const head = document.createElement('div');
+    head.className = 'meta';
+    const active = w.brew[0];
+    head.innerHTML =
+      '<b>Казан алхіміка' +
+      (level >= CAULDRON_DOUBLE_LEVEL ? ' II' : level >= 1 ? ' I' : '') +
+      '</b> · ' +
+      (level < 1
+        ? 'модуля немає — купіть у «Модулях бази» («Дослідження»)'
+        : 'варіння: <b>' +
+          (active ? orderName(active) + portion(active) + ' — ' + ticksText(active.ticksLeft) : '—') +
+          '</b>' +
+          (w.brew.length > 1 ? ' · у черзі ще ' + (w.brew.length - 1) : ''));
+    wrap.appendChild(head);
+    const store = document.createElement('div');
+    store.className = 'meta';
+    store.textContent = 'На складі: ' + BREW_IDS.map((id) => itemName(id) + ' ' + w.store[id]).join(' · ');
+    wrap.appendChild(store);
+    for (const id of BREW_IDS) {
+      const def = WORKSHOP_CATALOG[id];
+      const row = document.createElement('div');
+      row.className = 'probe';
+      row.style.marginBottom = '4px';
+      const info = document.createElement('span');
+      info.textContent =
+        def.name +
+        ' · ' +
+        sciencePrice(def.cost, party.campaign.preset) +
+        ' · трофеї: ' +
+        trophyListText(def.trophies) +
+        ' · ' +
+        ticksText(brewTicks(party, id)) +
+        ' · алхімік ' +
+        BREW_LEVEL[id];
+      row.appendChild(info);
+      const effect = document.createElement('span');
+      effect.className = 'meta';
+      effect.textContent = ' · ' + itemEffect(id);
+      row.appendChild(effect);
+      const b = document.createElement('button');
+      b.id = 'btn-brew-' + id;
+      b.className = 'research';
+      b.textContent = 'Зварити';
+      const why = brewBlockReason(party, id);
+      b.disabled = busy || why !== null;
+      b.title =
+        why ??
+        'Зварити (−' +
+          sciencePrice(def.cost, party.campaign.preset) +
+          ', трофеї: ' +
+          trophyListText(def.trophies) +
+          ', готовність через ' +
+          ticksText(brewTicks(party, id)) +
+          (level >= CAULDRON_DOUBLE_LEVEL ? ', дві порції' : '') +
+          ')';
+      b.onclick = () => {
+        try {
+          brewItem(party.econ, party.workshop, party.research, party.modules, id, party.campaign.preset);
+        } catch (e) {
+          deps.journal('✗ ' + (e as Error).message, 'lose', 'base');
+        }
+        deps.renderAll();
+      };
+      const line = document.createElement('span');
+      line.className = 'order-line';
+      line.appendChild(b);
+      row.appendChild(line);
+      setWhy(b, why);
+      wrap.appendChild(row);
+    }
+    return wrap;
   }
 
   // п19.4 (ADR-0159 п. 4, 13; ADR-0161): купівля перехоплювача — рядок «Кузні» з вибором ангара:
