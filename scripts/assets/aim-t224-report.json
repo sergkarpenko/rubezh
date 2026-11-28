@@ -1,6 +1,6 @@
 {
  "soldier": {"row": 0, "scale": 0.1204, "anchorX": 48.2, "idleBox": [39, 34, 67, 93], "up": {"scale": 0.1204, "bbox": [36, 28, 76, 93], "muzzle": {"x": 74, "y": 30}, "greenMax": 0}, "down": {"scale": 0.1204, "bbox": [35, 35, 77, 93], "muzzle": {"x": 74, "y": 76}, "greenMax": 0}},
  "demon": {"row": 1, "scale": 0.1735, "anchorX": 55.4, "idleBox": [27, 34, 71, 93], "up": {"scale": 0.1735, "bbox": [16, 12, 78, 93], "muzzle": {"x": 18, "y": 14}, "greenMax": 0}, "down": {"scale": 0.1735, "bbox": [19, 34, 81, 93], "muzzle": {"x": 20, "y": 89}, "greenMax": 0}},
- "golem": null,
- "eye": null
+ "golem": {"row": 3, "scale": 0.1392, "anchorX": 47.9, "idleBox": [23, 34, 71, 93], "up": {"scale": 0.1392, "bbox": [17, 24, 68, 93], "muzzle": {"x": 18, "y": 24}, "greenMax": 0}, "down": {"scale": 0.1392, "bbox": [22, 32, 70, 93], "muzzle": {"x": 26, "y": 85}, "greenMax": 0}},
+ "eye": {"row": 4, "scale": 0.1129, "anchorX": 48.4, "idleBox": [36, 47, 64, 93], "up": {"scale": 0.1129, "bbox": [31, 52, 63, 93], "muzzle": {"x": 32, "y": 53}, "greenMax": 0}, "down": {"scale": 0.1129, "bbox": [30, 59, 66, 93], "muzzle": {"x": 31, "y": 88}, "greenMax": 0}}
 }

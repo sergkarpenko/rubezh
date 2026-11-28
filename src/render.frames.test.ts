@@ -878,13 +878,13 @@ describe('Т.218: промінь на крутих кутах — з центр�
     expect(steepShot({ x: 2, y: 2 }, { x: 6, y: 2 })).toBe(false);
     expect(steepShot({ x: 2, y: 2 }, { x: 2, y: 2 })).toBe(false);
   });
-  // п21.6 (ADR-0180): з центру — лише вигляд без кадрів «угору» / «униз» (тут голем); оперативник і
-  // демон стріляють з дула свого кадру (src/render.aim.test.ts)
+  // п21.6 (ADR-0180): з центру — лише вигляд без кадрів «угору» / «униз» (Т.226: голем і око отримали
+  // кадри — тут гончак); решта стріляє з дула свого кадру (src/render.aim.test.ts)
   it('ціль строго вгорі: лінія з центру клітинки стрільця, без спалаху дула; збоку — з дула, як раніше', () => {
     const up = makeTracerAnim('alien', { x: 2, y: 5 }, { x: 2, y: 1 }, false);
     up.start = 0;
     const f = animCtx();
-    drawAnimFrame(f.ctx, up, up.dur * 0.1, 48, 8, 480, 480, { side: 'alien', flip: false, kind: 'golem' });
+    drawAnimFrame(f.ctx, up, up.dur * 0.1, 48, 8, 480, 480, { side: 'alien', flip: false, kind: 'hound' });
     expect(f.calls.find((c) => c.m === 'moveTo')?.args).toEqual([2 * 48 + 24, 5 * 48 + 24]);
     expect(f.calls.filter((c) => c.m === 'arc')).toHaveLength(0); // спалаху дула немає
     const side = makeTracerAnim('player', { x: 2, y: 5 }, { x: 6, y: 4 }, false);
