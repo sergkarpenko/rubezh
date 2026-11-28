@@ -58,7 +58,7 @@ import { setIconText } from './icons';
 import { portraitCell, portraitHtml } from './portrait';
 import { weaponIconHtml, weaponIdOf } from './weapon-icon';
 import { RANK_NAMES, rankOf } from '../core/career';
-import { chevronHtml, roleLabel, xpLine } from './roles';
+import { careerPathHtml, chevronHtml, roleLabel } from './roles';
 import { GCELL } from './grid';
 import { geoEventText, type LogCat } from './journal';
 import { renderEndScreens, renderGoalPanel, renderThreatChip } from './campaign-panel';
@@ -786,8 +786,8 @@ export function createPanels(deps: PanelsDeps): Panels {
         '<span class="kills">⚔ ' +
         s.kills +
         '</span>' +
-        // п16.4: третій рядок — HP, лікарня, вбивства і досвід (колонка 320 px: у першому рядку вони переносились)
-        (career ? '<span class="meta">' + xpLine(career) + '</span></div>' : '');
+        // п22.3 (ADR-0185; рішення власника «А. Сходинки»): під рядком HP — смуга шляху, рядок досвіду в ній
+        (career ? '</div>' + careerPathHtml(career) : '');
       box.appendChild(row);
       // П11.6 (ADR-0058): екіпірування в картці оперативника — кнопки
       // «спорядити» зі складу / «зняти» назад на склад; лише на геосцені

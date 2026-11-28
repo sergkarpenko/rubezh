@@ -9,6 +9,7 @@ import { createGame, makeUnit, moveUnit, type GameState, type Unit } from '../co
 import { enemyKind, enemyMix, kindsForThreat, makeEnemy } from '../core/enemies';
 import { missionSeed } from '../core/mission';
 import { createParty, type Party } from '../core/save';
+import { awaitingBranch, rankOf, SERGEANT_RANK } from '../core/career';
 import { campaignTick } from '../core/campaign';
 import { COVER_SHIELD_COLOR, initPixelSprites, initUnitAtlas } from '../render';
 import { ALIEN_RING, RING_DY, RING_RX, fighterLook, makeDeathAnim, makeMoveAnim, makeTracerAnim } from '../core/render-core';
@@ -611,6 +612,21 @@ describe('battle: флоу місії (запуск/закриття/завер�
     // картка смуги загону лишає загиблому позивний, з яким він ішов у бій
     f.battle.renderBattle();
     expect(document.querySelector('#bsquad [data-unit="' + first.id + '"] .sq-name')!.textContent).toBe('»Крук');
+  });
+
+  it('п22.3 (ADR-0185): підвищений до «Сержанта» після бою — без гілки (вибір — у вікні main.ts, не правило бота)', () => {
+    const f = makeFixture();
+    const party = f.deps.getParty();
+    const [first] = party.roster.soldiers;
+    party.roster.careers[first.id] = { ...party.roster.careers[first.id], xp: 4, role: 'assault' };
+    f.battle.launch(firstTarget(f));
+    const st = f.ui.mission!.state;
+    for (const u of st.units) if (u.side === 'alien') u.alive = false;
+    f.battle.finish('перемога');
+    const c = party.roster.careers[first.id];
+    expect(rankOf(c.xp)).toBe(SERGEANT_RANK);
+    expect(c.branches).toBeUndefined();
+    expect(awaitingBranch(c)).toBe('sergeant');
   });
 
   it('поразка: банер «загін втрачено», НЛО лишається активним', () => {

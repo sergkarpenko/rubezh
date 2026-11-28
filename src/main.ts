@@ -10,10 +10,10 @@
 import { tabStop } from './ui/tab-stop';
 import { advanceTime, geoDay } from './core/geo';
 import { SCENARIOS, scenarioParty, type ScenarioId } from './core/scenarios';
-import { assignBotBranches, chooseRole, hireSoldier, hospitalTick, isBankrupt, readySoldiers } from './core/squad';
+import { chooseBranch, chooseRole, hireSoldier, hospitalTick, isBankrupt, readySoldiers } from './core/squad';
 import { completeAssault } from './core/assault';
-import { awaitingRole, type SoldierRole } from './core/career';
-import { roleDialogHtml } from './ui/roles';
+import { awaitingBranch, awaitingRole, type CareerBranch, type SoldierRole } from './core/career';
+import { branchDialogHtml, roleDialogHtml } from './ui/roles';
 import { economyTick } from './core/economy';
 import { totalTrust } from './core/regions';
 // П11.2 (ADR-0058): тік науки — після дотації того ж дня; без вчених — no-op.
@@ -532,7 +532,6 @@ const geoAnim = new AnimEngine({
 // і завантаженої партії. П12.2 (ADR-0026): точка прийняття — контрольна
 // серіалізація (незбережених змін на цей момент немає).
 function adoptParty(p: Party): Party {
-  assignBotBranches(p.roster); // п22.2 (ADR-0183): сейв v2–v4 із «Сержантами» — гілки одразу, до вікна п22.3
   journalUI.adopt(p);
   // п18.3: поразка за загрозою (сейв) — гру закінчено, як банкрутство
   gameOver = isBankrupt(p.econ, p.roster, p.campaign.preset) || p.campaign.status === 'поразка';
@@ -696,19 +695,28 @@ function renderAll(): void {
 // п16.4 (ADR-0147 п. 5, 13; EARS 4, 10): вікно «Підвищення: «<позивний>» — Боєць. Оберіть роль» для
 // першого в ростері, хто досяг «Боєць» без ролі (після місії і після завантаження сейву v1). Esc і клік
 // поза вікном не закривають (вибір обов'язковий); кілька підвищень — вікна по черзі (наступне — після вибору).
+// п22.3 (ADR-0185): те саме вікно — і для розвилок «Сержанта» й «Ветерана» (`awaitingBranch`) замість
+// правила бота; у бійця нижча розвилка перша (роль → спеціалізація → навичка), далі — наступний у ростері;
+// сейв v4 із «Сержантами» без гілок — вікна після завантаження (рішення власника «Гравець у вікні»).
 function promptRole(): void {
   const box = el('role-dialog');
   if (party === null || ui.mission !== null || !partyOnScreen || !box.classList.contains('hidden')) return;
   const p = party;
-  const s = p.roster.soldiers.find((x) => p.roster.careers[x.id] !== undefined && awaitingRole(p.roster.careers[x.id]));
+  const pending = (id: string): boolean => {
+    const c = p.roster.careers[id];
+    return c !== undefined && (awaitingRole(c) || awaitingBranch(c) !== null);
+  };
+  const s = p.roster.soldiers.find((x) => pending(x.id));
   if (s === undefined) return;
-  box.innerHTML = roleDialogHtml(p.roster.careers[s.id]);
+  const career = p.roster.careers[s.id];
+  const tier = awaitingRole(career) ? null : awaitingBranch(career);
+  box.innerHTML = tier === null ? roleDialogHtml(career) : branchDialogHtml(career, tier);
   box.dataset.unit = s.id;
   box.classList.remove('hidden');
   for (const b of box.querySelectorAll<HTMLButtonElement>('.role-pick')) {
     b.onclick = () => {
-      chooseRole(p.roster, s.id, b.dataset.role as SoldierRole);
-      assignBotBranches(p.roster); // п22.2 (ADR-0183): гілки до вікна п22.3 — за правилом бота
+      if (b.dataset.branch !== undefined) chooseBranch(p.roster, s.id, b.dataset.branch as CareerBranch);
+      else chooseRole(p.roster, s.id, b.dataset.role as SoldierRole);
       box.classList.add('hidden');
       box.innerHTML = '';
       renderAll(); // наступне підвищення (якщо є) відкривається тут

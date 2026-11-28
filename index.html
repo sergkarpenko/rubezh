@@ -913,6 +913,33 @@
         flex-basis: 100%;
         padding-left: 30px;
       }
+      /* п22.3 (ADR-0185; рішення власника «А. Сходинки»): смуга шляху — рядок на звання під HP */
+      #roster .s-path {
+        flex-basis: 100%;
+        padding-left: 30px;
+        font-size: 12px;
+        line-height: 1.35;
+        margin-top: 2px;
+      }
+      #roster .soldier.with-pt .s-path {
+        padding-left: 0;
+      }
+      #roster .s-path .p-done {
+        color: #9fb0c3;
+      }
+      #roster .s-path .p-cur {
+        color: #f5c86a;
+      }
+      #roster .s-path .p-next {
+        color: #7fe2ff;
+      }
+      #roster .s-path .p-next b {
+        font-weight: normal;
+        color: #e6edf3;
+      }
+      #roster .s-path .meta {
+        margin-top: 1px;
+      }
       #roster .s-stats {
         display: flex;
         flex-wrap: wrap;
