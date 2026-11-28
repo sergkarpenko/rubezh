@@ -674,10 +674,12 @@ test('сценарій приймання ADR-0030: партія → місія 
       Math.round(document.getElementById('base-modules')!.getBoundingClientRect().height),
       Math.round(document.querySelector('#research .sci-hire')!.getBoundingClientRect().height),
     ]);
+    // аудит PR #553: до п22.7 одна кнопка найму входила в гейт Т.100 — віднімається лише приріст рядка найму
+    const oneHire = await page.evaluate(() => Math.round(document.getElementById('btn-hire-scientist')!.getBoundingClientRect().height));
     expect(modulesH, 'висота блоку «Модулі бази»').toBeLessThanOrEqual(380); // локально 339 px на новій партії
     expect(hireH, 'висота рядка найму техномантів').toBeLessThanOrEqual(160); // локально 138 px (три кнопки — у три рядки)
     expect(
-      researchH - keyH - weaponH - squadH - modulesH - hireH,
+      researchH - keyH - weaponH - squadH - modulesH - (hireH - oneHire),
       'висота панелі «Дослідження» без ключових протоколів, зброї, загону, модулів і найму'
     ).toBeLessThanOrEqual(1150); // варіант Б без А — 1193
     expect(keyH, 'висота блоку ключових протоколів').toBeLessThanOrEqual(340);
@@ -2287,4 +2289,63 @@ test('Т.171: шрифт сторінки в e2e — DejaVu Sans (fonts.conf)', 
     m.body,
     'system-ui сторінки — не DejaVu Sans: FONTCONFIG_FILE не дійшов до браузера (у CI без нього теж DejaVu — там гейт ловить лише відсутність шрифту)'
   ).toBeCloseTo(m.dejavu, 2);
+});
+
+// п22.7 (ADR-0189, рішення власника «А. Плитка «Стимул»»; аудит PR #553): «Стимулятор» зі складу — видача у вікні
+// спорядження, значок ⚡ у смузі загону, плитка «Стимул» (0 AP, S) між «Гранатою» і «Роллю»; тулбар з 11 плитками —
+// у вікні на 1366 × 768 і 1024 × 560 (без щільнішого стовпчика на 1366 × 768 — 784 px, за вікном).
+test('п22.7: «Стимулятор» — вікно спорядження, смуга загону, плитка «Стимул» і клавіша S у межах вікна', async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.setViewportSize({ width: 1366, height: 768 });
+  await page.goto('./');
+  const helpClose = page.locator('#btn-help-close');
+  if (await helpClose.isVisible()) await helpClose.click();
+  await page.locator('#btn-start-new').click();
+  await page.locator('#new-game-more').evaluate((d) => ((d as HTMLDetailsElement).open = true));
+  await page.locator('#new-game-seed').fill(String(SEED));
+  await page.locator(`input[name="new-game-preset"][value="${PRESET}"]`).check();
+  await page.locator('#btn-new-game-start').click();
+  await openSave(page);
+  await page.locator('#btn-save-1').click();
+  await expect(page.locator('#log')).toContainText('Збережено: слот 1.');
+  await page.evaluate(() => {
+    const d = JSON.parse(localStorage.getItem('rubezh.save.1')!) as { state: { workshop: { store: Record<string, number> } } };
+    d.state.workshop.store.stim = 1; // зварений «Стимулятор» на складі
+    localStorage.setItem('rubezh.save.1', JSON.stringify(d));
+  });
+  await page.locator('#btn-load-1').click();
+  const closeSave = page.locator('#btn-save-close');
+  if (await closeSave.isVisible()) await closeSave.click();
+  await page.locator('#status-tab-base').click();
+  const mission = page.locator('#probes button.mission').first();
+  for (let i = 0; i < 200 && !(await mission.isVisible()); i++) await page.locator('#btn-tick').click();
+  await mission.click();
+  const give = page.locator('#loadout-dialog button[id$="-stim"]').first();
+  await expect(give).toHaveText('+ видати: стимулятор');
+  await give.click();
+  await expect(page.locator('#loadout-dialog button[id$="-stim"]').first()).toHaveText('− зняти: стимулятор');
+  await page.locator('#btn-deploy').click();
+  await expect(page.locator('#btn-stim')).toBeVisible();
+  await expect(page.locator('#btoolbar button:not([hidden]) .tb-key')).toHaveText(['1', '2', '3', 'O', 'M', 'G', 'S', 'R', 'V', 'E']);
+  await expect(page.locator('#btn-stim .tb-ap')).toHaveText('0 AP');
+  await expect(page.locator('#bsquad .sq-it.stim.on')).toHaveCount(1);
+  for (const [w, h] of [
+    [1366, 768],
+    [1024, 560],
+  ] as const) {
+    await page.setViewportSize({ width: w, height: h });
+    const m = await page.evaluate(() => ({
+      tb: Math.round(document.getElementById('btoolbar')!.getBoundingClientRect().bottom),
+      page: document.documentElement.scrollHeight,
+      win: window.innerHeight,
+    }));
+    expect(m.tb, w + '×' + h + ': тулбар з плиткою «Стимул» нижче вікна').toBeLessThanOrEqual(m.win);
+    expect(m.page, w + '×' + h + ': сторінка бою вища за вікно').toBeLessThanOrEqual(m.win);
+  }
+  // S — «Стимулятор» бійця з ним (вибір — його картка смуги загону)
+  await page.locator('#bsquad .sq-card:has(.sq-it.stim)').click();
+  await page.keyboard.press('KeyS');
+  await expect(page.locator('#binfo')).toContainText('«Стимулятор» — AP');
+  await expect(page.locator('#bsquad .sq-it.stim:not(.on)')).toHaveCount(1); // витрачено — приглушений
+  expect(errors, 'помилки сторінки: ' + errors.join(' | ')).toEqual([]);
 });

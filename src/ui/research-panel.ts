@@ -84,12 +84,18 @@ export const SPEC_HINT: Record<ScientistSpec, string> = {
 };
 
 // Ефект техноманта його рівня: «+2 очки за добу», «варить «Стимулятор», «Щит»», «Кузня» −20 % часу».
-export function specEffectText(s: Scientist): string {
+// п22.7 (аудит PR #553): алхімік без модуля казана — з приміткою (brewItem тоді відмовляє).
+export function specEffectText(s: Scientist, cauldron = 1): string {
   const level = scientistLevel(s);
   if (s.spec === 'researcher') return '+' + plural(level, 'очко', 'очки', 'очок') + ' за добу';
   if (s.spec === 'mechanic') return '«Кузня» −' + pct(MECHANIC_TICKS_CUT * level) + ' часу';
   const recipes = BREW_IDS.filter((id) => BREW_LEVEL[id] <= level).map((id) => '«' + WORKSHOP_CATALOG[id].name + '»');
-  return 'варить ' + recipes.join(', ') + (level >= FAST_BREW_LEVEL ? ', удвічі швидше' : '');
+  return (
+    'варить ' +
+    recipes.join(', ') +
+    (level >= FAST_BREW_LEVEL ? ', удвічі швидше' : '') +
+    (cauldron < 1 ? ' (потрібен «Казан алхіміка»)' : '')
+  );
 }
 
 // «до рівня 3 — ще 2 протоколи» (протоколи, завершені в штаті) або «найвищий рівень».
@@ -336,7 +342,15 @@ export function createResearchPanel(deps: ResearchPanelDeps): ResearchPanel {
         const info = document.createElement('span');
         info.className = 'sci-spec';
         info.id = 'sci-spec-' + s.id;
-        info.innerHTML = '<b>' + SPEC_NAMES[s.spec] + ' ' + scientistLevel(s) + '</b> · ' + specEffectText(s) + ' · ' + nextLevelText(s);
+        info.innerHTML =
+          '<b>' +
+          SPEC_NAMES[s.spec] +
+          ' ' +
+          scientistLevel(s) +
+          '</b> · ' +
+          specEffectText(s, party.modules.cauldron) +
+          ' · ' +
+          nextLevelText(s);
         const fire = document.createElement('button');
         fire.id = 'btn-fire-' + s.id;
         fire.textContent = 'Звільнити';

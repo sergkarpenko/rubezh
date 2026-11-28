@@ -67,10 +67,14 @@ describe('п22.7: «Дослідження» — найм і штат', () => {
 
   it('рядок штату: «Алхімік 2 · варить «Стимулятор», «Щит» · до рівня 3 — ще 3 протоколи»', () => {
     party.research.scientists.push(sci('alchemist', LEVEL_THRESHOLDS[1]));
+    party.modules.cauldron = 1;
     createResearchPanel(researchDeps()).render();
     expect(document.getElementById('sci-spec-в1')!.textContent).toBe(
       'Алхімік 2 · варить «Стимулятор», «Щит» · до рівня 3 — ще 3 протоколи'
     );
+    party.modules.cauldron = 0; // аудит PR #553: без казана — примітка
+    createResearchPanel(researchDeps()).render();
+    expect(document.getElementById('sci-spec-в1')!.textContent).toContain('«Щит» (потрібен «Казан алхіміка») ·');
   });
 
   it('ефекти й шлях до рівня — з констант ядра', () => {
@@ -186,7 +190,9 @@ describe('п22.7: «Як грати» — вкладки «Основи» / «Р
     for (const s of ['Шлях бійця', 'Розмір загону', 'Техноманти', 'Модулі бази', 'Казан', 'Виводки', 'Чемпіони']) expect(text).toContain(s);
     expect(text).toContain('+' + STIM_AP_BONUS + ' AP за 0 AP, клавіша S');
     expect(text).toContain('«Тінь» — шанс по ній ×0,8');
-    expect(text).toContain('із загрози 40');
+    expect(text).toContain('із загрози 40 — у 50 % місій зонда (не на штурмі й не в Брамі)');
+    expect(text).toContain('(у «Тіні» шанс по ньому ×0,6)');
+    expect(text).toContain('(демон — лише аурою)');
     help.close();
     help.open();
     expect(growth.classList.contains('hidden')).toBe(true);

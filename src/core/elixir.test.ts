@@ -19,6 +19,7 @@ import {
   workshopTick,
 } from './workshop';
 import { makeSoldier } from './mission';
+import { createParty, deserializeParty, serializeParty } from './save';
 
 const rich = (money = 10_000): EconomyState => ({ ...createEconomy('норма'), money });
 function alchemist(level: number, champion?: number): { econ: EconomyState; r: ResearchState; m: BaseModules } {
@@ -116,5 +117,23 @@ describe('п22.7: «Еліксир чемпіона» — видача, бій, 
     removeLostEquipment(w, [s]);
     expect(w.log.at(-1)).toEqual({ type: 'equipment_lost', soldierId: s.id, items: ['elixir'] });
     expect(w.store.elixir).toBe(1);
+  });
+});
+
+describe('п22.7 (аудит PR #553): сейв з еліксиром', () => {
+  it('еліксир у черзі казана, на складі й при бійці — round-trip сейва без втрат', () => {
+    const p = createParty(7);
+    p.econ.money = 10_000;
+    p.modules.cauldron = 1;
+    p.research.scientists.push({ id: 'в9', name: 'Зінаїда', spec: 'alchemist', done: LEVEL_THRESHOLDS[2] });
+    p.research.hired = 9;
+    p.research.trophies.champion = 1;
+    brewItem(p.econ, p.workshop, p.research, p.modules, 'elixir');
+    p.workshop.store.elixir = 1;
+    equipItem(p.workshop, p.roster.soldiers[0], 'elixir');
+    const back = deserializeParty(serializeParty(p));
+    expect(back.workshop.brew).toEqual([{ id: 'elixir', ticksLeft: 8 }]);
+    expect(back.workshop.equipped[p.roster.soldiers[0].id]?.elixir).toBe(true);
+    expect(back.research.trophies.champion).toBe(0);
   });
 });

@@ -224,7 +224,7 @@ export function createWorkshopPanel(deps: WorkshopPanelDeps): WorkshopPanel {
         def.name +
         ' · ' +
         sciencePrice(def.cost, party.campaign.preset) +
-        ' · трофеї: ' +
+        ' кр. · трофеї: ' +
         trophyListText(def.trophies) +
         ' · ' +
         ticksText(brewTicks(party, id)) +

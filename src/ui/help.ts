@@ -37,7 +37,7 @@ import {
 import { ENEMY_KINDS } from '../core/enemies';
 import { RANK_NAMES } from '../core/career';
 import { BOILER_TICKS_CUT, MECHANIC_TICKS_CUT, MODULES } from '../core/base';
-import { CHAMPION_BROOD_MULT, CHAMPION_HP_MULT, CHAMPION_THREAT, ENEMY_BROODS } from '../core/broods';
+import { CHAMPION_BROOD_MULT, CHAMPION_CHANCE, CHAMPION_HP_MULT, CHAMPION_THREAT, ENEMY_BROODS } from '../core/broods';
 import { el } from './dom';
 
 // Залежності від шару застосунку (main.ts): стан слотів і сховища від панелі
@@ -210,6 +210,7 @@ function growthHtml(): string {
     '<div><h3>Загін</h3><ul>' +
     '<li><b>Шлях бійця</b>: ' +
     RANK_NAMES.map((r) => '«' + r + '»').join(' → ') +
+    // «двох» — словом: тип CAREER_TREE — пара (кортеж із двох), інше число не скомпілюється
     '. Із «Бійця» — роль, із «Сержанта» — одна з двох спеціалізацій ролі, із «Ветерана» — одна з двох навичок; вибір — у вікні після місії, смуга шляху — у картці ростера.</li>' +
     '<li><b>Розмір загону</b>: ' +
     BASE_SQUAD_SIZE +
@@ -224,7 +225,7 @@ function growthHtml(): string {
     '<div><h3>Лабораторія</h3><ul>' +
     '<li><b>Техноманти</b>: дослідник — очки потоку за рівнем, алхімік — варить у казані, механік — «Кузня» −' +
     pctText(MECHANIC_TICKS_CUT) +
-    ' часу за рівень. Рівні ' +
+    ' часу за рівень (діє найкращий механік). Рівні ' +
     LEVEL_THRESHOLDS.slice(1)
       .map((_, i) => i + 2)
       .join(' і ') +
@@ -259,14 +260,18 @@ function growthHtml(): string {
     brood('shadow') +
     ' — шанс по ній ' +
     mult(ENEMY_BROODS.shadow.evade) +
-    '; виводок — за районом посадки, на штурмі — один, у Брамі — усі три.</li>' +
+    ' (демон — лише аурою); виводок — за районом посадки, на штурмі — один, у Брамі — усі три.</li>' +
     '<li><b>Чемпіони</b>: із загрози ' +
     CHAMPION_THREAT +
-    ' — іменний ворог із вінцем ♛, HP ' +
+    ' — у ' +
+    pctText(CHAMPION_CHANCE) +
+    ' місій зонда (не на штурмі й не в Брамі) іменний ворог із вінцем ♛: HP ' +
     mult(CHAMPION_HP_MULT) +
     ', особливість виводку ' +
     mult(CHAMPION_BROOD_MULT) +
-    '; убитий дає трофей «' +
+    ' (у «Тіні» шанс по ньому ' +
+    mult(Math.round((1 - (1 - ENEMY_BROODS.shadow.evade) * CHAMPION_BROOD_MULT) * 100) / 100) +
+    '); убитий дає трофей «' +
     CHAMPION_TROPHY_NAME +
     '» для «' +
     WORKSHOP_CATALOG.elixir.name +

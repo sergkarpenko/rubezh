@@ -58,6 +58,7 @@ import { createModules, moduleMaxLevel, MODULE_IDS, type BaseModules } from './b
 import {
   createWorkshop,
   emptyStore,
+  isBrewItem,
   type ItemId,
   type SoldierEquipment,
   type SoldierItemId,
@@ -774,7 +775,8 @@ function validBrew(q: unknown): boolean {
       (o) =>
         o !== null &&
         typeof o === 'object' &&
-        (o.id === 'stim' || o.id === 'shield') &&
+        typeof o.id === 'string' &&
+        isBrewItem(o.id) && // п22.7 (ADR-0189): і «Еліксир чемпіона» (аудит PR #553)
         Number.isInteger(o.ticksLeft) &&
         o.ticksLeft > 0 &&
         (o.count === undefined || o.count === 2)
