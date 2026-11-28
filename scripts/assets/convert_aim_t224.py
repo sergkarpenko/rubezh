@@ -41,6 +41,12 @@ COLS = 7  # 0–4 — idle, walk1, walk2, fire, death; 5 — постріл уг
 AIM_COL = {'up': 5, 'down': 6}
 GREEN_MAX = 24  # як convert_portraits_t222.py: зелений над max(r, b) на непрозорих пікселях
 ANGLE = math.radians(55)
+# Т.226 (голем і око, ADR-0183): око в чинному атласі вужче за аркуш (щупальця аркуша розкинуті) — масштаб за
+# шириною «стій», інакше кадр пострілу «роздувався» б на ≈ 30 %; голем у «стій» тримає гармату перед собою
+# (передній край «стій» — дуло), тож дуло кадру звіряємо не з краєм, а з колонкою ступнів: попереду на
+# чверть ширини «стій»
+FIT_WIDTH = {'eye'}
+FRONT_FROM_FEET = {'golem'}
 FEET_BAND = 8  # рядки ступнів над BOTTOM
 
 
@@ -82,6 +88,8 @@ def build(name, old):
     idle = old[row * FR : (row + 1) * FR, 0:FR]
     ib = opaque_box(idle)
     scale = (ib[3] - ib[1]) / figs[0].shape[0]  # висота «стій» чинного атласа
+    if name in FIT_WIDTH:
+        scale = min(scale, (ib[2] - ib[0]) / figs[0].shape[1])
     anchor = feet_x(idle[ib[1] : ib[3], ib[0] : ib[2]]) + ib[0]
     frames, info = {}, {'row': row, 'scale': round(scale, 4), 'anchorX': round(anchor, 1), 'idleBox': ib}
     for aim, fig in (('up', figs[1]), ('down', figs[2])):
@@ -92,6 +100,8 @@ def build(name, old):
             raise SystemExit(f'{name} {aim}: зелений відблиск {green} > {GREEN_MAX}')
         m = muzzle(fr, facing, aim, ib)
         front = ib[2] if facing > 0 else ib[0]
+        if name in FRONT_FROM_FEET:
+            front = round(anchor + facing * (ib[2] - ib[0]) / 4)
         if facing * m['x'] <= facing * front:
             raise SystemExit(f'{name} {aim}: дуло {m} не за переднім краєм «стій» (x {front}) — ступня чи корпус, не ствол')
         shoulder = ib[1] + (ib[3] - ib[1]) // 3  # плечі «стій» — третина висоти від маківки
