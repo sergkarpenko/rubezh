@@ -14,7 +14,8 @@ import type { EconomyEvent } from '../core/economy';
 import { projectName, type ResearchEvent } from '../core/research';
 import { equipKeyItem, itemName, type WorkshopEvent } from '../core/workshop';
 import { MODULES, moduleMaxLevel } from '../core/base';
-import { EVAC_AP_COST, type GameEvent, type ShotMode } from '../core/combat';
+import { EVAC_AP_COST, type GameEvent, type ShotMode, type Unit } from '../core/combat';
+import { BROOD_IDS, ENEMY_BROODS, broodCarrier, broodEffect, broodEffectOf, broodName, type BroodId } from '../core/broods';
 import { ENEMY_KINDS, ENEMY_ORDER } from '../core/enemies';
 import { claimHint, type Party } from '../core/save';
 import { el } from './dom';
@@ -411,6 +412,7 @@ export function researchEventText(e: ResearchEvent): { text: string; cls: string
     case 'trophies': {
       // п18.5 (ADR-0157): трофеї виграної місії — типи порядком ENEMY_ORDER, назви з ядра
       const parts = ENEMY_ORDER.filter((k) => (e.gained[k] ?? 0) > 0).map((k) => ENEMY_KINDS[k].name.toLowerCase() + ' +' + e.gained[k]);
+      if ((e.gained.champion ?? 0) > 0) parts.push('чемпіон +' + e.gained.champion); // п22.6 (ADR-0188)
       return { text: '⚑ Трофеї: ' + parts.join(', '), cls: 'win' };
     }
     case 'module': // п22.5 (ADR-0187): модуль бази; рівень — римською, як «Тактична мережа I / II»
@@ -473,4 +475,20 @@ export function workshopEventText(e: WorkshopEvent): { text: string; cls: string
     case 'brewed':
       return { text: '⚑ Казан: зварено «' + itemName(e.id) + '»' + (e.count > 1 ? ' ×' + e.count : '') + ' → склад ✓', cls: 'win' };
   }
+}
+
+// п22.6 (ADR-0188): рядки старту бою про виводок і чемпіона (журнал бою, після рядка «▶ …»).
+export function broodLines(units: readonly Unit[]): string[] {
+  const aliens = units.filter((u) => u.side === 'alien' && u.brood !== undefined);
+  if (aliens.length === 0) return [];
+  const ids = BROOD_IDS.filter((b) => aliens.some((u) => u.brood === b));
+  // особливість — лише в рядку, де в бою є її носій (п22.6: демони — лише вигляд, `broodCarrier`)
+  const named = (b: BroodId): string => {
+    const carrier = aliens.some((u) => u.brood === b && !u.champion && broodCarrier(u));
+    return '«' + ENEMY_BROODS[b].name + '»' + (carrier ? (ids.length === 1 ? ': ' : ' ') + broodEffectOf(b) : '');
+  };
+  const lines = [ids.length === 1 ? '☠ Виводок ' + named(ids[0]) : '☠ Виводки: ' + ids.map(named).join(', ')];
+  const c = aliens.find((u) => u.champion);
+  if (c) lines.push('♛ Чемпіон: ' + c.name + ' — HP ' + c.maxHp + ', «' + broodName(c) + '» ' + broodEffect(c));
+  return lines;
 }

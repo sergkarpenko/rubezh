@@ -470,6 +470,30 @@
       #benemy.compact .em-face {
         display: none;
       }
+      /* п22.6 (ADR-0188): кільце бюста — кольором виводку (BROOD_COLORS, render-core.ts); чемпіон — вінець «♛» над бюстом */
+      #benemy .em-face[data-brood='ash'] {
+        box-shadow: inset 0 0 0 2px #ffb454;
+      }
+      #benemy .em-face[data-brood='rust'] {
+        box-shadow: inset 0 0 0 2px #b87333;
+      }
+      #benemy .em-face[data-brood='shadow'] {
+        box-shadow: inset 0 0 0 2px #8a2be2;
+      }
+      #benemy .em-face[data-champion] {
+        position: relative;
+      }
+      #benemy .em-face[data-champion]::after {
+        content: '♛';
+        position: absolute;
+        top: -9px;
+        left: 50%;
+        transform: translateX(-50%);
+        font-size: 13px;
+        line-height: 1;
+        color: #ffb454;
+        text-shadow: 0 0 2px #0a0a12;
+      }
       /* п21.5 (ADR-0179): «Голем Поршень» поруч із «HP 16/16» не вміщується в рядок (DejaVu Sans) —
          ім'я переноситься на другий рядок, два рядки по 15 px — у висоті бюста 40 px */
       #benemy .em-name {

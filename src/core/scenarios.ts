@@ -66,8 +66,8 @@ export const SCENARIOS: readonly Scenario[] = [
   {
     id: 'assault',
     title: 'Штурм бази',
-    desc: 'Загроза дійшла до порогу — штурм почнеться з першим рухом часу; на полі — усі чотири типи ворогів (29-та доба)',
-    seed: 10,
+    desc: 'Загроза дійшла до порогу — штурм почнеться з першим рухом часу; на полі — усі чотири типи ворогів (39-та доба)',
+    seed: 14, // п22.6 (ADR-0188): виводки змінили партії — до п22.6 сід 10
     preset: 'норма',
     until: (p) => p.campaign.assaultPending === true,
   },
@@ -82,8 +82,8 @@ export const SCENARIOS: readonly Scenario[] = [
   {
     id: 'gate-retry',
     title: 'За крок до перемоги',
-    desc: 'Перша спроба Брами програна, друга доступна — бот на ній перемагає (29-та доба)',
-    seed: 6,
+    desc: 'Перша спроба Брами програна, друга доступна — бот на ній перемагає (27-ма доба)',
+    seed: 16, // п22.6 (ADR-0188): до п22.6 сід 6
     preset: 'норма',
     until: (p) => gateOpen(p) && p.campaign.gateReadyAt !== undefined,
   },
@@ -91,7 +91,7 @@ export const SCENARIOS: readonly Scenario[] = [
     id: 'edge',
     title: 'На межі поразки',
     desc: 'Загроза 90+: третій штурм бази почнеться з першим рухом часу; на 100 — поразка (44-та доба)',
-    seed: 21,
+    seed: 18, // п22.6 (ADR-0188): до п22.6 сід 21
     preset: 'норма',
     until: (p) => p.campaign.threat >= EDGE_THREAT,
   },

@@ -782,10 +782,13 @@ function validBrew(q: unknown): boolean {
   );
 }
 
+// п22.6 (ADR-0188): і необов'язковий `champion` — трофей чемпіона.
 function validTrophies(t: unknown): boolean {
   if (t === null || typeof t !== 'object' || Array.isArray(t)) return false;
   // аудит PR #513: не `in` — він бачить ключі прототипу («constructor», «toString»)
-  return Object.entries(t).every(([k, v]) => (ENEMY_ORDER as readonly string[]).includes(k) && Number.isInteger(v) && (v as number) >= 0);
+  return Object.entries(t).every(
+    ([k, v]) => ((ENEMY_ORDER as readonly string[]).includes(k) || k === 'champion') && Number.isInteger(v) && (v as number) >= 0
+  );
 }
 
 // Відновлює партію з JSON-рядка. rng відновлюється з позиції потоку

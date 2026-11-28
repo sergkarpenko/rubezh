@@ -19,6 +19,7 @@
 
 import { RIFLE, createGame, makeUnit, mulberry32, type Unit, type UnitItems, type UnitRole, type Vec2 } from './combat';
 import { ALIEN_SPAWN, connectedMap, extraEnemies, placeSquad, squadZone, textSeed, type Mission } from './mission';
+import { ASSAULT_BROOD, applyBroods, broodOfRule } from './broods';
 import { ENEMY_MIX_SALT, ENEMY_ORDER, enemyMix, kindsForThreat, makeEnemies, type EnemyKind } from './enemies';
 import { campaignScore } from './campaign';
 import { geoDay } from './geo';
@@ -96,6 +97,7 @@ export function createAssault(party: Party, opts: CampaignBattleOptions): Missio
   const turrets = gateKeyDone(party) ? TURRET_SPAWN.map((_, i) => makeTurret(i)) : [];
   const n = ASSAULT_ENEMIES + extraEnemies(opts.squad.length); // п22.4: +1 за бійця понад три
   const aliens = makeEnemies(enemyMix(kindsForThreat(party.campaign.threat), n, seed), [...ASSAULT_SPAWN, ...ASSAULT_EXTRA_CELLS], seed);
+  applyBroods(aliens, seed, { brood: broodOfRule(ASSAULT_BROOD, seed), threat: party.campaign.threat, champion: false }); // п22.6 (ADR-0188)
   const state = createGame({
     map,
     units: [...opts.squad, ...turrets, ...aliens],
@@ -159,6 +161,7 @@ export function createGateMission(party: Party, opts: CampaignBattleOptions): Mi
   placeSquad(opts.squad);
   const n = GATE_ENEMIES + extraEnemies(opts.squad.length); // п22.4: +1 за бійця понад три
   const aliens = makeEnemies(gateMix(kindsForThreat(party.campaign.threat), seed, n), [...GATE_SPAWN, ...GATE_EXTRA_CELLS], seed);
+  applyBroods(aliens, seed, { brood: 'mixed', threat: party.campaign.threat, champion: false }); // п22.6 (ADR-0188): кожен — свого виводку
   const state = createGame({
     map,
     units: [...opts.squad, ...aliens],

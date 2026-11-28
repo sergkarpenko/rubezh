@@ -137,13 +137,15 @@ describe('П8.5: оркестратор — повна партія (фіксо�
     // поранених 28 → 24, найм 31 → 36, ветеранів 3 → 4, залишок 1895, тотал 5574; поразка — та сама 36-та доба.
     // п22.2 (ADR-0183): гілки «Сержанта» й «Ветерана» в бота — місій 27 → 26, поразок 5 → 4, втрати 38 → 36,
     // найм 36 → 35, ветеранів 4 → 5, залишок 1944, тотал 5636; поразка — та сама 36-та доба.
-    expect(r.score).toEqual({ probesShotDown: 16, missionsWon: 22, veteransAlive: 5, moneyLeft: 1944, total: 5636 });
+    // п22.6 (ADR-0188): виводки й чемпіони — втрати 36 → 37, поранених 24 → 20, ветеранів 5 → 4, залишок 2046, тотал 5612;
+    // місії, штурми й доба поразки ті самі.
+    expect(r.score).toEqual({ probesShotDown: 16, missionsWon: 22, veteransAlive: 4, moneyLeft: 2046, total: 5612 });
     expect([r.launches, r.shotDown]).toEqual([19, 16]);
     expect(r.missionsLaunched).toBe(26);
     expect(r.missionsWon).toBe(22);
     expect(r.missionsLost).toBe(4);
-    expect(r.soldiersLost).toBe(36);
-    expect(r.soldiersWounded).toBe(24);
+    expect(r.soldiersLost).toBe(37);
+    expect(r.soldiersWounded).toBe(20);
     expect(r.hiredTotal).toBe(35);
     expect(r.hireSpent).toBe(35 * hirePrice('норма')); // П11.8: hirePrice «норми» = 100
     expect(r.assaults).toBe(3);
@@ -172,9 +174,10 @@ describe('П8.5: оркестратор — повна партія (фіксо�
     // п20.3 (ШІ ворогів і бот загону з укриттям, ADR-0167): поразка на 55-й, 81 → 79 місій, перемог 74 → 69, загиблих 54 → 69,
     // програно штурмів 1 → 2.
     // п22.2 (гілки «Сержанта» й «Ветерана» в бота, ADR-0183): 79 → 70 місій, перемог 69, загиблих 69 → 35.
-    expect(r.missionsLaunched).toBe(70);
+    // п22.6 (виводки й чемпіони, ADR-0188): 70 → 95 місій, перемог 69, загиблих 35 → 120.
+    expect(r.missionsLaunched).toBe(95);
     expect(r.missionsWon).toBe(69);
-    expect(r.soldiersLost).toBe(35);
+    expect(r.soldiersLost).toBe(120);
     expect(r.assaults).toBe(3);
     expect(r.assaultsLost).toBe(2);
   }, 30_000); // issue #377: явний тайм-аут замість дефолтних 5000 мс (під покриттям повільніше)
@@ -349,26 +352,27 @@ describe('П11.8: політика науки — повний флоу (фік�
     const a = simulateParty(49, 'норма', { policy: SCIENCE_POLICY });
     const b = simulateParty(49, 'норма', { policy: SCIENCE_POLICY });
     expect(JSON.stringify(b)).toBe(JSON.stringify(a));
-    expect(a.outcome).toBe('поразка'); // п18.3: до поразки за загрозою — 72-га доба; п20.3 (ШІ з укриттям) — 58-ма; п22.2 (гілки) — 63-тя
-    expect(a.endDay).toBe(63);
+    expect(a.outcome).toBe('поразка'); // п18.3: до поразки за загрозою — 72-га доба; п20.3 (ШІ з укриттям) — 58-ма; п22.2 (гілки) — 63-тя; п22.6 (виводки) — 58-ма
+    expect(a.endDay).toBe(58);
     expect(a.scientistsHired).toBe(2);
     expect(a.completedProjects).toEqual(['armor']);
-    expect(a.workshopProduced).toBe(9); // п17.4: 7 → 8; п18.3: 7; п20.3: 10; п22.2: 9
+    expect(a.workshopProduced).toBe(10); // п17.4: 7 → 8; п18.3: 7; п20.3: 10; п22.2: 9; п22.6: 10
     // броня загиблих повертається на склад і йде наступним; п16.2 (ADR-0147): менше загиблих — 41 → 32; п16.3 (ролі) — 28;
     // п17.2 (ADR-0149): нові типи ворогів — більше загиблих, броня йде наступним частіше — 50; п17.3 (ШІ за типом) — 57;
     // п17.4 (туман із блокуванням, ADR-0151) — менше загиблих — 26; п18.3 (72 доби, склад за загрозою) — 70;
     // п18.4 (штурми бази, усі три відбито) — 68; п19.6 (бій перехоплювача до кінця) — 63; п20.2 (укриття) — 44;
-    // п20.3 (ШІ ворогів і бот загону з укриттям, ADR-0167) — 64; п22.2 (гілки «Сержанта» й «Ветерана», ADR-0183) — 35
-    expect(a.equippedItems).toBe(35);
+    // п20.3 (ШІ ворогів і бот загону з укриттям, ADR-0167) — 64; п22.2 (гілки «Сержанта» й «Ветерана», ADR-0183) — 35;
+    // п22.6 (виводки й чемпіони, ADR-0188) — 78
+    expect(a.equippedItems).toBe(78);
     expect(a.salarySpent).toBe(140); // 2 × 10 × 7 діб (14 очок, 2 очки на добу)
     expect(a.projectSpent).toBe(96);
-    expect(a.workshopSpent).toBe(540); // п18.3: 7 предметів; п20.3: 10; п22.2: 9
+    expect(a.workshopSpent).toBe(600); // п18.3: 7 предметів; п20.3: 10; п22.2: 9; п22.6: 10
     expect(a.scientistsFired).toBe(0); // лічильник — лише авто-звільнення за невиплату
     expect(Math.max(...a.scientistsByDay)).toBe(2);
     expect(a.scientistsByDay[a.scientistsByDay.length - 1]).toBe(0); // штат звільнено після протоколу
-    expect(a.missionsLaunched).toBe(79); // п16.2: 45 → 44; п16.3: 43; п17.2: 49; п17.3: 50; п17.4: 41; п18.3: 98; п18.4: 95; п19.6: 94; п20.2: 91; п20.3: 79; п22.2: 79
-    expect(a.missionsWon).toBe(75); // п20.3: 68; п22.2: 75
-    expect([a.assaults, a.assaultsLost]).toEqual([3, 1]); // п20.3: програно 2; п22.2: 1
+    expect(a.missionsLaunched).toBe(82); // п16.2: 45 → 44; п16.3: 43; п17.2: 49; п17.3: 50; п17.4: 41; п18.3: 98; п18.4: 95; п19.6: 94; п20.2: 91; п20.3: 79; п22.2: 79; п22.6: 82
+    expect(a.missionsWon).toBe(68); // п20.3: 68; п22.2: 75; п22.6: 68
+    expect([a.assaults, a.assaultsLost]).toEqual([3, 2]); // п20.3: програно 2; п22.2: 1; п22.6: 2
   }, 30_000); // дві повні партії з наукою: під інструментуванням покриття в CI не вкладається в 5 с
 
   it('спіраль зарплата→звільнення (урок П11.2): бідна партія звільняє вчених з кінця штату', () => {
@@ -568,9 +572,10 @@ describe('п18.6: політика кампанії (CAMPAIGN_POLICY)', () => {
     expect(simulateParty(7, 'норма', { policy: CAMPAIGN_POLICY })).toEqual(r);
   }, 30_000);
 
-  it('повна партія, сід 17 «норма»: фінали програно, поразка за загрозою на 38-й добі', () => {
-    const r = simulateParty(17, 'норма', { policy: CAMPAIGN_POLICY });
-    expect([r.outcome, r.endDay, r.gateAttempts, r.assaults]).toEqual(['поразка', 38, 5, 3]); // п22.5: до п22.5 — 44-та, 2 спроби Брами
+  // п22.6 (ADR-0188): сід 17 тепер виграє (31-ша, 4 спроби) — поразка: сід 9 (скан 1–40: поразок 6 — сіди 3, 9, 18, 29, 34, 39)
+  it('повна партія, сід 9 «норма»: фінали програно, поразка за загрозою на 38-й добі', () => {
+    const r = simulateParty(9, 'норма', { policy: CAMPAIGN_POLICY });
+    expect([r.outcome, r.endDay, r.gateAttempts, r.assaults]).toEqual(['поразка', 38, 4, 3]); // п22.5: сід 17 — 38-ма, 5 спроб; до п22.5 — 44-та
   }, 30_000);
 
   it('onTick: виклик на кожен тік, результат той самий, що без спостерігача', () => {

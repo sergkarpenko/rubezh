@@ -375,7 +375,7 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
         ui.hoverPath = null;
         battle.binfo(
           '~' +
-            Math.round(calculateHitChance(sel, ui.fireMode, shotCover(st, sel, u)) * 100) + // п20.2: з укриттям цілі
+            Math.round(calculateHitChance(sel, ui.fireMode, shotCover(st, sel, u), u.evade) * 100) + // п20.2: з укриттям цілі; п22.6: «Тінь»
             '% · повторний тап у цю саму ціль — постріл (' +
             (ui.itemMode === 'precise' ? '«Точний постріл»' : MODE_LABEL[ui.fireMode]) + // аудит PR #501
             ').'

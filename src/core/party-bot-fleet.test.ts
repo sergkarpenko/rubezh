@@ -301,23 +301,25 @@ describe('п19.6: повні партії політики кампанії з �
   // п20.3 (ШІ ворогів з укриттям, ADR-0167; бот кампанії в дозорі, з місця не йде): 21 погоня з 50, перемога на 38-й у другому фіналі
   // п20.6 (бот зі зброєю, ADR-0170): сід 6 купує в «Промзона» — сід 10: «Порт», 13 погонь з 50, перемога на 42-й у першому фіналі
   // п22.2 (гілки «Сержанта» й «Ветерана» в бота, ADR-0183): 12 погонь з 49, перемога — та сама 42-га
-  it('сід 10 «норма»: другий перехоплювач в ангарі «Порт», 11 погонь з 37; перемога на 29-й', () => {
+  // п22.6 (виводки й чемпіони, ADR-0188): 9 погонь з 33, перемога на 27-й з першої спроби
+  it('сід 10 «норма»: другий перехоплювач в ангарі «Порт», 9 погонь з 33; перемога на 27-й', () => {
     let last: Readonly<Party> | null = null;
     const r = simulateParty(10, 'норма', { policy: CAMPAIGN_POLICY, onTick: (p) => (last = p) });
-    expect([r.outcome, r.endDay, r.gateAttempts, r.launches, r.shotDown]).toEqual(['перемога', 29, 4, 37, 32]); // п22.5 (ADR-0187): до п22.5 — 42-га, 1 спроба, 49 і 36
+    expect([r.outcome, r.endDay, r.gateAttempts, r.launches, r.shotDown]).toEqual(['перемога', 27, 1, 33, 28]); // п22.5 (ADR-0187): 29-та, 4 спроби, 37 і 32; до п22.5 — 42-га, 1 спроба, 49 і 36
     const fin = last as unknown as Party;
     expect(fin.intercept.fighters.map((f) => f.id + ':' + f.region)).toEqual(['1:north', '2:west']);
     const starts = fin.intercept.log.filter((e) => e.type === 'intercept_start').map((e) => e.fighter ?? 1);
-    expect([starts.length, starts.filter((id) => id === 2).length]).toEqual([37, 11]);
+    expect([starts.length, starts.filter((id) => id === 2).length]).toEqual([33, 9]);
     expect(fin.intercept.fighters.every((f) => f.status !== 'бій')).toBe(true); // бій не переживає тік
   }, 30_000);
 
-  it('без купівлі (interceptorsUpTo 1) — сід 7 байт-у-байт як політика без поля; бій до кінця — 25 погонь, 20 збито', () => {
+  it('без купівлі (interceptorsUpTo 1) — сід 7 байт-у-байт як політика без поля; бій до кінця — 38 погонь, 29 збито', () => {
     const a = simulateParty(7, 'норма', { policy: { ...CAMPAIGN_POLICY, interceptorsUpTo: 1 } });
     const b = simulateParty(7, 'норма', { policy: { ...CAMPAIGN_POLICY, interceptorsUpTo: undefined } });
     expect(JSON.stringify(a)).toBe(JSON.stringify(b));
     // до п19.6 — 3 і 1: перехоплювач застрягав у «бою»; п20.2 — 41 і 31 → 38 і 29; п20.3 (ШІ ворогів з укриттям) — 43 і 33;
-    // п20.6 (бот зі зброєю, ADR-0170) — 39 і 31; п22.5 (дослідники за рівнем, партія коротша, ADR-0187) — 25 і 20
-    expect([a.launches, a.shotDown]).toEqual([25, 20]);
+    // п20.6 (бот зі зброєю, ADR-0170) — 39 і 31; п22.5 (дослідники за рівнем, партія коротша, ADR-0187) — 25 і 20;
+    // п22.6 (виводки й чемпіони, ADR-0188) — 38 і 29
+    expect([a.launches, a.shotDown]).toEqual([38, 29]);
   }, 30_000);
 });

@@ -19,6 +19,10 @@ import {
   RING_DY,
   RING_RX,
   RING_RY,
+  AURA_ALPHA,
+  CROWN_DY,
+  CROWN_H,
+  CROWN_W,
   BREATH_SCALE,
   DISSOLVE_STRIP,
   HP_BAR_H,
@@ -295,6 +299,8 @@ export interface UnitSpriteView extends UnitSprite {
   breath?: number; // Т.132: «дихання» у спокої, 0..1 (ambient-шар; стискання по висоті від ніг)
   kind?: EnemyKind; // п17.5 (ADR-0152): тип ворога — ряд атласа; без поля — демон
   turret?: boolean; // п18.5 (ADR-0157): турель бази — власний силует кодом замість кадру атласа
+  aura?: string; // п22.6 (ADR-0188): колір виводку — аура під ногами ворога
+  crown?: boolean; // п22.6: чемпіон — вінець кольору виводку над головою
 }
 
 // Поза за станом юніта — чиста функція, детермінована (без RNG, ADR-0003):
@@ -715,11 +721,45 @@ export function drawSoldierSprite(ctx: CanvasRenderingContext2D, u: UnitSpriteVi
   if (u.selected) drawSelectionBrackets(ctx, u.cx, u.cy);
 }
 
+// п22.6 (ADR-0188): аура виводку — напівпрозорий еліпс ширший за кільце, до тіні й кільця.
+function drawAura(ctx: CanvasRenderingContext2D, u: UnitSpriteView): void {
+  if (u.aura === undefined || u.hp <= 0) return;
+  ctx.globalAlpha = AURA_ALPHA;
+  ctx.fillStyle = u.aura;
+  ctx.beginPath();
+  ctx.ellipse(u.cx, u.cy + RING_DY, RING_RX + 6, RING_RY + 4, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalAlpha = 1;
+}
+
+// п22.6: вінець чемпіона — три зубці кольору виводку з темним контуром, над головою фігури.
+function drawCrown(ctx: CanvasRenderingContext2D, u: UnitSpriteView): void {
+  if (!u.crown || u.hp <= 0) return;
+  const x0 = u.cx - CROWN_W / 2;
+  const y0 = u.cy - CROWN_DY;
+  ctx.fillStyle = u.aura ?? '#FFB454';
+  ctx.strokeStyle = '#0A0A12';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(x0, y0 + CROWN_H);
+  ctx.lineTo(x0, y0);
+  ctx.lineTo(x0 + CROWN_W / 4, y0 + CROWN_H / 2);
+  ctx.lineTo(x0 + CROWN_W / 2, y0);
+  ctx.lineTo(x0 + (CROWN_W * 3) / 4, y0 + CROWN_H / 2);
+  ctx.lineTo(x0 + CROWN_W, y0);
+  ctx.lineTo(x0 + CROWN_W, y0 + CROWN_H);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+}
+
 export function drawAlienSprite(ctx: CanvasRenderingContext2D, u: UnitSpriteView): void {
+  drawAura(ctx, u);
   drawFootRing(ctx, u);
   if (unitAtlasImg !== null)
     drawAtlasUnit(ctx, u, ATLAS_ROW[u.kind ?? 'demon'], unitAtlasImg); // п17.5: ряд за типом
   else drawPixelSprite(ctx, (u.frame ?? 0) === 1 ? ALIEN_STEP : ALIEN_STAND, u.cx, u.cy, SPRITE_SCALE);
+  drawCrown(ctx, u);
   if (u.overwatch) drawOverwatchMarker(ctx, u);
   drawHpBadge(ctx, u); // П14.4: смуга HP + число у кутковій зоні (читабельність)
   if (u.selected) drawSelectionBrackets(ctx, u.cx, u.cy);
