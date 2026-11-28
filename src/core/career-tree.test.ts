@@ -298,5 +298,5 @@ describe('п22.2: сейв v5 (ADR-0182 п. 8, EARS 7)', () => {
     expect(q.campaign.threat).toBeGreaterThan(0);
     expect(Object.values(q.campaign.regions).some((r) => r.trust < 100)).toBe(true);
     expect(serializeParty(q, 'T')).toBe(JSON.stringify({ ...JSON.parse(v4), version: SAVE_VERSION }));
-  });
+  }, 30_000); // 30 діб бота з сейвом щотіку: у CI під shuffle — понад 5 с
 });
