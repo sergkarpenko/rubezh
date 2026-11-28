@@ -136,7 +136,7 @@ describe('п22.8: варіння казана (partyBotBrewStep) і видача
     expect(p.workshop.brew).toHaveLength(1);
   });
 
-  it('«Еліксир» — з трофеєм «чемпіон» (без нього — стимулятор); дефіцит рахує склад і порції в казані', () => {
+  it('«Еліксир» — з трофеєм «чемпіон» (без нього — стимулятор); дефіцит рахує склад', () => {
     const p = rich();
     withAlchemist(p, 3);
     p.modules.cauldron = 2;
@@ -234,7 +234,7 @@ describe('п22.8: «Стимулятор» в авто-бою (ai-bot)', () => {
 });
 
 describe('п22.8: повна партія політики кампанії', () => {
-  it('сід 7 «норма»: бот вчить обидві «Тактичні мережі», купує казан II, варить і вживає витратники', () => {
+  it('сід 7 «норма»: бот вчить обидві «Тактичні мережі», купує казан II, варить витратники (вжиток — тест `botTurn` вище)', () => {
     let last: Party | null = null;
     const r = simulateParty(7, 'норма', { policy: CAMPAIGN_POLICY, onTick: (p) => (last = p as Party) });
     const fin = last as unknown as Party;

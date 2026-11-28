@@ -83,12 +83,12 @@ export function squadZone(n: number): Vec2[] {
   return SPAWN_CELLS.slice(0, Math.max(SQUAD_SPAWN.length, n)).map((c) => ({ ...c }));
 }
 
-// Скільки ворогів додає загін з n бійців (0 для трьох і менше).
+// Скільки ворогів додає загін з n бійців (0 для чотирьох і менше).
 // п22.8 (ADR-0190, рішення власника «Б. +1 лише за п'ятого»): четвертий боєць — без надбавки,
-// п'ятий — +1 (до п22.8 — +1 за кожного понад трьох).
-export const EXTRA_ENEMY_FROM = SQUAD_SPAWN.length + 1;
+// п'ятий — +1 (до п22.8 — +1 за кожного понад трьох). EXTRA_ENEMY_FROM — номер бійця, з якого надбавка.
+export const EXTRA_ENEMY_FROM = SQUAD_SPAWN.length + 2;
 export function extraEnemies(n: number): number {
-  return Math.max(0, n - EXTRA_ENEMY_FROM);
+  return Math.max(0, n - EXTRA_ENEMY_FROM + 1);
 }
 
 // Висадити загін: перевірки і позиції — спільні для місії, штурму й фіналу (assault.ts).

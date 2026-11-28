@@ -194,7 +194,7 @@ export const SCIENCE_POLICY: PartyBotPolicy = {
 // п18.6 (ADR-0158): політика кампанії — ланцюжок до Брами. Три техноманти (п20.6 — п'ять, CAMPAIGN_SCIENTISTS; 90 точок ланцюжка ≈ 30 діб;
 // точки копляться в пулі, поки бракує трофеїв), броня першою, далі ключові протоколи за порядком;
 // цех — броня і «Пробивний заряд» з резервом трофеїв; дозор у кожному бою (рішення власника
-// «А. У кожному бою»); фінал — коли в загоні троє зі званням від «Боєць». Виміри —
+// «А. У кожному бою»); фінал — коли в загоні троє зі званням від «Боєць» (п22.8 — і по одному за місце понад три). Виміри —
 // docs/reports/p18.6-balance.md.
 // п19.6 (ADR-0159 п. 17): перехоплювачів політики кампанії — перший і ще один із «Кузні».
 export const CAMPAIGN_INTERCEPTORS = 2;
@@ -650,12 +650,11 @@ function brewCovered(eq: SoldierEquipment | undefined, id: BrewItemId): boolean 
 }
 
 // п22.8: дефіцит витратника казана — бійці загону (перші botSquadSize боєготових), яких він не
-// покриває, мінус склад і варіння в казані (порції — count).
+// покриває, мінус склад (варять лише з порожнім казаном — порцій у черзі немає).
 function brewDeficit(party: Party, policy: PartyBotPolicy, id: BrewItemId): number {
   const squad = readySoldiers(party.roster).slice(0, botSquadSize(party, policy));
   const lacking = squad.filter((s) => !brewCovered(party.workshop.equipped[s.id], id)).length;
-  const brewing = party.workshop.brew.filter((o) => o.id === id).reduce((n, o) => n + (o.count ?? 1), 0);
-  return Math.max(0, lacking - party.workshop.store[id] - brewing);
+  return Math.max(0, lacking - party.workshop.store[id]);
 }
 
 // п22.8 (ADR-0190): варіння — казан порожній, перший рецепт політики, який штат може зварити, з
