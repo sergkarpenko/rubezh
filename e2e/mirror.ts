@@ -30,7 +30,6 @@ import {
 } from '../src/core/combat';
 import { DemoSteps, aliensTurn } from '../src/core/ai-bot';
 import { awaitingBranch, awaitingRole, newCareer, RANK_NAMES, rankOf, type CareerBranch, type SoldierRole } from '../src/core/career';
-import { branchDialogTitle } from '../src/ui/roles';
 import { campaignTick, type DifficultyPreset } from '../src/core/campaign';
 import { advanceTime, detectedProbes, geoClock, missionTargets, type Probe } from '../src/core/geo';
 import { findPath, pathApCost, sideVisibleCells } from '../src/core/map';
@@ -184,7 +183,19 @@ export class CoreMirror {
       if (awaitingRole(c))
         return { id: s.id, title: 'Підвищення: «' + c.callsign + '» — ' + RANK_NAMES[rankOf(c.xp)] + '. Оберіть роль', tier: 'role' };
       const tier = awaitingBranch(c);
-      if (tier !== null) return { id: s.id, title: branchDialogTitle(c, tier), tier };
+      // заголовок — літералом, а не функцією сторінки (аудит PR #549): дзеркало не звіряє сторінку з її ж кодом
+      if (tier !== null)
+        return {
+          id: s.id,
+          title:
+            'Підвищення: «' +
+            c.callsign +
+            '» — ' +
+            RANK_NAMES[tier === 'veteran' ? 3 : 2] +
+            '. Оберіть ' +
+            (tier === 'veteran' ? 'навичку' : 'спеціалізацію'),
+          tier,
+        };
     }
     return null;
   }
