@@ -5,6 +5,7 @@
 // Без графіки (іконки зброї — п20.5). Дані ядра → HTML; DOM чіпає лише контролер нижче.
 import type { Unit } from '../core/combat';
 import { missionSquad } from '../core/squad';
+import { squadSize } from '../core/research';
 import { equipItem, equipWeapon, itemName, unequipItem } from '../core/workshop';
 import { FORGE_WEAPONS, WEAPONS, type WeaponId } from '../core/weapons';
 import type { Party } from '../core/save';
@@ -114,7 +115,7 @@ export function createLoadout(deps: LoadoutDeps): Loadout {
     const party = deps.getParty();
     let squad: Unit[];
     try {
-      squad = missionSquad(party.roster);
+      squad = missionSquad(party.roster, squadSize(party.research)); // п22.4: ті самі, що підуть у бій
     } catch (e) {
       deps.journal('✗ ' + (e as Error).message, 'lose');
       close();

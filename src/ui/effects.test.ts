@@ -27,6 +27,7 @@ import {
   opticsEffect,
   pct,
   plainProjectEffect,
+  squadProjectEffect,
   projectEffect,
 } from './effects';
 
@@ -93,6 +94,15 @@ describe('effects: диспетчери каталогів', () => {
       expect(itemEffect(id, soldier(10, 0.6))).not.toBe('');
     }
     expect(itemEffect('armor')).toBe(armorEffect(undefined));
+  });
+});
+
+describe('п22.4: ефект «Тактичної мережі» (рішення власника «Як у кандидатах»)', () => {
+  it('I — «Загін — 4 бійці замість 3», II — «Загін — 5 бійців замість 4»; однаково в обох текстах картки', () => {
+    expect(squadProjectEffect('tac-net-1')).toBe('Загін — 4 бійці замість 3');
+    expect(squadProjectEffect('tac-net-2')).toBe('Загін — 5 бійців замість 4');
+    expect(plainProjectEffect('tac-net-2')).toBe('Загін — 5 бійців замість 4');
+    expect(projectEffect('tac-net-1')).toBe('Загін — 4 бійці замість 3');
   });
 });
 

@@ -24,7 +24,7 @@
 import { RESCUER_EXTRA_USES, type GameState, type Unit, type UnitRole } from './combat';
 import { hirePrice, spend, type EconomyState } from './economy';
 import { type DifficultyPreset, DEFAULT_PRESET, DIFFICULTY_MULTIPLIERS } from './campaign';
-import { makeSoldier, SQUAD_SPAWN } from './mission';
+import { makeSoldier, SPAWN_CELLS, SQUAD_SPAWN } from './mission';
 import {
   applyBranchBonus,
   awaitingBranch,
@@ -137,9 +137,10 @@ export function fireSoldier(roster: Roster, id: string): Unit {
 // (поранені в лікарні не рахуються — ADR-0021). size обмежений зоною
 // висадки; солдатів може виявитись менше, ніж просили, якщо ростер порідів
 // (валідний загін — від 1 солдата).
+// п22.4 (ADR-0186): size — до п'яти (SPAWN_CELLS); виклики гри передають squadSize(research).
 export function missionSquad(roster: Roster, size: number = SQUAD_SPAWN.length): Unit[] {
-  if (!Number.isInteger(size) || size < 1 || size > SQUAD_SPAWN.length) {
-    throw new Error('Розмір загону: ціле число від 1 до ' + SQUAD_SPAWN.length);
+  if (!Number.isInteger(size) || size < 1 || size > SPAWN_CELLS.length) {
+    throw new Error('Розмір загону: ціле число від 1 до ' + SPAWN_CELLS.length);
   }
   const squad = readySoldiers(roster).slice(0, size);
   if (squad.length === 0) {

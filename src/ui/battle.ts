@@ -7,7 +7,8 @@
 // застосунок (замість глобальних let — мітигація плану рефакторингу);
 // обробники вводу (модуль input) працюють із тим самим об'єктом.
 
-import { SQUAD_SPAWN, completeMission, createMission, missionOutcome, type Mission } from '../core/mission';
+import { completeMission, createMission, missionOutcome, squadZone, type Mission } from '../core/mission';
+import { squadSize } from '../core/research';
 import { awardTrophies } from '../core/research';
 import { completeAssault, completeGate, createAssault, createGateMission, type CampaignBattleOptions } from '../core/assault';
 import { applyMissionResult, deployRoles, missionSquad } from '../core/squad';
@@ -523,7 +524,10 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
 
     ctx.setLineDash([3, 3]);
     ctx.strokeStyle = 'rgba(110,168,255,0.5)';
-    for (const p of SQUAD_SPAWN) ctx.strokeRect(p.x * BCELL + 2, p.y * BCELL + 2, BCELL - 5, BCELL - 5);
+    // п22.4 (ADR-0186): рамки — зона висадки цього бою (загін 4–5 — більше клітинок); штурм без евакуації —
+    // за числом бійців (турелі не рахуються)
+    const zone = st.evacZone ?? squadZone(st.units.filter((u) => u.side === 'player' && u.turret !== true).length);
+    for (const p of zone) ctx.strokeRect(p.x * BCELL + 2, p.y * BCELL + 2, BCELL - 5, BCELL - 5);
     ctx.setLineDash([]);
 
     // Т.44: зона ходу вибраного оперативника — у хід гравця, поки не зведено ні постріл,
@@ -837,7 +841,7 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
     deps.cancelGeoAnim(); // П6.9: геосцену сховано — пульс радара скидаємо
     const party = deps.getParty();
     try {
-      const squad = missionSquad(party.roster);
+      const squad = missionSquad(party.roster, squadSize(party.research)); // п22.4: 3–5 за протоколами
       // П11.4 (ADR-0058): аптечка/граната при солдатах — у стан бою.
       // п16.4 (ADR-0147): ролі загону — копія з ростеру (без ролей — бій байт-у-байт як до п16.3)
       const roles = deployRoles(party.roster, squad);

@@ -81,7 +81,7 @@ describe('squad: підбір загону', () => {
   it('невалідний розмір або порожній ростер → помилка', () => {
     const r = createRoster();
     expect(() => missionSquad(r, 0)).toThrow();
-    expect(() => missionSquad(r, 4)).toThrow();
+    expect(() => missionSquad(r, 6)).toThrow(); // п22.4: межа — 5
     expect(() => missionSquad({ soldiers: [], hired: 0, hospital: {}, careers: {} })).toThrow();
   });
 });
@@ -520,8 +520,8 @@ describe('squad: Т.14 — пул імен, межі розміру, причи�
   it('розмір ростеру і загону: відмова називає причину; загін з одного — припустимий', () => {
     expect(() => createRoster(0)).toThrow('Розмір ростеру має бути цілим числом від 1');
     const r = createRoster();
-    for (const size of [0, 1.5, 4]) {
-      expect(() => missionSquad(r, size)).toThrow('Розмір загону: ціле число від 1 до 3');
+    for (const size of [0, 1.5, 6]) {
+      expect(() => missionSquad(r, size)).toThrow('Розмір загону: ціле число від 1 до 5');
     }
     expect(missionSquad(r, 1).map((s) => s.id)).toEqual(['s1']);
   });

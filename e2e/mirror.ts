@@ -34,7 +34,7 @@ import { campaignTick, type DifficultyPreset } from '../src/core/campaign';
 import { advanceTime, detectedProbes, geoClock, missionTargets, type Probe } from '../src/core/geo';
 import { findPath, pathApCost, sideVisibleCells } from '../src/core/map';
 import { completeMission, createMission, missionOutcome, type Mission, type MissionOutcome } from '../src/core/mission';
-import { awardTrophies, radarRange } from '../src/core/research';
+import { awardTrophies, radarRange, squadSize } from '../src/core/research';
 import { createParty, type Party } from '../src/core/save';
 import { applyMissionResult, chooseBranch, chooseRole, deployRoles, hospitalTick, missionSquad, readySoldiers } from '../src/core/squad';
 import { deployConsumables } from '../src/core/workshop';
@@ -207,7 +207,7 @@ export class CoreMirror {
   // --- бій: ті самі виклики ядра, що в src/ui/battle.ts та src/ui/input.ts ---
 
   launch(probeId: string): Mission {
-    const squad = missionSquad(this.party.roster);
+    const squad = missionSquad(this.party.roster, squadSize(this.party.research)); // п22.4: як start у src/ui/battle.ts
     const roles = deployRoles(this.party.roster, squad); // п16.4: як launch у src/ui/battle.ts
     this.mission = createMission(this.party.geo, probeId, {
       squad,

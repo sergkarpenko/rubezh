@@ -24,6 +24,7 @@ import {
 import {
   KEY_PROJECTS,
   WEAPON_PROJECTS,
+  SQUAD_PROJECTS,
   PROJECTS,
   PROJECT_CATALOG,
   awardTrophies,
@@ -31,6 +32,7 @@ import {
   hireScientist,
   radarRange,
   researchTick,
+  squadSize,
   startProject,
 } from './core/research';
 import { ENEMY_ORDER, enemyKind, kindsForThreat, makeEnemy } from './core/enemies';
@@ -90,7 +92,7 @@ import {
 const RUN = { seed: 20261111, numRuns: 100 };
 // п18.2: генератор бере й ключові протоколи та «Пробивний заряд» (у панелях до п18.5 сховані).
 // п20.4 (ADR-0168): і протоколи та виріб зброї; видача зброї — equipItem (делегує equipWeapon)
-const ALL_PROJECTS = [...PROJECTS, ...KEY_PROJECTS, ...WEAPON_PROJECTS];
+const ALL_PROJECTS = [...PROJECTS, ...KEY_PROJECTS, ...WEAPON_PROJECTS, ...SQUAD_PROJECTS]; // п22.4: і «Тактична мережа»
 const ALL_ITEMS: ItemId[] = [...ITEM_IDS, 'breach-charge', ...FORGE_WEAPONS];
 const CHOICES = ['далека', 'середня', 'впритул', 'відступ'] as const;
 
@@ -157,7 +159,7 @@ function tick(p: Party): void {
 // п18.4: бій кампанії від запуску до підсумку — у тому порядку, що й src/ui/battle.ts (finish).
 // п18.6 (ADR-0158): hold — бот тримає позицію в дозорі, як політика кампанії бота партії.
 function campaignBattle(p: Party, op: 'штурм' | 'брама', hold = false): void {
-  const squad = missionSquad(p.roster);
+  const squad = missionSquad(p.roster, squadSize(p.research)); // п22.4: як start у src/ui/battle.ts
   const roles = deployRoles(p.roster, squad) ?? undefined;
   const opts = { squad, items: deployConsumables(p.workshop, squad), ...(roles ? { roles } : {}) };
   const m = op === 'штурм' ? createAssault(p, opts) : createGateMission(p, opts);
@@ -188,7 +190,7 @@ function assault(p: Party): boolean {
 // Місія від запуску до підсумку — у тому порядку, що й src/ui/battle.ts; бій веде авто-бій.
 function mission(p: Party, i: number): void {
   const targets = missionTargets(p.geo);
-  const squad = missionSquad(p.roster);
+  const squad = missionSquad(p.roster, squadSize(p.research)); // п22.4: як start у src/ui/battle.ts
   const roles = deployRoles(p.roster, squad) ?? undefined; // п16.3: ролі загону — як у бота партії
   const m = createMission(p.geo, targets[i % (targets.length || 1)]?.id ?? '', {
     squad,

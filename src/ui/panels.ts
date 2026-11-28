@@ -26,7 +26,7 @@ import {
 import { REGION_IDS, REGION_NAMES, totalTrust } from '../core/regions';
 import { drawRegionsLayer, renderRegions } from './regions-panel';
 import { dailyAllowance, hirePrice, missionBonus } from '../core/economy';
-import { radarRange } from '../core/research';
+import { radarRange, squadSize } from '../core/research';
 import type { Vec2 } from '../core/combat';
 // П11.6 (ADR-0058): екіпірування в картці солдата ростеру — броня/оптика
 // (постійні), аптечка/граната (витратні); дії — лише на геосцені.
@@ -40,7 +40,6 @@ import {
   type SoldierItemId,
 } from '../core/workshop';
 import { missionRisksBankruptcy, readySoldiers } from '../core/squad';
-import { SQUAD_SPAWN } from '../core/mission';
 import type { Party } from '../core/save';
 import { gunModuleEffect, itemEffect } from './effects';
 import {
@@ -395,9 +394,9 @@ export function createPanels(deps: PanelsDeps): Panels {
         // Т.24 (рішення власника за Т.20): у бій іде останній боєготовий загін, а на
         // вербування не вистачає — рядок-попередження; запуск лишається в один клік.
         // Умова — та сама, що в боті партії (missionRisksBankruptcy, ADR-0089);
-        // розмір загону — як у missionSquad за замовчуванням (SQUAD_SPAWN).
+        // розмір загону — як у запуску бою (squadSize, п22.4: 3–5 за протоколами).
         const preset = party.campaign.preset;
-        if (!btn.disabled && missionRisksBankruptcy(party.econ, party.roster, SQUAD_SPAWN.length, preset)) {
+        if (!btn.disabled && missionRisksBankruptcy(party.econ, party.roster, squadSize(party.research), preset)) {
           const warn = document.createElement('div');
           warn.className = 'mission-warn';
           warn.textContent =

@@ -14,7 +14,17 @@ import {
   type ShotMode,
   type Unit,
 } from '../core/combat';
-import { BASE_LAB_SLOTS, MAX_LAB_SLOTS, RADAR_RANGE_BASE, RADAR_RANGE_WIDE, type KeyProjectId, type ProjectId } from '../core/research';
+import {
+  BASE_LAB_SLOTS,
+  BASE_SQUAD_SIZE,
+  MAX_LAB_SLOTS,
+  RADAR_RANGE_BASE,
+  RADAR_RANGE_WIDE,
+  SQUAD_PROJECTS,
+  type KeyProjectId,
+  type ProjectId,
+  type SquadProjectId,
+} from '../core/research';
 import { ARMOR_MAX_HP_BONUS, OPTICS_ACCURACY_BONUS, type ItemId } from '../core/workshop';
 import { GUN_MODULE_DAMAGE } from '../core/intercept';
 import { isForgeWeapon, WEAPONS, type ForgeWeaponId, type WeaponId } from '../core/weapons';
@@ -72,6 +82,13 @@ export function gunModuleEffect(): string {
   return '+' + GUN_MODULE_DAMAGE + ' пошкодження за раунд повітряного бою';
 }
 
+// п22.4 (ADR-0186, рішення власника «Як у кандидатах»): «Загін — 4 бійці замість 3» /
+// «Загін — 5 бійців замість 4» — числа з порядку SQUAD_PROJECTS і BASE_SQUAD_SIZE.
+export function squadProjectEffect(id: SquadProjectId): string {
+  const n = BASE_SQUAD_SIZE + SQUAD_PROJECTS.findIndex((p) => p.id === id) + 1;
+  return 'Загін — ' + n + (n < 5 ? ' бійці' : ' бійців') + ' замість ' + (n - 1);
+}
+
 // Ефект протоколу дослідження ДО старту; soldier — звідки береться «зараз»
 // для покращень ростеру (перший оперативник загону; без ростеру — без «→»).
 export function projectEffect(id: ProjectId, soldier?: Unit): string {
@@ -88,6 +105,9 @@ export function projectEffect(id: ProjectId, soldier?: Unit): string {
       return labSlotsEffect();
     case 'gun-module':
       return gunModuleEffect();
+    case 'tac-net-1':
+    case 'tac-net-2':
+      return squadProjectEffect(id);
     default:
       return keyProjectEffect(id);
   }
@@ -160,6 +180,9 @@ export function plainProjectEffect(id: ProjectId, soldier?: Unit): string {
       return NUM_NOM[MAX_LAB_SLOTS] + ' протоколи в роботі одночасно замість ' + NUM_GEN[BASE_LAB_SLOTS];
     case 'gun-module':
       return 'Перехоплювач завдає на ' + GUN_MODULE_DAMAGE + ' пошкодження більше за раунд';
+    case 'tac-net-1':
+    case 'tac-net-2':
+      return squadProjectEffect(id);
     default:
       return keyProjectEffect(id);
   }

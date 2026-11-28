@@ -24,6 +24,7 @@ import {
   HIRE_SCIENTIST_PRICE,
   KEY_PROJECTS,
   WEAPON_PROJECTS,
+  SQUAD_PROJECTS,
   PROJECTS,
   PROJECT_CATALOG,
   SCIENTIST_SALARY,
@@ -226,7 +227,8 @@ export function createResearchPanel(deps: ResearchPanelDeps): ResearchPanel {
     const ref = party.roster.soldiers[0];
     // п18.5 (ADR-0157): після звичайних — три ключові протоколи ланцюжка до Брами Розриву (до п18.5 сховано)
     // п20.4 (ADR-0168): за ними — протоколи зброї (свій на кожну, виріб у «Кузні»)
-    const all = [...PROJECTS, ...KEY_PROJECTS, ...WEAPON_PROJECTS];
+    // п22.4 (ADR-0186): останнім блоком — протоколи розміру загону «Тактична мережа I / II»
+    const all = [...PROJECTS, ...KEY_PROJECTS, ...WEAPON_PROJECTS, ...SQUAD_PROJECTS];
     for (let i = 0; i < all.length; i++) {
       const def = all[i];
       if (i === PROJECTS.length) {
@@ -239,6 +241,12 @@ export function createResearchPanel(deps: ResearchPanelDeps): ResearchPanel {
         const sep = document.createElement('div');
         sep.className = 'sci-row sci-key-head';
         sep.innerHTML = '<b>Зброя</b> — виріб у «Кузні», видача — у вікні спорядження перед вильотом';
+        catalog.appendChild(sep);
+      }
+      if (i === PROJECTS.length + KEY_PROJECTS.length + WEAPON_PROJECTS.length) {
+        const sep = document.createElement('div');
+        sep.className = 'sci-row sci-key-head';
+        sep.innerHTML = '<b>Загін</b> — більше бійців у місії, на штурмі бази й біля Брами';
         catalog.appendChild(sep);
       }
       const active = r.active.find((p) => p.id === def.id);

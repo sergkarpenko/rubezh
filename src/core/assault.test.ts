@@ -24,7 +24,7 @@ import {
   makeTurret,
 } from './assault';
 import { ENEMY_ORDER, kindsForThreat, enemyKind, enemyName } from './enemies';
-import { SQUAD_SPAWN, connectedMap, missionOutcome, textSeed } from './mission';
+import { SQUAD_SPAWN, connectedMap, makeSoldier, missionOutcome, textSeed } from './mission';
 import { DEFAULT_PARTY_POLICY, partyBotAssaultStep, partyBotGateStep } from './party-bot';
 import { applyMissionResult, readySoldiers } from './squad';
 import { createParty, deserializeParty, serializeParty, type Party } from './save';
@@ -142,12 +142,13 @@ describe('п18.4: бій штурму (createAssault)', () => {
     expect(m.state.map.width).toBe(20);
   });
 
-  it('загін: порожній, понад 3 чи з чужим юнітом — відмова (як createMission)', () => {
+  it('загін: порожній, понад 5 (п22.4) чи з чужим юнітом — відмова (як createMission)', () => {
     const p = createParty(42);
     atThreat(p, 60);
     tick(p);
     expect(() => createAssault(p, { squad: [] })).toThrow('Загін не може бути порожнім');
-    expect(() => createAssault(p, { squad: squadOf(p, 4) })).toThrow('Максимум 3 оперативників');
+    const six = ['a', 'b', 'c', 'd', 'e', 'f'].map((id) => makeSoldier(id, id));
+    expect(() => createAssault(p, { squad: six })).toThrow('Максимум 5 оперативників');
     const alien = makeUnit({ id: 'x', side: 'alien', pos: { x: 0, y: 0 } });
     const [s1] = squadOf(p, 1);
     const pos = { ...s1.pos };

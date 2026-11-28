@@ -62,6 +62,42 @@ export const ALIEN_SPAWN: Vec2[] = [
 
 export const ALIENS_PER_KIND: Record<ProbeKind, number> = { розвідник: 2, збирач: 3 };
 
+// п22.4 (ADR-0186): загін до п'яти — зона висадки = перші n клітинок SPAWN_CELLS (не менше
+// трьох SQUAD_SPAWN). Четверта й п'ята — у тій самій чистій зоні 3 × 3 навколо (2, 2), яку
+// makeTestMap звільняє, а keepClear береже від низьких перешкод: вони завжди досяжні з (2, 2),
+// тож connectedMap перевіряє ті самі цілі і мапи тих самих сідів не міняються; (3, 3) і (3, 1)
+// не беремо — там турелі штурму (assault.ts).
+export const SPAWN_CELLS: readonly Vec2[] = [...SQUAD_SPAWN, { x: 1, y: 2 }, { x: 2, y: 1 }];
+// Надбавка ворогів (рішення власника «А. За бійців у загоні», «Усюди»): +1 за кожного
+// бійця понад три; клітинки — у чистій зоні 3 × 3 навколо (17, 2) після ALIEN_SPAWN.
+export const ALIEN_EXTRA_CELLS: readonly Vec2[] = [
+  { x: 16, y: 3 },
+  { x: 18, y: 2 },
+  { x: 18, y: 3 },
+];
+
+// Зона висадки й евакуації загону з n бійців: n ≤ 3 — SQUAD_SPAWN (як до п22.4).
+export function squadZone(n: number): Vec2[] {
+  return SPAWN_CELLS.slice(0, Math.max(SQUAD_SPAWN.length, n)).map((c) => ({ ...c }));
+}
+
+// Скільки ворогів додає загін з n бійців (0 для трьох і менше).
+export function extraEnemies(n: number): number {
+  return Math.max(0, n - SQUAD_SPAWN.length);
+}
+
+// Висадити загін: перевірки і позиції — спільні для місії, штурму й фіналу (assault.ts).
+export function placeSquad(squad: Unit[]): void {
+  if (squad.length === 0) throw new Error('Загін не може бути порожнім');
+  if (squad.length > SPAWN_CELLS.length) throw new Error('Максимум ' + SPAWN_CELLS.length + ' оперативників у зоні висадки');
+  for (const u of squad) {
+    if (u.side !== 'player') throw new Error('У загоні можуть бути лише оперативники гравця: ' + u.id);
+  }
+  squad.forEach((u, i) => {
+    u.pos = { ...SPAWN_CELLS[i] };
+  });
+}
+
 // Детермінований сід місії (FNV-1a) з ідентифікатора НЛО та хвилини запуску.
 // Один і той самий хід гри → та сама мапа і той самий бойовий RNG.
 // Т.218: id зонда в коді — `probeN` (до Т.218 — `ufoN`); сід бойовища рахується зі старого вигляду
@@ -192,7 +228,7 @@ export interface Mission {
 }
 
 export interface CreateMissionOptions {
-  squad?: Unit[]; // свій загін (максимум 3 — розмір зони висадки)
+  squad?: Unit[]; // свій загін (максимум 5 — SPAWN_CELLS, п22.4)
   items?: Record<string, UnitItems>; // П11.4 (ADR-0058): витратники загону в бою (deployConsumables)
   roles?: Record<string, UnitRole>; // п16.3 (ADR-0147 п. 11): ролі загону в бою (deployRoles, squad.ts)
   // п18.3 (ADR-0153 п. 14): загроза кампанії — склад ворогів; без поля — 0 (лише демони).
@@ -215,27 +251,21 @@ export function createMission(geo: GeoState, probeId: string, opts: CreateMissio
   const rng = mulberry32(seed);
 
   const squad = opts.squad ?? [makeSoldier('s1', 'Іван'), makeSoldier('s2', 'Олена'), makeSoldier('s3', 'Тарас')];
-  if (squad.length === 0) throw new Error('Загін не може бути порожнім');
-  if (squad.length > SQUAD_SPAWN.length) throw new Error('Максимум ' + SQUAD_SPAWN.length + ' оперативників у зоні висадки');
-  for (const u of squad) {
-    if (u.side !== 'player') throw new Error('У загині можуть бути лише оперативники гравця: ' + u.id);
-  }
-  squad.forEach((u, i) => {
-    u.pos = { ...SQUAD_SPAWN[i] };
-  });
+  placeSquad(squad);
 
   // п17.2 (ADR-0149 п. 8, 12): склад окремим генератором від сіду місії — бойовий RNG
   // не зсувається; п18.3 (ADR-0153 п. 14): доступні типи — за загрозою, а не за добою.
   // П12.6 (ADR-0064): «демон Розриву», не «прибулець».
-  const n = ALIENS_PER_KIND[probe.kind];
-  const aliens: Unit[] = makeEnemies(enemyMix(kindsForThreat(opts.threat ?? 0), n, seed), ALIEN_SPAWN, seed);
+  // п22.4 (ADR-0186): +1 ворог за бійця понад три; загін до трьох — склад байт-у-байт.
+  const n = ALIENS_PER_KIND[probe.kind] + extraEnemies(squad.length);
+  const aliens: Unit[] = makeEnemies(enemyMix(kindsForThreat(opts.threat ?? 0), n, seed), [...ALIEN_SPAWN, ...ALIEN_EXTRA_CELLS], seed);
 
   const state = createGame({
     map,
     units: [...squad, ...aliens],
     rng,
     items: opts.items,
-    evacZone: SQUAD_SPAWN,
+    evacZone: squadZone(squad.length), // п22.4: зона — за розміром загону
     roles: opts.roles,
     cover: true, // п20.2 (ADR-0165 п. 10): укриття в шансі — бої місій
   });
