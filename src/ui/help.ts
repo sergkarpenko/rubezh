@@ -38,6 +38,7 @@ import { ENEMY_KINDS } from '../core/enemies';
 import { RANK_NAMES } from '../core/career';
 import { BOILER_TICKS_CUT, MECHANIC_TICKS_CUT, MODULES } from '../core/base';
 import { CHAMPION_BROOD_MULT, CHAMPION_CHANCE, CHAMPION_HP_MULT, CHAMPION_THREAT, ENEMY_BROODS } from '../core/broods';
+import { EXTRA_ENEMY_FROM } from '../core/mission';
 import { el } from './dom';
 
 // Залежності від шару застосунку (main.ts): стан слотів і сховища від панелі
@@ -218,9 +219,10 @@ function growthHtml(): string {
     SQUAD_PROJECTS.map((p) => '«' + p.name + '»').join(' і ') +
     ' — до ' +
     MAX_SQUAD_SIZE +
-    '; за кожного бійця понад ' +
-    BASE_SQUAD_SIZE +
-    ' — ще один ворог у бою.</li>' +
+    // п22.8 (ADR-0190): надбавка — лише з п'ятим (EXTRA_ENEMY_FROM)
+    '; із ' +
+    EXTRA_ENEMY_FROM +
+    '-м бійцем — ще один ворог у бою.</li>' +
     '</ul></div>' +
     '<div><h3>Лабораторія</h3><ul>' +
     '<li><b>Техноманти</b>: дослідник — очки потоку за рівнем, алхімік — варить у казані, механік — «Кузня» −' +
@@ -243,7 +245,7 @@ function growthHtml(): string {
     '» II — дві порції за раз.</li>' +
     '<li><b>Казан</b>: «Стимулятор» (+' +
     STIM_AP_BONUS +
-    ' AP за 0 AP, клавіша S), «Щит» (поглинає перше влучання), «' +
+    ' AP за 0 AP, клавіша S; «Авто» вживає сам), «Щит» (поглинає перше влучання), «' +
     WORKSHOP_CATALOG.elixir.name +
     '» (обидва); кредити й трофеї, видача — у вікні перед вильотом.</li>' +
     '</ul></div>' +

@@ -70,8 +70,8 @@ export const ALIENS_PER_KIND: Record<ProbeKind, number> = { розвідник: 
 // тож connectedMap перевіряє ті самі цілі і мапи тих самих сідів не міняються; (3, 3) і (3, 1)
 // не беремо — там турелі штурму (assault.ts).
 export const SPAWN_CELLS: readonly Vec2[] = [...SQUAD_SPAWN, { x: 1, y: 2 }, { x: 2, y: 1 }];
-// Надбавка ворогів (рішення власника «А. За бійців у загоні», «Усюди»): +1 за кожного
-// бійця понад три; клітинки — у чистій зоні 3 × 3 навколо (17, 2) після ALIEN_SPAWN.
+// Надбавка ворогів (рішення власника «А. За бійців у загоні», «Усюди»; п22.8 — «Б. +1 лише за
+// п'ятого»); клітинки — у чистій зоні 3 × 3 навколо (17, 2) після ALIEN_SPAWN.
 export const ALIEN_EXTRA_CELLS: readonly Vec2[] = [
   { x: 16, y: 3 },
   { x: 18, y: 2 },
@@ -83,9 +83,12 @@ export function squadZone(n: number): Vec2[] {
   return SPAWN_CELLS.slice(0, Math.max(SQUAD_SPAWN.length, n)).map((c) => ({ ...c }));
 }
 
-// Скільки ворогів додає загін з n бійців (0 для трьох і менше).
+// Скільки ворогів додає загін з n бійців (0 для чотирьох і менше).
+// п22.8 (ADR-0190, рішення власника «Б. +1 лише за п'ятого»): четвертий боєць — без надбавки,
+// п'ятий — +1 (до п22.8 — +1 за кожного понад трьох). EXTRA_ENEMY_FROM — номер бійця, з якого надбавка.
+export const EXTRA_ENEMY_FROM = SQUAD_SPAWN.length + 2;
 export function extraEnemies(n: number): number {
-  return Math.max(0, n - SQUAD_SPAWN.length);
+  return Math.max(0, n - EXTRA_ENEMY_FROM + 1);
 }
 
 // Висадити загін: перевірки і позиції — спільні для місії, штурму й фіналу (assault.ts).
@@ -258,7 +261,7 @@ export function createMission(geo: GeoState, probeId: string, opts: CreateMissio
   // п17.2 (ADR-0149 п. 8, 12): склад окремим генератором від сіду місії — бойовий RNG
   // не зсувається; п18.3 (ADR-0153 п. 14): доступні типи — за загрозою, а не за добою.
   // П12.6 (ADR-0064): «демон Розриву», не «прибулець».
-  // п22.4 (ADR-0186): +1 ворог за бійця понад три; загін до трьох — склад байт-у-байт.
+  // п22.4 (ADR-0186): надбавка за великий загін (п22.8 — +1 лише за п'ятого); загін до чотирьох — склад байт-у-байт.
   const n = ALIENS_PER_KIND[probe.kind] + extraEnemies(squad.length);
   const aliens: Unit[] = makeEnemies(enemyMix(kindsForThreat(opts.threat ?? 0), n, seed), [...ALIEN_SPAWN, ...ALIEN_EXTRA_CELLS], seed);
   // п22.6 (ADR-0188): виводок — за районом посадки, чемпіон — з порогу загрози; окремий генератор.

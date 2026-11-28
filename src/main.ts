@@ -755,6 +755,9 @@ function startScenario(id: ScenarioId): boolean {
   geoAnim.cancel();
   party = adoptParty(p);
   renderAll();
+  // п22.8 (ADR-0190): перший показ підказки (hints) на рендері міняє партію — контрольна точка сценарію
+  // після рендера, інакше вихід без змін питав би «Незбережені зміни» (віха «Перед Брамою» з погонею)
+  checkpoint = serializeParty(party);
   const sc = SCENARIOS.find((s) => s.id === id);
   journal(
     `Сценарій «${sc?.title ?? id}» (сід ${sc?.seed ?? '?'}, складність «${p.campaign.preset}», доба ${geoDay(p.geo)}): партію до віхи довів бот.`

@@ -31,6 +31,8 @@ import {
   roleActionBlock,
   setOverwatch,
   useDash,
+  useStim,
+  stimBlock,
   OVERWATCH_AP_COST,
   MOVE_AP_PER_CELL,
   EVAC_AP_COST,
@@ -212,6 +214,12 @@ function soldierStep(state: GameState, u: Unit, evac?: EvacPolicy, hold: HoldMod
     !(state.cover && !mode && movedThisTurn(state, u))
   ) {
     useDash(state, u.id);
+    return true;
+  }
+  // п22.8 (ADR-0190): «Стимулятор» (і «Еліксир») — так само, як «Ривок»: ворога видно, а на найкращий
+  // режим зброї AP бракує; після ривка — теж. Без витратника бій байт-у-байт як до п22.8.
+  if (u.ap < bestModeAp(u.weapon) && stimBlock(state, u.id) === undefined && !(state.cover && !mode && movedThisTurn(state, u))) {
+    useStim(state, u.id);
     return true;
   }
   if (mode) {
