@@ -85,9 +85,14 @@ export interface UnitItems {
 // в стані бою — як витратники ADR-0058: кар'єри ростеру ядро бою не знає,
 // копію на місію готує squad.ts (`deployRoles`).
 export type BattleRole = 'assault' | 'sniper' | 'medic';
+// п22.2 (ADR-0182 п. 1, 7; ADR-0183): спеціалізація «Сержанта» — підсилення дії ролі
+// (каталог і назви — `CAREER_TREE` у career.ts; «Панцир» — броня в записі юніта ростеру).
+export type RoleSpec = 'breakthrough' | 'plating' | 'hunter' | 'sentinel' | 'surgeon' | 'rescuer';
 export interface UnitRole {
   role: BattleRole;
   used: boolean; // дію ролі використано в цьому бою
+  spec?: RoleSpec; // п22.2: без поля — дія ролі як до п22.2
+  extraUses?: number; // п22.2: «Рятівник» — ще стільки використань до `used`
 }
 
 export type GameEvent =
@@ -163,6 +168,11 @@ export const PRECISE_AP_COST = 6; // «Точний постріл»: 6 AP
 export const PRECISE_DAMAGE_MULT = 1.5; // шкода ×1,5 з округленням униз
 export const FIELD_AID_AP_COST = 2; // «Польова допомога»: 2 AP
 export const FIELD_AID_AMOUNT = HEAL_AMOUNT; // +3 HP за правилом гелю, без гелю
+// п22.2 (ADR-0183, рішення власника «А. Підсилення дії ролі»): спеціалізації «Сержанта» в бою.
+export const BREAKTHROUGH_DASH_BONUS = 6; // «Прорив»: «Ривок» +6 AP замість +4
+export const HUNTER_DAMAGE_MULT = 2; // «Мисливець»: «Точний постріл» — шкода ×2 замість ×1,5
+export const SURGEON_AID_AMOUNT = 5; // «Хірург»: «Польова допомога» +5 HP замість +3
+export const RESCUER_EXTRA_USES = 1; // «Рятівник»: «Польова допомога» двічі за бій
 
 export const EVAC_AP_COST = 2; // П15.2 (ADR-0075): «Евакуація» — 2 AP (кандидат, probe П15.5)
 
@@ -583,7 +593,9 @@ function fireReaction(state: GameState, shooter: Unit, target: Unit): void {
   const profile = shooter.weapon.modes.snap;
   // п20.2: укриття цілі — множником після штрафу дозору; без укриття — вираз як до п20.2
   const cover = shotCover(state, shooter, target);
-  const base = shooter.firingAccuracy * profile.accuracyMod * OVERWATCH_ACC_PENALTY;
+  // п22.2: «Вартовий» стріляє з дозору без штрафу точності; решта — як досі
+  const penalty = state.roles?.[shooter.id]?.spec === 'sentinel' ? 1 : OVERWATCH_ACC_PENALTY;
+  const base = shooter.firingAccuracy * profile.accuracyMod * penalty;
   const chance = clampChance(cover === undefined ? base : base * COVER_MULT[cover]);
   fireOnce(state, shooter, target, shooter.weapon.only?.[0] ?? 'snap', chance);
 }
@@ -834,6 +846,12 @@ function requireRole(state: GameState, unitId: string, role: BattleRole): { u: U
   return { u: getUnit(state, unitId), slot: state.roles![unitId] };
 }
 
+// Використання дії ролі: «Рятівник» спершу витрачає додаткові використання (п22.2).
+function spendRole(slot: UnitRole): void {
+  if (slot.extraUses !== undefined && slot.extraUses > 0) slot.extraUses -= 1;
+  else slot.used = true;
+}
+
 export interface DashResult {
   ap: number; // AP юніта після ривка
 }
@@ -842,9 +860,10 @@ export interface DashResult {
 // AP може перевищити максимум — наступний хід відновлює maxAp (endTurn).
 export function useDash(state: GameState, unitId: string): DashResult {
   const { u, slot } = requireRole(state, unitId, 'assault');
-  u.ap += DASH_AP_BONUS;
-  slot.used = true;
-  state.log.push({ type: 'dash', unitId: u.id, bonus: DASH_AP_BONUS });
+  const bonus = slot.spec === 'breakthrough' ? BREAKTHROUGH_DASH_BONUS : DASH_AP_BONUS;
+  u.ap += bonus;
+  spendRole(slot);
+  state.log.push({ type: 'dash', unitId: u.id, bonus });
   return { ap: u.ap };
 }
 
@@ -857,10 +876,11 @@ export function preciseShot(state: GameState, shooterId: string, targetId: strin
   const t = getUnit(state, targetId);
   assertCanFire(state, s, t, 'aimed');
   s.ap -= PRECISE_AP_COST;
-  slot.used = true;
+  spendRole(slot);
+  const mult = slot.spec === 'hunter' ? HUNTER_DAMAGE_MULT : PRECISE_DAMAGE_MULT;
   state.log.push({ type: 'precise_shot', shooterId: s.id, targetId: t.id });
   const pierce = useCharge(state, s, t);
-  const shot = fireOnce(state, s, t, 'aimed', calculateHitChance(s, 'aimed', shotCover(state, s, t)), PRECISE_DAMAGE_MULT, pierce);
+  const shot = fireOnce(state, s, t, 'aimed', calculateHitChance(s, 'aimed', shotCover(state, s, t)), mult, pierce);
   return { shots: [shot], targetDown: !t.alive };
 }
 
@@ -874,10 +894,10 @@ export function fieldAid(state: GameState, medicId: string, targetId: string): H
   if (t.side !== u.side) throw new Error('Допомога можлива лише своїм');
   if (distance(u.pos, t.pos) > 1) throw new Error('Ціль поза межами допомоги (відстань ≤1)');
   if (t.hp >= t.maxHp) throw new Error('Ціль не поранена');
-  const healed = Math.min(FIELD_AID_AMOUNT, t.maxHp - t.hp);
+  const healed = Math.min(slot.spec === 'surgeon' ? SURGEON_AID_AMOUNT : FIELD_AID_AMOUNT, t.maxHp - t.hp);
   t.hp += healed;
   u.ap -= FIELD_AID_AP_COST;
-  slot.used = true;
+  spendRole(slot);
   state.log.push({ type: 'field_aid', unitId: u.id, targetId: t.id, healed });
   return { healed };
 }

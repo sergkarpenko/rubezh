@@ -10,7 +10,7 @@
 import { tabStop } from './ui/tab-stop';
 import { advanceTime, geoDay } from './core/geo';
 import { SCENARIOS, scenarioParty, type ScenarioId } from './core/scenarios';
-import { chooseRole, hireSoldier, hospitalTick, isBankrupt, readySoldiers } from './core/squad';
+import { assignBotBranches, chooseRole, hireSoldier, hospitalTick, isBankrupt, readySoldiers } from './core/squad';
 import { completeAssault } from './core/assault';
 import { awaitingRole, type SoldierRole } from './core/career';
 import { roleDialogHtml } from './ui/roles';
@@ -707,6 +707,7 @@ function promptRole(): void {
   for (const b of box.querySelectorAll<HTMLButtonElement>('.role-pick')) {
     b.onclick = () => {
       chooseRole(p.roster, s.id, b.dataset.role as SoldierRole);
+      assignBotBranches(p.roster); // п22.2 (ADR-0183): гілки до вікна п22.3 — за правилом бота
       box.classList.add('hidden');
       box.innerHTML = '';
       renderAll(); // наступне підвищення (якщо є) відкривається тут

@@ -205,7 +205,7 @@ describe('сейв (ADR-0165 п. 13; EARS 8): v4 з необов’язкови�
     equipWeapon(p.workshop, s, 'shotgun');
     const json = serializeParty(p);
     expect(JSON.parse(json).version).toBe(SAVE_VERSION);
-    expect(SAVE_VERSION).toBe(4);
+    expect(SAVE_VERSION).toBe(5); // п22.2: v5 — гілки кар'єри, поля зброї — ті самі
     const q = deserializeParty(json);
     expect(q.research.completed).toContain('shotgun');
     expect(q.workshop.store.shotgun).toBe(1);

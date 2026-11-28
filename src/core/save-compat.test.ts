@@ -254,7 +254,7 @@ describe('п16.2: сейв v1 мігрує у v2 (ADR-0147 п. 15, EARS 10)', ()
     const p = deserializeParty(v1With((soldiers) => void (soldiers[0].kills = 5)));
     const json = serializeParty(p, 'T');
     expect(JSON.parse(json).version).toBe(SAVE_VERSION);
-    expect(SAVE_VERSION).toBe(4); // п18.3: v3 — загроза; п19.2: v4 — довіра регіонів
+    expect(SAVE_VERSION).toBe(5); // п18.3: v3 — загроза; п19.2: v4 — довіра регіонів; п22.2: v5 — гілки кар'єри
     const again = deserializeParty(json);
     expect(serializeParty(again, 'T')).toBe(json);
     expect(again.roster.soldiers[0].maxHp).toBe(12); // прирости не застосовуються вдруге
