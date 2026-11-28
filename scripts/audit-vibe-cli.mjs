@@ -9,6 +9,8 @@
 //                                                  знахідки з дослівною цитатою, коментар у PR «Аудит Vibe».
 // Відповідь без блоку JSON — один повтор у тій самій сесії (`--resume <session_id>` з export.json, ADR-0105):
 // «поверни лише блок JSON» з короткими межами RETRY; і після повтору без JSON — «Аудиту не було».
+// Тимчасовий збій API (429, 5xx, обрив мережі) на першому прогоні — пауза RERUN.pauseMs і один повторний прогін
+// з нуля в теці rerun/ (кандидат процесу 176, ADR-0191); 401–403 і білінг не повторюються.
 // Збій, 402 чи відповідь без JSON — коментар «Аудиту не було» з причиною і код 0: чек мерж не блокує.
 // Знахідку, цитати якої немає ні у файлі на голові PR, ні в дифі, скрипт відкидає і називає в коментарі.
 // Vibe 3.1.3: `--disabled-tools write_file/edit` діє лише разом з `--auto-approve`, а `bash` (потрібен для пошуку
@@ -32,6 +34,20 @@ const SEVERITIES = ['висока', 'середня', 'низька'];
 export const LIMITS = { turns: 60, price: 2, seconds: 1500 };
 /** Межі повтору «лише блок JSON» (ADR-0105): два ходи — на випадок, якщо модель ще раз викличе інструмент; ціна — не стеля. */
 export const RETRY = { turns: 2, price: 0.5, seconds: 300 };
+/**
+ * Повторний прогін після тимчасового збою API (ADR-0191): пауза перед ним і найдовший перший прогін, після якого
+ * повтор ще вкладається в тайм-аут джоби (45 хв: перший ≤ 10 хв + другий ≤ LIMITS.seconds + 2 хв).
+ */
+export const RERUN = { pauseMs: 60000, maxFirstSeconds: 600 };
+
+/** Тимчасовий збій API Mistral за текстом помилки: 429, 5xx, обрив мережі; 401–403 і білінг — ні (ADR-0191). */
+export function isTransient(text) {
+  const s = String(text ?? '');
+  if (/\b40[123]\b|billing|unauthori[sz]ed|forbidden|invalid api key/i.test(s)) return false;
+  return /\b(429|50[0234])\b|rate.?limit|too many requests|bad gateway|service unavailable|gateway time-?out|overloaded|ECONNRESET|ETIMEDOUT|socket hang up/i.test(
+    s
+  );
+}
 
 export const cut = (s, n) => (String(s).length > n ? `${String(s).slice(0, n)}…` : String(s));
 
@@ -350,7 +366,7 @@ function runVibe(spawn, args, { env, outDir, seconds }) {
  * Аудит одного PR. git читає з оригінального checkout (вміст файлів — з об'єктів коміту голови PR,
  * а не з робочої теки: bash Vibe міг би її змінити); spawn запускає Vibe. Будь-який збій — коментар.
  */
-export async function audit({ env, fetch, log, spawn = spawnSync, gitRun, wait = sleep }) {
+export async function audit({ env, fetch, log, spawn = spawnSync, gitRun, wait = sleep, now = Date.now }) {
   const repo = env.GITHUB_REPOSITORY;
   const token = env.GITHUB_TOKEN;
   const key = env.MISTRAL_API_KEY;
@@ -388,14 +404,39 @@ export async function audit({ env, fetch, log, spawn = spawnSync, gitRun, wait =
     writeFileSync(promptFile, buildPrompt({ number, title: pr.title, body: pr.body ?? '', base, head: headSha, names }));
     const childEnv = { ...env };
     for (const k of ['GITHUB_TOKEN', 'ACTIONS_RUNTIME_TOKEN', 'ACTIONS_ID_TOKEN_REQUEST_TOKEN']) delete childEnv[k];
-    const args = vibeArgs({ work: env.VIBE_WORKDIR, promptFile, outDir, model, thinking: env.VIBE_THINKING || 'medium' });
+    const vibeOpts = { work: env.VIBE_WORKDIR, promptFile, model, thinking: env.VIBE_THINKING || 'medium' };
+    const args = vibeArgs({ ...vibeOpts, outDir });
     log(`audit-vibe-cli: vibe ${args.join(' ')}`);
-    const { run, code, exp } = runVibe(spawn, args, { env: childEnv, outDir, seconds: LIMITS.seconds });
+    const t0 = now();
+    let { run, code, exp } = runVibe(spawn, args, { env: childEnv, outDir, seconds: LIMITS.seconds });
     usage = usageLine(exp, code);
     log(`audit-vibe-cli: ${redact(usage, [key])}\nstderr: ${cut(redact(run.stderr ?? '', [key]), 3000)}`);
+    const failReason = () => exp?.error?.message ?? (run.error?.message || cut(redact(run.stderr ?? '', [key]), 400) || `код ${code}`);
+    let firstFail = '';
     if (code !== 0 && code !== 3) {
-      const reason = exp?.error?.message ?? (run.error?.message || cut(redact(run.stderr ?? '', [key]), 400) || `код ${code}`);
-      return await say({ ok: false, reason: `Vibe CLI завершився з кодом ${code}: ${reason}`, usage });
+      const text = `${exp?.error?.message ?? ''}\n${run.error?.message ?? ''}\n${redact(run.stderr ?? '', [key])}`;
+      const elapsed = (now() - t0) / 1000;
+      if (isTransient(text) && elapsed <= RERUN.maxFirstSeconds) {
+        // кандидат процесу 176 (ADR-0191): 429 / 5xx / обрив — пауза і один прогін з нуля, у своїй теці
+        firstFail = `код ${code}: ${failReason()}`;
+        log(
+          `audit-vibe-cli: тимчасовий збій API (${cut(redact(firstFail, [key]), 300)}) — пауза ${RERUN.pauseMs / 1000} с і повторний прогін`
+        );
+        await wait(RERUN.pauseMs);
+        const rerunDir = join(outDir, 'rerun');
+        mkdirSync(rerunDir, { recursive: true });
+        const args2 = vibeArgs({ ...vibeOpts, outDir: rerunDir });
+        log(`audit-vibe-cli: повторний прогін — vibe ${args2.join(' ')}`);
+        ({ run, code, exp } = runVibe(spawn, args2, { env: childEnv, outDir: rerunDir, seconds: LIMITS.seconds }));
+        usage = `${usage}; повторний прогін: ${usageLine(exp, code)}`;
+        log(
+          `audit-vibe-cli: повторний прогін — ${redact(usageLine(exp, code), [key])}\nstderr: ${cut(redact(run.stderr ?? '', [key]), 3000)}`
+        );
+      }
+    }
+    if (code !== 0 && code !== 3) {
+      const again = firstFail ? ` (повторний прогін після тимчасового збою; перший — ${firstFail})` : '';
+      return await say({ ok: false, reason: `Vibe CLI завершився з кодом ${code}: ${failReason()}${again}`, usage });
     }
     let parsed = extractFindings(run.stdout);
     const first = code === 3 ? `Vibe зупинився на ліміті (${exp?.outcome ?? exp?.stop_reason ?? 'код 3'}) до відповіді` : parsed.reason;
@@ -518,9 +559,10 @@ async function selfTest() {
   writeFileSync(join(tmp, 'dir', 'f.ts'), 'export const answer = 43; // змінено «аудитором»\n');
   const outDir = join(tmp, 'out');
   mkdirSync(outDir);
-  const pass = async ({ stdout, status = 0, exportJson, envExtra = {}, crash = false, retry, stderr, flaky = 0 }) => {
+  const pass = async ({ stdout, status = 0, exportJson, envExtra = {}, crash = false, retry, stderr, flaky = 0, rerun, clock }) => {
     const posted = [];
     posted.calls = [];
+    posted.waits = [];
     const fetch = async (url, o = {}) => {
       if (crash && url.includes('/pulls/')) return { ok: false, status: 500, text: async () => 'boom' };
       if (flaky > 0 && url.includes('/pulls/')) {
@@ -535,10 +577,12 @@ async function selfTest() {
     };
     rmSync(join(outDir, 'export.json'), { force: true });
     rmSync(join(outDir, 'retry'), { recursive: true, force: true });
+    rmSync(join(outDir, 'rerun'), { recursive: true, force: true });
     const spawn = (cmd, args, opts) => {
       posted.calls.push(args);
       const again = args.includes('--resume');
-      const r = again ? (retry ?? { stdout: '', status: 1 }) : { stdout, status, exportJson, stderr };
+      const second = !again && posted.calls.filter((a) => !a.includes('--resume')).length === 2;
+      const r = again ? (retry ?? { stdout: '', status: 1 }) : second && rerun ? rerun : { stdout, status, exportJson, stderr };
       const od = args[args.indexOf('--output-dir') + 1];
       if (r.exportJson !== undefined) writeFileSync(join(od, 'export.json'), r.exportJson);
       if (opts.env.GITHUB_TOKEN) return { status: 2, stdout: '', stderr: 'TOKEN-LEAK' };
@@ -555,7 +599,9 @@ async function selfTest() {
       ...envExtra,
     };
     posted.logs = [];
-    await audit({ env, fetch, log: (m) => posted.logs.push(String(m)), spawn, wait: async () => {} });
+    const t = clock ? [...clock] : null;
+    const now = t ? () => t.shift() ?? 0 : () => 0;
+    await audit({ env, fetch, log: (m) => posted.logs.push(String(m)), spawn, wait: async (ms) => posted.waits.push(ms), now });
     return posted;
   };
   const good =
@@ -573,6 +619,47 @@ async function selfTest() {
     exportJson: '{"outcome":"infrastructure_failure","error":{"message":"402 billing_wallet_depleted"}}',
   });
   check('прохід: код 2 — «Аудиту не було» з причиною', r[0].includes('**Аудиту не було:** Vibe CLI завершився з кодом 2: 402 billing'));
+  check('402 — не тимчасовий збій: повторного прогону немає', r.calls.length === 1 && !r.waits.includes(RERUN.pauseMs));
+  // кандидат процесу 176 (ADR-0191): тимчасовий збій API — пауза і один повторний прогін
+  check(
+    'isTransient: 429, 502, 503, обрив — так; 401, 402, білінг, код 1 без тексту — ні',
+    ['429 Too Many Requests', 'HTTP 502 Bad Gateway', 'service unavailable', 'read ECONNRESET', 'Rate limit exceeded'].every(isTransient) &&
+      !['402 billing_wallet_depleted', '401 Unauthorized', 'rate limit: 402 billing', 'код 1', ''].some(isTransient)
+  );
+  const err429 = '{"outcome":"infrastructure_failure","error":{"message":"429 Too Many Requests"}}';
+  r = await pass({ stdout: '', status: 2, exportJson: err429, rerun: { stdout: good, exportJson: '{"outcome":"finished","usage":{}}' } });
+  const rr = r.calls[1] ?? [];
+  check(
+    'повторний прогін: 429 — пауза 60 с, другий прогін з нуля в rerun/ (без --resume), знахідки з нього',
+    r.calls.length === 2 &&
+      !rr.includes('--resume') &&
+      rr[rr.indexOf('--output-dir') + 1] === join(outDir, 'rerun') &&
+      r.waits.includes(RERUN.pauseMs) &&
+      r[0].includes('answer = 42') &&
+      r[0].includes('повторний прогін')
+  );
+  check('повторний прогін: export.json першого прогону лишився у своїй теці', readFileSync(join(outDir, 'export.json'), 'utf8') === err429);
+  r = await pass({
+    stdout: '',
+    status: 2,
+    stderr: 'HTTP 502 Bad Gateway',
+    rerun: { stdout: '', status: 2, stderr: '503 Service Unavailable' },
+  });
+  check(
+    'повторний прогін: і він зі збоєм — «Аудиту не було» з обома причинами, третього прогону немає',
+    r.calls.length === 2 && r[0].includes('503 Service Unavailable') && r[0].includes('перший — код 2: HTTP 502')
+  );
+  r = await pass({
+    stdout: '',
+    status: 2,
+    stderr: '429 Too Many Requests',
+    clock: [0, (RERUN.maxFirstSeconds + 1) * 1000],
+    rerun: { stdout: good },
+  });
+  check(
+    'повторний прогін: перший прогін довший за 10 хв — повтору немає (тайм-аут джоби)',
+    r.calls.length === 1 && r[0].includes('Аудиту не було')
+  );
   r = await pass({ stdout: 'Stopped: turn_limit', status: 3, exportJson: '{"stop_reason":"turn_limit"' });
   check(
     'прохід: ліміт і зіпсований export.json — коментар про ліміт',
