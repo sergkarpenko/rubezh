@@ -107,6 +107,7 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
   // п17.2 (ADR-0149 п. 15): як у меню — «впритул», «лише прицільний», броня.
   function enemyInfo(a: Unit): string {
     const w = a.weapon;
+    const bonus = a.dmgBonus ?? 0; // п22.6 (ADR-0188): «Попіл» — шкода з бонусом, як рядок «Шкода» меню
     const only = w.only?.length === 1 && w.range > 1 ? ', лише ' + MODE_LABEL[w.only[0]] : '';
     const armor = a.armor !== undefined && a.armor > 0 ? ' Броня ' + a.armor + ': −' + a.armor + ' від влучання.' : '';
     return (
@@ -118,9 +119,9 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
       ' · зброя «' +
       w.name +
       '» (пошкодження ' +
-      w.damage[0] +
+      (w.damage[0] + bonus) +
       '–' +
-      w.damage[1] +
+      (w.damage[1] + bonus) +
       (w.range === 1 ? ', впритул' : ', дальність ' + w.range) +
       only +
       ').' +

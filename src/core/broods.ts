@@ -9,7 +9,7 @@
 // загрози: HP ×CHAMPION_HP_MULT (угору), особливість виводку посилена, убитий — трофей `champion`.
 
 import { mulberry32, type Unit } from './combat';
-import { ENEMY_KINDS, ENEMY_ORDER, enemyKind } from './enemies';
+import { ENEMY_KINDS, enemyKind, type EnemyKind } from './enemies';
 import type { RegionId } from './regions';
 
 export type BroodId = 'ash' | 'rust' | 'shadow';
@@ -50,6 +50,10 @@ export const CHAMPION_BROOD_MULT = 2; // особливість виводку �
 
 // Пул імен чемпіонів — `docs/design/setting.md` (рішення власника п22.6); як пул ворогів (ADR-0179):
 // вигадані, без реальних імен, не закінчуються на «-а»/«-я» (рід — за назвою типу).
+// «Найсильніший тип складу» (рішення власника) — за HP і бронею: голем (16, броня 2), демон (10)… —
+// порядок вибору чемпіона: голем, око, гончак, демон (око — дальність 16, сильніше за демона й гончака в бою).
+export const CHAMPION_ORDER: readonly EnemyKind[] = ['golem', 'eye', 'hound', 'demon'];
+
 export const CHAMPION_NAMES: readonly string[] = ['Скверн', 'Ґрімхар', 'Вельзаг', 'Тарґул', 'Шракс', 'Морох', 'Кзарт', 'Ульґар'];
 
 function broodRng(seed: number): () => number {
@@ -103,21 +107,31 @@ export function applyBroods(aliens: Unit[], seed: number, opts: BroodOptions): U
   const rng = broodRng(seed ^ 0x51ed27);
   let champ: Unit | undefined;
   if (opts.champion && opts.threat >= CHAMPION_THREAT && aliens.length > 0 && rng() < CHAMPION_CHANCE) {
-    // найсильніший тип складу (останній за ENEMY_ORDER), перший такий
-    const top = Math.max(...aliens.map((u) => ENEMY_ORDER.indexOf(enemyKind(u))));
-    champ = aliens.find((u) => ENEMY_ORDER.indexOf(enemyKind(u)) === top);
+    // найсильніший тип складу (CHAMPION_ORDER), перший такий за порядком ворогів
+    const top = CHAMPION_ORDER.find((k) => aliens.some((u) => enemyKind(u) === k)) as EnemyKind;
+    champ = aliens.find((u) => enemyKind(u) === top);
   }
   if (champ) champ.champion = true;
-  for (const u of aliens) {
-    const b = opts.brood === 'mixed' ? pick(rng) : opts.brood;
-    applyOne(u, b, u === champ ? CHAMPION_BROOD_MULT : broodCarrier(u) ? 1 : 0);
-  }
+  const broods = opts.brood === 'mixed' ? mixedBroods(aliens, rng) : aliens.map(() => opts.brood as BroodId);
+  aliens.forEach((u, i) => applyOne(u, broods[i], u === champ ? CHAMPION_BROOD_MULT : broodCarrier(u) ? 1 : 0));
   if (champ) {
     champ.maxHp = Math.ceil(champ.maxHp * CHAMPION_HP_MULT);
     champ.hp = champ.maxHp;
     champ.name = ENEMY_KINDS[enemyKind(champ)].name + ' ' + CHAMPION_NAMES[championNameIndex(seed)];
   }
   return champ;
+}
+
+// Брама (рішення власника «у фіналі зустрічаються всі три»): перші три носії особливості (`broodCarrier`) —
+// три виводки в порядку перестановки за сідом, решта ворогів — випадково; носіїв менше трьох — по черзі перестановки.
+function mixedBroods(aliens: readonly Unit[], rng: () => number): BroodId[] {
+  const perm = [...BROOD_IDS];
+  for (let i = perm.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [perm[i], perm[j]] = [perm[j], perm[i]];
+  }
+  let k = 0;
+  return aliens.map((u) => (broodCarrier(u) && k < perm.length ? perm[k++] : pick(rng)));
 }
 
 // Ім'я чемпіона — ціла арифметика від сіду без RNG (як `enemyNameStart`, ADR-0179 п. 2).

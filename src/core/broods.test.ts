@@ -9,6 +9,7 @@ import {
   CHAMPION_BROOD_MULT,
   CHAMPION_HP_MULT,
   CHAMPION_NAMES,
+  CHAMPION_ORDER,
   CHAMPION_THREAT,
   ENEMY_BROODS,
   REGION_BROODS,
@@ -180,8 +181,8 @@ describe('п22.6: чемпіон', () => {
     expect(champs).toHaveLength(1);
     const c = champs[0];
     const kind = enemyKind(c);
-    const top = Math.max(...aliens.map((u) => ['demon', 'hound', 'golem', 'eye'].indexOf(enemyKind(u))));
-    expect(['demon', 'hound', 'golem', 'eye'].indexOf(kind)).toBe(top);
+    expect(kind).toBe(CHAMPION_ORDER.find((k) => aliens.some((u) => enemyKind(u) === k))); // голем, око, гончак, демон
+    expect(aliens.find((u) => enemyKind(u) === kind)).toBe(c); // перший такий
     expect(c.maxHp).toBe(Math.ceil(ENEMY_KINDS[kind].hp * CHAMPION_HP_MULT));
     expect(c.hp).toBe(c.maxHp);
     expect(c.dmgBonus).toBe(ENEMY_BROODS.ash.damage * CHAMPION_BROOD_MULT);
@@ -266,6 +267,24 @@ describe('п22.6: штурм бази і Брама', () => {
     expect(BROOD_IDS).toContain(b);
     for (const a of aliens) expect(a.brood).toBe(b);
     expect(aliens.some((u) => u.champion)).toBe(false);
+  });
+
+  it('Брама: усі три виводки з особливістю на кожному сіді (носії — перестановка), склад 6 і 4', () => {
+    for (let seed = 0; seed < 300; seed++) {
+      for (const kinds of [
+        ['demon', 'hound', 'golem', 'eye', 'hound', 'eye'],
+        ['demon', 'hound', 'golem', 'eye'],
+      ] as const) {
+        const al = makeEnemies(
+          [...kinds],
+          kinds.map((_, i) => ({ x: i, y: 0 })),
+          seed
+        );
+        applyBroods(al, seed, { brood: 'mixed', threat: 70, champion: false });
+        const carried = new Set(al.filter((u) => broodCarrier(u)).map((u) => u.brood));
+        expect(carried.size).toBe(3);
+      }
+    }
   });
 
   it('Брама: кожен ворог свого виводку за сідом, без чемпіона', () => {

@@ -24,7 +24,7 @@ function ctxRec(): { ctx: CanvasRenderingContext2D; calls: Call[]; sets: { p: st
   return { ctx: ctx as unknown as CanvasRenderingContext2D, calls, sets };
 }
 
-const base = { side: 'alien' as const, cx: 100, cy: 100, r: 8, hp: 10, maxHp: 10 };
+const base = { side: 'alien' as const, cx: 100, cy: 100, r: 8, hp: 10, maxHp: 10, selected: false, overwatch: false };
 
 beforeEach(() => initPixelSprites(make));
 

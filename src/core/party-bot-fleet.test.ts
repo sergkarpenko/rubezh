@@ -313,13 +313,13 @@ describe('п19.6: повні партії політики кампанії з �
     expect(fin.intercept.fighters.every((f) => f.status !== 'бій')).toBe(true); // бій не переживає тік
   }, 30_000);
 
-  it('без купівлі (interceptorsUpTo 1) — сід 7 байт-у-байт як політика без поля; бій до кінця — 38 погонь, 29 збито', () => {
+  it('без купівлі (interceptorsUpTo 1) — сід 7 байт-у-байт як політика без поля; бій до кінця — 32 погоні, 24 збито', () => {
     const a = simulateParty(7, 'норма', { policy: { ...CAMPAIGN_POLICY, interceptorsUpTo: 1 } });
     const b = simulateParty(7, 'норма', { policy: { ...CAMPAIGN_POLICY, interceptorsUpTo: undefined } });
     expect(JSON.stringify(a)).toBe(JSON.stringify(b));
     // до п19.6 — 3 і 1: перехоплювач застрягав у «бою»; п20.2 — 41 і 31 → 38 і 29; п20.3 (ШІ ворогів з укриттям) — 43 і 33;
     // п20.6 (бот зі зброєю, ADR-0170) — 39 і 31; п22.5 (дослідники за рівнем, партія коротша, ADR-0187) — 25 і 20;
-    // п22.6 (виводки й чемпіони, ADR-0188) — 38 і 29
-    expect([a.launches, a.shotDown]).toEqual([38, 29]);
+    // п22.6 (виводки й чемпіони, ADR-0188) — 32 і 24
+    expect([a.launches, a.shotDown]).toEqual([32, 24]);
   }, 30_000);
 });
