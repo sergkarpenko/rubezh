@@ -79,6 +79,8 @@ export interface UnitItems {
   medkit: boolean; // «Аптечка»: доступна дія «Лікування»
   grenade: boolean; // «Осколкова граната»: доступна дія «Кидок»
   charge?: boolean; // п18.2 (ADR-0154): «Пробивний заряд» — перша атака по броньованій цілі без броні
+  stim?: boolean; // п22.5 (ADR-0187): «Стимулятор» — дія за 0 AP, +STIM_AP_BONUS цього ходу
+  shield?: boolean; // п22.5 (ADR-0187): «Щит» — сам поглинає перше влучання будь-якої шкоди
 }
 
 // п16.3 (ADR-0147 п. 3, 11): роль оперативника і прапорець «дію використано»
@@ -112,7 +114,10 @@ export type GameEvent =
   | { type: 'dash'; unitId: string; bonus: number } // bonus — додані AP (не підсумок)
   | { type: 'precise_shot'; shooterId: string; targetId: string }
   | { type: 'field_aid'; unitId: string; targetId: string; healed: number }
-  | { type: 'charge'; shooterId: string; targetId: string }; // п18.5 (ADR-0157): «Пробивний заряд» витрачено
+  | { type: 'charge'; shooterId: string; targetId: string } // п18.5 (ADR-0157): «Пробивний заряд» витрачено
+  // п22.5 (ADR-0187): витратники алхіміка; «Щит» — мітка перед подією шкоди (shot / grenade з 0)
+  | { type: 'stim'; unitId: string; bonus: number }
+  | { type: 'shield'; unitId: string };
 
 export interface GameMap {
   width: number;
@@ -163,6 +168,7 @@ export const GRENADE_RANGE = 6; // дальність кидка (Чебишев
 export const GRENADE_DAMAGE: [number, number] = [3, 5]; // пошкодження всієї зони вибуху (один кидок RNG)
 
 // п16.3 (ADR-0147 п. 3): дії ролей; числа — кандидати, probe п16.5.
+export const STIM_AP_BONUS = 3; // п22.5: «Стимулятор» — +3 AP цього ходу, сам — 0 AP (кандидат, probe п22.8)
 export const DASH_AP_BONUS = 4; // «Ривок»: +4 AP цього ходу, сам — 0 AP, AP може перевищити максимум
 export const PRECISE_AP_COST = 6; // «Точний постріл»: 6 AP
 export const PRECISE_DAMAGE_MULT = 1.5; // шкода ×1,5 з округленням униз
@@ -574,6 +580,7 @@ function fireOnce(
       dmax = shooter.weapon.damage[1];
     damage = Math.floor((dmin + Math.floor(state.rng() * (dmax - dmin + 1))) * mult);
     if (!pierce && target.armor !== undefined && target.armor > 0) damage = Math.max(1, damage - target.armor);
+    if (useShield(state, target)) damage = 0; // п22.5: кидки RNG ті самі — щит лише обнуляє шкоду
     target.hp -= damage;
     if (target.hp <= 0) {
       target.hp = 0;
@@ -698,6 +705,38 @@ function useCharge(state: GameState, s: Unit, t: Unit): boolean {
   return true;
 }
 
+// п22.5 (ADR-0187): «Щит» поглинає перше влучання юніта (постріл, дозор, турель, «Кігті», граната);
+// подія — перед подією шкоди. RNG не викликається — порядок кидків той самий.
+function useShield(state: GameState, t: Unit): boolean {
+  const items = state.items?.[t.id];
+  if (!items?.shield) return false;
+  items.shield = false;
+  state.log.push({ type: 'shield', unitId: t.id });
+  return true;
+}
+
+// п22.5 (ADR-0187): причина, з якої «Стимулятор» недоступний, або undefined (для UI і бота).
+export function stimBlock(state: GameState, unitId: string): string | undefined {
+  const u = state.units.find((x) => x.id === unitId);
+  if (!u || !u.alive) return 'Юніта немає в бою';
+  if (u.side !== state.activeSide) return 'Зараз не хід цього юніта';
+  if (!state.items?.[u.id]?.stim) return 'Стимулятора немає у юніта';
+  return undefined;
+}
+
+// п22.5 (ADR-0187, рішення власника «А. Дія + пасивний щит»): «Стимулятор» — дія за 0 AP,
+// +STIM_AP_BONUS цього ходу (AP може перевищити максимум, як «Ривок»; наступний хід — maxAp).
+// Реакційного вогню не провокує, RNG не витягає. Витратник один на бій.
+export function useStim(state: GameState, unitId: string): void {
+  const u = getUnit(state, unitId);
+  requireActive(state, u);
+  const items = unitItems(state, u.id);
+  if (!items?.stim) throw new Error('Стимулятора немає у юніта: ' + u.id);
+  u.ap += STIM_AP_BONUS;
+  items.stim = false;
+  state.log.push({ type: 'stim', unitId: u.id, bonus: STIM_AP_BONUS });
+}
+
 // Витратники юніта в цьому бою (відсутній запис = предметів немає).
 function unitItems(state: GameState, unitId: string): UnitItems | undefined {
   return state.items?.[unitId];
@@ -760,14 +799,15 @@ export function throwGrenade(state: GameState, throwerId: string, center: Vec2):
   const damage = dmin + Math.floor(state.rng() * (dmax - dmin + 1));
   const hits: { unitId: string; damage: number }[] = [];
   for (const t of affected) {
-    t.hp -= damage;
+    const taken = useShield(state, t) ? 0 : damage; // п22.5: «Щит» поглинає й гранату (свою теж)
+    t.hp -= taken;
     if (t.hp <= 0) {
       t.hp = 0;
       t.alive = false;
       if (t.side !== u.side) u.kills += 1; // friendly fire у kills не зараховується
       state.log.push({ type: 'death', unitId: t.id, killerId: u.id });
     }
-    hits.push({ unitId: t.id, damage });
+    hits.push({ unitId: t.id, damage: taken });
   }
   u.ap -= GRENADE_AP_COST;
   items.grenade = false; // витратник списується (по одній на місію, ADR-0058)

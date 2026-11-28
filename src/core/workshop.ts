@@ -34,13 +34,26 @@ import { addFighter, baseWhere, fighterById, MAX_FIGHTERS, type InterceptState }
 import type { GeoState } from './geo';
 import type { RegionId } from './regions';
 import { isForgeWeapon, WEAPONS, type ForgeWeaponId, type WeaponId } from './weapons';
+import { bestLevel, scientistLevel } from './research';
+import { forgeTicks, type BaseModules } from './base';
 
 // Предмети «Кузні» — завершені протоколи науки, крім «Розширення лабораторії».
 // П12.6 (ADR-0064): ключі англійські (стабільні, збігаються з ProjectId),
 // відображувані назви — поле name каталогу.
 // п18.2 (ADR-0153 п. 10–11): ключові протоколи предмета не виробляють; «Пробивний
 // заряд» має власний id і протокол, що його відкриває (`unlockedBy`).
-export type ItemId = Exclude<ProjectId, 'lab-extension' | KeyProjectId | SquadProjectId> | 'breach-charge';
+export type ItemId = Exclude<ProjectId, 'lab-extension' | KeyProjectId | SquadProjectId> | 'breach-charge' | BrewItemId;
+
+// п22.5 (ADR-0182 п. 13; ADR-0187): витратники алхіміка — варить «Казан алхіміка», не «Кузня».
+export type BrewItemId = 'stim' | 'shield';
+export const BREW_IDS: readonly BrewItemId[] = ['stim', 'shield'];
+export function isBrewItem(id: string): id is BrewItemId {
+  return id === 'stim' || id === 'shield';
+}
+// Рівень найкращого алхіміка в штаті, з якого рецепт доступний (рішення власника «А. Свій ефект + очко»).
+export const BREW_LEVEL: Record<BrewItemId, number> = { stim: 1, shield: 2 };
+export const FAST_BREW_LEVEL = 3; // алхімік рівня 3 варить удвічі швидше
+export const CAULDRON_DOUBLE_LEVEL = 2; // «Казан алхіміка» II — дві порції за раз
 
 export interface WorkshopItemDef {
   name: string; // відображувана назва предмета (ADR-0064 — мапа перейменувань)
@@ -48,6 +61,7 @@ export interface WorkshopItemDef {
   ticks: number; // тики геосцени на виготовлення (кандидат, П11.8)
   unlockedBy?: ProjectId; // п18.2: протокол, що відкриває предмет (відсутній — протокол з тим самим id)
   trophies?: TrophyCost; // п18.2: трофеї, що списуються при замовленні разом із кредитами
+  brewed?: boolean; // п22.5: варить «Казан алхіміка» (brewItem), «Кузня» не замовляє
 }
 
 // Каталог «Кузні» (ADR-0058): формат кредити / тики.
@@ -63,6 +77,9 @@ export const WORKSHOP_CATALOG: Record<ItemId, WorkshopItemDef> = {
   shotgun: { name: WEAPONS.shotgun.name, cost: 60, ticks: 16 },
   sniper: { name: WEAPONS.sniper.name, cost: 70, ticks: 20 },
   mg: { name: WEAPONS.mg.name, cost: 80, ticks: 24 },
+  // п22.5 (рішення власника «А. Дія + пасивний щит»; числа — кандидати, probe п22.8)
+  stim: { name: 'Стимулятор', cost: 30, ticks: 12, trophies: { demon: 1 }, brewed: true },
+  shield: { name: 'Щит', cost: 40, ticks: 16, trophies: { hound: 1 }, brewed: true },
 };
 
 // Предмети, які показують панелі «Кузні» і порада «Наступний крок». п18.2: «Пробивний
@@ -117,12 +134,15 @@ export type WorkshopEvent =
   | { type: 'gun_module_removed'; fighter?: number } // модуль з винищувача назад на склад
   | { type: 'interceptor_order'; region: RegionId; ticks: number } // п19.3: перехоплювач замовлено
   | { type: 'interceptor_produced'; fighter: number; region: RegionId } // п19.3: перехоплювач — в ангарі
-  | { type: 'store_lost'; lost: Partial<Record<ItemId, number>> }; // п18.4: половина складу — у програному штурмі бази
+  | { type: 'store_lost'; lost: Partial<Record<ItemId, number>> } // п18.4: половина складу — у програному штурмі бази
+  | { type: 'brew'; id: BrewItemId; ticks: number; count: number } // п22.5: казан алхіміка — варіння почато
+  | { type: 'brewed'; id: BrewItemId; count: number }; // п22.5: зварено → склад
 
 export interface WorkshopOrder {
   id: ItemId | 'interceptor'; // п19.3: 'interceptor' — перехоплювач (region — ангар призначення)
   ticksLeft: number; // тики геосцени до готовності
   region?: RegionId; // п19.3: лише для 'interceptor'
+  count?: number; // п22.5: порцій варіння казана (без поля — 1)
 }
 
 // Екіпірування солдата ростеру (ADR-0058): броня і оптика — постійні
@@ -136,6 +156,8 @@ export interface SoldierEquipment {
   medkit: boolean; // «Регенеративний гель»
   grenade: boolean; // «Імпульсна граната»
   charge?: boolean; // п18.2: «Пробивний заряд» (витратник; поле лише за наявності — сейви без нього байт-у-байт)
+  stim?: boolean; // п22.5: «Стимулятор» (витратник; поле лише за наявності)
+  shield?: boolean; // п22.5: «Щит» (витратник; поле лише за наявності)
   // п20.4 (ADR-0165 п. 13, ADR-0168): зброя з «Кузні»; без поля — «Гарт» (у кожного, на складі не рахується)
   weapon?: ForgeWeaponId;
 }
@@ -152,16 +174,29 @@ export interface WorkshopState {
   store: Record<ItemId, number>; // склад: лічильники готових предметів
   equipped: Record<string, SoldierEquipment>; // id оперативника → екіпірування
   log: WorkshopEvent[]; // події «Кузні» для журналу (П11.6)
+  brew: WorkshopOrder[]; // п22.5: черга «Казана алхіміка» (перше — активне), окрема від «Кузні»
 }
 
 // Порожній склад: усі предмети каталогу з нульовими лічильниками (мерж у сейві
 // лишає валідні ключі майбутніх предметів).
 export function emptyStore(): Record<ItemId, number> {
-  return { medkit: 0, grenade: 0, optics: 0, armor: 0, 'gun-module': 0, 'breach-charge': 0, shotgun: 0, sniper: 0, mg: 0 };
+  return {
+    medkit: 0,
+    grenade: 0,
+    optics: 0,
+    armor: 0,
+    'gun-module': 0,
+    'breach-charge': 0,
+    shotgun: 0,
+    sniper: 0,
+    mg: 0,
+    stim: 0,
+    shield: 0,
+  };
 }
 
 export function createWorkshop(): WorkshopState {
-  return { queue: [], store: emptyStore(), equipped: {}, log: [] };
+  return { queue: [], store: emptyStore(), equipped: {}, log: [], brew: [] };
 }
 
 // Замовлення предмета в «Кузні» (ADR-0058): оплата кредитами ОДРУЧ при
@@ -170,15 +205,18 @@ export function createWorkshop(): WorkshopState {
 // завершений (дослідження відкриває виробництво). Порушення → throw
 // з українським текстом, стан не змінюється. Множник пресету — лише
 // на ціну; тики без множників (ADR-0033/0058).
+// п22.5 (ADR-0187): тики — з «Паровим котлом» і механіком (forgeTicks, base.ts).
 export function orderItem(
   econ: EconomyState,
   workshop: WorkshopState,
   research: ResearchState,
   id: ItemId,
-  preset: DifficultyPreset = DEFAULT_PRESET
+  preset: DifficultyPreset = DEFAULT_PRESET,
+  modules?: BaseModules
 ): WorkshopOrder {
   const def = WORKSHOP_CATALOG[id];
   if (!def) throw new Error('Невідомий предмет: ' + id);
+  if (def.brewed) throw new Error('«' + def.name + '» варить «Казан алхіміка», а не «Кузня»');
   if (!itemUnlocked(research, id)) {
     throw new Error('Предмет ще не досліджено: ' + itemName(id));
   }
@@ -187,10 +225,46 @@ export function orderItem(
   if (lack !== undefined) throw new Error(lack);
   spend(econ, sciencePrice(def.cost, preset));
   spendTrophies(research.trophies, def.trophies);
-  const order: WorkshopOrder = { id, ticksLeft: def.ticks };
+  const ticks = forgeTicks(def.ticks, research, modules);
+  const order: WorkshopOrder = { id, ticksLeft: ticks };
   workshop.queue.push(order);
-  workshop.log.push({ type: 'order', id, ticks: def.ticks });
+  workshop.log.push({ type: 'order', id, ticks });
   return order;
+}
+
+// п22.5 (ADR-0182 п. 13; ADR-0187): варіння витратника в «Казані алхіміка» — потрібні казан і
+// алхімік рівня BREW_LEVEL у штаті; оплата кредитами й трофеями одразу; окрема черга (одне
+// активне варіння). Алхімік рівня 3 — удвічі менше тиків (вгору), казан II — дві порції.
+// Порушення → throw з українським текстом, стан не змінюється.
+export function brewItem(
+  econ: EconomyState,
+  workshop: WorkshopState,
+  research: ResearchState,
+  modules: BaseModules,
+  id: BrewItemId,
+  preset: DifficultyPreset = DEFAULT_PRESET
+): WorkshopOrder {
+  if (!isBrewItem(id)) throw new Error('Невідомий рецепт казана: ' + String(id));
+  const def = WORKSHOP_CATALOG[id];
+  if (modules.cauldron < 1) throw new Error('Немає модуля «Казан алхіміка»');
+  const level = bestLevel(research, 'alchemist');
+  if (level === 0) throw new Error('Немає алхіміка в штаті');
+  if (level < BREW_LEVEL[id]) throw new Error('«' + def.name + '» варить алхімік рівня ' + BREW_LEVEL[id]);
+  const lack = missingTrophies(research.trophies, def.trophies);
+  if (lack !== undefined) throw new Error(lack);
+  spend(econ, sciencePrice(def.cost, preset));
+  spendTrophies(research.trophies, def.trophies);
+  const ticks = level >= FAST_BREW_LEVEL ? Math.ceil(def.ticks / 2) : def.ticks;
+  const count = modules.cauldron >= CAULDRON_DOUBLE_LEVEL ? 2 : 1;
+  const order: WorkshopOrder = { id, ticksLeft: ticks, ...(count > 1 ? { count } : {}) };
+  workshop.brew.push(order);
+  workshop.log.push({ type: 'brew', id, ticks, count });
+  return order;
+}
+
+// п22.5: чи може штат зварити рецепт (для панелей і бота; джерело правди — brewItem).
+export function canBrew(research: Pick<ResearchState, 'scientists'>, modules: BaseModules, id: BrewItemId): boolean {
+  return modules.cauldron >= 1 && research.scientists.some((s) => s.spec === 'alchemist' && scientistLevel(s) >= BREW_LEVEL[id]);
 }
 
 // п19.3 (ADR-0161): перехоплювачів разом із замовленими в «Кузні» — не більше MAX_FIGHTERS.
@@ -206,15 +280,18 @@ export function orderInterceptor(
   workshop: WorkshopState,
   intercept: InterceptState,
   region: RegionId,
-  preset: DifficultyPreset = DEFAULT_PRESET
+  preset: DifficultyPreset = DEFAULT_PRESET,
+  research?: Pick<ResearchState, 'scientists'>, // п22.5: механік і котел — і для перехоплювача
+  modules?: BaseModules
 ): WorkshopOrder {
   if (interceptorCount(workshop, intercept) >= MAX_FIGHTERS) {
     throw new Error('Перехоплювачів уже ' + MAX_FIGHTERS + ' разом із замовленими: більше не буває');
   }
   spend(econ, sciencePrice(INTERCEPTOR_COST, preset));
-  const order: WorkshopOrder = { id: 'interceptor', ticksLeft: INTERCEPTOR_TICKS, region };
+  const ticks = forgeTicks(INTERCEPTOR_TICKS, research, modules);
+  const order: WorkshopOrder = { id: 'interceptor', ticksLeft: ticks, region };
   workshop.queue.push(order);
-  workshop.log.push({ type: 'interceptor_order', region, ticks: INTERCEPTOR_TICKS });
+  workshop.log.push({ type: 'interceptor_order', region, ticks });
   return order;
 }
 
@@ -225,6 +302,7 @@ export function orderInterceptor(
 // п19.3: готовий перехоплювач — в ангар регіону замовлення (потрібні intercept і geo; без
 // замовлень перехоплювача виклик без них — як до п19.3).
 export function workshopTick(workshop: WorkshopState, intercept?: InterceptState, geo?: GeoState): void {
+  brewTick(workshop);
   const active = workshop.queue[0];
   if (!active) return;
   // аудит PR #522: перевірка до зміни стану — помилка не губить замовлення
@@ -244,6 +322,19 @@ export function workshopTick(workshop: WorkshopState, intercept?: InterceptState
     workshop.store[active.id] += 1;
     workshop.log.push({ type: 'produced', id: active.id });
   }
+}
+
+// п22.5: тік казана — той самий виклик, що й «Кузня»; окрема черга не чекає на «Кузню».
+function brewTick(workshop: WorkshopState): void {
+  const active = workshop.brew[0];
+  if (!active) return;
+  active.ticksLeft -= 1;
+  if (active.ticksLeft > 0) return;
+  workshop.brew.shift();
+  const id = active.id as BrewItemId;
+  const count = active.count ?? 1;
+  workshop.store[id] += count;
+  workshop.log.push({ type: 'brewed', id, count });
 }
 
 // Екіпірування оперативника предметом зі складу (ADR-0058): списує лічильник
@@ -297,8 +388,8 @@ export function unequipItem(workshop: WorkshopState, soldier: Unit, id: ItemId):
   if (!eq || !eq[soldierId]) {
     throw new Error('Предмета немає на оперативникові: ' + itemName(id));
   }
-  if (soldierId === 'charge')
-    delete eq.charge; // п18.2: поле заряду — лише за наявності (аудит PR #513)
+  if (soldierId === 'charge' || soldierId === 'stim' || soldierId === 'shield')
+    delete eq[soldierId]; // п18.2, п22.5: поле витратника — лише за наявності (аудит PR #513)
   else eq[soldierId] = false;
   workshop.store[id] += 1;
   if (soldierId === 'armor') {
@@ -352,7 +443,7 @@ export function removeLostEquipment(workshop: WorkshopState, lost: Unit[]): void
     const items = (Object.keys(eq) as (keyof SoldierEquipment)[]).filter((k): k is ItemSlot => k !== 'weapon' && eq[k] === true);
     const returned: ('armor' | 'optics' | ForgeWeaponId)[] = items.filter((k): k is 'armor' | 'optics' => k === 'armor' || k === 'optics');
     if (eq.weapon !== undefined) returned.push(eq.weapon); // п20.4: зброя загиблого — на склад, як броня
-    const gone = items.filter((k) => k === 'medkit' || k === 'grenade' || k === 'charge');
+    const gone = items.filter((k) => k === 'medkit' || k === 'grenade' || k === 'charge' || k === 'stim' || k === 'shield');
     delete workshop.equipped[soldier.id];
     for (const k of returned) workshop.store[k] += 1;
     if (returned.length > 0) workshop.log.push({ type: 'equipment_returned', soldierId: soldier.id, items: returned });
@@ -362,7 +453,7 @@ export function removeLostEquipment(workshop: WorkshopState, lost: Unit[]): void
 
 // Порожній запис екіпірування (не тримаємо в сейві).
 function isEmptyEquipment(eq: SoldierEquipment): boolean {
-  return !eq.armor && !eq.optics && !eq.medkit && !eq.grenade && !eq.charge && eq.weapon === undefined;
+  return !eq.armor && !eq.optics && !eq.medkit && !eq.grenade && !eq.charge && !eq.stim && !eq.shield && eq.weapon === undefined;
 }
 
 // Запис екіпірування солдата (створюється порожнім при першому зверненні).
@@ -417,9 +508,11 @@ export function deployConsumables(workshop: WorkshopState, squad: Unit[]): Recor
   const items: Record<string, UnitItems> = {};
   for (const soldier of squad) {
     const eq = workshop.equipped[soldier.id];
-    if (eq?.medkit || eq?.grenade || eq?.charge) {
+    if (eq?.medkit || eq?.grenade || eq?.charge || eq?.stim || eq?.shield) {
       items[soldier.id] = { medkit: eq.medkit, grenade: eq.grenade };
       if (eq.charge) items[soldier.id].charge = true; // п18.2: поле лише за наявності заряду
+      if (eq.stim) items[soldier.id].stim = true; // п22.5
+      if (eq.shield) items[soldier.id].shield = true; // п22.5
     }
   }
   return items;
@@ -438,6 +531,11 @@ export function settleConsumables(workshop: WorkshopState, survivors: Unit[], it
     eq.grenade = items?.[soldier.id]?.grenade ?? false;
     if (items?.[soldier.id]?.charge) eq.charge = true;
     else delete eq.charge; // п18.2: витрачений заряд зникає
+    // п22.5: використаний стимулятор / щит зникає, невикористаний лишається, як граната
+    if (items?.[soldier.id]?.stim) eq.stim = true;
+    else delete eq.stim;
+    if (items?.[soldier.id]?.shield) eq.shield = true;
+    else delete eq.shield;
     if (isEmptyEquipment(eq)) delete workshop.equipped[soldier.id];
   }
 }
@@ -456,5 +554,9 @@ export function SoldierItemIdOf(id: SoldierItemId): ItemSlot {
       return 'grenade';
     case 'breach-charge':
       return 'charge';
+    case 'stim':
+      return 'stim';
+    case 'shield':
+      return 'shield';
   }
 }

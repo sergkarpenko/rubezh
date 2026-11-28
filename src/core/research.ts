@@ -19,11 +19,12 @@ import { type DifficultyPreset, DEFAULT_PRESET, sciencePrice } from './campaign'
 import type { GameState } from './combat';
 import { ENEMY_KINDS, ENEMY_ORDER, enemyKind, type EnemyKind } from './enemies';
 import { WEAPONS, type ForgeWeaponId } from './weapons';
+import type { ModuleId } from './base';
 
 export const HIRE_SCIENTIST_PRICE = 100; // кандидат (П11.8); прецедент найму солдата, ADR-0021
 export const SCIENTIST_SALARY = 10; // зарплата за добу за вченого; Т.28 (ADR-0091): 20 → 10
 export const BASE_LAB_SLOTS = 2; // стартові слоти лабораторії (ADR-0058)
-export const MAX_LAB_SLOTS = 3; // після проєкту «Розширення лабораторії»
+export const MAX_LAB_SLOTS = 3; // після проєкту «Розширення лабораторії» (п22.5: +1 модулем «Стенд», base.ts)
 
 // Ідентифікатори проєктів — стабільні англійські ключі (П12.6, ADR-0064:
 // ключі — не відображувані назви; сейви ≤0.3.0 мігруються при завантаженні,
@@ -185,9 +186,36 @@ const SCIENTIST_NAMES = [
   'Остап',
 ];
 
+// п22.5 (ADR-0182 п. 3, 11; ADR-0187): спеціалізація техноманта — обирає гравець при наймі.
+export type ScientistSpec = 'researcher' | 'alchemist' | 'mechanic';
+export const SCIENTIST_SPECS: readonly ScientistSpec[] = ['researcher', 'alchemist', 'mechanic'];
+export const SPEC_NAMES: Record<ScientistSpec, string> = { researcher: 'Дослідник', alchemist: 'Алхімік', mechanic: 'Механік' };
+// Рівень 1–3 за протоколи, завершені, поки техномант у штаті (рішення власника «А. Свій ефект + очко»).
+export const LEVEL_THRESHOLDS: readonly number[] = [0, 2, 5];
+export const MAX_SCIENTIST_LEVEL = 3;
+
 export interface Scientist {
   id: string;
   name: string;
+  spec: ScientistSpec; // п22.5: сейв без поля — «Дослідник» (EARS 7)
+  done: number; // п22.5: протоколи, завершені в штаті (рівень — scientistLevel)
+}
+
+// п22.5: рівень техноманта — найвищий поріг LEVEL_THRESHOLDS, якого досягли завершені протоколи.
+export function scientistLevel(s: Pick<Scientist, 'done'>): number {
+  let level = 1;
+  for (let i = 1; i < LEVEL_THRESHOLDS.length; i++) if (s.done >= LEVEL_THRESHOLDS[i]) level = i + 1;
+  return level;
+}
+
+// п22.5: очки за добу — кожен 1, дослідник — за рівнем (1 / 2 / 3).
+export function scientistPoints(s: Scientist): number {
+  return s.spec === 'researcher' ? scientistLevel(s) : 1;
+}
+
+// п22.5: найвищий рівень техноманта спеціалізації в штаті (0 — такого немає).
+export function bestLevel(research: Pick<ResearchState, 'scientists'>, spec: ScientistSpec): number {
+  return research.scientists.reduce((m, s) => (s.spec === spec ? Math.max(m, scientistLevel(s)) : m), 0);
 }
 
 // Активний проєкт лабораторії: порядок у масиві = порядок запуску
@@ -205,12 +233,13 @@ export type ResearchEvent =
   | { type: 'points'; day: number; amount: number }
   | { type: 'project_started'; id: ProjectId }
   | { type: 'project_completed'; id: ProjectId }
-  | { type: 'trophies'; gained: TrophyCost }; // п18.2: трофеї за виграну місію
+  | { type: 'trophies'; gained: TrophyCost } // п18.2: трофеї за виграну місію
+  | { type: 'module'; id: ModuleId; level: number }; // п22.5: модуль бази куплено чи покращено (base.ts)
 
 export interface ResearchState {
   scientists: Scientist[]; // штат вчених (окремий від ростеру солдатів)
   hired: number; // скільки всього пройшло через штат — для унікальності id/імен
-  slots: number; // доступні слоти лабораторії: 2, після «Розширення» — 3
+  slots: number; // доступні слоти лабораторії: 2, +1 «Розширення», +1 модуль «Стенд техномантів» (п22.5)
   active: ActiveProject[]; // активні проєкти в порядку запуску
   completed: ProjectId[]; // завершені проєкти (передумови Т2 і майбутніх фаз)
   pool: number; // спільний пул наукових точок (невитрачені)
@@ -241,9 +270,16 @@ function scientistName(index: number): string {
 // Найм вченого за гроші (ADR-0058): списує ціну найму з економіки
 // (недостатньо грошей → помилка, штат не змінюється). Без RNG: id та ім'я —
 // наступні за лічильником hired (прецедент hireSoldier, squad.ts).
-export function hireScientist(econ: EconomyState, research: ResearchState, preset: DifficultyPreset = DEFAULT_PRESET): Scientist {
+// п22.5 (ADR-0187): спеціалізацію обирає гравець; без аргументу — «Дослідник» (бот і UI до п22.7).
+export function hireScientist(
+  econ: EconomyState,
+  research: ResearchState,
+  preset: DifficultyPreset = DEFAULT_PRESET,
+  spec: ScientistSpec = 'researcher'
+): Scientist {
+  if (!SCIENTIST_SPECS.includes(spec)) throw new Error('Невідома спеціалізація техноманта: ' + String(spec));
   spend(econ, sciencePrice(HIRE_SCIENTIST_PRICE, preset));
-  const scientist: Scientist = { id: 'в' + (research.hired + 1), name: scientistName(research.hired) };
+  const scientist: Scientist = { id: 'в' + (research.hired + 1), name: scientistName(research.hired), spec, done: 0 };
   research.hired += 1;
   research.scientists.push(scientist);
   research.log.push({ type: 'hire', name: scientist.name });
@@ -293,9 +329,10 @@ function completeProject(research: ResearchState, project: ActiveProject): void 
   research.active = research.active.filter((p) => p !== project);
   research.completed.push(project.id);
   research.log.push({ type: 'project_completed', id: project.id });
-  if (project.id === LAB_EXTENSION_PROJECT) {
-    research.slots = MAX_LAB_SLOTS;
-  }
+  // п22.5: протокол росте досвід усього штату (рівень — scientistLevel)
+  for (const s of research.scientists) s.done += 1;
+  // п22.5: +1, а не «= 3» — «Стенд техномантів» міг дати слот раніше (до п22.5 2 + 1 = 3 те саме)
+  if (project.id === LAB_EXTENSION_PROJECT) research.slots += 1;
 }
 
 // Старт протоколу (ADR-0058): оплата кредитами одразу; перевіри — відома
@@ -359,8 +396,10 @@ export function researchTick(research: ResearchState, econ: EconomyState, geo: G
       const amount = salaryPerScientist * research.scientists.length;
       spend(econ, amount);
       research.log.push({ type: 'salary', day, amount });
-      research.pool += research.scientists.length;
-      research.log.push({ type: 'points', day, amount: research.scientists.length });
+      // п22.5: очки за спеціалізацією й рівнем (до п22.5 — по 1 на техноманта)
+      const points = research.scientists.reduce((sum, s) => sum + scientistPoints(s), 0);
+      research.pool += points;
+      research.log.push({ type: 'points', day, amount: points });
     }
     distributePool(research);
   }

@@ -84,7 +84,9 @@ describe('П12.6: сейви ≤0.3.0 вантажаться (критерій 1
       shotgun: 0,
       sniper: 0,
       mg: 0,
-    }); // п18.2, п20.4: нові ключі складу — 0
+      stim: 0,
+      shield: 0,
+    }); // п18.2, п20.4, п22.5: нові ключі складу — 0
     expect(p.workshop.equipped).toEqual({ s1: { armor: false, optics: false, medkit: true, grenade: false } });
     expect(kinds(p.workshop.log)).toEqual(['order', 'order', 'produced', 'equip', 'order', 'produced']);
     expect(p.workshop.log[0]).toEqual({ type: 'order', id: 'medkit', ticks: 12 });
@@ -209,6 +211,8 @@ describe('П12.6: продовження сіда 42 — види подій і 
       shotgun: 0,
       sniper: 0,
       mg: 0,
+      stim: 0,
+      shield: 0,
     });
   });
 });

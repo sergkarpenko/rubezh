@@ -317,7 +317,7 @@ export function createResearchPanel(deps: ResearchPanelDeps): ResearchPanel {
           forge.title = st.title;
           forge.onclick = () => {
             try {
-              orderItem(party.econ, party.workshop, party.research, itemId, preset);
+              orderItem(party.econ, party.workshop, party.research, itemId, preset, party.modules);
             } catch (e) {
               deps.journal('✗ ' + (e as Error).message, 'lose', 'base');
             }

@@ -51,7 +51,9 @@ import {
   type ResearchState,
   type Scientist,
   type TrophyStore,
+  SCIENTIST_SPECS,
 } from './research';
+import { createModules, moduleMaxLevel, MODULE_IDS, type BaseModules } from './base';
 import {
   createWorkshop,
   emptyStore,
@@ -146,6 +148,7 @@ export interface Party {
   hints: HintFlags; // П9.2: прапорці підказок — у Party (один раз за партію)
   research: ResearchState; // П11.2 (ADR-0058): штат вчених і проєкти — у Party
   workshop: WorkshopState; // П11.3 (ADR-0058): черга цеху і склад — у Party
+  modules: BaseModules; // п22.5 (ADR-0187): рівні модулів бази — у Party
 }
 
 // П8.4a (борг П8.4): пресет партії передається в усі фабрики ядра — geo
@@ -163,6 +166,7 @@ export function createParty(seed: number, preset: DifficultyPreset = DEFAULT_PRE
     hints: defaultHints(),
     research: createResearch(),
     workshop: createWorkshop(),
+    modules: createModules(),
   };
 }
 
@@ -371,7 +375,7 @@ interface HintsSave {
 // П12.6: id — ключі каталогу; у сейвах ≤0.3.0 — старі українські значення
 // (мігруються на вході, LEGACY_PROJECT_KEYS).
 interface ResearchSave {
-  scientists: Scientist[];
+  scientists: (Pick<Scientist, 'id' | 'name'> & Partial<Pick<Scientist, 'spec' | 'done'>>)[]; // п22.5: v4 — без spec / done
   hired: number;
   slots: number;
   active: { id: string; invested: number }[];
@@ -393,6 +397,7 @@ interface WorkshopSave {
   store: Record<string, number>;
   equipped?: Record<string, SoldierEquipment>; // П11.3 екіпірування (старіші сейви — порожньо)
   log: WorkshopEvent[];
+  brew?: { id: string; ticksLeft: number; count?: number }[]; // п22.5: черга казана (без поля — порожня)
 }
 
 export interface SaveData {
@@ -408,6 +413,7 @@ export interface SaveData {
     hints?: HintsSave;
     research?: ResearchSave;
     workshop?: WorkshopSave;
+    modules?: Partial<BaseModules>; // п22.5: без поля — модулів немає (EARS 7)
   };
 }
 
@@ -485,7 +491,9 @@ export function serializeParty(party: Party, savedAt: string = ''): string {
         store: { ...party.workshop.store },
         equipped: Object.fromEntries(Object.entries(party.workshop.equipped).map(([id, eq]) => [id, { ...eq }])),
         log: party.workshop.log.slice(),
+        brew: party.workshop.brew.map((o) => ({ ...o })),
       },
+      modules: { ...party.modules },
     },
   };
   return JSON.stringify(toDisk(data)); // Т.218: ключі `ufo` на диску
@@ -673,10 +681,13 @@ function parseSave(json: string): SaveData {
       !Number.isInteger(rsv.pool) ||
       !Number.isInteger(rsv.lastSalaryDay) ||
       !Array.isArray(rsv.log) ||
-      (rsv.trophies !== undefined && !validTrophies(rsv.trophies)))
+      (rsv.trophies !== undefined && !validTrophies(rsv.trophies)) ||
+      !rsv.scientists.every(validScientist))
   ) {
     fail('Пошкоджені дані збереження: наука');
   }
+  // п22.5: модулі бази — необов'язкові; якщо є — рівні 0..найвищий
+  if (st.modules !== undefined && !validModules(st.modules)) fail('Пошкоджені дані збереження: модулі бази');
   // П11.3: поле workshop опційне (сейви до П11.3) — але якщо є, має бути коректним.
   const wsv = st.workshop;
   if (
@@ -686,6 +697,7 @@ function parseSave(json: string): SaveData {
       typeof wsv.store !== 'object' ||
       !Array.isArray(wsv.log) ||
       (wsv.equipped !== undefined && (typeof wsv.equipped !== 'object' || wsv.equipped === null)) ||
+      (wsv.brew !== undefined && !validBrew(wsv.brew)) ||
       !validInterceptorOrders(wsv.queue, savedFighters(icsv, data.version), data.version))
   ) {
     fail('Пошкоджені дані збереження: Кузня');
@@ -728,6 +740,44 @@ function savedFighters(icsv: InterceptSave | undefined, version: number): number
 }
 
 // п18.2: трофеї в сейві — об'єкт лише з відомими типами і цілими ≥ 0.
+// п22.5 (ADR-0187): техномант — id і ім'я; spec і done необов'язкові (v4), якщо є — відомі.
+function validScientist(s: unknown): boolean {
+  if (s === null || typeof s !== 'object') return false;
+  const r = s as Record<string, unknown>;
+  return (
+    typeof r.id === 'string' &&
+    typeof r.name === 'string' &&
+    (r.spec === undefined || SCIENTIST_SPECS.includes(r.spec as never)) &&
+    (r.done === undefined || (Number.isInteger(r.done) && (r.done as number) >= 0))
+  );
+}
+
+function validModules(m: unknown): boolean {
+  if (m === null || typeof m !== 'object') return false;
+  const r = m as Record<string, unknown>;
+  return (
+    Object.keys(r).every((k) => MODULE_IDS.includes(k as never)) &&
+    MODULE_IDS.every(
+      (k) => r[k] === undefined || (Number.isInteger(r[k]) && (r[k] as number) >= 0 && (r[k] as number) <= moduleMaxLevel(k))
+    )
+  );
+}
+
+function validBrew(q: unknown): boolean {
+  return (
+    Array.isArray(q) &&
+    q.every(
+      (o) =>
+        o !== null &&
+        typeof o === 'object' &&
+        (o.id === 'stim' || o.id === 'shield') &&
+        Number.isInteger(o.ticksLeft) &&
+        o.ticksLeft > 0 &&
+        (o.count === undefined || o.count === 2)
+    )
+  );
+}
+
 function validTrophies(t: unknown): boolean {
   if (t === null || typeof t !== 'object' || Array.isArray(t)) return false;
   // аудит PR #513: не `in` — він бачить ключі прототипу («constructor», «toString»)
@@ -829,7 +879,8 @@ export function deserializeParty(json: string): Party {
     research:
       rsv !== undefined
         ? {
-            scientists: rsv.scientists.map((s) => ({ ...s })),
+            // п22.5 (EARS 7): v4 — «Дослідник» рівня 1 (done 0)
+            scientists: rsv.scientists.map((s) => ({ id: s.id, name: s.name, spec: s.spec ?? 'researcher', done: s.done ?? 0 })),
             hired: rsv.hired,
             slots: rsv.slots,
             active: rsv.active.map((p) => ({ id: migrateProjectKey(p.id), invested: p.invested })),
@@ -865,8 +916,10 @@ export function deserializeParty(json: string): Party {
               if (e.type === 'equip' || e.type === 'unequip') return { ...e, id: migrateItemKey(e.id as string) as SoldierItemId };
               return e;
             }),
+            brew: (wsv.brew ?? []).map((o) => ({ ...o, id: o.id as ItemId })),
           }
         : createWorkshop(),
+    modules: { ...createModules(), ...(data.state.modules ?? {}) }, // п22.5: без поля — модулів немає
   };
 }
 
