@@ -63,6 +63,7 @@ import { createParty, type Party } from './save';
 // П11.8: наука (research.ts) і цех (workshop.ts) — публічне API ядра, ядро не змінюється.
 import {
   HIRE_SCIENTIST_PRICE,
+  LAB_EXTENSION_PROJECT,
   awardTrophies,
   PROJECT_CATALOG,
   BASE_SQUAD_SIZE,
@@ -75,13 +76,17 @@ import {
   researchTick,
   startProject,
   type ProjectId,
+  type ScientistSpec,
   type TrophyCost,
 } from './research';
+import { MODULE_IDS, buyModule, modulePrice, type ModuleId } from './base';
 import { ENEMY_ORDER } from './enemies';
 import { rankOf } from './career';
 import {
   INTERCEPTOR_COST,
   WORKSHOP_CATALOG,
+  brewItem,
+  canBrew,
   deployConsumables,
   equipItem,
   equipWeapon,
@@ -93,6 +98,7 @@ import {
   removeLostEquipment,
   settleConsumables,
   workshopTick,
+  type BrewItemId,
   type ItemId,
   type SoldierEquipment,
 } from './workshop';
@@ -142,6 +148,16 @@ export interface PartyBotPolicy {
   // решті «Град» (зброя, чий протокол завершено); виріб — за дефіцитом після предметів workshopOrders,
   // видача — зі складу. Протоколи зброї — у `projects` політики. Немає — без зброї, як до п20.6.
   weapons?: boolean;
+  // п22.8 (ADR-0190; ADR-0182 п. 17): склад штату техномантів — спеціалізація кожного наступного найму —
+  // перша з переліку, якої в штаті менше, ніж у переліку (понад перелік — «Дослідник»). Немає — усі
+  // «Дослідники», як до п22.8.
+  scientistSpecs?: readonly ScientistSpec[];
+  // п22.8: модулі бази — до рівня (порядок MODULE_IDS), купівля з резервом найму повного загону, як
+  // перехоплювач; «Казан алхіміка» — лише з алхіміком у штаті. Немає — без модулів.
+  modules?: Partial<Record<ModuleId, number>>;
+  // п22.8: витратники казана за пріоритетом — варіння за дефіцитом у загоні (одне активне варіння),
+  // видача першим бійцям загону; алхімік лишається в штаті й після протоколів. Немає — без казана.
+  brew?: readonly BrewItemId[];
 }
 
 // Стандартна політика (X-COM-стиль): перехоплення — balanced (intercept-bot),
@@ -191,7 +207,8 @@ export const CAMPAIGN_POLICY: PartyBotPolicy = {
   ...DEFAULT_PARTY_POLICY,
   name: 'campaign',
   scientistsUpTo: CAMPAIGN_SCIENTISTS,
-  projects: ['armor', 'rift-anatomy', 'gate-bearing', 'gate-key', 'shotgun', 'mg', 'optics', 'sniper'],
+  // п22.8 (ADR-0190): «Тактична мережа I / II» — одразу після ключових (раніше — більше загиблих у ранніх місіях)
+  projects: ['armor', 'rift-anatomy', 'gate-bearing', 'gate-key', 'tac-net-1', 'tac-net-2', 'shotgun', 'mg', 'optics', 'sniper'],
   workshopOrders: ['armor', 'breach-charge'],
   equip: true,
   fireScientistsWhenDone: true,
@@ -201,6 +218,12 @@ export const CAMPAIGN_POLICY: PartyBotPolicy = {
   gateMinRanked: MISSION_SQUAD_SIZE,
   interceptorsUpTo: CAMPAIGN_INTERCEPTORS,
   weapons: true,
+  // п22.8 (ADR-0190): штат — чотири дослідники й алхімік, «Казан алхіміка» II (дві порції), витратники
+  // казана за пріоритетом (еліксир з трофеєм «чемпіон» першим); варіанти з механіком і «Паровим котлом»
+  // дали пізнішу перемогу (менше очок науки) — docs/reports/p22.8-balance.md.
+  scientistSpecs: ['researcher', 'researcher', 'researcher', 'researcher', 'alchemist'],
+  modules: { cauldron: 2 },
+  brew: ['elixir', 'stim', 'shield'],
 };
 
 export type PartyOutcome = 'триває' | 'перемога' | 'банкрутство' | 'поразка'; // п18.3: «поразка» — загроза 100
@@ -469,7 +492,9 @@ export function partyBotScienceStep(party: Party, policy: PartyBotPolicy): void 
     policy.workshopOrders.length === 0 &&
     !policy.equip &&
     !policy.interceptorsUpTo &&
-    !policy.weapons
+    !policy.weapons &&
+    !policy.modules &&
+    !policy.brew
   )
     return;
   const preset = party.campaign.preset;
@@ -478,13 +503,15 @@ export function partyBotScienceStep(party: Party, policy: PartyBotPolicy): void 
   // усі протоколи політики завершено — штат звільнити й більше не наймати.
   const done =
     policy.fireScientistsWhenDone && policy.projects.length > 0 && policy.projects.every((id) => party.research.completed.includes(id));
-  if (done) for (const sc of [...party.research.scientists]) fireScientist(party.research, sc.id);
+  // п22.8: з казаном (`brew`) алхімік лишається — варить і після протоколів
+  if (done)
+    for (const sc of [...party.research.scientists]) if (!(policy.brew && sc.spec === 'alchemist')) fireScientist(party.research, sc.id);
   while (
     !done &&
     party.research.scientists.length < policy.scientistsUpTo &&
     party.econ.money - presetPrice(HIRE_SCIENTIST_PRICE, preset) >= reserve
   ) {
-    hireScientist(party.econ, party.research, preset);
+    hireScientist(party.econ, party.research, preset, nextSpec(party, policy));
   }
   // 2) проєкти: перший за пріоритетом, який можна запустити (не завершений,
   // не активний, передумова виконана, є слот, кошти з резервом) — один за крок.
@@ -522,6 +549,9 @@ export function partyBotScienceStep(party: Party, policy: PartyBotPolicy): void 
   }
   // 3.5) п19.6 (ADR-0159 п. 17): перехоплювач — коли черга й далі порожня (предмети цеху першими).
   partyBotFleetStep(party, policy);
+  // 3.6) п22.8 (ADR-0190): модулі бази і варіння казана.
+  partyBotModuleStep(party, policy);
+  partyBotBrewStep(party, policy);
   // 3.7) п20.6 (ADR-0170): видача зброї за роллю — зі складу (без `equip` теж); попередня зброя «Кузні» повертається на склад.
   if (policy.weapons) {
     for (const soldier of readySoldiers(party.roster)) {
@@ -529,6 +559,16 @@ export function partyBotScienceStep(party: Party, policy: PartyBotPolicy): void 
       if (want === null || (party.workshop.equipped[soldier.id]?.weapon ?? 'rifle') === want) continue;
       if (party.workshop.store[want] <= 0) continue;
       equipWeapon(party.workshop, soldier, want);
+    }
+  }
+  // 3.8) п22.8 (поза `equip`, урок Т.217): витратники казана — першим бійцям загону (missionSquad бере перших боєготових);
+  // «Еліксир» — тому, в кого ще немає ні стимулятора, ні щита (equipItem разом їх не видає).
+  if (policy.brew) {
+    for (const soldier of readySoldiers(party.roster).slice(0, botSquadSize(party, policy))) {
+      for (const id of policy.brew) {
+        if (party.workshop.store[id] <= 0 || brewCovered(party.workshop.equipped[soldier.id], id)) continue;
+        equipItem(party.workshop, soldier, id);
+      }
     }
   }
   if (!policy.equip) return;
@@ -566,9 +606,71 @@ export function partyBotFleetStep(party: Party, policy: PartyBotPolicy): void {
   if (upTo <= 0 || party.workshop.queue.length > 0) return;
   if (interceptorCount(party.workshop, party.intercept) >= upTo) return;
   // резерв найму — повний загін за ціною пресета і залишок на ремонт (купівля не з'їдає найм після розгрому)
-  const reserve = hirePrice(party.campaign.preset) * botHireUpTo(party, policy) + policy.hireReserve;
+  const reserve = buildReserve(party, policy);
   if (party.econ.money - presetPrice(INTERCEPTOR_COST, party.campaign.preset) < reserve) return;
   orderInterceptor(party.econ, party.workshop, party.intercept, weakestRegion(party), party.campaign.preset, party.research, party.modules);
+}
+
+// п22.8 (ADR-0190): спеціалізація наступного найму — перша з `scientistSpecs`, якої в штаті менше, ніж
+// у переліку; перелік вичерпано чи його немає — «Дослідник» (як до п22.8).
+function nextSpec(party: Party, policy: PartyBotPolicy): ScientistSpec {
+  const want = policy.scientistSpecs ?? [];
+  for (const spec of want) {
+    const need = want.filter((s) => s === spec).length;
+    if (party.research.scientists.filter((s) => s.spec === spec).length < need) return spec;
+  }
+  return 'researcher';
+}
+
+// п22.8: резерв купівель бази (перехоплювач, модулі) — повний загін за ціною найму пресета і ремонт.
+function buildReserve(party: Party, policy: PartyBotPolicy): number {
+  return hirePrice(party.campaign.preset) * botHireUpTo(party, policy) + policy.hireReserve;
+}
+
+// п22.8 (ADR-0190): модулі бази до рівнів політики, по одному за крок, у порядку MODULE_IDS; «Стенд» —
+// лише після «Розширення лабораторії», «Казан» — лише з алхіміком у штаті; гроші — з резервом найму.
+export function partyBotModuleStep(party: Party, policy: PartyBotPolicy): void {
+  if (!policy.modules) return;
+  for (const id of MODULE_IDS) {
+    if (party.modules[id] >= (policy.modules[id] ?? 0)) continue;
+    if (id === 'stand' && !party.research.completed.includes(LAB_EXTENSION_PROJECT)) continue;
+    if (id === 'cauldron' && !party.research.scientists.some((s) => s.spec === 'alchemist')) continue;
+    const price = modulePrice(party.modules, id, party.campaign.preset);
+    if (price === undefined || party.econ.money - price < buildReserve(party, policy)) continue;
+    buyModule(party.econ, party.research, party.modules, id, party.campaign.preset);
+    return;
+  }
+}
+
+// п22.8: чи вже покриває спорядження бійця витратник казана (еліксир = стимулятор + щит).
+function brewCovered(eq: SoldierEquipment | undefined, id: BrewItemId): boolean {
+  if (!eq) return false;
+  if (eq.elixir) return true;
+  return id === 'elixir' ? !!(eq.stim || eq.shield) : !!eq[id];
+}
+
+// п22.8: дефіцит витратника казана — бійці загону (перші botSquadSize боєготових), яких він не
+// покриває, мінус склад і варіння в казані (порції — count).
+function brewDeficit(party: Party, policy: PartyBotPolicy, id: BrewItemId): number {
+  const squad = readySoldiers(party.roster).slice(0, botSquadSize(party, policy));
+  const lacking = squad.filter((s) => !brewCovered(party.workshop.equipped[s.id], id)).length;
+  const brewing = party.workshop.brew.filter((o) => o.id === id).reduce((n, o) => n + (o.count ?? 1), 0);
+  return Math.max(0, lacking - party.workshop.store[id] - brewing);
+}
+
+// п22.8 (ADR-0190): варіння — казан порожній, перший рецепт політики, який штат може зварити, з
+// дефіцитом у загоні, трофеями (резерв ключових протоколів) і грошима з резервом найму (hireReserve).
+export function partyBotBrewStep(party: Party, policy: PartyBotPolicy): void {
+  if (!policy.brew || party.workshop.brew.length > 0) return;
+  for (const id of policy.brew) {
+    if (!canBrew(party.research, party.modules, id) || brewDeficit(party, policy, id) <= 0) continue;
+    const cost = WORKSHOP_CATALOG[id].trophies;
+    // трофей «чемпіон» — поза ENEMY_ORDER, тож спершу наявність усіх трофеїв (як missingTrophies у brewItem)
+    if (missingTrophies(party.research.trophies, cost) !== undefined || !trophiesAfford(party, policy, cost)) continue;
+    if (party.econ.money - presetPrice(WORKSHOP_CATALOG[id].cost, party.campaign.preset) < policy.hireReserve) continue;
+    brewItem(party.econ, party.workshop, party.research, party.modules, id, party.campaign.preset);
+    return;
+  }
 }
 
 // п18.6 (ADR-0158): чи вистачає трофеїв на предмет цеху з резервом незапущених ключових
@@ -710,7 +812,9 @@ export function partyBotGateStep(party: Party, policy: PartyBotPolicy): Campaign
   if (readySoldiers(party.roster).length < size) return info;
   if (policy.gateMinRanked !== undefined) {
     const squad = missionSquad(party.roster, size);
-    if (squad.filter((u) => rankOf(party.roster.careers[u.id]?.xp ?? 0) >= 1).length < policy.gateMinRanked) return info;
+    // п22.8 (ADR-0190): поріг росте з загоном — gateMinRanked на базовий загін + місця понад базовий
+    const need = Math.min(size, policy.gateMinRanked + squadSize(party.research) - BASE_SQUAD_SIZE);
+    if (squad.filter((u) => rankOf(party.roster.careers[u.id]?.xp ?? 0) >= 1).length < need) return info;
   }
   const b = botCampaignBattle(party, policy, createGateMission);
   completeGate(party, b.outcome);

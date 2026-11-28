@@ -63,6 +63,7 @@ import {
 import {
   DEFAULT_PARTY_POLICY,
   MISSION_SQUAD_SIZE,
+  botSquadSize,
   SCIENCE_POLICY,
   CAMPAIGN_POLICY,
   TICKS_PER_DAY,
@@ -283,8 +284,10 @@ function run(name: string, v: Variant, preset: DifficultyPreset, seed: number): 
     if (partyBotGateStep(party, policy).fought) rec.gateAttempts += 1; // Т.210: фінал перед місією — як simulateParty
     const logFrom = party.workshop.log.length;
     if (missionTargets(party.geo).length > 0) {
-      if (readySoldiers(party.roster).length < MISSION_SQUAD_SIZE) rec.noSquadTicks += 1;
-      else if (missionRisksBankruptcy(party.econ, party.roster, MISSION_SQUAD_SIZE, preset)) rec.blockedTicks += 1;
+      // п22.8 (кандидат 220 б): загін — за «Тактичною мережею» (botSquadSize), як у partyBotMissionStep
+      const size = botSquadSize(party, policy);
+      if (readySoldiers(party.roster).length < size) rec.noSquadTicks += 1;
+      else if (missionRisksBankruptcy(party.econ, party.roster, size, preset)) rec.blockedTicks += 1;
     }
     const m = partyBotMissionStep(party, policy);
     if (v.keep) {

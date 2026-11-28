@@ -116,7 +116,7 @@ describe('п22.4: зона висадки й евакуації (ADR-0186 п. 4)
   });
 
   it('надбавка ворогів: 0 до трьох, +1 і +2 для 4 і 5 (рішення власника «За бійців у загоні»)', () => {
-    expect([1, 2, 3, 4, 5].map(extraEnemies)).toEqual([0, 0, 0, 1, 2]);
+    expect([1, 2, 3, 4, 5].map(extraEnemies)).toEqual([0, 0, 0, 0, 1]); // п22.8 (ADR-0190): «+1 лише за п'ятого»
   });
 
   it('зона клітинок 4–5 завжди вільна: мапи місій 200 сідів — без перешкод і низьких перешкод на SPAWN_CELLS', () => {
@@ -140,7 +140,7 @@ describe('п22.4: місія зонда із загоном 4–5 (createMission
     expect(m.briefing.aliens).toBe(ALIENS_PER_KIND[kind]);
   });
 
-  it('загін 4 і 5: позиції — перші клітинки SPAWN_CELLS, зона евакуації — ті самі, +1 / +2 ворогів; мапа та сама', () => {
+  it('загін 4 і 5: позиції — перші клітинки SPAWN_CELLS, зона евакуації — ті самі, +0 / +1 ворог (п22.8); мапа та сама', () => {
     const { party, probeId } = withTarget();
     const kind = missionTargets(party.geo)[0].kind;
     const base = createMission(party.geo, probeId, { squad: missionSquad(party.roster, 3), threat: 50 });
@@ -151,7 +151,7 @@ describe('п22.4: місія зонда із загоном 4–5 (createMission
       expect(players.map((u) => u.pos)).toEqual(SPAWN_CELLS.slice(0, n));
       expect(m.state.evacZone).toEqual(squadZone(n));
       const aliens = m.state.units.filter((u) => u.side === 'alien');
-      expect(aliens).toHaveLength(ALIENS_PER_KIND[kind] + n - 3);
+      expect(aliens).toHaveLength(ALIENS_PER_KIND[kind] + (n === 5 ? 1 : 0)); // п22.8: «+1 лише за п'ятого»
       expect(m.briefing.aliens).toBe(aliens.length);
       // мапа і перші вороги — ті самі, що в загону 3 (склад — той самий генератор, довший ряд)
       expect([...m.state.map.blocked].sort()).toEqual([...base.state.map.blocked].sort());
@@ -165,14 +165,14 @@ describe('п22.4: місія зонда із загоном 4–5 (createMission
 });
 
 describe('п22.4: штурм бази і Брама із загоном 5', () => {
-  it('штурм: 4 + 2 ворогів, турелі на своїх місцях, ніхто не ділить клітинку; мапа — за ASSAULT_SPAWN', () => {
+  it('штурм: 4 + 1 ворог (п22.8), турелі на своїх місцях, ніхто не ділить клітинку; мапа — за ASSAULT_SPAWN', () => {
     const p = createParty(42);
     p.campaign.assaultPending = true;
     p.research.completed.push('gate-key'); // турелі
     const m3 = createAssault(p, { squad: readySoldiers(p.roster).slice(0, 3) });
     expect(m3.state.units.filter((u) => u.side === 'alien')).toHaveLength(ASSAULT_ENEMIES);
     const m5 = createAssault(p, { squad: readySoldiers(p.roster).slice(0, 5) });
-    expect(m5.state.units.filter((u) => u.side === 'alien')).toHaveLength(ASSAULT_ENEMIES + 2);
+    expect(m5.state.units.filter((u) => u.side === 'alien')).toHaveLength(ASSAULT_ENEMIES + 1);
     expect(m5.state.units.filter((u) => u.turret === true).map((u) => u.pos)).toEqual(TURRET_SPAWN);
     expect(m5.state.evacZone).toBeUndefined(); // штурм — без евакуації, як і досі
     expect([...m5.state.map.blocked].sort()).toEqual([...m3.state.map.blocked].sort());
@@ -180,15 +180,15 @@ describe('п22.4: штурм бази і Брама із загоном 5', () =
     placementOk(m5.state);
   });
 
-  it('Брама: 6 + 2 ворогів (gateMix з n — продовження того самого ряду), зона евакуації 5 клітинок', () => {
+  it('Брама: 6 + 1 ворог (п22.8; gateMix з n — продовження того самого ряду), зона евакуації 5 клітинок', () => {
     const p = createParty(42);
     p.research.completed.push('gate-key');
     const m = createGateMission(p, { squad: readySoldiers(p.roster).slice(0, 5) });
     const aliens = m.state.units.filter((u) => u.side === 'alien');
-    expect(aliens).toHaveLength(GATE_ENEMIES + 2);
+    expect(aliens).toHaveLength(GATE_ENEMIES + 1);
     const avail = kindsForThreat(p.campaign.threat);
     const seed = 7;
-    expect(gateMix(avail, seed, GATE_ENEMIES + 2).slice(0, GATE_ENEMIES)).toEqual(gateMix(avail, seed));
+    expect(gateMix(avail, seed, GATE_ENEMIES + 1).slice(0, GATE_ENEMIES)).toEqual(gateMix(avail, seed));
     expect(m.state.evacZone).toEqual(squadZone(5));
     expect(aliens.slice(0, GATE_SPAWN.length).map((u) => u.pos)).toEqual(GATE_SPAWN);
     placementOk(m.state);

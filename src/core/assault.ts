@@ -28,7 +28,7 @@ import type { Party } from './save';
 
 export const ASSAULT_ENEMIES = 4; // ворогів у штурмі (ADR-0153 п. 16)
 export const ASSAULT_SPAWN: Vec2[] = [...ALIEN_SPAWN, { x: 16, y: 3 }]; // четверта — у чистій зоні (17,2)
-// п22.4 (ADR-0186): клітинки надбавки (+1 ворог за бійця понад три) — у тій самій чистій зоні;
+// п22.4 (ADR-0186): клітинки надбавки (п22.8 — +1 ворог лише за п'ятого) — у тій самій чистій зоні;
 // мапа перевіряє досяжність лише ASSAULT_SPAWN, тож мапи тих самих сідів не міняються.
 export const ASSAULT_EXTRA_CELLS: Vec2[] = [
   { x: 18, y: 2 },
@@ -95,7 +95,7 @@ export function createAssault(party: Party, opts: CampaignBattleOptions): Missio
   const map = connectedMap(seed, undefined, undefined, ASSAULT_SPAWN);
   placeSquad(opts.squad);
   const turrets = gateKeyDone(party) ? TURRET_SPAWN.map((_, i) => makeTurret(i)) : [];
-  const n = ASSAULT_ENEMIES + extraEnemies(opts.squad.length); // п22.4: +1 за бійця понад три
+  const n = ASSAULT_ENEMIES + extraEnemies(opts.squad.length); // п22.4, п22.8: +1 лише за п'ятого
   const aliens = makeEnemies(enemyMix(kindsForThreat(party.campaign.threat), n, seed), [...ASSAULT_SPAWN, ...ASSAULT_EXTRA_CELLS], seed);
   applyBroods(aliens, seed, { brood: broodOfRule(ASSAULT_BROOD, seed), threat: party.campaign.threat, champion: false }); // п22.6 (ADR-0188)
   const state = createGame({
@@ -159,7 +159,7 @@ export function createGateMission(party: Party, opts: CampaignBattleOptions): Mi
   const seed = textSeed('брама:' + party.geo.minute);
   const map = connectedMap(seed, GATE_MAP, GATE_MAP, GATE_SPAWN, GATE_ZONE_CENTER);
   placeSquad(opts.squad);
-  const n = GATE_ENEMIES + extraEnemies(opts.squad.length); // п22.4: +1 за бійця понад три
+  const n = GATE_ENEMIES + extraEnemies(opts.squad.length); // п22.4, п22.8: +1 лише за п'ятого
   const aliens = makeEnemies(gateMix(kindsForThreat(party.campaign.threat), seed, n), [...GATE_SPAWN, ...GATE_EXTRA_CELLS], seed);
   applyBroods(aliens, seed, { brood: 'mixed', threat: party.campaign.threat, champion: false }); // п22.6 (ADR-0188): кожен — свого виводку
   const state = createGame({
