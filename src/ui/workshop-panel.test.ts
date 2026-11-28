@@ -213,7 +213,7 @@ describe('Т.43: причина під «Замовити» в «Кузні»', 
     for (const row of rows) {
       const line = row.lastElementChild!;
       expect(line.classList.contains('order-line')).toBe(true);
-      expect(line.firstElementChild!.id).toMatch(/^btn-order-/);
+      expect(line.firstElementChild!.id).toMatch(/^btn-(order|brew)-/); // п22.7: рецепти казана — той самий рядок
       expect(line.children[1]?.classList.contains('btn-why')).toBe(true);
     }
   });

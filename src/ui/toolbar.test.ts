@@ -58,6 +58,7 @@ describe('Т.33: ціна в AP і клавіша в кутках плитки',
       ['btn-ow', OVERWATCH_AP_COST + ' AP', 'O'],
       ['btn-medkit', HEAL_AP_COST + ' AP', 'M'],
       ['btn-grenade', GRENADE_AP_COST + ' AP', 'G'],
+      ['btn-stim', '0 AP', 'S'], // п22.7 (ADR-0189): «Стимулятор» — 0 AP
       ['btn-role', '', 'R'], // п16.4: ціну ставить renderBattle за роллю вибраного
       ['btn-evac', EVAC_AP_COST + ' AP', 'V'],
       ['btn-end', null, 'E'],
@@ -79,6 +80,7 @@ describe('тулбар: перелік дій (П13.2, ADR-0066)', () => {
       'ow',
       'medkit',
       'grenade',
+      'stim',
       'role',
       'evac',
       'end',
@@ -91,6 +93,7 @@ describe('тулбар: перелік дій (П13.2, ADR-0066)', () => {
       'Дозор',
       'Лікування',
       'Граната',
+      'Стимул',
       'Роль',
       'Евакуація',
       'Кінець',

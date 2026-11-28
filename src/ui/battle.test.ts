@@ -747,11 +747,11 @@ describe('тулбар: причини блокування дій (П13.2, кр
     const icons = (): Element[] => [...document.querySelectorAll('#btoolbar svg.tb-icon')];
     const before = icons();
     const drawn = before.map((i) => i.outerHTML);
-    expect(before.length).toBe(10); // п16.4: + плитка «Роль»
+    expect(before.length).toBe(11); // п16.4: + плитка «Роль»; п22.7: + «Стимул»
     f.battle.renderBattle(); // стан плиток — DOM, іконки не чіпаються
     f.battle.renderBattle();
     const after = icons();
-    expect(after.length).toBe(10);
+    expect(after.length).toBe(11);
     after.forEach((icon, i) => expect(icon).toBe(before[i])); // ті самі вузли, не перестворені
     expect(after.map((i) => i.outerHTML)).toEqual(drawn);
   });

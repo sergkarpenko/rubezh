@@ -912,6 +912,8 @@ if (typeof document !== 'undefined') {
       else if (id === 'ow') input.armOverwatch();
       else if (id === 'medkit') input.armMedkit();
       else if (id === 'grenade') input.armGrenade();
+      else if (id === 'stim')
+        input.useStimSelected(); // п22.7 (ADR-0189)
       else if (id === 'role')
         input.useRole(); // п16.4 (ADR-0147)
       else if (id === 'evac')

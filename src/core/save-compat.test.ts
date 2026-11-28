@@ -86,6 +86,7 @@ describe('П12.6: сейви ≤0.3.0 вантажаться (критерій 1
       mg: 0,
       stim: 0,
       shield: 0,
+      elixir: 0, // п22.7 (ADR-0189)
     }); // п18.2, п20.4, п22.5: нові ключі складу — 0
     expect(p.workshop.equipped).toEqual({ s1: { armor: false, optics: false, medkit: true, grenade: false } });
     expect(kinds(p.workshop.log)).toEqual(['order', 'order', 'produced', 'equip', 'order', 'produced']);
@@ -213,6 +214,7 @@ describe('П12.6: продовження сіда 42 — види подій і 
       mg: 0,
       stim: 0,
       shield: 0,
+      elixir: 0, // п22.7 (ADR-0189)
     });
   });
 });

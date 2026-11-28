@@ -113,18 +113,26 @@ export function radarRange(research: Pick<ResearchState, 'completed'>): number {
 }
 
 // п18.2: причина «Бракує трофеїв: …» (усі типи, яких бракує, порядком ENEMY_ORDER) або undefined.
+// п22.7 (ADR-0189): і рідкісний трофей «чемпіон» — останнім, після типів.
 export function missingTrophies(trophies: TrophyStore, cost: TrophyCost | undefined): string | undefined {
   if (!cost) return undefined;
   const lacks = ENEMY_ORDER.filter((k) => (cost[k] ?? 0) > trophies[k]).map(
     (k) => ENEMY_KINDS[k].name.toLowerCase() + ' ' + trophies[k] + ' з ' + cost[k]
   );
+  const champ = trophies.champion ?? 0;
+  if ((cost.champion ?? 0) > champ) lacks.push(CHAMPION_TROPHY_NAME + ' ' + champ + ' з ' + cost.champion);
   return lacks.length > 0 ? 'Бракує трофеїв: ' + lacks.join(', ') : undefined;
 }
 
+// п22.7 (ADR-0189): назва трофея чемпіона в текстах (журнал, панелі, причини).
+export const CHAMPION_TROPHY_NAME = 'чемпіон';
+
 // Списати трофеї (перевірку зроблено missingTrophies до оплати).
+// п22.7: трофей «чемпіон» — лише коли рецепт його бере (поле необов'язкове — сейв без нього байт-у-байт).
 export function spendTrophies(trophies: TrophyStore, cost: TrophyCost | undefined): void {
   if (!cost) return;
   for (const k of ENEMY_ORDER) trophies[k] -= cost[k] ?? 0;
+  if ((cost.champion ?? 0) > 0) trophies.champion = (trophies.champion ?? 0) - (cost.champion ?? 0);
 }
 
 // п18.2 (ADR-0153 п. 9, EARS 1): трофеї за виграну місію — по одному за кожного

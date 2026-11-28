@@ -499,6 +499,19 @@ describe('П14.4 (ADR-0072/0064): вибух гранати — зона, спа
 });
 
 describe('П14.4 (ADR-0072/0064): плаваючі числа пошкоджень/зцілення', () => {
+  it('п22.7 (ADR-0189): пошкодження 0 — напис «щит» (поглинув «Щит»), зцілення 0 — «+0»', () => {
+    const t = animCtx();
+    const a = makeDNumAnim({ x: 3, y: 4 }, 0, false);
+    a.start = 0;
+    drawAnimFrame(t.ctx, a, 0, 48, 8, 960, 960);
+    expect(t.calls.find((c) => c.m === 'fillText')!.args[0]).toBe('щит');
+    const h = animCtx();
+    const b = makeDNumAnim({ x: 3, y: 4 }, 0, true);
+    b.start = 0;
+    drawAnimFrame(h.ctx, b, 0, 48, 8, 960, 960);
+    expect(h.calls.find((c) => c.m === 'fillText')!.args[0]).toBe('+0');
+  });
+
   it('dnum: підйом (y спадає) і згасання (alpha), текст «-N» бурштин на темній плашці', () => {
     const a = makeDNumAnim({ x: 3, y: 4 }, 7, false);
     a.start = 0;

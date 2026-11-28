@@ -15,6 +15,7 @@ import {
   HEAL_AMOUNT,
   OVERWATCH_AP_COST,
   RIFLE,
+  STIM_AP_BONUS,
   type Weapon,
 } from '../core/combat';
 import { createIcon, type IconName } from './icons';
@@ -24,7 +25,9 @@ import { createIcon, type IconName } from './icons';
 // Т.71 (ADR-0075): «Евакуація» — між гранатою і кінцем ходу.
 // п16.4 (ADR-0147, рішення власника «А»): «Роль» — одна плитка дії ролі між гранатою і евакуацією;
 // підпис, іконку і ціну за роллю вибраного бійця ставить renderBattle (src/ui/roles.ts).
-export type ToolbarActionId = 'snap' | 'aimed' | 'auto' | 'ow' | 'medkit' | 'grenade' | 'role' | 'evac' | 'end' | 'auto-battle';
+// п22.7 (ADR-0189, рішення власника «А. Плитка «Стимул»»): «Стимул» — між гранатою і роллю; видно лише в бою,
+// де в когось із загону є стимулятор (як «Евакуація» без зони) — бій без них має чинні плитки.
+export type ToolbarActionId = 'snap' | 'aimed' | 'auto' | 'ow' | 'medkit' | 'grenade' | 'stim' | 'role' | 'evac' | 'end' | 'auto-battle';
 
 export interface ToolbarAction {
   id: ToolbarActionId;
@@ -90,6 +93,13 @@ export const TOOLBAR_ACTIONS: readonly ToolbarAction[] = [
       '), уражає і своїх · клавіша G',
     icon: 'grenade',
   },
+  {
+    id: 'stim',
+    btnId: 'btn-stim',
+    label: 'Стимул',
+    hint: '0 AP · «Стимулятор»: +' + STIM_AP_BONUS + ' AP цього ходу, один на бій · клавіша S',
+    icon: 'stim',
+  },
   { id: 'role', btnId: 'btn-role', label: 'Роль', hint: 'Дія ролі — раз за бій («Рятівник» — двічі) · клавіша R', icon: 'dash' },
   {
     id: 'evac',
@@ -120,6 +130,7 @@ export const TILE_KEY: Partial<Record<ToolbarActionId, string>> = {
   ow: 'O',
   medkit: 'M',
   grenade: 'G',
+  stim: 'S',
   role: 'R',
   evac: 'V',
   end: 'E',
@@ -128,6 +139,7 @@ const ITEM_AP: Partial<Record<ToolbarActionId, number>> = {
   ow: OVERWATCH_AP_COST,
   medkit: HEAL_AP_COST,
   grenade: GRENADE_AP_COST,
+  stim: 0,
   evac: EVAC_AP_COST,
 };
 

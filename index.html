@@ -569,6 +569,13 @@
         flex-direction: column;
         gap: 6px;
       }
+      /* п22.7 (ADR-0189): з плиткою «Стимул» (11 плиток) — щільніший стовпчик: на 1366 × 768 з gap 6 px
+         тулбар виходив за вікно на 16 px (вимір макета); на телефоні плитки рядами — gap без змін */
+      @media (min-width: 900px) {
+        #btoolbar:has(#btn-stim:not([hidden])) {
+          gap: 3px;
+        }
+      }
       #btoolbar button {
         display: flex;
         flex-direction: column;
@@ -769,6 +776,31 @@
       #bsquad .sq-ap i.on {
         background: #00e5ff;
       }
+      /* п22.7 (ADR-0189): значки витратників казана — у правому нижньому куті картки, поверх рядка AP
+         (висота картки без змін); витрачений — приглушений */
+      #bsquad .sq-card {
+        position: relative;
+      }
+      #bsquad .sq-items {
+        position: absolute;
+        right: 5px;
+        bottom: 2px;
+        display: flex;
+        gap: 2px;
+        font-size: 10px;
+        line-height: 10px;
+        font-style: normal;
+      }
+      #bsquad .sq-it {
+        font-style: normal;
+        color: #4a5a72;
+      }
+      #bsquad .sq-it.stim.on {
+        color: #ffb454;
+      }
+      #bsquad .sq-it.shield.on {
+        color: #00e5ff;
+      }
       #bsquad .sq-state {
         font-size: 11px;
         line-height: 6px;
@@ -911,6 +943,51 @@
       }
       .staff .soldier {
         align-items: center;
+      }
+      /* п22.7 (ADR-0189): рядок штату — спеціалізація з рівнем, ефект і шлях до рівня дрібним шрифтом,
+         «Звільнити» праворуч; кнопки найму — рядком із переносом; модулі й казан — рядки з кнопкою */
+      .staff .soldier {
+        flex-wrap: wrap;
+        column-gap: 8px;
+      }
+      .staff .sci-spec {
+        flex: 1 1 100%;
+        padding-left: 40px; /* під іменем, правіше бюста */
+        font-size: 12px;
+        color: #aab3bf;
+        line-height: 1.35;
+      }
+      .staff .sci-spec b {
+        color: #e6e9ee;
+      }
+      .staff .sci-staff-name {
+        flex: 1 1 auto;
+      }
+      .sci-hire {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 6px;
+        margin: 4px 0;
+      }
+      .sci-modules {
+        margin: 8px 0 4px;
+      }
+      .sci-module {
+        margin: 4px 0;
+        padding: 6px 8px;
+        border: 1px solid #232a36;
+        border-radius: 6px;
+        font-size: 12px;
+        color: #c8ced6;
+      }
+      .sci-module button {
+        margin-top: 4px;
+      }
+      #cauldron {
+        margin-top: 8px;
+        padding-top: 6px;
+        border-top: 1px solid #232a36;
       }
       /* п16.4 (ADR-0147, рішення власника «А. Три рядки»): ім'я «позивний», шеврон, звання, роль;
          біографія і досвід — окремими рядками під ними (з відступом під аватар) */
@@ -1454,6 +1531,31 @@
          висота вміщується в 1366 × 768 і 1024 × 768 (гейт e2e), вузький екран — одна колонка */
       #help-screen .help-box {
         max-width: 1000px;
+        margin: auto; /* п22.7: довідка вища за вікно (телефон) — верх із вкладками не зрізається центруванням flex */
+      }
+      /* п22.7 (ADR-0189): вкладки «Основи» / «Розвиток» — у рядку заголовка (висота довідки без змін) */
+      .help-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        flex-wrap: wrap;
+      }
+      .help-tabs {
+        display: flex;
+        gap: 6px;
+      }
+      .help-tabs button {
+        padding: 1px 10px;
+        font-size: 12px;
+        line-height: 16px;
+      }
+      .help-tabs button[aria-selected='true'] {
+        border-color: #00e5ff;
+        color: #00e5ff;
+      }
+      .help-cols.hidden {
+        display: none;
       }
       .help-cols {
         display: grid;

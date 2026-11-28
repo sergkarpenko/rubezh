@@ -6,7 +6,7 @@
 import type { Unit } from '../core/combat';
 import { missionSquad } from '../core/squad';
 import { squadSize } from '../core/research';
-import { equipItem, equipWeapon, itemName, unequipItem } from '../core/workshop';
+import { equipItem, equipWeapon, itemName, unequipItem, type ItemSlot, type SoldierEquipment, type SoldierItemId } from '../core/workshop';
 import { FORGE_WEAPONS, WEAPONS, type WeaponId } from '../core/weapons';
 import type { Party } from '../core/save';
 import { weaponEffect } from './effects';
@@ -23,6 +23,22 @@ export function weaponChoices(party: Party, soldier: Unit): WeaponId[] {
 
 function button(id: string, text: string, title: string, extra = '', icon = ''): string {
   return '<button type="button" id="' + id + '" title="' + esc(title) + '"' + extra + '>' + icon + esc(text) + '</button>';
+}
+
+// п22.7 (ADR-0189, рішення власника «А. Плитка «Стимул»»): витратники казана — лише у вікні перед вильотом
+// (картка ростера їх не показує — висота картки без змін). Еліксир уже містить стимулятор і щит.
+export const BREW_EQUIP: [SoldierItemId, ItemSlot, string][] = [
+  ['stim', 'stim', 'стимулятор'],
+  ['shield', 'shield', 'щит'],
+  ['elixir', 'elixir', 'еліксир'],
+];
+const LOADOUT_ITEMS = [...EQUIP_ITEMS, ...BREW_EQUIP];
+
+// Видати зараз не можна: еліксир разом зі стимулятором чи щитом (equipItem ядра — той самий throw).
+function clashes(eq: SoldierEquipment | undefined, slot: keyof SoldierEquipment): boolean {
+  return (
+    (slot === 'elixir' && (eq?.stim === true || eq?.shield === true)) || ((slot === 'stim' || slot === 'shield') && eq?.elixir === true)
+  );
 }
 
 // п20.5: ширина іконки зброї на кнопці вікна, CSS px (48 × 16)
@@ -46,9 +62,9 @@ export function loadoutHtml(party: Party, squad: readonly Unit[]): string {
         );
       })
       .join('');
-    const items = EQUIP_ITEMS.flatMap(([item, slot, short]) => {
+    const items = LOADOUT_ITEMS.flatMap(([item, slot, short]) => {
       if (eq?.[slot] === true) return [button('btn-lo-i-' + s.id + '-' + item, '− зняти: ' + short, itemName(item) + ' → склад')];
-      if (party.workshop.store[item] > 0)
+      if (party.workshop.store[item] > 0 && !clashes(eq, slot))
         return [
           button('btn-lo-i-' + s.id + '-' + item, '+ видати: ' + short, itemName(item) + ' · на складі ' + party.workshop.store[item]),
         ];
@@ -129,7 +145,7 @@ export function createLoadout(deps: LoadoutDeps): Loadout {
           if ((party.workshop.equipped[s.id]?.weapon ?? 'rifle') !== w) act(() => equipWeapon(party.workshop, s, w));
         };
       }
-      for (const [item, slot] of EQUIP_ITEMS) {
+      for (const [item, slot] of LOADOUT_ITEMS) {
         const b = document.getElementById('btn-lo-i-' + s.id + '-' + item) as HTMLButtonElement | null;
         if (b === null) continue;
         b.onclick = () => act(() => (party.workshop.equipped[s.id]?.[slot] === true ? unequipItem : equipItem)(party.workshop, s, item));

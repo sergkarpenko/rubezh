@@ -29,6 +29,9 @@ export interface SquadCardView {
   roleGlyph?: string;
   // п20.5 (ADR-0169; EARS 9): зброя бійця — мальована іконка в рядку імені; поза каталогом — без іконки
   weapon?: WeaponId;
+  // п22.7 (ADR-0189; рішення власника «А. Плитка «Стимул»»): витратники казана — true є, false витрачено, без поля — не було
+  stim?: boolean;
+  shield?: boolean;
 }
 
 // Префікс id кліпа аватара в смузі: той самий боєць є й у ростері (`av-cp-<id>`).
@@ -62,7 +65,10 @@ export function squadCards(
     const c = careers[id];
     const role = state.roles?.[id]?.role;
     const weapon = weaponIdOf(u.weapon);
+    const it = state.items?.[id];
     return {
+      ...(it?.stim !== undefined ? { stim: it.stim } : {}),
+      ...(it?.shield !== undefined ? { shield: it.shield } : {}),
       ...(c ? { callsign: c.callsign, rank: rankOf(c.xp) } : {}),
       ...(role ? { roleGlyph: ROLE_INFO[role].glyph } : {}),
       ...(weapon !== null ? { weapon } : {}),
@@ -94,7 +100,23 @@ export function squadCardLabel(c: SquadCardView): string {
   const who = c.callsign === undefined ? c.name : c.name + ' «' + c.callsign + '»';
   if (c.status === 'down') return who + ': ' + byGender(c.name, 'загинув', 'загинула');
   if (c.status === 'evac') return who + ': евакуйовано';
-  return who + ': HP ' + c.hp + '/' + c.maxHp + ' · AP ' + c.ap + '/' + c.maxAp;
+  return who + ': HP ' + c.hp + '/' + c.maxHp + ' · AP ' + c.ap + '/' + c.maxAp + itemsLabel(c);
+}
+
+// п22.7: «· стимулятор · щит витрачено» — для диктора й підказки картки
+function itemsLabel(c: SquadCardView): string {
+  const part = (v: boolean | undefined, name: string): string => (v === undefined ? '' : ' · ' + name + (v ? '' : ' витрачено'));
+  return part(c.stim, 'стимулятор') + part(c.shield, 'щит');
+}
+
+// п22.7: значки ⚡ (стимулятор) і ◈ (щит) після поділок AP; витрачений — приглушений
+export const STIM_GLYPH = '⚡';
+export const SHIELD_GLYPH = '◈';
+function itemsHtml(c: SquadCardView): string {
+  const g = (v: boolean | undefined, glyph: string, k: string): string =>
+    v === undefined ? '' : '<i class="sq-it ' + k + (v ? ' on' : '') + '" aria-hidden="true">' + glyph + '</i>';
+  const html = g(c.stim, STIM_GLYPH, 'stim') + g(c.shield, SHIELD_GLYPH, 'shield');
+  return html === '' ? '' : '<span class="sq-items">' + html + '</span>';
 }
 
 function cardHtml(c: SquadCardView): string {
@@ -108,7 +130,7 @@ function cardHtml(c: SquadCardView): string {
   else {
     foot = '<span class="sq-ap">';
     for (let i = 0; i < c.maxAp; i++) foot += i < c.ap ? '<i class="on"></i>' : '<i></i>';
-    foot += '</span>';
+    foot += '</span>' + itemsHtml(c);
   }
   const label = squadCardLabel(c);
   return (

@@ -8,7 +8,7 @@ import { SCORE_PER_MISSION_WON, SCORE_PER_MONEY, SCORE_PER_PROBE_SHOT_DOWN, SCOR
 import { gateKeyDone, gateOpen } from '../core/assault';
 import { ENEMY_KINDS, ENEMY_ORDER } from '../core/enemies';
 import { TICK_MINUTES, geoDay } from '../core/geo';
-import { KEY_PROJECTS, missingTrophies, type ProjectDef } from '../core/research';
+import { CHAMPION_TROPHY_NAME, KEY_PROJECTS, missingTrophies, type ProjectDef } from '../core/research';
 import type { Party } from '../core/save';
 import { el } from './dom';
 import { ticksText } from './text';
@@ -37,9 +37,13 @@ export function threatTitle(threat: number): string {
   );
 }
 
-// Трофеї складу порядком типів: «демон 2 · гончак 0 · голем 1 · око 0».
+// Трофеї складу порядком типів: «демон 2 · гончак 0 · голем 1 · око 0 · чемпіон 0».
+// п22.7 (ADR-0189): рідкісний трофей «чемпіон» — останнім (рецепт «Еліксиру чемпіона»).
 export function trophiesText(party: Party): string {
-  return ENEMY_ORDER.map((k) => ENEMY_KINDS[k].name.toLowerCase() + ' ' + party.research.trophies[k]).join(' · ');
+  return [
+    ...ENEMY_ORDER.map((k) => ENEMY_KINDS[k].name.toLowerCase() + ' ' + party.research.trophies[k]),
+    CHAMPION_TROPHY_NAME + ' ' + (party.research.trophies.champion ?? 0),
+  ].join(' · ');
 }
 
 // Перший незавершений ключовий протокол ланцюжка; null — усі три завершено.

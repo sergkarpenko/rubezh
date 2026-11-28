@@ -149,9 +149,12 @@ function keyProjectEffect(id: KeyProjectId | ForgeWeaponId): string {
 // п22.5 (ADR-0187): витратники казана — тексти до UI п22.7 (числа з констант ядра).
 export const STIM_EFFECT = 'Дія без AP: +' + STIM_AP_BONUS + ' AP цього ходу; один на бій';
 export const SHIELD_EFFECT = 'Сам поглинає перше влучання будь-якої шкоди; один на бій';
+// п22.7 (ADR-0189, рішення власника «А. «Еліксир чемпіона»»): обидва ефекти в одному витратнику
+export const ELIXIR_EFFECT = '«Стимулятор» (+' + STIM_AP_BONUS + ' AP за 0 AP) і «Щит» разом; один на бій';
 export function itemEffect(id: ItemId, soldier?: Unit): string {
   if (id === 'stim') return STIM_EFFECT;
   if (id === 'shield') return SHIELD_EFFECT;
+  if (id === 'elixir') return ELIXIR_EFFECT;
   return id === 'breach-charge' ? BREACH_CHARGE_EFFECT : projectEffect(id, soldier);
 }
 

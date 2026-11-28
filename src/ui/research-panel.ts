@@ -30,32 +30,88 @@ import {
   SCIENTIST_SALARY,
   hireScientist,
   scientistPoints,
+  scientistLevel,
   fireScientist,
+  LAB_EXTENSION_PROJECT,
+  LEVEL_THRESHOLDS,
+  MAX_SCIENTIST_LEVEL,
+  SCIENTIST_SPECS,
+  SPEC_NAMES,
+  type Scientist,
+  type ScientistSpec,
   missingTrophies,
   projectName,
   startProject,
   type ProjectDef,
 } from '../core/research';
-import { WORKSHOP_CATALOG, orderItem, type ItemId } from '../core/workshop';
+import { BREW_IDS, BREW_LEVEL, FAST_BREW_LEVEL, WORKSHOP_CATALOG, orderItem, type ItemId } from '../core/workshop';
+import {
+  BOILER_TICKS_CUT,
+  MECHANIC_TICKS_CUT,
+  MODULES,
+  MODULE_IDS,
+  buyModule,
+  moduleMaxLevel,
+  modulePrice,
+  type ModuleId,
+} from '../core/base';
 import { sciencePrice } from '../core/campaign';
 import type { Party } from '../core/save';
 import { plainProjectEffect } from './effects';
-import { orderButtonState } from './workshop-panel';
+import { orderButtonState, trophyListText } from './workshop-panel';
 import { el, setWhy } from './dom';
 import { setIconText } from './icons';
 import type { LogCat } from './journal';
-import { daysText, ticksText } from './text';
+import { daysText, plural, ticksText } from './text';
 import { portraitHtml } from './portrait';
-import { ENEMY_KINDS, ENEMY_ORDER } from '../core/enemies';
 
 // п21.4 (ADR-0178): сторона аватара техноманта в рядку штату, CSS px — рішення власника «Б. Більші»
 export const STAFF_AVATAR = 32;
 
 // п18.5 (ADR-0157): ціна ключового протоколу в трофеях — «демон 6, гончак 3» (порядок типів ядра).
 export function trophyCostText(def: ProjectDef): string {
-  return ENEMY_ORDER.filter((k) => (def.trophies?.[k] ?? 0) > 0)
-    .map((k) => ENEMY_KINDS[k].name.toLowerCase() + ' ' + def.trophies?.[k])
-    .join(', ');
+  return trophyListText(def.trophies); // п22.7: спільний текст з казаном (і трофей «чемпіон»)
+}
+
+// п22.7 (ADR-0189): тексти спеціалізацій і модулів — числа з констант ядра (урок П9.1).
+const ROMAN = ['', 'I', 'II', 'III'];
+const pct = (k: number): string => Math.round(k * 100) + ' %';
+
+export const SPEC_HINT: Record<ScientistSpec, string> = {
+  researcher: 'очки потоку за рівнем (1 / 2 / 3)',
+  alchemist: 'варить витратники в «Казані алхіміка»',
+  mechanic: '«Кузня» швидша на ' + pct(MECHANIC_TICKS_CUT) + ' за рівень найкращого механіка',
+};
+
+// Ефект техноманта його рівня: «+2 очки за добу», «варить «Стимулятор», «Щит»», «Кузня» −20 % часу».
+// п22.7 (аудит PR #553): алхімік без модуля казана — з приміткою (brewItem тоді відмовляє).
+export function specEffectText(s: Scientist, cauldron = 1): string {
+  const level = scientistLevel(s);
+  if (s.spec === 'researcher') return '+' + plural(level, 'очко', 'очки', 'очок') + ' за добу';
+  if (s.spec === 'mechanic') return '«Кузня» −' + pct(MECHANIC_TICKS_CUT * level) + ' часу';
+  const recipes = BREW_IDS.filter((id) => BREW_LEVEL[id] <= level).map((id) => '«' + WORKSHOP_CATALOG[id].name + '»');
+  return (
+    'варить ' +
+    recipes.join(', ') +
+    (level >= FAST_BREW_LEVEL ? ', удвічі швидше' : '') +
+    (cauldron < 1 ? ' (потрібен «Казан алхіміка»)' : '')
+  );
+}
+
+// «до рівня 3 — ще 2 протоколи» (протоколи, завершені в штаті) або «найвищий рівень».
+export function nextLevelText(s: Scientist): string {
+  const level = scientistLevel(s);
+  if (level >= MAX_SCIENTIST_LEVEL) return 'найвищий рівень';
+  const k = LEVEL_THRESHOLDS[level] - s.done;
+  return 'до рівня ' + (level + 1) + ' — ще ' + plural(k, 'протокол', 'протоколи', 'протоколів');
+}
+
+// Ефект модуля на рівні level (0 — ефект першого рівня, ще не куплений).
+export function moduleEffectText(id: ModuleId, level: number): string {
+  const l = Math.max(1, level);
+  if (id === 'stand') return '+1 слот лабораторії (четвертий)';
+  if (id === 'boiler') return '«Кузня» −' + pct(BOILER_TICKS_CUT * l) + ' часу замовлення';
+  return l >= 2 ? 'дві порції за раз' : 'алхімік варить витратники';
 }
 
 // Залежності від шару застосунку (main.ts): читання стану і дії панелі.
@@ -119,6 +175,67 @@ export function createResearchPanel(deps: ResearchPanelDeps): ResearchPanel {
     return 'Час ≈ ' + daysText(points) + ', з двома — ' + Math.ceil(points / 2);
   }
 
+  // п22.7 (ADR-0189): блок «Модулі бази» — рядок на модуль: назва з рівнем, ефект, кнопка купівлі
+  // (джерело правди — buyModule ядра; причина — тим самим стилем, що під кнопками).
+  function modulesBlock(party: Party, busy: boolean): HTMLElement {
+    const wrap = document.createElement('div');
+    wrap.className = 'sci-modules';
+    wrap.id = 'base-modules';
+    const head = document.createElement('div');
+    head.className = 'sci-row sci-mod-head'; // не sci-key-head: гейти e2e міряють блоки каталогу за ним
+    head.innerHTML = '<b>Модулі бази</b> — купівля одразу, без дослідження';
+    wrap.appendChild(head);
+    for (const id of MODULE_IDS) {
+      const level = party.modules[id];
+      const row = document.createElement('div');
+      row.className = 'sci-module';
+      const info = document.createElement('div');
+      const max = moduleMaxLevel(id);
+      info.innerHTML =
+        '<b>' +
+        MODULES[id].name +
+        (max > 1 && level > 0 ? ' ' + ROMAN[level] : '') +
+        '</b> · <span class="meta">' +
+        moduleEffectText(id, level) +
+        '</span>';
+      row.appendChild(info);
+      const price = modulePrice(party.modules, id, party.campaign.preset);
+      const b = document.createElement('button');
+      b.id = 'btn-module-' + id;
+      b.className = 'research wide';
+      if (price === undefined) {
+        b.textContent = max > 1 ? 'Найвищий рівень' : 'Встановлено';
+        b.disabled = true;
+        b.title = 'Модуль уже на найвищому рівні';
+      } else {
+        b.textContent = (level === 0 ? 'Купити' : 'Рівень ' + ROMAN[level + 1]) + ' — ' + price + ' кр.';
+        const why =
+          id === 'stand' && !party.research.completed.includes(LAB_EXTENSION_PROJECT)
+            ? 'Спершу протокол «' + projectName(LAB_EXTENSION_PROJECT) + '»'
+            : party.econ.money < price
+              ? 'Недостатньо кредитів (ціна ' + price + ')'
+              : null;
+        b.disabled = busy || why !== null;
+        b.title = why ?? 'Купити: ' + moduleEffectText(id, level + 1) + ' (−' + price + ')';
+        b.onclick = () => {
+          try {
+            buyModule(party.econ, party.research, party.modules, id, party.campaign.preset);
+          } catch (e) {
+            deps.journal('✗ ' + (e as Error).message, 'lose', 'base');
+          }
+          deps.renderAll();
+        };
+        row.appendChild(b);
+        setWhy(b, why);
+        wrap.appendChild(row);
+        continue;
+      }
+      row.appendChild(b);
+      wrap.appendChild(row);
+    }
+    return wrap;
+  }
+
   function renderResearchPanel(): void {
     const party = deps.getParty();
     deps.drainResearch();
@@ -170,27 +287,43 @@ export function createResearchPanel(deps: ResearchPanelDeps): ResearchPanel {
     head.append(l1, l2, l3);
     box.appendChild(head);
 
-    // вербування техноманта (прецедент btn-hire у панелі «Фінанси»); id без змін
-    const hire = document.createElement('button');
-    hire.id = 'btn-hire-scientist';
-    // Т.128 (рішення власника): іконка перед підписом, ціна в дужках — як у «Вербувати оперативника (100)»
-    setIconText(hire, 'tech', 'Вербувати техноманта (' + hirePrice + ')');
-    hire.disabled = busy || party.econ.money < hirePrice;
-    hire.title = hire.disabled
-      ? 'Недостатньо кредитів (ціна вербування ' + hirePrice + ')'
-      : 'Новий техномант у лабораторію техномагії (−' + hirePrice + ', утримання ' + salary + '/добу)';
-    hire.onclick = () => {
-      try {
-        hireScientist(party.econ, party.research, party.campaign.preset);
-      } catch (e) {
-        deps.journal('✗ ' + (e as Error).message, 'lose', 'base');
-      }
-      deps.renderAll();
-    };
-    box.appendChild(hire);
-    setWhy(hire, party.econ.money < hirePrice ? hire.title : null); // Т.43
+    // п22.7 (ADR-0189, рішення власника «А. У чинних панелях»): вербування — кнопка на кожну спеціалізацію;
+    // «Дослідник» лишає id btn-hire-scientist (прецедент btn-hire у панелі «Фінанси»), решта — btn-hire-<spec>
+    const hireRow = document.createElement('div');
+    hireRow.className = 'sci-hire';
+    const hireLabel = document.createElement('span');
+    hireLabel.className = 'meta';
+    hireLabel.textContent = 'Вербувати техноманта:';
+    hireRow.appendChild(hireLabel);
+    const poor = party.econ.money < hirePrice;
+    for (const spec of SCIENTIST_SPECS) {
+      const hire = document.createElement('button');
+      hire.id = spec === 'researcher' ? 'btn-hire-scientist' : 'btn-hire-' + spec;
+      // Т.128 (рішення власника): іконка перед підписом, ціна в дужках — як у «Вербувати оперативника (100)»
+      setIconText(hire, 'tech', SPEC_NAMES[spec] + ' (' + hirePrice + ')');
+      hire.disabled = busy || poor;
+      hire.title = poor
+        ? 'Недостатньо кредитів (ціна вербування ' + hirePrice + ')'
+        : SPEC_NAMES[spec] + ': ' + SPEC_HINT[spec] + ' (−' + hirePrice + ', утримання ' + salary + '/добу)';
+      hire.onclick = () => {
+        try {
+          hireScientist(party.econ, party.research, party.campaign.preset, spec);
+        } catch (e) {
+          deps.journal('✗ ' + (e as Error).message, 'lose', 'base');
+        }
+        deps.renderAll();
+      };
+      hireRow.appendChild(hire);
+    }
+    box.appendChild(hireRow);
+    if (poor) {
+      const w = document.createElement('div');
+      w.className = 'btn-why'; // Т.43: одна причина на рядок кнопок (прецедент рядка перехоплювача)
+      w.textContent = 'Недостатньо кредитів (ціна вербування ' + hirePrice + ')';
+      box.appendChild(w);
+    }
 
-    // штат вчених — по рядку на вченого з кнопкою звільнення
+    // штат вчених — по рядку на вченого: бюст, ім'я, спеціалізація з рівнем, ефект, до наступного рівня; звільнення
     if (r.scientists.length > 0) {
       const staff = document.createElement('div');
       staff.className = 'staff';
@@ -201,14 +334,28 @@ export function createResearchPanel(deps: ResearchPanelDeps): ResearchPanel {
         row.style.marginBottom = '2px';
         const name = document.createElement('span');
         name.style.minWidth = '64px';
+        name.className = 'sci-staff-name'; // п22.7: ім'я тягнеться — «Звільнити» праворуч
         name.textContent = s.name;
         // п21.4 (ADR-0178): мальований бюст техноманта перед іменем; шолом кодом — запасний
         row.insertAdjacentHTML('beforeend', portraitHtml(s.id, STAFF_AVATAR));
+        // п22.7: «Алхімік 2 · варить «Стимулятор», «Щит» · до рівня 3 — ще 2 протоколи»
+        const info = document.createElement('span');
+        info.className = 'sci-spec';
+        info.id = 'sci-spec-' + s.id;
+        info.innerHTML =
+          '<b>' +
+          SPEC_NAMES[s.spec] +
+          ' ' +
+          scientistLevel(s) +
+          '</b> · ' +
+          specEffectText(s, party.modules.cauldron) +
+          ' · ' +
+          nextLevelText(s);
         const fire = document.createElement('button');
         fire.id = 'btn-fire-' + s.id;
         fire.textContent = 'Звільнити';
         fire.disabled = busy;
-        fire.title = 'Звільнити без повернення кредитів (утримання більше не нараховується)';
+        fire.title = 'Звільнити без повернення кредитів (утримання більше не нараховується; рівень техноманта втрачається)';
         fire.onclick = () => {
           try {
             fireScientist(party.research, s.id);
@@ -217,11 +364,13 @@ export function createResearchPanel(deps: ResearchPanelDeps): ResearchPanel {
           }
           deps.renderAll();
         };
-        row.append(name, fire);
+        row.append(name, fire, info); // п22.7: «Звільнити» — поруч з іменем, спеціалізація й ефект — рядком нижче
         staff.appendChild(row);
       }
       box.appendChild(staff);
     }
+
+    box.appendChild(modulesBlock(party, busy));
 
     // T.39: картка протоколу: рядок 1 — назва + плашка стану; рядок 2 — ефект
     // простими словами; далі — за станом (ціна/час/кнопка, смуга прогресу,

@@ -45,11 +45,11 @@ const card = (name: string): HTMLElement =>
   [...document.querySelectorAll<HTMLElement>('#research .sci-card')].find((c) => c.textContent!.includes(name))!;
 
 describe('ResearchPanel: штат вчених', () => {
-  it('найм — вчений у панелі, гроші списані, renderAll викликано, кнопка «Вербувати техноманта (H)» (Т.128)', () => {
+  it('найм — вчений у панелі, гроші списані, renderAll викликано, кнопка «Дослідник (H)» (Т.128, п22.7)', () => {
     const deps = makeDeps();
     const panel = createResearchPanel(deps);
     panel.render();
-    expect(el('btn-hire-scientist').textContent).toBe('Вербувати техноманта (' + HIRE_SCIENTIST_PRICE + ')'); // «норма» ×1; Т.128 — ціна в дужках
+    expect(el('btn-hire-scientist').textContent).toBe('Дослідник (' + HIRE_SCIENTIST_PRICE + ')'); // «норма» ×1; Т.128 — ціна в дужках; п22.7 — кнопка на спеціалізацію
     const before = party.econ.money;
     (el('btn-hire-scientist') as HTMLButtonElement).click();
     expect(party.research.scientists).toHaveLength(1);
@@ -497,7 +497,7 @@ describe('ResearchPanel: ціни за пресетом (T.29) — картки 
     party = createParty(42, 'легкий');
     const panel = createResearchPanel(makeDeps());
     panel.render();
-    expect(el('btn-hire-scientist').textContent).toBe('Вербувати техноманта (' + sciencePrice(HIRE_SCIENTIST_PRICE, 'легкий') + ')');
+    expect(el('btn-hire-scientist').textContent).toBe('Дослідник (' + sciencePrice(HIRE_SCIENTIST_PRICE, 'легкий') + ')');
     expect(el('research').querySelector('.sci-head')!.textContent).toContain(
       'утримання ' + sciencePrice(SCIENTIST_SALARY, 'легкий') + ' кр. за добу'
     );
@@ -531,15 +531,16 @@ describe('Т.43: причини під неактивними кнопками �
     party.econ.money = 47;
     const panel = createResearchPanel(makeDeps());
     panel.render();
-    expect(why(btn('btn-hire-scientist'))).toBe('Недостатньо кредитів (ціна вербування 50)');
-    expect(why(btn('btn-hire-scientist'))).toBe(btn('btn-hire-scientist').title);
+    // п22.7: одна причина під рядком кнопок найму (на кожну спеціалізацію)
+    expect(why(btn('btn-hire-scientist').parentElement!)).toBe('Недостатньо кредитів (ціна вербування 50)');
+    expect(why(btn('btn-hire-scientist').parentElement!)).toBe(btn('btn-hire-alchemist').title);
     expect(btn('btn-start-0').disabled).toBe(true);
     expect(why(btn('btn-start-0'))).not.toBeNull();
     expect(why(btn('btn-start-0'))).toBe(btn('btn-start-0').title);
     party.econ.money = 50; // рівно ціна вербування — кнопка активна, рядка немає
     panel.render();
     expect(btn('btn-hire-scientist').disabled).toBe(false);
-    expect(why(btn('btn-hire-scientist'))).toBeNull();
+    expect(why(btn('btn-hire-scientist').parentElement!)).toBeNull();
     party.econ.money = 1000;
     btn('btn-hire-scientist').click();
     panel.render();

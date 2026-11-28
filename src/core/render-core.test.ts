@@ -1349,7 +1349,10 @@ describe('Т.160: старий код render-core (живі мутанти до 
       { x: 6, y: 2 },
     ]);
     expect(anims[1].kind === 'dnum' && anims[1].heal).toBe(false);
-    expect(kinds(animsFromEvents(shot(true, 0), [s1, a1]))).toEqual(['tracer']);
+    // п22.7 (ADR-0189): влучання з шкодою 0 — лише «Щит» (броня лишає ≥ 1) — число 0, напис «щит» малює render.ts
+    const shielded = animsFromEvents(shot(true, 0), [s1, a1]);
+    expect(kinds(shielded)).toEqual(['tracer', 'dnum']);
+    expect(shielded[1].kind === 'dnum' && shielded[1].amount).toBe(0);
     expect(kinds(animsFromEvents(shot(false, 3), [s1, a1]))).toEqual(['tracer']);
     expect(animsFromEvents(shot(true, 3), [a1])).toEqual([]);
     expect(animsFromEvents(shot(true, 3), [s1])).toEqual([]);

@@ -30,6 +30,8 @@ import {
   setOverwatch,
   throwGrenade,
   useDash,
+  useStim,
+  stimBlock,
   useMedkit,
   weaponHasMode,
   type ShotMode,
@@ -89,6 +91,7 @@ export interface InputUI {
   armFire(mode: ShotMode): void;
   armOverwatch(): void;
   armMedkit(): void; // П11.6 (ADR-0058): зведення аптечки (клавіша M)
+  useStimSelected(): void; // п22.7 (ADR-0189): «Стимулятор» вибраного (плитка «Стимул», клавіша S)
   armGrenade(): void; // П11.6 (ADR-0058): зведення гранати (клавіша G)
   useRole(): void; // п16.4 (ADR-0147): дія ролі вибраного (плитка «Роль», клавіша R)
   evacuateSelected(): void; // Т.71 (ADR-0075): евакуація вибраного (клавіша V)
@@ -651,6 +654,35 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
     battle.renderBattle();
   }
 
+  // п22.7 (ADR-0189, рішення власника «А. Плитка «Стимул»»): плитка «Стимул» і клавіша S — «Стимулятор» вибраного
+  // одразу (0 AP); недоступний — причина з stimBlock ядра.
+  function useStimSelected(): void {
+    if (!battle.playerTurnActive() || !ui.mission) return;
+    if (deps.autoBusy()) return; // П13.3: триває авто-бій — керування заблоковано
+    if (battle.animating()) return; // як плитка ролі — під час анімації дія не діє
+    closeMenu();
+    const st = ui.mission.state;
+    const sel = battle.selectedUnit();
+    if (!sel) {
+      battle.binfo('Спершу клікніть свого оперативника.');
+      return;
+    }
+    const block = stimBlock(st, sel.id);
+    if (block !== undefined) {
+      battle.binfo('✗ ' + block);
+      return;
+    }
+    ui.fireMode = null;
+    ui.itemMode = null;
+    ui.tapCell = null;
+    ui.aimCell = null;
+    const prevLen = st.log.length;
+    useStim(st, sel.id);
+    battle.enqueueAnims(prevLen);
+    battle.binfo(sel.name + ': «Стимулятор» — AP ' + sel.ap + '/' + sel.maxAp + ' цього ходу.');
+    deps.renderAll();
+  }
+
   function armOverwatch(): void {
     if (!battle.playerTurnActive() || !ui.mission) return;
     if (deps.autoBusy()) return; // П13.3: триває авто-бій — керування заблоковано
@@ -878,6 +910,9 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
     else if (ev.code === 'KeyR') {
       // п16.4 (аудит PR #501): утримана R і Ctrl/Alt/Meta+R (перезавантаження) дії ролі не роблять (урок Т.117)
       if (!ev.repeat && !ev.ctrlKey && !ev.altKey && !ev.metaKey) useRole();
+    } else if (ev.code === 'KeyS') {
+      // п22.7: утримана S і Ctrl/Alt/Meta+S «Стимулятор» не вживають (урок Т.117)
+      if (!ev.repeat && !ev.ctrlKey && !ev.altKey && !ev.metaKey) useStimSelected();
     } else if (ev.code === 'KeyV')
       evacuateSelected(); // Т.71 (ADR-0075)
     else if (ev.code === 'KeyQ') {
@@ -898,6 +933,7 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
     armMedkit,
     armGrenade,
     useRole,
+    useStimSelected,
     evacuateSelected,
     disarm,
     endPlayerTurn,
