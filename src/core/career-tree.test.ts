@@ -27,13 +27,16 @@ import {
   branchOptions,
   CAREER_TREE,
   newCareer,
+  RANK_ACCURACY_BONUS,
+  RANK_HP_BONUS,
   RANK_THRESHOLDS,
   SERGEANT_RANK,
   VETERAN_RANK,
   type CareerBranch,
 } from './career';
 import { assignBotBranches, botBranch, chooseBranch, createRoster, deployRoles, type Roster } from './squad';
-import { createParty, deserializeParty, SAVE_VERSION, SAVE_VERSION_V4, serializeParty } from './save';
+import { createParty, deserializeParty, SAVE_VERSION, SAVE_VERSION_V4, serializeParty, type Party } from './save';
+import { CAMPAIGN_POLICY, simulateParty } from './party-bot';
 
 const alwaysHit: RNG = () => 0;
 
@@ -81,7 +84,8 @@ describe('п22.2: каталог розвилок (ADR-0183)', () => {
     ]);
     for (const b of Object.keys(BRANCH_NAMES) as CareerBranch[]) expect(BRANCH_EFFECTS[b].length).toBeGreaterThan(0);
     expect([SERGEANT_RANK, VETERAN_RANK]).toEqual([2, 3]);
-    expect(RANK_THRESHOLDS).toEqual([0, 2, 5, 9]); // EARS 1: пороги як на main d6d9b8c
+    expect(RANK_THRESHOLDS).toEqual([0, 2, 5, 9]); // EARS 1: пороги і прирости звання як на main d6d9b8c
+    expect([RANK_HP_BONUS, RANK_ACCURACY_BONUS]).toEqual([1, 0.03]);
   });
 
   it('awaitingBranch: спершу роль, далі «Сержант», далі «Ветеран»; перескок — по черзі', () => {
@@ -267,10 +271,32 @@ describe('п22.2: сейв v5 (ADR-0182 п. 8, EARS 7)', () => {
       return JSON.stringify(d);
     };
     expect(deserializeParty(bad({ sergeant: 'surgeon' })).roster.careers.s1.branches).toEqual({ sergeant: 'surgeon' });
-    for (const b of [{ sergeant: 'hunter' }, { veteran: 'hardened' }, { sergeant: 'surgeon', x: 1 }, null, ['surgeon']]) {
+    for (const b of [
+      { sergeant: 'hunter' },
+      { veteran: 'hardened' },
+      { sergeant: 'surgeon', x: 1 },
+      { sergeant: 'surgeon', veteran: 'plating' },
+      null,
+      ['surgeon'],
+    ]) {
       expect(() => deserializeParty(bad(b, RANK_THRESHOLDS[3]))).toThrow("Пошкоджені дані збереження: кар'єри оперативників");
     }
     expect(() => deserializeParty(bad({ sergeant: 'surgeon' }, RANK_THRESHOLDS[1]))).toThrow("кар'єри оперативників");
     expect(() => deserializeParty(bad({ sergeant: 'surgeon', veteran: 'hardened' }))).toThrow("кар'єри оперативників");
+    const noRole = JSON.parse(bad({ sergeant: 'surgeon' }));
+    noRole.state.roster.careers.s1.role = null;
+    expect(() => deserializeParty(JSON.stringify(noRole))).toThrow("кар'єри оперативників");
+  });
+
+  it('v4 зіграної партії (загроза, довіра, перехоплювачі) відкривається байт-у-байт, крім версії', () => {
+    let v5 = '';
+    simulateParty(7, 'норма', { policy: CAMPAIGN_POLICY, maxDays: 30, onTick: (p) => (v5 = serializeParty(p as Party, 'T')) });
+    const data = JSON.parse(v5);
+    for (const c of Object.values<Record<string, unknown>>(data.state.roster.careers)) delete c.branches;
+    const v4 = JSON.stringify({ ...data, version: SAVE_VERSION_V4 });
+    const q = deserializeParty(v4);
+    expect(q.campaign.threat).toBeGreaterThan(0);
+    expect(Object.values(q.campaign.regions).some((r) => r.trust < 100)).toBe(true);
+    expect(serializeParty(q, 'T')).toBe(JSON.stringify({ ...JSON.parse(v4), version: SAVE_VERSION }));
   });
 });

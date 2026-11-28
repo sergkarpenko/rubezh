@@ -6,9 +6,10 @@ import {
   FIELD_AID_AMOUNT,
   FIELD_AID_AP_COST,
   PRECISE_AP_COST,
-  PRECISE_DAMAGE_MULT,
+  preciseMult,
   roleActionBlock,
   type BattleRole,
+  type RoleSpec,
   type GameState,
 } from '../core/combat';
 import { RANK_NAMES, rankOf, xpToNextRank, type SoldierCareer } from '../core/career';
@@ -43,7 +44,7 @@ export const ROLE_INFO: Record<BattleRole, RoleInfo> = {
     glyph: '◎',
     icon: 'precise',
     ap: PRECISE_AP_COST,
-    desc: 'прицільний постріл, шкода ×' + num(PRECISE_DAMAGE_MULT) + ' — ' + PRECISE_AP_COST + ' AP',
+    desc: sniperDesc(),
   },
   medic: {
     name: 'Медик',
@@ -55,6 +56,11 @@ export const ROLE_INFO: Record<BattleRole, RoleInfo> = {
     desc: '+' + FIELD_AID_AMOUNT + ' HP собі чи сусідові без гелю — ' + FIELD_AID_AP_COST + ' AP',
   },
 };
+
+// п22.2 (ADR-0183): опис «Точного пострілу» з множником спеціалізації («Мисливець» — ×2).
+export function sniperDesc(spec?: RoleSpec): string {
+  return 'прицільний постріл, шкода ×' + num(preciseMult(spec)) + ' — ' + PRECISE_AP_COST + ' AP';
+}
 
 export const ROLE_ORDER: readonly BattleRole[] = ['assault', 'sniper', 'medic'];
 

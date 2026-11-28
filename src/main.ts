@@ -532,6 +532,7 @@ const geoAnim = new AnimEngine({
 // і завантаженої партії. П12.2 (ADR-0026): точка прийняття — контрольна
 // серіалізація (незбережених змін на цей момент немає).
 function adoptParty(p: Party): Party {
+  assignBotBranches(p.roster); // п22.2 (ADR-0183): сейв v2–v4 із «Сержантами» — гілки одразу, до вікна п22.3
   journalUI.adopt(p);
   // п18.3: поразка за загрозою (сейв) — гру закінчено, як банкрутство
   gameOver = isBankrupt(p.econ, p.roster, p.campaign.preset) || p.campaign.status === 'поразка';

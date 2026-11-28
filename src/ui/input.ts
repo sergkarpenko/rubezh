@@ -10,7 +10,7 @@ import {
   EVAC_AP_COST,
   GRENADE_AP_COST,
   GRENADE_RANGE,
-  FIELD_AID_AMOUNT,
+  aidAmount,
   FIELD_AID_AP_COST,
   HEAL_AMOUNT,
   HEAL_AP_COST,
@@ -41,7 +41,7 @@ import { aliensTurn } from '../core/ai-bot';
 import { el } from './dom';
 import { BCELL } from './grid';
 import { MODE_LABEL } from './journal';
-import { ROLE_INFO } from './roles';
+import { sniperDesc } from './roles';
 import { byGender } from './text';
 import { evacBlockReason, type BattleUI, type BattleUIState } from './battle';
 
@@ -267,7 +267,7 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
             t.maxHp +
             ') — повторний клік у цю ціль — ' +
             (aid
-              ? '«Польова допомога» (+' + FIELD_AID_AMOUNT + ' HP, ' + FIELD_AID_AP_COST
+              ? '«Польова допомога» (+' + aidAmount(st.roles?.[sel.id]?.spec) + ' HP, ' + FIELD_AID_AP_COST
               : 'лікування (+' + HEAL_AMOUNT + ' HP, ' + HEAL_AP_COST) +
             ' AP).'
         );
@@ -633,13 +633,15 @@ export function createInput(ui: BattleUIState, battle: BattleUI, deps: InputDeps
       ui.fireMode = 'aimed';
       ui.itemMode = 'precise';
       // п20.5: як рядок зведення режиму (рішення власника «А. Прибрати шанс») — шанс лише біля цілі, з укриттям
-      battle.binfo('«Точний постріл»: ' + ROLE_INFO.sniper.desc + ' · тапніть обведену ціль — шанс з укриттям, повторний тап — постріл.');
+      battle.binfo(
+        '«Точний постріл»: ' + sniperDesc(st.roles?.[sel.id]?.spec) + ' · тапніть обведену ціль — шанс з укриттям, повторний тап — постріл.'
+      );
     } else {
       ui.fireMode = null;
       ui.itemMode = 'aid';
       battle.binfo(
         '«Польова допомога»: тапніть пораненого союзника поруч (≤1, себе теж) — повторний тап у ціль — допомога (+' +
-          FIELD_AID_AMOUNT +
+          aidAmount(st.roles?.[sel.id]?.spec) +
           ' HP, ' +
           FIELD_AID_AP_COST +
           ' AP).'

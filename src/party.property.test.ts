@@ -12,6 +12,7 @@ import { WORLD_H, WORLD_W, advanceTime, geoDay, missionTargets, type Probe } fro
 import { createEconomy, creditMissionBonus, economyTick } from './core/economy';
 import {
   applyMissionResult,
+  assignBotBranches,
   assignBotRoles,
   deployRoles,
   hireSoldier,
@@ -72,7 +73,19 @@ import { completeMission, createMission } from './core/mission';
 import { FORGE_WEAPONS, isForgeWeapon, WEAPONS } from './core/weapons';
 import { autoBattle } from './core/ai-bot';
 import { createParty, deserializeParty, serializeParty, type Party } from './core/save';
-import { awaitingRole, KILL_XP, MISSION_XP, RANK_ACCURACY_BONUS, RANK_HP_BONUS, rankOf, ROLE_RANK } from './core/career';
+import {
+  awaitingBranch,
+  awaitingRole,
+  HARDENED_HP_BONUS,
+  KILL_XP,
+  MISSION_XP,
+  PLATING_ARMOR,
+  RANK_ACCURACY_BONUS,
+  RANK_HP_BONUS,
+  rankOf,
+  ROLE_RANK,
+  TACTICIAN_AP_BONUS,
+} from './core/career';
 
 const RUN = { seed: 20261111, numRuns: 100 };
 // п18.2: генератор бере й ключові протоколи та «Пробивний заряд» (у панелях до п18.5 сховані).
@@ -153,6 +166,7 @@ function campaignBattle(p: Party, op: 'штурм' | 'брама', hold = false)
   const outcome = fought === 'триває' ? 'поразка' : fought;
   const aftermath = applyMissionResult(p.roster, m.state);
   assignBotRoles(p.roster);
+  assignBotBranches(p.roster); // п22.2: як бот партії і src/ui/battle.ts
   removeLostEquipment(p.workshop, aftermath.lost);
   settleConsumables(p.workshop, aftermath.survivors, m.state.items);
   if (op === 'штурм') completeAssault(p, outcome === 'перемога' ? 'перемога' : 'поразка');
@@ -190,6 +204,7 @@ function mission(p: Party, i: number): void {
   const outcome = fought === 'триває' ? 'поразка' : fought;
   const aftermath = applyMissionResult(p.roster, m.state);
   assignBotRoles(p.roster);
+  assignBotBranches(p.roster); // п22.2: як бот партії і src/ui/battle.ts
   removeLostEquipment(p.workshop, aftermath.lost);
   settleConsumables(p.workshop, aftermath.survivors, m.state.items);
   completeMission(p.geo, m.briefing.probeId, outcome);
@@ -360,10 +375,16 @@ function broken(p: Party): string[] {
     // п16.3 (ADR-0147 п. 12): роль — лише зі звання «Боєць»; після місії ніхто не чекає ролі
     must(career.role === null || rank >= ROLE_RANK, s.id + ': роль у рекрута');
     must(!awaitingRole(career), s.id + ': чекає ролі після місії');
+    // п22.2 (ADR-0183): після місії ніхто не чекає гілки; прирости гілок — поверх звань
+    must(awaitingBranch(career) === null, s.id + ': чекає гілки після місії');
+    const vet = career.branches?.veteran;
+    must(s.maxAp === 10 + (vet === 'tactician' ? TACTICIAN_AP_BONUS : 0), s.id + ': AP не за гілкою');
+    must(s.armor === (career.branches?.sergeant === 'plating' ? PLATING_ARMOR : undefined), s.id + ': броня не за гілкою');
     const maxHp =
       Math.round(10 * DIFFICULTY_MULTIPLIERS[campaign.preset].hpBonusMultiplier) +
       (eq?.armor ? ARMOR_MAX_HP_BONUS : 0) +
-      rank * RANK_HP_BONUS;
+      rank * RANK_HP_BONUS +
+      (vet === 'hardened' ? HARDENED_HP_BONUS : 0);
     const accuracy = 0.6 + (eq?.optics ? OPTICS_ACCURACY_BONUS : 0) + rank * RANK_ACCURACY_BONUS;
     // п20.4 (ADR-0168): зброя ростеру — об'єкт каталогу за слотом екіпірування (без слоту — «Гарт»)
     must(JSON.stringify(s.weapon) === JSON.stringify(WEAPONS[eq?.weapon ?? 'rifle']), s.id + ': зброя ' + s.weapon.name);

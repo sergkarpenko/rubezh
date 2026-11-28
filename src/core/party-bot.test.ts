@@ -367,8 +367,8 @@ describe('П11.8: політика науки — повний флоу (фік�
     expect(Math.max(...a.scientistsByDay)).toBe(2);
     expect(a.scientistsByDay[a.scientistsByDay.length - 1]).toBe(0); // штат звільнено після протоколу
     expect(a.missionsLaunched).toBe(79); // п16.2: 45 → 44; п16.3: 43; п17.2: 49; п17.3: 50; п17.4: 41; п18.3: 98; п18.4: 95; п19.6: 94; п20.2: 91; п20.3: 79; п22.2: 79
-    expect(a.missionsWon).toBe(75);
-    expect([a.assaults, a.assaultsLost]).toEqual([3, 1]);
+    expect(a.missionsWon).toBe(75); // п20.3: 68; п22.2: 75
+    expect([a.assaults, a.assaultsLost]).toEqual([3, 1]); // п20.3: програно 2; п22.2: 1
   }, 30_000); // дві повні партії з наукою: під інструментуванням покриття в CI не вкладається в 5 с
 
   it('спіраль зарплата→звільнення (урок П11.2): бідна партія звільняє вчених з кінця штату', () => {

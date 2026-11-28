@@ -846,6 +846,17 @@ function requireRole(state: GameState, unitId: string, role: BattleRole): { u: U
   return { u: getUnit(state, unitId), slot: state.roles![unitId] };
 }
 
+// п22.2: числа дії ролі за спеціалізацією — для ядра і підказок UI (без спеціалізації — як до п22.2).
+export function dashBonus(spec?: RoleSpec): number {
+  return spec === 'breakthrough' ? BREAKTHROUGH_DASH_BONUS : DASH_AP_BONUS;
+}
+export function preciseMult(spec?: RoleSpec): number {
+  return spec === 'hunter' ? HUNTER_DAMAGE_MULT : PRECISE_DAMAGE_MULT;
+}
+export function aidAmount(spec?: RoleSpec): number {
+  return spec === 'surgeon' ? SURGEON_AID_AMOUNT : FIELD_AID_AMOUNT;
+}
+
 // Використання дії ролі: «Рятівник» спершу витрачає додаткові використання (п22.2).
 function spendRole(slot: UnitRole): void {
   if (slot.extraUses !== undefined && slot.extraUses > 0) slot.extraUses -= 1;
@@ -860,7 +871,7 @@ export interface DashResult {
 // AP може перевищити максимум — наступний хід відновлює maxAp (endTurn).
 export function useDash(state: GameState, unitId: string): DashResult {
   const { u, slot } = requireRole(state, unitId, 'assault');
-  const bonus = slot.spec === 'breakthrough' ? BREAKTHROUGH_DASH_BONUS : DASH_AP_BONUS;
+  const bonus = dashBonus(slot.spec);
   u.ap += bonus;
   spendRole(slot);
   state.log.push({ type: 'dash', unitId: u.id, bonus });
@@ -877,7 +888,7 @@ export function preciseShot(state: GameState, shooterId: string, targetId: strin
   assertCanFire(state, s, t, 'aimed');
   s.ap -= PRECISE_AP_COST;
   spendRole(slot);
-  const mult = slot.spec === 'hunter' ? HUNTER_DAMAGE_MULT : PRECISE_DAMAGE_MULT;
+  const mult = preciseMult(slot.spec);
   state.log.push({ type: 'precise_shot', shooterId: s.id, targetId: t.id });
   const pierce = useCharge(state, s, t);
   const shot = fireOnce(state, s, t, 'aimed', calculateHitChance(s, 'aimed', shotCover(state, s, t)), mult, pierce);
@@ -894,7 +905,7 @@ export function fieldAid(state: GameState, medicId: string, targetId: string): H
   if (t.side !== u.side) throw new Error('Допомога можлива лише своїм');
   if (distance(u.pos, t.pos) > 1) throw new Error('Ціль поза межами допомоги (відстань ≤1)');
   if (t.hp >= t.maxHp) throw new Error('Ціль не поранена');
-  const healed = Math.min(slot.spec === 'surgeon' ? SURGEON_AID_AMOUNT : FIELD_AID_AMOUNT, t.maxHp - t.hp);
+  const healed = Math.min(aidAmount(slot.spec), t.maxHp - t.hp);
   t.hp += healed;
   u.ap -= FIELD_AID_AP_COST;
   spendRole(slot);
