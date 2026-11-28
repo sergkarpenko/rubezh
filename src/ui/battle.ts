@@ -59,13 +59,14 @@ import {
   recoilPx,
   shakeOffset,
   tracerShare,
+  BROOD_COLORS,
   type Anim,
   type TerrainCell,
 } from '../core/render-core';
 import { takeHpBefore } from './hp-track';
 import { el } from './dom';
 import { BCELL } from './grid';
-import { type LogCat } from './journal';
+import { broodLines, type LogCat } from './journal';
 import { ICONS } from './icons';
 import { ROLE_INFO, roleTileView } from './roles';
 import { byGender, probeNo, ticksText } from './text';
@@ -646,6 +647,8 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
         recoil: u.id === firingId ? recoil : 0, // Т.132: віддача пострілу
         breath: u.id === firingId ? 0 : (deps.ambient.breath?.(at) ?? 0), // Т.132: дихання у спокої
         ring: unitRing(u.side, u.id, u.kind), // Т.129: кільце кольору бійця; п17.2: ворог — колір типу
+        ...(u.brood !== undefined ? { aura: BROOD_COLORS[u.brood] } : {}), // п22.6 (ADR-0188): аура виводку
+        ...(u.champion ? { crown: true } : {}), // п22.6: вінець чемпіона
         kind: u.kind, // п17.5 (ADR-0152): ряд атласа за типом ворога
         turret: u.turret === true, // п18.5 (ADR-0157): турель бази — силует кодом
         flip: (facing.get(u.id) ?? native) !== native, // П14.3: дзеркало за напрямком
@@ -694,7 +697,7 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
           gy: focus.y,
           cell: BCELL,
           cw: cv.width,
-          text: '~' + Math.round(calculateHitChance(sel, ui.fireMode, cover) * 100) + '%',
+          text: '~' + Math.round(calculateHitChance(sel, ui.fireMode, cover, tgt?.evade) * 100) + '%', // п22.6: «Тінь»
         });
       }
     }
@@ -863,6 +866,7 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
     ui.aimCell = null; // П6.14
     deps.resetBattleLog();
     deps.journal(line, '', 'battle');
+    for (const b of broodLines(ui.mission.state.units)) deps.journal(b, '', 'battle'); // п22.6 (ADR-0188)
     binfo('Ваш хід: виберіть бійця — на полі або карткою загону, потім клітинку — прев’ю шляху; повторний клік у ту саму клітинку — хід.');
     deps.renderAll();
   }

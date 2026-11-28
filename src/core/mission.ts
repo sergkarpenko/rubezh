@@ -45,6 +45,8 @@ import {
 import { makeTestMap } from './map';
 import { missionTargets, type GeoState, type Probe, type ProbeKind } from './geo';
 import { enemyMix, kindsForThreat, makeEnemies } from './enemies';
+import { applyBroods, missionBrood } from './broods';
+import { regionOf } from './regions';
 
 export const MISSION_MAP_W = 20;
 export const MISSION_MAP_H = 20;
@@ -259,6 +261,8 @@ export function createMission(geo: GeoState, probeId: string, opts: CreateMissio
   // п22.4 (ADR-0186): +1 ворог за бійця понад три; загін до трьох — склад байт-у-байт.
   const n = ALIENS_PER_KIND[probe.kind] + extraEnemies(squad.length);
   const aliens: Unit[] = makeEnemies(enemyMix(kindsForThreat(opts.threat ?? 0), n, seed), [...ALIEN_SPAWN, ...ALIEN_EXTRA_CELLS], seed);
+  // п22.6 (ADR-0188): виводок — за районом посадки, чемпіон — з порогу загрози; окремий генератор.
+  applyBroods(aliens, seed, { brood: missionBrood(regionOf(probe.pos), seed), threat: opts.threat ?? 0, champion: true });
 
   const state = createGame({
     map,

@@ -25,6 +25,7 @@
 // Ітерація 2: дозор (overwatch) з реакційним вогнем під час ходу ворога.
 
 import type { EnemyKind } from './enemies';
+import type { BroodId } from './broods';
 
 export type RNG = () => number; // [0, 1)
 
@@ -69,6 +70,12 @@ export interface Unit {
   // п18.4 (ADR-0153 п. 16, ADR-0156): турель бази — нерухомий юніт сторони загону
   // (стріляє і стає в дозор, рухатись не може; поза ростером і досвідом).
   turret?: boolean;
+  // п22.6 (ADR-0188): виводок Розриву і чемпіон (src/core/broods.ts); бій читає лише числа:
+  // dmgBonus — + до шкоди кожного влучання юніта, evade — множник шансу влучити по ньому.
+  brood?: BroodId;
+  champion?: boolean;
+  dmgBonus?: number;
+  evade?: number;
 }
 
 // П11.4 (ADR-0058): витратники юніта в цьому бою. «По одній на місцію»:
@@ -442,10 +449,11 @@ function clampChance(p: number): number {
 
 // Точність солдата × режим пострілу (ADR-0004); п20.2: × множник укриття цілі, якщо його
 // передано (`shotCover`); без укриття — як до п20.2.
-export function calculateHitChance(attacker: Unit, mode: ShotMode, cover?: CoverLevel): number {
+// п22.6 (ADR-0188): evade — множник цілі «Тіні» (`Unit.evade`); без нього — вираз як до п22.6.
+export function calculateHitChance(attacker: Unit, mode: ShotMode, cover?: CoverLevel, evade?: number): number {
   const mod = attacker.weapon.modes[mode].accuracyMod;
-  if (cover === undefined) return clampChance(attacker.firingAccuracy * mod);
-  return clampChance(attacker.firingAccuracy * mod * COVER_MULT[cover]);
+  const base = cover === undefined ? attacker.firingAccuracy * mod : attacker.firingAccuracy * mod * COVER_MULT[cover];
+  return clampChance(evade === undefined ? base : base * evade);
 }
 
 // --- Фабрики ---
@@ -578,7 +586,7 @@ function fireOnce(
   if (hit) {
     const dmin = shooter.weapon.damage[0],
       dmax = shooter.weapon.damage[1];
-    damage = Math.floor((dmin + Math.floor(state.rng() * (dmax - dmin + 1))) * mult);
+    damage = Math.floor((dmin + Math.floor(state.rng() * (dmax - dmin + 1))) * mult) + (shooter.dmgBonus ?? 0); // п22.6: «Попіл»
     if (!pierce && target.armor !== undefined && target.armor > 0) damage = Math.max(1, damage - target.armor);
     if (useShield(state, target)) damage = 0; // п22.5: кидки RNG ті самі — щит лише обнуляє шкоду
     target.hp -= damage;
@@ -603,7 +611,8 @@ function fireReaction(state: GameState, shooter: Unit, target: Unit): void {
   // п22.2: «Вартовий» стріляє з дозору без штрафу точності; решта — як досі
   const penalty = state.roles?.[shooter.id]?.spec === 'sentinel' ? 1 : OVERWATCH_ACC_PENALTY;
   const base = shooter.firingAccuracy * profile.accuracyMod * penalty;
-  const chance = clampChance(cover === undefined ? base : base * COVER_MULT[cover]);
+  const covered = cover === undefined ? base : base * COVER_MULT[cover];
+  const chance = clampChance(target.evade === undefined ? covered : covered * target.evade); // п22.6: «Тінь»
   fireOnce(state, shooter, target, shooter.weapon.only?.[0] ?? 'snap', chance);
 }
 
@@ -661,7 +670,7 @@ export function resolveAttack(state: GameState, shooterId: string, targetId: str
   assertCanFire(state, s, t, mode);
   const profile = s.weapon.modes[mode];
   s.ap -= profile.apCost;
-  const chance = calculateHitChance(s, mode, shotCover(state, s, t));
+  const chance = calculateHitChance(s, mode, shotCover(state, s, t), t.evade);
   const pierce = useCharge(state, s, t);
   const result: AttackResult = { shots: [], targetDown: false };
   for (let i = 0; i < profile.shots; i++) {
@@ -933,7 +942,7 @@ export function preciseShot(state: GameState, shooterId: string, targetId: strin
   const mult = preciseMult(slot.spec);
   state.log.push({ type: 'precise_shot', shooterId: s.id, targetId: t.id });
   const pierce = useCharge(state, s, t);
-  const shot = fireOnce(state, s, t, 'aimed', calculateHitChance(s, 'aimed', shotCover(state, s, t)), mult, pierce);
+  const shot = fireOnce(state, s, t, 'aimed', calculateHitChance(s, 'aimed', shotCover(state, s, t), t.evade), mult, pierce);
   return { shots: [shot], targetDown: !t.alive };
 }
 

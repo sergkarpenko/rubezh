@@ -24,6 +24,7 @@ import {
 import { ENEMY_NAMES, ENEMY_ORDER, enemyKind, type EnemyKind } from '../core/enemies';
 import { ATLAS_ROW } from '../render';
 import { coverMenuLine } from './cover-ui';
+import { broodEffect, broodName, type BroodId } from '../core/broods';
 import unitAtlasUrl from '../../assets/units-atlas.png';
 import enemyPortraitsUrl from '../../assets/enemy-portraits.png';
 
@@ -51,6 +52,10 @@ export interface EnemyMenuView {
   weaponRange: number;
   only: ShotMode | null; // п17.2: єдиний режим зброї ворога (око — прицільний), інакше null
   armor: number; // п17.2: броня (голем — 2), 0 — без броні
+  // п22.6 (ADR-0188): виводок і його особливість словами; null — без виводку; champion — вінець
+  brood: { id: BroodId; name: string; effect: string } | null;
+  champion: boolean;
+  dmgBonus: number; // «Попіл»: + до шкоди — рядок «Шкода» показує з ним
   // null — бійця не вибрано: картка лише з інформацією
   // п20.5: cover — укриття цілі від стрільця (undefined — укриття не діє: бій без `cover`, удар впритул)
   shooter: { dist: number; cover: CoverLevel | undefined; shots: EnemyMenuShot[]; grenade: MenuBlock } | null;
@@ -80,6 +85,9 @@ export function enemyMenuView(state: GameState, target: Unit, shooter: Unit | un
     weaponRange: w.range,
     only: w.only?.length === 1 ? w.only[0] : null,
     armor: target.armor ?? 0,
+    brood: target.brood === undefined ? null : { id: target.brood, name: broodName(target) ?? '', effect: broodEffect(target) ?? '' },
+    champion: target.champion === true,
+    dmgBonus: target.dmgBonus ?? 0,
     shooter: null,
   };
   if (shooter === undefined) return view;
@@ -102,7 +110,7 @@ export function enemyMenuView(state: GameState, target: Unit, shooter: Unit | un
       mode,
       label: SHOT_LABEL[mode],
       ap: p.apCost,
-      chancePct: Math.round(calculateHitChance(shooter, mode, cover) * 100), // п20.2: з укриттям цілі
+      chancePct: Math.round(calculateHitChance(shooter, mode, cover, target.evade) * 100), // п20.2: з укриттям цілі; п22.6: «Тінь»
       shots: p.shots,
       block,
     };
@@ -188,6 +196,22 @@ export function enemyFaceStyle(kind: EnemyKind, name: string): string {
   );
 }
 
+// п22.6 (ADR-0188): рядок виводку під смугою HP; чемпіон — з вінцем «♛».
+function broodLine(v: EnemyMenuView): string {
+  if (v.brood === null) return '';
+  return (
+    '<div class="em-line em-brood" data-brood="' +
+    v.brood.id +
+    '">' +
+    (v.champion ? '♛ Чемпіон · ' : '') +
+    'Виводок «' +
+    esc(v.brood.name) +
+    '»' +
+    (v.brood.effect !== '' ? ': ' + esc(v.brood.effect) : '') + // демон — лише вигляд, без особливості
+    '</div>'
+  );
+}
+
 export function enemyMenuHtml(v: EnemyMenuView): string {
   const pct = v.maxHp > 0 ? Math.round((v.hp / v.maxHp) * 100) : 0;
   let html =
@@ -195,7 +219,10 @@ export function enemyMenuHtml(v: EnemyMenuView): string {
     v.kind +
     '" data-face="' +
     enemyPortraitCell(v.kind, v.name).col +
-    '" style="' +
+    '"' +
+    (v.brood !== null ? ' data-brood="' + v.brood.id + '"' : '') +
+    (v.champion ? ' data-champion="1"' : '') +
+    ' style="' +
     enemyFaceStyle(v.kind, v.name) +
     '"></span><span class="em-name">' +
     esc(v.name) +
@@ -209,12 +236,13 @@ export function enemyMenuHtml(v: EnemyMenuView): string {
     '%;background:' +
     hpColor(v.hp, v.maxHp) +
     '"></i></div>' +
+    broodLine(v) +
     '<div class="em-line" title="«' +
     esc(v.weapon) +
     '»">Шкода ' +
-    v.damage[0] +
+    (v.damage[0] + v.dmgBonus) +
     '–' +
-    v.damage[1] +
+    (v.damage[1] + v.dmgBonus) +
     (v.weaponRange === 1 ? ' · впритул' : ' · дальність ' + v.weaponRange) +
     '</div>';
   // п17.2: рядок єдиного режиму — для зброї на відстані (удар гончака вже «впритул»)

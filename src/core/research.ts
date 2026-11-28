@@ -40,8 +40,10 @@ export type SquadProjectId = 'tac-net-1' | 'tac-net-2';
 export type KeyProjectId = 'rift-anatomy' | 'gate-bearing' | 'gate-key';
 
 // п18.2 (ADR-0153 п. 2, 9): трофеї партії — лічильник за типом убитого ворога.
-export type TrophyStore = Record<EnemyKind, number>;
-export type TrophyCost = Partial<Record<EnemyKind, number>>;
+// п22.6 (ADR-0188): `champion` — рідкісний трофей убитого чемпіона; необов'язкове поле —
+// партія без чемпіонів (і сейв) байт-у-байт як до п22.6.
+export type TrophyStore = Record<EnemyKind, number> & { champion?: number };
+export type TrophyCost = Partial<Record<EnemyKind | 'champion', number>>;
 
 export function emptyTrophies(): TrophyStore {
   return { demon: 0, hound: 0, golem: 0, eye: 0 };
@@ -136,6 +138,10 @@ export function awardTrophies(research: ResearchState, battle: Pick<GameState, '
     const k = enemyKind(u);
     gained[k] = (gained[k] ?? 0) + 1;
     research.trophies[k] += 1;
+    if (u.champion) {
+      gained.champion = (gained.champion ?? 0) + 1;
+      research.trophies.champion = (research.trophies.champion ?? 0) + 1;
+    }
   }
   if (Object.keys(gained).length > 0) research.log.push({ type: 'trophies', gained });
   return gained;

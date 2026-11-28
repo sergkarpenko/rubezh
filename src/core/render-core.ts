@@ -6,6 +6,7 @@
 // Canvas/DOM API (ADR-0002) — Canvas-виклики живуть у шарі відображення
 // (src/render.ts), планувальник кадрів ін'єктується викликачем.
 
+import type { BroodId } from './broods';
 import { VISION_RANGE, distance, lineCells, type GameEvent, type Side, type Unit, type Vec2 } from './combat';
 import type { EnemyKind } from './enemies';
 // П14.5: розкладка геосцени 16×8 і хвіст перехоплення читають розміри світу та
@@ -916,6 +917,16 @@ export interface FighterLook {
 // п18.4 (ADR-0156): турель бази (id 't1', 't2') — сіре кільце; сірий не збігається з кольорами
 // бійців і типів ворогів. п18.5 (ADR-0157): силует турелі — кодом (drawTurretSprite у render.ts).
 export const TURRET_RING = '#9aa1ab';
+
+// п22.6 (ADR-0188): колір виводку — аура під ворогом, кільце бюста в меню і вінець чемпіона;
+// кольори — з палітри «неон + латунь» (docs/design/setting.md): «Попіл» — бурштин, «Іржа» — мідь,
+// «Тінь» — фіолет глітчу.
+export const BROOD_COLORS: Readonly<Record<BroodId, string>> = { ash: '#FFB454', rust: '#B87333', shadow: '#8A2BE2' };
+export const AURA_ALPHA = 0.35; // аура — напівпрозорий еліпс ширший за кільце (без градієнта, як тінь)
+// Вінець чемпіона над головою: три зубці шириною CROWN_W, висотою CROWN_H, верх — CROWN_DY над центром клітинки.
+export const CROWN_W = 14;
+export const CROWN_H = 8;
+export const CROWN_DY = 30;
 
 export function fighterLook(id: string): FighterLook {
   if (/^t\d+$/.test(id)) return { index: 0, color: TURRET_RING, shape: 0 };

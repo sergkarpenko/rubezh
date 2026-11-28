@@ -371,7 +371,11 @@ export class CoreMirror {
         if (distance(shooter.pos, target.pos) > shooter.weapon.range) continue;
         if (!hasLineOfSight(this.state, shooter.pos, target.pos, shooter.side)) continue;
         // п20.2 (ADR-0166): шанс з укриттям цілі — як меню на ворогові і тап по цілі в бою місії
-        return { shooter, target, chancePct: Math.round(calculateHitChance(shooter, mode, shotCover(this.state, shooter, target)) * 100) };
+        return {
+          shooter,
+          target,
+          chancePct: Math.round(calculateHitChance(shooter, mode, shotCover(this.state, shooter, target), target.evade) * 100),
+        };
       }
     }
     return null;
