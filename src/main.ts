@@ -10,7 +10,7 @@
 import { tabStop } from './ui/tab-stop';
 import { advanceTime, geoDay } from './core/geo';
 import { SCENARIOS, scenarioParty, type ScenarioId } from './core/scenarios';
-import { chooseRole, hireSoldier, hospitalTick, isBankrupt, readySoldiers } from './core/squad';
+import { assignBotBranches, chooseRole, hireSoldier, hospitalTick, isBankrupt, readySoldiers } from './core/squad';
 import { completeAssault } from './core/assault';
 import { awaitingRole, type SoldierRole } from './core/career';
 import { roleDialogHtml } from './ui/roles';
@@ -532,6 +532,7 @@ const geoAnim = new AnimEngine({
 // і завантаженої партії. П12.2 (ADR-0026): точка прийняття — контрольна
 // серіалізація (незбережених змін на цей момент немає).
 function adoptParty(p: Party): Party {
+  assignBotBranches(p.roster); // п22.2 (ADR-0183): сейв v2–v4 із «Сержантами» — гілки одразу, до вікна п22.3
   journalUI.adopt(p);
   // п18.3: поразка за загрозою (сейв) — гру закінчено, як банкрутство
   gameOver = isBankrupt(p.econ, p.roster, p.campaign.preset) || p.campaign.status === 'поразка';
@@ -707,6 +708,7 @@ function promptRole(): void {
   for (const b of box.querySelectorAll<HTMLButtonElement>('.role-pick')) {
     b.onclick = () => {
       chooseRole(p.roster, s.id, b.dataset.role as SoldierRole);
+      assignBotBranches(p.roster); // п22.2 (ADR-0183): гілки до вікна п22.3 — за правилом бота
       box.classList.add('hidden');
       box.innerHTML = '';
       renderAll(); // наступне підвищення (якщо є) відкривається тут

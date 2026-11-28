@@ -10,7 +10,7 @@
 import { SQUAD_SPAWN, completeMission, createMission, missionOutcome, type Mission } from '../core/mission';
 import { awardTrophies } from '../core/research';
 import { completeAssault, completeGate, createAssault, createGateMission, type CampaignBattleOptions } from '../core/assault';
-import { applyMissionResult, deployRoles, missionSquad } from '../core/squad';
+import { applyMissionResult, assignBotBranches, deployRoles, missionSquad } from '../core/squad';
 import { RANK_NAMES, rankOf, type SoldierCareer } from '../core/career';
 // Т.28 (ADR-0091): броня й око загиблих — на склад, витратники зникають.
 // П11.4 (ADR-0058): витратники загону — копія в бій і розрахунок після бою.
@@ -882,6 +882,8 @@ export function createBattleUI(ui: BattleUIState, deps: BattleDeps): BattleUI {
     dropPlate(); // Т.33: бій скінчився — замість плашки ходу картка результату
     const party = deps.getParty();
     const aftermath = applyMissionResult(party.roster, mission.state);
+    // п22.2 (ADR-0183): гілки «Сержанта» і «Ветерана» до вікна вибору п22.3 — за правилом бота
+    assignBotBranches(party.roster);
     // Т.28 (ADR-0091): броня й око загиблих повертаються на склад, витратники зникають.
     removeLostEquipment(party.workshop, aftermath.lost);
     // П11.4 (ADR-0058): витратники уцілілих — використані зникають, невикористані лишаються.

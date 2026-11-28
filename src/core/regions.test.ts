@@ -228,7 +228,7 @@ describe('п19.2: сейв v4 (ADR-0159 п. 14, EARS 7)', () => {
     const json = serializeParty(p, 'T');
     const data = JSON.parse(json);
     expect(data.version).toBe(SAVE_VERSION);
-    expect(SAVE_VERSION).toBe(4);
+    expect(SAVE_VERSION).toBe(5); // п22.2: v5 — гілки кар'єри, довіра — та сама
     expect(data.state.campaign.regions.east).toEqual({ trust: 0, out: true });
     const again = deserializeParty(json);
     expect(again.campaign.regions).toEqual(p.campaign.regions);
@@ -248,7 +248,7 @@ describe('п19.2: сейв v4 (ADR-0159 п. 14, EARS 7)', () => {
     expect(m.campaign.trustCursor).toBe(m.geo.log.length);
     campaignTick({ geo: m.geo, roster: m.roster, econ: m.econ }, m.campaign);
     expect(m.campaign.regions).toEqual(createRegions());
-    expect(JSON.parse(serializeParty(m, 'T')).version).toBe(4);
+    expect(JSON.parse(serializeParty(m, 'T')).version).toBe(SAVE_VERSION);
   });
 
   it('v3 з полями регіонів — поля не читаються, міграція', () => {

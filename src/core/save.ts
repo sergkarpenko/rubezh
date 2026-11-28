@@ -7,10 +7,11 @@
 // партія продовжує траєкторію оригіналу байт-у-байт.
 // ADR-0026: активна місія не зберігається (кнопки активні лише на геосцені);
 // метадані слоту — похідні від збереженого стану.
-// Формат: { version: 4, seed, savedAt, state } (п16.2, ADR-0147 п. 15: v2 —
+// Формат: { version: 5, seed, savedAt, state } (п16.2, ADR-0147 п. 15: v2 —
 // кар'єри оперативників roster.careers; сейв v1 мігрує на вході, migrateCareers;
 // п18.3, ADR-0153 п. 18: v3 — загроза кампанії, сейви v1 і v2 мігрують, migrateThreat;
-// п19.2, ADR-0159 п. 14: v4 — довіра регіонів, сейви v1–v3 мігрують з довірою 100). Невідома версія або пошкоджений
+// п19.2, ADR-0159 п. 14: v4 — довіра регіонів, сейви v1–v3 мігрують з довірою 100;
+// п22.2, ADR-0182 п. 8: v5 — гілки кар'єри `branches`, сейв v4 відкривається без гілок). Невідома версія або пошкоджений
 // JSON — throw з українським текстом, без часткового стану. Зміни схеми —
 // новою версією + міграцією на вході.
 
@@ -18,7 +19,16 @@ import { mulberry32, type StatefulRng, type Unit, type Vec2 } from './combat';
 import { WEAPONS, isForgeWeapon } from './weapons';
 import { WORLD_H, WORLD_W, createGeoGame, geoDay, type GeoEvent, type GeoState, type Probe } from './geo';
 import { createRoster, type Roster } from './squad';
-import { applyRankBonus, newCareer, rankOf, type SoldierCareer, type SoldierRole } from './career';
+import {
+  applyRankBonus,
+  CAREER_TREE,
+  newCareer,
+  rankOf,
+  SERGEANT_RANK,
+  VETERAN_RANK,
+  type SoldierCareer,
+  type SoldierRole,
+} from './career';
 import { createEconomy, type EconomyEvent, type EconomyState } from './economy';
 import {
   createIntercept,
@@ -52,7 +62,9 @@ import {
   type WorkshopState,
 } from './workshop';
 
-export const SAVE_VERSION = 4;
+export const SAVE_VERSION = 5;
+// п22.2 (ADR-0182 п. 8, ADR-0183): сейв v4 (Фази 19–21) вантажиться без гілок кар'єри.
+export const SAVE_VERSION_V4 = 4;
 // п19.2 (ADR-0159 п. 14): сейв v3 (Фаза 18) вантажиться з довірою 100 в усіх регіонах.
 export const SAVE_VERSION_V3 = 3;
 // п18.3 (ADR-0153 п. 18): сейв v2 (Фази 16–17) вантажиться з міграцією загрози.
@@ -178,7 +190,10 @@ interface RosterSave {
 // той самий рядок (детермінізм, ADR-0003).
 function copyCareers(soldiers: Unit[], careers: Record<string, SoldierCareer>): Record<string, SoldierCareer> {
   const out: Record<string, SoldierCareer> = {};
-  for (const s of soldiers) out[s.id] = { ...careers[s.id] };
+  for (const s of soldiers) {
+    const c = careers[s.id];
+    out[s.id] = c.branches === undefined ? { ...c } : { ...c, branches: { ...c.branches } };
+  }
   return out;
 }
 
@@ -186,7 +201,24 @@ const ROLES: readonly (SoldierRole | null)[] = ['assault', 'sniper', 'medic', nu
 
 // Кар'єра v2: типи полів, невід'ємні лічильники і зараховані вбивства не
 // більше за kills юніта (інакше settleCareer зменшив би досвід — аудит PR #499).
-function validCareer(c: unknown, kills: number): boolean {
+// п22.2: гілки — лише в сейві v5, лише варіант своєї розвилки і лише з досягнутим званням.
+function validBranches(b: unknown, k: Record<string, unknown>): boolean {
+  if (b === undefined) return true;
+  if (b === null || typeof b !== 'object' || Array.isArray(b)) return false;
+  const { sergeant, veteran, ...rest } = b as Record<string, unknown>;
+  if (Object.keys(rest).length > 0) return false;
+  const rank = rankOf(k.xp as number);
+  const role = k.role as SoldierRole | null;
+  const sergeantOk =
+    sergeant === undefined ||
+    (role !== null && rank >= SERGEANT_RANK && (CAREER_TREE.sergeant[role] as readonly unknown[]).includes(sergeant));
+  const veteranOk =
+    veteran === undefined ||
+    (sergeant !== undefined && rank >= VETERAN_RANK && (CAREER_TREE.veteran as readonly unknown[]).includes(veteran));
+  return sergeantOk && veteranOk;
+}
+
+function validCareer(c: unknown, kills: number, withBranches: boolean): boolean {
   if (c === null || typeof c !== 'object') return false;
   const k = c as Record<string, unknown>;
   return (
@@ -199,7 +231,8 @@ function validCareer(c: unknown, kills: number): boolean {
     Number.isInteger(k.killsCounted) &&
     (k.killsCounted as number) >= 0 &&
     (k.killsCounted as number) <= kills &&
-    ROLES.includes(k.role as SoldierRole | null)
+    ROLES.includes(k.role as SoldierRole | null) &&
+    (withBranches ? validBranches(k.branches, k) : k.branches === undefined)
   );
 }
 
@@ -269,7 +302,12 @@ interface CampaignSave {
 
 // Загроза кампанії — у сейвах з v3 (п18.3).
 function hasThreat(version: number): boolean {
-  return version === SAVE_VERSION || version === SAVE_VERSION_V3;
+  return version === SAVE_VERSION || version === SAVE_VERSION_V4 || version === SAVE_VERSION_V3;
+}
+
+// Довіра регіонів і перелік перехоплювачів — у сейвах з v4 (п19.2–п19.3).
+function hasRegions(version: number): boolean {
+  return version === SAVE_VERSION || version === SAVE_VERSION_V4;
 }
 
 // п19.2 (ADR-0159 п. 14): довіра сейва v1–v3 — 100 скрізь; курсор — кінець журналу, щоб
@@ -500,6 +538,7 @@ function parseSave(json: string): SaveData {
   }
   if (
     data.version !== SAVE_VERSION &&
+    data.version !== SAVE_VERSION_V4 &&
     data.version !== SAVE_VERSION_V3 &&
     data.version !== SAVE_VERSION_V2 &&
     data.version !== SAVE_VERSION_V1
@@ -543,7 +582,7 @@ function parseSave(json: string): SaveData {
     if (
       cs === null ||
       typeof cs !== 'object' ||
-      !st.roster.soldiers.every((s) => s !== null && typeof s === 'object' && validCareer(cs[s.id], s.kills))
+      !st.roster.soldiers.every((s) => s !== null && typeof s === 'object' && validCareer(cs[s.id], s.kills, data.version === SAVE_VERSION))
     ) {
       fail("Пошкоджені дані збереження: кар'єри оперативників");
     }
@@ -560,7 +599,7 @@ function parseSave(json: string): SaveData {
       (icsv.fighters !== undefined
         ? !validFighters(icsv.fighters) ||
           // аудит PR #522: «бій» у переліку ⇔ активний зонд бою
-          (data.version === SAVE_VERSION && icsv.fighters.some((f) => f.status === 'бій') !== (icsv.activeProbeId != null))
+          (hasRegions(data.version) && icsv.fighters.some((f) => f.status === 'бій') !== (icsv.activeProbeId != null))
         : icsv.fighter === null || typeof icsv.fighter !== 'object'))
   ) {
     fail('Пошкоджені дані збереження: перехоплення');
@@ -609,7 +648,7 @@ function parseSave(json: string): SaveData {
   // п19.2 (ADR-0159 п. 14): у v4 — регіони і курсор довіри в межах журналу; у v1–v3 поля
   // не читаються (міграція — довіра 100), як поля загрози у v1 / v2 (прецедент п18.3).
   if (
-    data.version === SAVE_VERSION &&
+    hasRegions(data.version) &&
     ccsv !== undefined &&
     (!validRegions(ccsv.regions) ||
       !Number.isInteger(ccsv.trustCursor) ||
@@ -680,12 +719,12 @@ function validFighters(list: unknown): boolean {
 // разом із замовленими — не більше MAX_FIGHTERS.
 function validInterceptorOrders(queue: { id: string; region?: unknown }[], fighters: number, version: number): boolean {
   const orders = queue.filter((o) => o?.id === 'interceptor');
-  if (orders.length > 0 && version !== SAVE_VERSION) return false;
+  if (orders.length > 0 && !hasRegions(version)) return false;
   return orders.every((o) => (REGION_IDS as readonly string[]).includes(o.region as string)) && fighters + orders.length <= MAX_FIGHTERS;
 }
 // (поле fighters у v1–v3 не читається — для ліміту там рахується один перехоплювач)
 function savedFighters(icsv: InterceptSave | undefined, version: number): number {
-  return version === SAVE_VERSION && icsv?.fighters ? icsv.fighters.length : 1;
+  return hasRegions(version) && icsv?.fighters ? icsv.fighters.length : 1;
 }
 
 // п18.2: трофеї в сейві — об'єкт лише з відомими типами і цілими ≥ 0.
@@ -722,7 +761,7 @@ export function deserializeParty(json: string): Party {
   if (sv !== undefined) {
     // п19.3 (ADR-0161): v4 — перелік; один перехоплювач старих сейвів — id 1, регіон north — «Шпилі» (вузол)
     // (у v1–v3 переліку не буває: поле не читається, крім першого запису за відсутності fighter — урок Т.205)
-    if (sv.fighters && data.version === SAVE_VERSION) {
+    if (sv.fighters && hasRegions(data.version)) {
       ic.fighters = sv.fighters.map((f) => ({ ...f, pos: { ...f.pos } }));
     } else {
       const one = sv.fighter ?? sv.fighters![0];
@@ -777,7 +816,7 @@ export function deserializeParty(json: string): Party {
           }
         : migratedCampaign(geo)),
       // п19.2 (ADR-0159 п. 14): v4 — копія; v1–v3 — довіра 100, курсор — кінець журналу
-      ...(data.version === SAVE_VERSION
+      ...(hasRegions(data.version)
         ? { regions: copyRegions(cc.regions as Regions), trustCursor: cc.trustCursor as number }
         : migratedRegions(geo)),
     },

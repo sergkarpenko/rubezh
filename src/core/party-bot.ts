@@ -31,6 +31,7 @@ import { creditMissionBonus, economyTick, hirePrice } from './economy';
 import { REGION_IDS, totalTrust, type RegionId } from './regions';
 import {
   applyMissionResult,
+  assignBotBranches,
   assignBotRoles,
   deployRoles,
   hireSoldier,
@@ -614,6 +615,7 @@ export function partyBotMissionStep(party: Party, policy: PartyBotPolicy): Missi
   awardTrophies(party.research, mission.state, outcome); // п18.2 (ADR-0153 п. 9): трофеї лише за перемогу
   const aftermath = applyMissionResult(party.roster, mission.state);
   assignBotRoles(party.roster); // п16.3 (ADR-0147 п. 12): роль кожному, хто дослужився до «Боєць»
+  assignBotBranches(party.roster); // п22.2 (ADR-0182 п. 7): гілки «Сержанта» і «Ветерана»
   removeLostEquipment(party.workshop, aftermath.lost); // броня й око — на склад (ADR-0091)
   settleConsumables(party.workshop, aftermath.survivors, mission.state.items); // витратники (П11.4)
   if (outcome === 'перемога') {
@@ -649,6 +651,7 @@ function botCampaignBattle(
   awardTrophies(party.research, mission.state, outcome);
   const aftermath = applyMissionResult(party.roster, mission.state);
   assignBotRoles(party.roster);
+  assignBotBranches(party.roster);
   removeLostEquipment(party.workshop, aftermath.lost);
   settleConsumables(party.workshop, aftermath.survivors, mission.state.items);
   return { mission, outcome, lost: aftermath.lost.length, wounded: aftermath.wounded.length };

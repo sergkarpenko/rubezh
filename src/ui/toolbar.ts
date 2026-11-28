@@ -90,7 +90,7 @@ export const TOOLBAR_ACTIONS: readonly ToolbarAction[] = [
       '), уражає і своїх · клавіша G',
     icon: 'grenade',
   },
-  { id: 'role', btnId: 'btn-role', label: 'Роль', hint: 'Дія ролі — раз за бій · клавіша R', icon: 'dash' },
+  { id: 'role', btnId: 'btn-role', label: 'Роль', hint: 'Дія ролі — раз за бій («Рятівник» — двічі) · клавіша R', icon: 'dash' },
   {
     id: 'evac',
     btnId: 'btn-evac',

@@ -9,7 +9,7 @@
 // правилом. Прирости звання (HP, точність) пишуться в запис юніта ростеру
 // в момент підвищення (`promote`) — ядро бою кар'єри не знає.
 
-import type { BattleRole, Unit } from './combat';
+import type { BattleRole, RoleSpec, Unit } from './combat';
 
 // Пули позивних і біографій (ADR-0147 п. 16; власник править у рев'ю PR п16.2).
 export const CALLSIGNS = ['Крук', 'Шрам', 'Іскра', 'Тінь', 'Сокіл', 'Байт', 'Грім', 'Рись', 'Кремінь', 'Мла', 'Вольт', 'Оса'];
@@ -45,6 +45,54 @@ export type SoldierRole = BattleRole;
 // Порядок ролей — рівність у правилі бота (ADR-0147 п. 12): штурмовик → снайпер → медик.
 export const SOLDIER_ROLES: readonly SoldierRole[] = ['assault', 'sniper', 'medic'];
 
+// п22.2 (ADR-0182 п. 1, 7; ADR-0183 — рішення власника «А. Підсилення дії ролі»):
+// розвилка на кожному званні понад «Рекрута». «Боєць» — роль (як досі), «Сержант» —
+// одна з двох спеціалізацій своєї ролі, «Ветеран» — одна з двох навичок.
+export const SERGEANT_RANK = 2;
+export const VETERAN_RANK = 3;
+export type SergeantSpec = RoleSpec;
+export type VeteranSkill = 'hardened' | 'tactician';
+export type CareerBranch = SergeantSpec | VeteranSkill;
+export type BranchTier = 'sergeant' | 'veteran';
+// Каталог розвилок: порядок у переліку — рівність у правилі бота (ADR-0182 п. 7).
+export const CAREER_TREE: {
+  sergeant: Record<SoldierRole, readonly [SergeantSpec, SergeantSpec]>;
+  veteran: readonly [VeteranSkill, VeteranSkill];
+} = {
+  sergeant: { assault: ['breakthrough', 'plating'], sniper: ['hunter', 'sentinel'], medic: ['surgeon', 'rescuer'] },
+  veteran: ['hardened', 'tactician'],
+};
+// Назви й ефекти — тексти власника (кнопка п22.2); ефекти бою — константи combat.ts.
+export const BRANCH_NAMES: Record<CareerBranch, string> = {
+  breakthrough: 'Прорив',
+  plating: 'Панцир',
+  hunter: 'Мисливець',
+  sentinel: 'Вартовий',
+  surgeon: 'Хірург',
+  rescuer: 'Рятівник',
+  hardened: 'Загартований',
+  tactician: 'Тактик',
+};
+export const BRANCH_EFFECTS: Record<CareerBranch, string> = {
+  breakthrough: '«Ривок» +6 AP замість +4',
+  plating: 'броня 1',
+  hunter: '«Точний постріл» — шкода ×2',
+  sentinel: 'дозор без штрафу точності',
+  surgeon: '«Польова допомога» +5 HP',
+  rescuer: '«Польова допомога» двічі за бій',
+  hardened: '+2 HP',
+  tactician: '+1 AP щоходу',
+};
+// Прирости гілки в запис юніта ростеру — у мить вибору, як прирости звання.
+export const PLATING_ARMOR = 1; // «Панцир»: броня 1 (мінус від кожного влучання, мінімум 1 шкоди)
+export const HARDENED_HP_BONUS = 2; // «Загартований»: maxHp і hp +2
+export const TACTICIAN_AP_BONUS = 1; // «Тактик»: maxAp +1
+
+export interface CareerBranches {
+  sergeant?: SergeantSpec;
+  veteran?: VeteranSkill;
+}
+
 export interface SoldierCareer {
   callsign: string;
   bio: string;
@@ -55,6 +103,7 @@ export interface SoldierCareer {
   // (ADR-0147 п. 10). Сейв робиться лише між місіями — знімок завжди чинний.
   killsCounted: number;
   role: SoldierRole | null; // роль обирається на званні «Боєць» (п16.3–п16.4)
+  branches?: CareerBranches; // п22.2 (сейв v5): без поля — гілок не обрано
 }
 
 // Пул за порядковим номером (0-based), понад довжину — з номером кола:
@@ -117,6 +166,37 @@ export function settleCareer(unit: Unit, career: SoldierCareer): number {
 // (ADR-0147 п. 13; вікно вибору — п16.4).
 export function awaitingRole(career: SoldierCareer): boolean {
   return career.role === null && rankOf(career.xp) >= ROLE_RANK;
+}
+
+// п22.2: розвилка, що чекає вибору (null — нічого): спершу роль (`awaitingRole`),
+// далі «Сержант» — спеціалізація ролі, далі «Ветеран» — навичка. Перескочив
+// звання за місію — розвилки по черзі, нижча перша.
+export function awaitingBranch(career: SoldierCareer): BranchTier | null {
+  if (career.role === null) return null;
+  const rank = rankOf(career.xp);
+  if (rank >= SERGEANT_RANK && career.branches?.sergeant === undefined) return 'sergeant';
+  if (rank >= VETERAN_RANK && career.branches?.veteran === undefined) return 'veteran';
+  return null;
+}
+
+// Варіанти розвилки: спеціалізації своєї ролі або навички «Ветерана».
+export function branchOptions(career: SoldierCareer, tier: BranchTier): readonly CareerBranch[] {
+  if (tier === 'veteran') return CAREER_TREE.veteran;
+  return career.role === null ? [] : CAREER_TREE.sergeant[career.role];
+}
+
+// Прирости гілки в запис юніта ростеру (у мить вибору; сейв несе юніт цілком).
+// Решта гілок діє в бою через роль (`deployRoles`, squad.ts).
+export function applyBranchBonus(unit: Unit, branch: CareerBranch): void {
+  if (branch === 'plating') unit.armor = PLATING_ARMOR;
+  if (branch === 'hardened') {
+    unit.maxHp += HARDENED_HP_BONUS;
+    unit.hp += HARDENED_HP_BONUS;
+  }
+  if (branch === 'tactician') {
+    unit.maxAp += TACTICIAN_AP_BONUS;
+    unit.ap += TACTICIAN_AP_BONUS;
+  }
 }
 
 // Відмінок іменника після числівника: 1 місія, 2 місії, 5 місій, 11 місій, 21 місія.

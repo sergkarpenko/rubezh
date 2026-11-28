@@ -151,8 +151,8 @@ describe('save: зіпсовані дані (критерій П5.2)', () => {
   it('невідома/майбутня версія — throw українською', () => {
     const p = createParty(42);
     const json = serializeParty(p, 'T');
-    const v5 = JSON.stringify({ ...JSON.parse(json), version: 5 });
-    expect(() => deserializeParty(v5)).toThrow('Невідома версія збереження: 5');
+    const v6 = JSON.stringify({ ...JSON.parse(json), version: 6 }); // п22.2: v5 — чинна
+    expect(() => deserializeParty(v6)).toThrow('Невідома версія збереження: 6');
     const vStr = JSON.stringify({ ...JSON.parse(json), version: '1' });
     expect(() => deserializeParty(vStr)).toThrow('Невідома версія збереження');
   });
@@ -541,7 +541,7 @@ describe('save: П15.2 — «евакуйовано» (EARS 7)', () => {
     }
     completeMission(p.geo, 'uV1', 'евакуйовано');
     const json = serializeParty(p, 'T');
-    expect(SAVE_VERSION).toBe(4); // п16.2: v2 — кар'єри; п18.3: v3 — загроза; п19.2: v4 — довіра; П15.2 формат не міняв
+    expect(SAVE_VERSION).toBe(5); // п16.2: v2 — кар'єри; п18.3: v3 — загроза; п19.2: v4 — довіра; п22.2: v5 — гілки; П15.2 формат не міняв
     expect(json.includes('mission_evacuated')).toBe(true);
     expect(json.includes('evacuated') === json.includes('mission_evacuated')).toBe(true); // стан бою поза сейвом
     const restored = deserializeParty(json);
@@ -668,7 +668,7 @@ describe('save: Т.12 — кожне поле сейву перевіряєть�
 
   it('тексти відмов називають причину: некоректний JSON, очікувана версія', () => {
     expect(() => deserializeParty('{не json')).toThrow('Пошкоджені дані збереження: некоректний JSON');
-    expect(() => deserializeParty(corrupt('version', 5))).toThrow(`Невідома версія збереження: 5 (очікується ${SAVE_VERSION})`);
+    expect(() => deserializeParty(corrupt('version', 6))).toThrow(`Невідома версія збереження: 6 (очікується ${SAVE_VERSION})`);
   });
 
   it('round-trip стану не за замовчуванням: лікарня, погоня винищувача, НЛО в бою, рахунок кампанії', () => {
@@ -771,8 +771,11 @@ describe('Т.218: сутність у коді — `probe`, на диску — 
   });
 });
 
-describe('Т.218 (аудит PR #536): золотий сейв — той самий рядок, що v0.12.0 до перейменування', () => {
-  it('сід 7, політика кампанії, 20 діб: FNV-1a і довжина сейва — як на `main` 0e812fd', () => {
+// п22.2 (ADR-0182 п. 8, ADR-0183): новий еталон — сейв v5 (версія 4 → 5) і гілки «Сержанта» й «Ветерана» в бота
+// (поле `branches` у кар'єрах, прирости гілок у записах юнітів, інша траєкторія партії): довжина 104 761 → 105 408,
+// FNV-1a 4154294394 → 3555835768. До п22.2 еталон фіксував рядок v0.12.0 до перейменування (`main` 0e812fd, Т.218).
+describe('Т.218 (аудит PR #536): золотий сейв — еталон сейва партії бота (п22.2: v5)', () => {
+  it('сід 7, політика кампанії, 20 діб: FNV-1a і довжина сейва — еталон п22.2', () => {
     let s = '';
     simulateParty(7, 'норма', {
       policy: CAMPAIGN_POLICY,
@@ -781,7 +784,7 @@ describe('Т.218 (аудит PR #536): золотий сейв — той сам
         s = serializeParty(p as Party);
       },
     });
-    expect(s.length).toBe(104761);
-    expect(textSeed(s)).toBe(4154294394);
+    expect(s.length).toBe(105408);
+    expect(textSeed(s)).toBe(3555835768);
   });
 });
