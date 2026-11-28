@@ -289,8 +289,9 @@ describe('п22.2: сейв v5 (ADR-0182 п. 8, EARS 7)', () => {
   });
 
   it('v4 зіграної партії (загроза, довіра, перехоплювачі) відкривається байт-у-байт, крім версії', () => {
-    let v5 = '';
-    simulateParty(7, 'норма', { policy: CAMPAIGN_POLICY, maxDays: 30, onTick: (p) => (v5 = serializeParty(p as Party, 'T')) });
+    let last: Readonly<Party> | null = null;
+    simulateParty(7, 'норма', { policy: CAMPAIGN_POLICY, maxDays: 30, onTick: (p) => (last = p) });
+    const v5 = serializeParty(last as unknown as Party, 'T');
     const data = JSON.parse(v5);
     for (const c of Object.values<Record<string, unknown>>(data.state.roster.careers)) delete c.branches;
     const v4 = JSON.stringify({ ...data, version: SAVE_VERSION_V4 });
@@ -298,5 +299,5 @@ describe('п22.2: сейв v5 (ADR-0182 п. 8, EARS 7)', () => {
     expect(q.campaign.threat).toBeGreaterThan(0);
     expect(Object.values(q.campaign.regions).some((r) => r.trust < 100)).toBe(true);
     expect(serializeParty(q, 'T')).toBe(JSON.stringify({ ...JSON.parse(v4), version: SAVE_VERSION }));
-  }, 30_000); // 30 діб бота з сейвом щотіку: у CI під shuffle — понад 5 с
+  }, 30_000); // повна партія бота на 30 діб: у CI під shuffle — понад 5 с
 });
